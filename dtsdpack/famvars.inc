@@ -6,12 +6,13 @@
 #define DTSD_FAMS(X) X(hdr) X(sid) X(abt) X(scl) X(hit) X(smp) X(vqr) X(raw)
 
 // The fields the hdr family codes, each of their own values (fld): the core frame's header and
-// coding header, a subframe's header fields, then the container's (below); and the sid family's,
-// a subband's side information (SF_*).
+// coding header, a subframe's header fields, then the container's (below), then the XCH
+// extension's; and the sid family's, a subband's side information (SF_*).
 constexpr int NHF = 64;
 // the container's fields, after the frame's: a chunk's kind, the length of bytes kept as bytes,
-// the bits after the subframes all zero, and how many of their last bytes are not
-enum { HX_KIND, HX_RAWLEN, HX_TAILZ, HX_TAILNZ, HX_N };
+// the bits after the subframes all zero, and how many of their last bytes are not; the same of the
+// bits before the XCH extension
+enum { HX_KIND, HX_RAWLEN, HX_TAILZ, HX_TAILNZ, HX_GAPZ, HX_GAPNZ, HX_N };
 // sid's fields
 enum { SF_PMODE, SF_PVQ, SF_TMODE, SF_JSHUFF, SF_JSCALE, SF_HFVQ, SF_LFE, SF_N };
 
@@ -103,7 +104,8 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      (VK_PVQ: 0-15) or its scale factor / 8 (0-15), lh the subband's last rank of the kind (0
 //      none, 1 the best, 2 another)
 // raw: c1, c2 the bytes before, code what the bytes are (0 between frames, 1 a frame kept as bytes,
-//      2 the bits after the subframes), at the byte's place (tc_qlog; the tail's from its end), cl
+//      2 the bits after the subframes, 3 those before the XCH extension), at the byte's place
+//      (tc_qlog; the tail's and the gap's from their end), cl
 //      the byte at the place in the last field of the kind (0 none, else 1 + it)
 #define M_hdr_VARS(X) X(fld) X(lv) X(l2) X(pos) X(st) X(nch)
 #define M_sid_VARS(X) X(fld) X(cc) X(bd) X(lv) X(pq) X(st) X(ac) X(ab) X(ec)

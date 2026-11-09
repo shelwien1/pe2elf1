@@ -3,7 +3,7 @@
 // hands each element to an IO that codes it (the model, model.inc): dts2tsv's walk of the core,
 // with what its IO is told of where it is. The Huffman code books are dtssplit's (huff.inc).
 
-enum { SYNC_CORE = 0x7FFE8001 };
+enum { SYNC_CORE = 0x7FFE8001, SYNC_XCH = 0x5A5A5A5A };
 constexpr int MAX_FRAME = 16384;  // a core frame's bytes, at most (FSIZE: 14 bits)
 constexpr int PAD = 16;           // zero bytes after a buffer the bit reader may read
 enum { NCH = 8, NSUB = 32, NSF = 16, NSSF = 4, NSMP = NSSF * 8 };
@@ -116,15 +116,20 @@ static void huff_init(void) {
 // The core frame's elements by their names in TS 102 114, each with its kind: H a field of the
 // frame's or a subframe's header (the hdr family), B one of a channel's subbands (the side
 // information, ABITS, the scale factors), Q a subband sample's quantization index, T the bits
-// after the subframes
+// after the subframes (tail) or before the XCH extension (xgap). The XCH extension's fields are
+// X...: its being there (XCH) and the whole 4-byte words between the subframes' next 4-byte
+// boundary and its sync word (XGAP) only the record's (FFmpeg finds it by the sync word); its
+// frame size, AMODE, 3 bits after it, the coding header's CRC and a subframe's side information's
+// (XSICRC); its channel's elements are the core channels'.
 #define CORE_FIELDS(X)                                                                                         \
   X(FTYPE, H) X(SHORT, H) X(CPF, H) X(NBLKS, H) X(FSIZE, H) X(AMODE, H) X(SFREQ, H) X(RATE, H) X(FixedBit, H) \
   X(DYNF, H) X(TIMEF, H) X(AUXF, H) X(HDCD, H) X(EXT_AUDIO_ID, H) X(EXT_AUDIO, H) X(ASPF, H) X(LFF, H)        \
   X(HFLAG, H) X(HCRC, H) X(FILTS, H) X(VERNUM, H) X(CHIST, H) X(PCMR, H) X(SUMF, H) X(SUMS, H) X(DIALNORM, H) \
   X(SUBFS, H) X(PCHS, H) X(SUBS, H) X(VQSUB, H) X(JOINX, H) X(THUFF, H) X(SHUFF, H) X(BHUFF, H) X(SEL, H)    \
-  X(ADJ, H) X(AHCRC, H) X(SSC, H) X(PSC, H) X(RANGE, H) X(SICRC, H) X(LFEscaleIndex, H)                       \
+  X(ADJ, H) X(AHCRC, H) X(SSC, H) X(PSC, H) X(RANGE, H) X(SICRC, H) X(LFEscaleIndex, H) X(XCH, H)           \
+  X(XGAP, H) X(XFSIZE, H) X(XAMODE, H) X(XRES, H) X(XAHCRC, H) X(XSICRC, H)                                    \
   X(PMODE, B) X(PVQ, B) X(ABITS, B) X(TMODE, B) X(SCALES, B) X(JOIN_SHUFF, B) X(JOIN_SCALES, B) X(HFVQ, B)    \
-  X(LFE, B) X(q, Q) X(tail, T)
+  X(LFE, B) X(q, Q) X(tail, T) X(xgap, T)
 enum { FK_H, FK_B, FK_Q, FK_T };
 #define CF_ID(n, k) F_##n,
 #define CF_NAME(n, k) #n,
@@ -139,7 +144,7 @@ struct CoreSub {  // a subframe
   int ssc, psc, nssc;
   int pmode[NCH][NSUB], pvq[NCH][NSUB], abits[NCH][NSUB], tmode[NCH][NSUB], scale[NCH][NSUB][2];
   int jsel[NCH], jscale[NCH][NSUB];
-  int range, sicrc;
+  int range, sicrc, xsicrc;
   int hfvq[NCH][NSUB];
   int lfe[16], lfescale;
   S32 q[NCH][NSUB][NSMP];  // the quantization indexes, by subsubframe and sample
@@ -154,7 +159,16 @@ struct CoreRec {
   int nsubfs, npchs, nsubs[NCH], nvqsub[NCH];
   int nblk;  // the subband samples of its subframes
   CoreSub sub[NSF];
-  int tailbits;  // the bits after the subframes, and their bytes (the last one's unused bits 0)
+  // the XCH extension (6.1's back centre, channel npchs; nxch 1 where there): whether there, the
+  // whole words before its sync word after the subframes' 4-byte boundary (XGAP), the bits from
+  // the subframes' end to it (and their bytes), its header, its coding header's CRC; the walk's
+  // pass (0 the core's channels, 1 XCH's)
+  int xch, nxch, xgapw, xgap, xfsize, xamode, xres, xahcrc, xpass;
+  U8 xgapb[MAX_FRAME];
+  // the channels of the walk's pass: ch0() to ch1() - 1
+  int ch0() const { return xpass ? npchs : 0; }
+  int ch1() const { return xpass ? npchs + nxch : npchs; }
+  int tailbits;  // the bits after the subframes (after XCH), and their bytes (the last one's unused bits 0)
   U8 tail[MAX_FRAME];
 };
 
@@ -187,11 +201,33 @@ struct BitIn {
   const U8* d;
   U64 pos, end;
   const char* err;
+  int no_xch;  // the XCH extension not parsed (the bits after the subframes all a tail)
   void init(const U8* p, U64 nbits) {
     d = p;
     pos = 0;
     end = nbits;
     err = 0;
+    no_xch = 0;
+  }
+  // The XCH extension of the core frame c (bits 0 to fend, its subframes' to pos), where c's header
+  // says there is one: its sync word searched for from the frame's end at 4-byte places, as
+  // FFmpeg searches (the XCH frame size the distance to the frame's end, or one more; 96 bytes at
+  // least; AMODE 1, then 3 bits of 0), at or after pos: c.xch, and c.xgapw the whole words before
+  // it after pos's 4-byte boundary
+  void find_xch(CoreRec& c, U64 fend) {
+    c.xch = c.xgapw = 0;
+    if (no_xch || !c.ext || c.ext_id != 0 || c.npchs >= NCH) return;
+    const S64 fs = (S64)(fend >> 3);
+    for (S64 k = fs / 4 - 2; k >= 0 && (U64)k * 32 >= pos; k--) {
+      if (be32(d + 4 * k) != SYNC_XCH) continue;
+      const U32 w2 = be32(d + 4 * k + 4);
+      const S64 size = (S64)(w2 >> 22) + 1, dist = fs - 4 * k;
+      if (size >= 96 && (size == dist || size - 1 == dist) && ((w2 >> 15) & 0x7f) == 0x08) {
+        c.xch = 1;
+        c.xgapw = (int)(k - (S64)((pos + 31) >> 5));
+        return;
+      }
+    }
   }
   bool fail(const char* why) {
     if (!err) err = why;
@@ -354,6 +390,8 @@ struct Walk {
 
   bool core(CoreRec& c) {
     const U64 p0 = io.pos;
+    c.xpass = 0;
+    if (IO::READ) c.xch = c.nxch = c.xgapw = c.xgap = 0;
     io.frame_start();
     if (!io.fixed(SYNC_CORE, 32, "no core sync word")) return false;
     WU(FTYPE, 1, c.ftype);
@@ -390,66 +428,112 @@ struct Walk {
     c.nsubfs = c.subfs + 1;
     WU(PCHS, 3, c.pchs);
     c.npchs = c.pchs + 1;
-    for (int ch = 0; ch < c.npchs; ch++) {
-      WU(SUBS, 5, c.subs[ch]);
-      if ((c.nsubs[ch] = c.subs[ch] + 2) > NSUB) return fail("a subband count out of range");
-    }
-    for (int ch = 0; ch < c.npchs; ch++) {
-      WU(VQSUB, 5, c.vqsub[ch]);
-      c.nvqsub[ch] = c.vqsub[ch] + 1;
-    }
-    for (int ch = 0; ch < c.npchs; ch++) {
-      WU(JOINX, 3, c.joinx[ch]);
-      if (c.joinx[ch] > c.npchs) return fail("a joint intensity channel out of range");
-    }
-    for (int ch = 0; ch < c.npchs; ch++) WU(THUFF, 2, c.thuff[ch]);
-    for (int ch = 0; ch < c.npchs; ch++) {
-      WU(SHUFF, 3, c.shuff[ch]);
-      if (c.shuff[ch] == 7) return fail("a scale factor code book out of range");
-    }
-    for (int ch = 0; ch < c.npchs; ch++) {
-      WU(BHUFF, 3, c.bhuff[ch]);
-      if (c.bhuff[ch] == 7) return fail("a bit allocation code book out of range");
-    }
-    for (int a = 0; a < 10; a++)
-      for (int ch = 0; ch < c.npchs; ch++) WU(SEL, SEL_BITS[a], c.sel[ch][a]);
-    for (int a = 0; a < 10; a++)
-      for (int ch = 0; ch < c.npchs; ch++) {
-        if (c.sel[ch][a] < QB_GROUP[a])
-          WU(ADJ, 2, c.adj[ch][a]);
-        else
-          c.adj[ch][a] = 0;
-      }
+    if (!coding_header(c, 0, c.npchs)) return false;
     if (c.cpf) WU(AHCRC, 16, c.ahcrc);
     c.nblk = 0;  // subband samples so far
     for (int sf = 0; sf < c.nsubfs; sf++)
       if (!subframe(c, sf)) return false;
     if (io.pos > end) return fail("subframes past the end of the frame");
+    // the XCH extension (6.1's back centre): found in the bits where the header says there may be
+    // one, else as the record has it; its channel's coding header, its subframes, as the core's
+    if (IO::BITS && IO::READ) find_xch(io, c, end);
+    {
+      S64 v = c.xch;
+      if (!io.val(F_XCH, 0, c.ext && c.ext_id == 0 && c.npchs < NCH, v)) return false;
+      c.xch = (int)v;
+    }
+    if (c.xch) {
+      // (its sync word at a 4-byte boundary of the frame: the subframes' next, or XGAP words after)
+      const int pad = (int)((32 - ((io.pos - p0) & 31)) & 31);
+      const S64 room = (S64)(end - io.pos) - pad;
+      S64 v = c.xgapw;
+      if (!io.val(F_XGAP, 0, room > 0 ? room / 32 : 0, v)) return false;
+      c.xgapw = (int)v;
+      c.xgap = pad + 32 * c.xgapw;
+      if (!io.raw(F_xgap, c.xgap, c.xgapb)) return false;
+      if (!io.fixed(SYNC_XCH, 32, "no XCH sync word")) return false;
+      WU(XFSIZE, 10, c.xfsize);
+      WU(XAMODE, 4, c.xamode);
+      WU(XRES, 3, c.xres);
+      c.nxch = 1;
+      if (!coding_header(c, c.npchs, c.npchs + 1)) return false;
+      if (c.cpf) WU(XAHCRC, 16, c.xahcrc);
+      c.xpass = 1;
+      c.nblk = 0;
+      for (int sf = 0; sf < c.nsubfs; sf++)
+        if (!subframe(c, sf)) return false;
+      c.xpass = 0;
+      if (io.pos > end) return fail("XCH past the end of the frame");
+    }
     c.tailbits = (int)(end - io.pos);
     if (!io.raw(F_tail, c.tailbits, c.tail)) return false;
     return true;
   }
+  // (BitIn's search, nothing for the other IOs)
+  static void find_xch(BitIn& i, CoreRec& c, U64 end) { i.find_xch(c, end); }
+  template <class I>
+  static void find_xch(I&, CoreRec&, U64) {}
 
+  // the coding header's fields of channels ch0 to ch1 - 1 (the core's; XCH's)
+  bool coding_header(CoreRec& c, int ch0, int ch1) {
+    for (int ch = ch0; ch < ch1; ch++) {
+      WU(SUBS, 5, c.subs[ch]);
+      if ((c.nsubs[ch] = c.subs[ch] + 2) > NSUB) return fail("a subband count out of range");
+    }
+    for (int ch = ch0; ch < ch1; ch++) {
+      WU(VQSUB, 5, c.vqsub[ch]);
+      c.nvqsub[ch] = c.vqsub[ch] + 1;
+    }
+    for (int ch = ch0; ch < ch1; ch++) {
+      WU(JOINX, 3, c.joinx[ch]);
+      if (c.joinx[ch] > ch1) return fail("a joint intensity channel out of range");
+    }
+    for (int ch = ch0; ch < ch1; ch++) WU(THUFF, 2, c.thuff[ch]);
+    for (int ch = ch0; ch < ch1; ch++) {
+      WU(SHUFF, 3, c.shuff[ch]);
+      if (c.shuff[ch] == 7) return fail("a scale factor code book out of range");
+    }
+    for (int ch = ch0; ch < ch1; ch++) {
+      WU(BHUFF, 3, c.bhuff[ch]);
+      if (c.bhuff[ch] == 7) return fail("a bit allocation code book out of range");
+    }
+    for (int a = 0; a < 10; a++)
+      for (int ch = ch0; ch < ch1; ch++) WU(SEL, SEL_BITS[a], c.sel[ch][a]);
+    for (int a = 0; a < 10; a++)
+      for (int ch = ch0; ch < ch1; ch++) {
+        if (c.sel[ch][a] < QB_GROUP[a])
+          WU(ADJ, 2, c.adj[ch][a]);
+        else
+          c.adj[ch][a] = 0;
+      }
+    return true;
+  }
+
+  // a subframe of the pass's channels (c.xpass: the core's, with their header and the LFE; XCH's,
+  // the core's subsubframes)
   bool subframe(CoreRec& c, int sf) {
     CoreSub& s = c.sub[sf];
-    WU(SSC, 2, s.ssc);
-    s.nssc = s.ssc + 1;
-    WU(PSC, 3, s.psc);
-    if (s.psc) return fail("a partial subsubframe");
+    const int ch0 = c.ch0(), ch1 = c.ch1();
+    if (!c.xpass) {
+      WU(SSC, 2, s.ssc);
+      s.nssc = s.ssc + 1;
+      WU(PSC, 3, s.psc);
+      if (s.psc) return fail("a partial subsubframe");
+    }
     if (c.nblk + s.nssc * 8 > c.nblks + 1) return fail("more subband samples than blocks");
     io.subframe(c, sf);
-    for (int ch = 0; ch < c.npchs; ch++)
+    for (int ch = ch0; ch < ch1; ch++)
       for (int b = 0; b < c.nsubs[ch]; b++) {
         io.at(ch, b, 0);
         WU(PMODE, 1, s.pmode[ch][b]);
       }
-    for (int ch = 0; ch < c.npchs; ch++)
+    for (int ch = ch0; ch < ch1; ch++)
       for (int b = 0; b < c.nsubs[ch]; b++)
         if (s.pmode[ch][b]) {
           io.at(ch, b, 0);
           WU(PVQ, 12, s.pvq[ch][b]);
         }
-    for (int ch = 0; ch < c.npchs; ch++)
+    for (int ch = ch0; ch < ch1; ch++)
       for (int b = 0; b < c.nvqsub[ch]; b++) {
         io.at(ch, b, 0);
         if (c.bhuff[ch] < 5)
@@ -458,7 +542,7 @@ struct Walk {
           WU(ABITS, c.bhuff[ch] - 1, s.abits[ch][b]);
         if (s.abits[ch][b] < 0 || s.abits[ch][b] > 26) return fail("a bit allocation out of range");
       }
-    for (int ch = 0; ch < c.npchs; ch++)
+    for (int ch = ch0; ch < ch1; ch++)
       for (int b = 0; b < c.nvqsub[ch]; b++) {
         if (s.nssc > 1 && s.abits[ch][b]) {
           io.at(ch, b, 0);
@@ -468,7 +552,7 @@ struct Walk {
           s.tmode[ch][b] = 0;
         }
       }
-    for (int ch = 0; ch < c.npchs; ch++) {
+    for (int ch = ch0; ch < ch1; ch++) {
       const int sh = c.shuff[ch], max = sh == 6 ? 128 : 64;
       int si = 0;
       for (int b = 0; b < c.nsubs[ch] || b < c.nvqsub[ch]; b++) {
@@ -492,13 +576,13 @@ struct Walk {
         }
       }
     }
-    for (int ch = 0; ch < c.npchs; ch++)
+    for (int ch = ch0; ch < ch1; ch++)
       if (c.joinx[ch]) {
         io.at(ch, 0, 0);
         WU(JOIN_SHUFF, 3, s.jsel[ch]);
         if (s.jsel[ch] == 7) return fail("a joint scale code book out of range");
       }
-    for (int ch = 0; ch < c.npchs; ch++) {
+    for (int ch = ch0; ch < ch1; ch++) {
       if (!c.joinx[ch]) continue;
       const int src = c.joinx[ch] - 1;
       for (int b = c.nsubs[ch]; b < c.nsubs[src]; b++) {
@@ -509,25 +593,28 @@ struct Walk {
           WU(JOIN_SCALES, s.jsel[ch] + 1, s.jscale[ch][b]);
       }
     }
-    if (c.dynf) WU(RANGE, 8, s.range);
-    if (c.cpf) WU(SICRC, 16, s.sicrc);
-    for (int ch = 0; ch < c.npchs; ch++)
+    if (c.dynf && !c.xpass) WU(RANGE, 8, s.range);
+    if (c.cpf) {
+      if (c.xpass) WU(XSICRC, 16, s.xsicrc);
+      else WU(SICRC, 16, s.sicrc);
+    }
+    for (int ch = ch0; ch < ch1; ch++)
       for (int b = c.nvqsub[ch]; b < c.nsubs[ch]; b++) {
         io.at(ch, b, 0);
         WU(HFVQ, 10, s.hfvq[ch][b]);
       }
-    const int nlfe = c.lff ? 2 * c.lff * s.nssc : 0;
+    const int nlfe = c.lff && !c.xpass ? 2 * c.lff * s.nssc : 0;
     for (int i = 0; i < nlfe; i++) {
       io.at(0, 0, i);
       WS(LFE, 8, s.lfe[i]);
     }
-    if (c.lff) {
+    if (c.lff && !c.xpass) {
       WU(LFEscaleIndex, 8, s.lfescale);
       if (s.lfescale >= 128) return fail("an LFE scale factor out of range");
     }
     // the subband samples
     for (int ssf = 0; ssf < s.nssc; ssf++) {
-      for (int ch = 0; ch < c.npchs; ch++)
+      for (int ch = ch0; ch < ch1; ch++)
         for (int b = 0; b < c.nvqsub[ch]; b++) {
           const int a = s.abits[ch][b], how = sample_coding(c, ch, a);
           S32* v = &s.q[ch][b][ssf * 8];
@@ -605,13 +692,20 @@ static INLINE int core_blocks(pcU8 p, size_t n) {
 }
 
 // the core frame at p (n bytes, PAD readable after them) parsed into c: 0, or why it can't be
+// (where its XCH extension doesn't parse, without it: its bytes a tail)
 static const char* core_parse(pcU8 p, int n, CoreRec& c) {
-  BitIn bi;
-  bi.init(p, (U64)n * 8);
-  Walk<BitIn> w(bi);
-  if (!w.core(c)) return w.why();
-  if (bi.pos != (U64)n * 8) return "a frame size otherwise than its header's";
-  return 0;
+  const char* why = 0;
+  for (int no = 0; no < 2; no++) {
+    BitIn bi;
+    bi.init(p, (U64)n * 8);
+    bi.no_xch = no;
+    Walk<BitIn> w(bi);
+    if (!w.core(c)) why = w.why();
+    else if (bi.pos != (U64)n * 8) why = "a frame size otherwise than its header's";
+    else return 0;
+    if (!c.xch) break;
+  }
+  return why;
 }
 // c written back into out (room for cap bytes): its bytes, 0 where it doesn't make whole bytes
 static int core_write(CoreRec& c, U8* out, int cap) {

@@ -95,7 +95,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     S64 lo = o0 - 512, hi = o0 + 32 * (S64)(nsmp - 1);
     // the LFE (64x only), its samples' windows and the correction's around them
     const S64 n0 = t0 / 2;
-    if (r.lff == 2 && bind.lfe >= 0 && bind.lfe < wav->nch) {
+    if (r.lff == 2 && !r.xpass && bind.lfe >= 0 && bind.lfe < wav->nch) {
       lfe_on = 1;
       lfe_n = 2 * r.lff * s.nssc;
       lo = imin(lo, 64 * (n0 - LFE_K) + bind.off - 512);
@@ -106,7 +106,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       for (int k = 0; k < LFE_NT; k++) lfe_f[i][k] = lfe_d(n0 + i + k - LFE_K);
       lfe_p[i] = lfit.predict(lfe_f[i]);
     }
-    for (int ch = 0; ch < r.npchs; ch++) {
+    for (int ch = r.ch0(); ch < r.ch1(); ch++) {
       if (!bind.bound(ch, wav->nch)) continue;
       bound[ch] = 1;
       S64 x[32];
@@ -152,7 +152,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // correction fit again
   void smp_subframe_end(const CoreRec& r) {
     if (lfe_on) lfit.refit();
-    for (int ch = 0; ch < r.npchs; ch++) {
+    for (int ch = r.ch0(); ch < r.ch1(); ch++) {
       if (!bound[ch]) continue;
       for (int b = 0; b < NSUB; b++)
         for (int k = 0; k < 4; k++) xh[ch][b][k] = X[ch][b][nsmp - 1 - k];
@@ -436,7 +436,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // the decoder's samples of the subframe's subbands without indexes: none where ABITS is 0 but the
   // ADPCM prediction, the VQ vector's (and the prediction) past VQSUB, none past SUBS
   void smp_fill(const CoreRec& r, const CoreSub& s) {
-    for (int ch = 0; ch < r.npchs; ch++)
+    for (int ch = r.ch0(); ch < r.ch1(); ch++)
       for (int b = 0; b < NSUB; b++) {
         if (b < r.nvqsub[ch] && s.abits[ch][b]) continue;  // (pushed as decoded)
         const int pm = b < r.nsubs[ch] && s.pmode[ch][b];

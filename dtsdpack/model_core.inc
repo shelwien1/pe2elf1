@@ -4,26 +4,32 @@
 constexpr int HOCC = 128;  // hdr: the places of a field in a frame that have a last value (more: the last of them)
 constexpr int kVal = 62;   // a value as a variable (lv, pq): 1 + it, to 1 + kVal
 // what raw bytes are (raw's code)
-enum { RC_CHUNK, RC_BAD, RC_TAIL };
+enum { RC_CHUNK, RC_BAD, RC_TAIL, RC_GAP };
 // a chunk's kind (code_kind()): the end, a frame as records, bytes between frames, a frame kept as
 // bytes
 enum { CK_END, CK_FRAME, CK_RAW, CK_BAD, CK_N };
 constexpr S64 kRawLenMax = (S64)1 << 40;  // a chunk's length as decoded (more: damaged data)
 
-// a field's number in the hdr family (-1: not one of its), made as the program starts
+// A field's number in the hdr family (-1: not one of its), made as the program starts: the core
+// frame's fields, the container's (NHFRAME + HX_*), then the XCH extension's (so the others keep
+// the numbers they had before XCH had fields: the levels' contexts take parts of them)
+static const int NHFRAME = 42;  // the core frame's hdr fields
+static_assert(F_LFEscaleIndex + 1 == NHFRAME && F_XCH == NHFRAME && F_XSICRC + 1 == F_PMODE,
+              "the hdr family's fields are the first of CORE_FIELDS, XCH's after the core's");
 struct FieldNums {
   S16 hdr[F_N];
 };
 static FieldNums field_nums(void) {
   FieldNums t;
   int h = 0;
-  for (int fid = 0; fid < F_N; fid++) t.hdr[fid] = field_kind[fid] == FK_H ? (S16)h++ : (S16)-1;
-  if (h + HX_N > NHF) fatal("internal error: %d header fields", h + HX_N);
+  for (int fid = 0; fid < F_N; fid++) {
+    if (fid == F_XCH) h += HX_N;
+    t.hdr[fid] = field_kind[fid] == FK_H ? (S16)h++ : (S16)-1;
+  }
+  if (h > NHF) fatal("internal error: %d header fields", h);
   return t;
 }
 static const FieldNums fnums = field_nums();
-static const int NHFRAME = 42;  // the frame's hdr fields (the container's come after them: HX_*)
-static_assert(F_LFEscaleIndex + 1 == NHFRAME, "the hdr family's fields are the first of CORE_FIELDS");
 
 // What the stream had last, as its frames are coded (zeroed pages: none)
 struct Hist {
@@ -36,8 +42,10 @@ struct Hist {
   S32 jscale[NCH][NSUB];
   S32 pscale[NCH][NSUB], energy[NCH][NSUB];
   S32 lfe;
-  U8 tail[MAX_FRAME];  // the last tail's bytes that aren't 0, at its end (tailn of them)
-  S32 tailn;
+  // the last tail's bytes that aren't 0, at its end (tailn of them); the same of the bits before
+  // the XCH extension ([1])
+  U8 tail[2][MAX_FRAME];
+  S32 tailn[2];
 };
 
 // a value as a variable: 0 none (v 0), else 1 + it, to 1 + c (v as Hist keeps it: 1 + the value)

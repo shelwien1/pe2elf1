@@ -122,10 +122,16 @@ struct Model : ModelSmp<f_DEC, LV> {
       v = B::lfe_scl;
       return good();
     }
+    if (fid == F_XFSIZE) {  // (less the one its sync word's distance to the frame's end makes, mod 2^10)
+      account(CAT_HDR);
+      const S64 e = (S64)r.fsize - (S64)((pos - 32) >> 3);
+      v = (hdr_field(fid, 1023, (v - e) & 1023) + e) & 1023;
+      return good();
+    }
     switch (field_kind[fid]) {
-      case FK_H:
+      case FK_H:  // (a value of the record's only, in lo..hi: nothing where it can only be lo)
         account(CAT_HDR);
-        v = checked(hdr_field(fid, nbits, v), lo, hi);
+        v = hi > lo ? checked(hdr_field(fid, hi, v), lo, hi) : lo;
         return good();
       case FK_Q:
         account(CAT_SMP);
@@ -249,12 +255,12 @@ struct Model : ModelSmp<f_DEC, LV> {
   }
   bool val(int fid, S64 lo, S64 hi, S64& v) { return code(fid, v, lo, hi, 0); }
   bool raw(int fid, int n, U8* p) {
-    if (fid != F_tail) fatal("internal error: raw bits of %s", field_name[fid]);
+    if (fid != F_tail && fid != F_xgap) fatal("internal error: raw bits of %s", field_name[fid]);
 #ifdef DTSD_FSTAT
     c->fid = fid;
 #endif
     account(CAT_TAIL);
-    B::code_tail(p, n);
+    B::code_tail(p, n, fid == F_xgap);
     pos += n;
     return good();
   }
@@ -279,7 +285,7 @@ struct Model : ModelSmp<f_DEC, LV> {
     const CoreSub& s = r.sub[sf];
     B::smp_fill(r, s);
     B::smp_subframe_end(r);
-    for (int ch = 0; ch < r.npchs; ch++)
+    for (int ch = r.ch0(); ch < r.ch1(); ch++)
       for (int b = 0; b < NSUB; b++) {
         const int in = b < r.nsubs[ch], q = b < r.nvqsub[ch];
         hist.pmode[ch][b] = in ? s.pmode[ch][b] + 1 : 0;

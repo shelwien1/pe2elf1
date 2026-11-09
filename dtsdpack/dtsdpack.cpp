@@ -17,9 +17,9 @@
 // parsed into its record (syntax.inc: dts2tsv's walk of the core, down to every subband sample's
 // quantization index), written back as bits and compared with the frame: if that reproduces it,
 // the record is coded with a binary arithmetic coder, else the frame is kept as bytes, and so are
-// the bytes between frames, so compression is always lossless. The same walk that reads a frame's
-// bits and writes them is, at record level, what codes and decodes the record (model.inc: the
-// model is its IO).
+// the bytes between frames, so compression is always lossless. A frame's XCH extension (6.1's back
+// centre) is in its record as one more channel. The same walk that reads a frame's bits and writes
+// them is, at record level, what codes and decodes the record (model.inc: the model is its IO).
 //
 // The WAV. The core was coded from the audio a DTS-HD MA stream's lossless extension decodes to:
 // that audio's subband samples, by the encoder's analysis filterbank (anal.inc, in integers), and
@@ -37,7 +37,8 @@
 // domain, refined by APMs, the decision then range coded (rc.inc). famvars.inc lists what the model
 // gives each family; IDX/l<L>/<family>.idx declares a level's indices over those variables and their
 // tunable parameters, which IDX/idx2inc.pl turns into MOD/l<L>/ (mk.sh). The families:
-//   hdr  the frame's, the coding header's and the subframes' fields, against their last values
+//   hdr  the frame's, the coding header's and the subframes' fields (XCH's too), against their last
+//        values
 //   sid  a subband's PMODE (against the gain of the predictor the encoder would choose), TMODE,
 //        joint scale factors; and where the WAV isn't bound, its predictor, HF VQ vector, the LFE
 //   abt  the bit allocations, against the ABITS seen at the subband's energy, and the last ones
@@ -45,10 +46,10 @@
 //   hit  whether an index that isn't the audio's is the one across the rounding boundary
 //   smp  the subband samples' indexes otherwise: magnitude and sign
 //   vqr  the ranks of the predictors and the HF VQ vectors in the encoder's search order
-//   raw  bytes kept as bytes, the bits after the subframes
+//   raw  bytes kept as bytes, the bits after the subframes and those before XCH
 // (Whether a subband sample's index is the audio's goes straight to the coder: model_smp.inc.)
 //
-// File format: "dtsdpack", the format version 2, the level, the WAV's binding (how the core lines
+// File format: "dtsdpack", the format version 3, the level, the WAV's binding (how the core lines
 // up with it, and what the WAV was: coro.inc), then the range coded chunks (kind: end, a frame as
 // records, bytes between frames, a frame kept as bytes; then the records or a length and the
 // bytes); after the end, the CRC-32 of the core stream.

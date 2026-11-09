@@ -15,7 +15,7 @@ struct MixSums {
   double G[NCH][WAV_CH][WAV_CH], C[NCH][WAV_CH], Y[NCH];  // (G's lower half)
   U64 N[NCH];
   void operator()(const CoreRec& r, const CoreSub& s, int j, S64 (*xw)[32]) {
-    for (int ch = 0; ch < r.npchs; ch++)
+    for (int ch = 0; ch < r.npchs + r.nxch; ch++)
       for (int b = 0; b < r.nvqsub[ch]; b++) {
         if (!s.abits[ch][b] || s.pmode[ch][b]) continue;
         const S64 ss = step_scale(r, s, ch, b, j >> 3);
@@ -43,7 +43,7 @@ struct MixHits {
   int nc[NCH];
   U64 hits[NCH][MIX_CANDS], n[NCH];
   void operator()(const CoreRec& r, const CoreSub& s, int j, S64 (*xw)[32]) {
-    for (int ch = 0; ch < r.npchs; ch++)
+    for (int ch = 0; ch < r.npchs + r.nxch; ch++)
       for (int b = 0; b < r.nvqsub[ch]; b++) {
         if (!s.abits[ch][b] || s.pmode[ch][b]) continue;
         const S64 ss = step_scale(r, s, ch, b, j >> 3);
@@ -340,7 +340,7 @@ struct Call {
     mix_pass(pre, pos, len, ft, nf, nch, filts, ms);
     const int nw = wav.nch;
     auto g = [&](int ch, int i, int k) { return i >= k ? ms.G[ch][i][k] : ms.G[ch][k][i]; };
-    for (int ch = 0; ch < nch; ch++) {
+    for (int ch = 0; ch < NCH; ch++) {  // (XCH's channel too: after the core's)
       if (ms.N[ch] < 64) continue;  // (too few to tell: as find_bind() had it)
       double rs = 1e300, rp = 1e300, gs = 0, pa = 0, pb = 0;
       int si = -1, pi = -1, pk = -1;
@@ -374,7 +374,7 @@ struct Call {
       }
     }
     mix_pass(pre, pos, len, ft, nf, nch, filts, mh);
-    for (int ch = 0; ch < nch; ch++) {
+    for (int ch = 0; ch < NCH; ch++) {
       if (!mh.nc[ch] || !mh.n[ch]) continue;
       int bk = 0;  // (the candidates in order of preference: one channel before two, the table's gains before the fit's)
       for (int k = 1; k < mh.nc[ch]; k++)

@@ -96,11 +96,12 @@ FFmpeg's small DTS-HD MA samples (`xll_*`, 7 frames each) round-trip too:
 | `xll_51_24_48_768` | 7168 | 721 (10.06%) | the WAV's 5.1 |
 | `xll_71_24_48_768_0` | 7168 | 560 (7.81%) | a downmix of its 7.1: every channel at -3 dB, each surround its side and rear surround |
 | `xll_71_24_48_768_1` | 7168 | 693 (9.67%) | the same, the rear surrounds' sign inverted |
-| `xll_xch_61_24_48_768` | 7168 | 1920 (26.79%) | its 6.1's 5.1, the back centre in the surrounds at about -3 dB (and in the XCH extension, kept as bytes) |
+| `xll_xch_61_24_48_768` | 7168 | 1036 (14.45%) | its 6.1's 5.1, the back centre in the surrounds at about -3 dB; and in the XCH extension, the back centre |
 | `xll_51_16_192_768_1`, `xll_71_24_96_768` | 7168 | 49.05%, 42.16% | coded from a 48 kHz version of the 192 or 96 kHz WAV: nothing lines up |
 
 Before the downmixes were found, the 7.1 and 6.1 ones went to 36-38%: only 3 of their core's
-channels lined up with a WAV channel, and those at the wrong gain in the 7.1 ones.
+channels lined up with a WAV channel, and those at the wrong gain in the 7.1 ones. With its XCH
+extension kept as bytes (about 140 of each frame's 1024), the 6.1 one went to 26.79%.
 
 ## How it works
 
@@ -113,6 +114,15 @@ compared with the frame: if they match, the record is coded; if not, or the fram
 the frame is kept as bytes, and so is everything between frames, so any input round-trips. The same
 walk that reads a frame's bits and writes them is, at record level, what codes and decodes the
 record: the model (`model.inc`) is its IO, so the two directions can't drift apart.
+
+A 6.1 core's XCH extension (its back centre, after the core's subframes) is found as FFmpeg finds
+it: where the header says there is one, its sync word at a 4-byte boundary, searched for back from
+the frame's end, its frame size the distance to the end. Its coding header and subframes are the
+core's syntax for one more channel (without an LFE, in the core's subsubframes), so the record has
+it as a channel after the core's, which the model codes as it codes theirs, against the WAV; what
+is left is the bits from the subframes to its sync word (the zeros to the next 4-byte boundary, in
+the streams seen) and the bits after it. Where the extension doesn't parse, its bytes are the bits
+after the subframes again.
 
 ### The audio
 
@@ -159,7 +169,7 @@ c finds how the core lines up with the WAV before it starts (`call.inc`'s `find_
 doubles; the header keeps the result). The offset: from the core's first 4 MB, the 64 blocks with
 the most energy, decoded to their plain subband samples, against the WAV's analysis at offsets
 -1024..1536 for each of its channels; the best for the core's channel 0 gives it. Then each core
-channel (`find_mixes()`): a core may be a downmix of the WAV, as a DTS-HD MA 7.1 stream's is (its
+channel, XCH's too (`find_mixes()`): a core may be a downmix of the WAV, as a DTS-HD MA 7.1 stream's is (its
 lossless extension's primary channel set is the 5.1 the core was coded from, each surround the side
 and the rear surround, every channel scaled: coefficients of DTS's downmix table, FFmpeg's
 `ff_dca_dmixtable`, Q15). So over
@@ -185,7 +195,8 @@ which `IDX/idx2inc.pl` turns into `MOD/l9/` (`./mk.sh mod`; the format:
 [IDX/IDX-FORMAT.md](IDX/IDX-FORMAT.md)).
 
 - **hdr**: the frame's header, the coding header and the subframes' headers, each field against its
-  last values; the container's kinds and lengths.
+  last values (XCH's header and coding header too: its frame size against the one its sync word's
+  distance to the frame's end makes); the container's kinds and lengths.
 - **sid**: a subband's PMODE (against the gain above), TMODE, joint scale factors, and where the
   WAV isn't bound, its predictor, its HF VQ vector and the LFE samples.
 - **abt**: the bit allocations.
@@ -194,7 +205,7 @@ which `IDX/idx2inc.pl` turns into `MOD/l9/` (`./mk.sh mod`; the format:
   it is the audio's.
 - **smp**: the indexes otherwise (and all of them where the WAV isn't bound): magnitude and sign.
 - **vqr**: the ranks of the predictors and the HF VQ vectors.
-- **raw**: bytes kept as bytes, and the bits after the subframes.
+- **raw**: bytes kept as bytes, the bits after the subframes, and those before XCH's sync word.
 
 The parameters started as ac3pack's tuned level -9's (its sid, mag and raw families'), then were
 tuned as ac3pack's are: `./mk.sh dump 9 DIR stream wav ...` writes what each family codes,
@@ -210,7 +221,7 @@ files.
 
 ### The format
 
-"dtsdpack", the format's version (2), the level, the WAV's binding (the offset; each core channel's
+"dtsdpack", the format's version (3), the level, the WAV's binding (the offset; each core channel's
 WAV channel, the second of its mix and their gains, Q23; the LFE's channel; the WAV's format, size
 and the CRC-32 of its first 64 KB), then the
 range coded chunks (a frame as records, bytes between frames, a frame kept as bytes), the end, and
@@ -222,7 +233,8 @@ the CRC-32 of the core stream, which `d` checks.
   downmixed from 5.1) is bound to its best two, or isn't. Cores coded from a resampled WAV (96 and
   192 kHz streams) aren't bound at all.
 - The LFE is predicted at 64x only (LFF 2); a 128x LFE (LFF 1) is coded by the model alone.
-- Extensions in the core substream (XCH, XXCH, X96) are bytes after the subframes, kept as they are.
+- The other extensions in the core substream (XXCH, X96) are bytes after the subframes, kept as
+  they are.
 - One thread, one level.
 
 ## Build

@@ -97,18 +97,18 @@ struct ModelHdr {
     kept(A, v);
     return v;
   }
-  // a field of the hdr family (local number fld) at place o, n bits: against the last two values
-  // there, kept as the frame ends
-  S64 hdr_hist(int fld, int o, int n, S64 v) {
-    v = hdr_code(fld, n == 1, v, hist.h1[fld][o], hist.h2[fld][o], o, ((S64)1 << n) - 1);
+  // a field of the hdr family (local number fld) at place o, in 0..hi (a flag where hi is 1):
+  // against the last two values there, kept as the frame ends
+  S64 hdr_hist(int fld, int o, S64 hi, S64 v) {
+    v = hdr_code(fld, hi == 1, v, hist.h1[fld][o], hist.h2[fld][o], o, hi);
     if (npend < PEND_MAX) pend[npend++] = Pend{(U8)fld, (U8)o, (S32)(v + 1)};
     return v;
   }
-  // a field of the frame's or a subframe's header (fid) at its next place in the frame
-  S64 hdr_field(int fid, int n, S64 v) {
+  // a field of the frame's or a subframe's header (fid), in 0..hi, at its next place in the frame
+  S64 hdr_field(int fid, S64 hi, S64 v) {
     const int o = imin(occ[fid], HOCC - 1);
     if (occ[fid] < UINT8_MAX) occ[fid]++;
-    return hdr_hist(fnums.hdr[fid], o, n, v);
+    return hdr_hist(fnums.hdr[fid], o, hi, v);
   }
   // the frame's hdr values into the history, as it ends
   void hdr_commit(void) {
@@ -142,11 +142,14 @@ struct ModelHdr {
     }
   }
 
-  // The bits after the subframes (nbits at p, the last byte's unused bits 0): a flag whether they
-  // are all 0, else how many of their last bytes are not (from the first that isn't), and those
-  // bytes, against the last tail's at the same places from the end
-  void code_tail(pU8 p, int nbits) {
-    const int nb = (nbits + 7) / 8;
+  // The bits after the subframes (nbits at p, the last byte's unused bits 0), or those before the
+  // XCH extension (gap): a flag whether they are all 0, else how many of their last bytes are not
+  // (from the first that isn't), and those bytes, against the last ones' of the kind at the same
+  // places from the end
+  void code_tail(pU8 p, int nbits, int gap) {
+    const int nb = (nbits + 7) / 8, zf = NHFRAME + (gap ? HX_GAPZ : HX_TAILZ), nf = NHFRAME + (gap ? HX_GAPNZ : HX_TAILNZ);
+    U8* const last = hist.tail[gap];
+    S32& lastn = hist.tailn[gap];
     int nz = 0;
     if (!nb) return;
     if (ENC) {
@@ -154,15 +157,15 @@ struct ModelHdr {
       while (i < nb && !p[i]) i++;
       nz = nb - i;
     }
-    if (hdr_hist(NHFRAME + HX_TAILZ, 0, 1, nz == 0)) {
+    if (hdr_hist(zf, 0, 1, nz == 0)) {
       if (!ENC) memset(p, 0, (size_t)nb);
       return;
     }
-    nz = (int)checked(hdr_hist(NHFRAME + HX_TAILNZ, 0, 16, nz), 1, nb);
+    nz = (int)checked(hdr_hist(nf, 0, 0xFFFF, nz), 1, nb);
     if (!ENC) memset(p, 0, (size_t)(nb - nz));
-    raw_bytes(p + nb - nz, (size_t)nz, RC_TAIL, hist.tail, hist.tailn - nz, hist.tailn, 1);
-    memcpy(hist.tail, p + nb - nz, (size_t)nz);
-    hist.tailn = nz;
+    raw_bytes(p + nb - nz, (size_t)nz, gap ? RC_GAP : RC_TAIL, last, lastn - nz, lastn, 1);
+    memcpy(last, p + nb - nz, (size_t)nz);
+    lastn = nz;
   }
 
   // the container: a chunk's kind (CK_*), the length of one kept as bytes, its bytes
