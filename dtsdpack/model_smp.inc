@@ -40,9 +40,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   U8 ab_seen[2][NSUB][129];  // the ABITS each subband had the last time it had that energy (by pm; 1 + it, 0 none)
   // the bit allocations' staircases (stair_guess()), by pass (the core's, the extension's), pm and
   // subband; each pass's level
-  static constexpr int AL_ND = 128, AL_NK = 2 * AL_ND + 1;  // (the level's search: 4 doublings either side)
-  static constexpr int AB_RC = 256;  // (the rate control's: 8 doublings either side of the last level)
-  static constexpr S32 FE_NONE = -(1 << 30), AL_C = 1 << 13;
+  // (the energies in 128ths of a doubling)
+  static constexpr int AL_ND = 512, AL_NK = 2 * AL_ND + 1;  // (the level's search: 4 doublings either side)
+  static constexpr int AB_RC = 1024;  // (the rate control's: 8 doublings either side of the last level)
+  static constexpr S32 FE_NONE = -(1 << 30), AL_C = 1 << 15;
   struct AbStair {
     S32 lo[32], hi[32];  // each ABITS's energies, less the level
     U32 has;             // (a bit per ABITS)
@@ -241,7 +242,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // The pass's level: from the subframe's centre, the rate control's (level_centre(): where the
   // staircases' ABITS would cost what the last subframes' did), the shift at which the staircases
   // made the most of the subframe's ABITS so far (within AL_ND; of those, the nearest).
-  // the fine energy of the n values v: 32 times the log2 of their mean square (FE_NONE: all 0)
+  // the fine energy of the n values v: 128 times the log2 of their mean square (FE_NONE: all 0)
   static S32 fine_energy(const S64* v, int n) {
     U128 e = 0;
     for (int j = 0; j < n; j++) e += (U128)((S128)v[j] * v[j]);
@@ -340,13 +341,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // pass p's guess on the staircase t at the energy x
   int level_guess(int p, const AbStair& t, S32 x) const { return stair_guess(t, x - abl[p].c0 - abl[p].d); }
   // and how sure it is, its guess g: how near x lies to the energies where the guess changes, the
-  // nearer's side (0 none; 1-6 below, 7-12 above: within 0, 1, 3, 7, 15 32nds of a doubling or
-  // farther)
+  // nearer's side (0 none; 1-8 below, 9-16 above: within 0, 1, 3, 7, 15, 31, 63 128ths of a
+  // doubling or farther)
   int level_margin(int p, const AbStair& t, S32 x, int g) const {
     S64 a, z;
     if (g < 0 || !stair_region(t, g, &a, &z)) return 0;
     const S64 y = (S64)x - abl[p].c0 - abl[p].d, lo = y - a, hi = z - y, m = lo < hi ? lo : hi;
-    return 1 + 6 * (lo >= hi) + (m < 1 ? 0 : m < 2 ? 1 : m < 4 ? 2 : m < 8 ? 3 : m < 16 ? 4 : 5);
+    int k = 0;
+    while (k < 7 && m >= ((S64)1 << k)) k++;
+    return 1 + 8 * (lo >= hi) + k;
   }
   // and its ABITS was v: the shifts at which the staircase would have said it count, then the
   // staircase has it
@@ -359,10 +362,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     stair_add(t, x - L.c0 - L.d, v);
     L.cost += ab_bits(v), L.n++;
-    int bk = AL_ND;  // (a quarter of an ABITS's score off for each unit from the centre)
-    S32 bs = 4 * L.sc[AL_ND];
+    int bk = AL_ND;  // (a 16th of an ABITS's score off for each unit from the centre)
+    S32 bs = 16 * L.sc[AL_ND];
     for (int k = 1; k <= AL_ND; k++) {
-      const S32 s1 = 4 * L.sc[AL_ND - k] - k, s2 = 4 * L.sc[AL_ND + k] - k;
+      const S32 s1 = 16 * L.sc[AL_ND - k] - k, s2 = 16 * L.sc[AL_ND + k] - k;
       if (s1 > bs) bs = s1, bk = AL_ND - k;
       if (s2 > bs) bs = s2, bk = AL_ND + k;
     }

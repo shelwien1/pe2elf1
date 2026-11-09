@@ -92,8 +92,8 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      fall inside the buckets, so where the ABITS seen at the energy above or below differs, its
 //      side's quarter makes the change likelier), sm where sn is the staircase's (model_smp.inc's
 //      level_guess()), how near the energy lies to where its guess changes and on which side
-//      (level_margin(): 0 none, 1-6 below, 7-12 above, by 0, 1, 2-3, 4-7, 8-15, more 32nds of a
-//      doubling)
+//      (level_margin(): 0 none, 1-8 below, 9-16 above, by 0, 1, 2-3, 4-7, 8-15, 16-31, 32-63, more
+//      128ths of a doubling)
 // scl: kd (0 a subband's first scale factor, 1 its second, after its transient, 2 a high-frequency
 //      VQ subband's, 3 the LFE's), ab its ABITS (1 + it, 0 none), pm whether it predicts, pk whether the audio
 //      predicts the scale factor, pn how near its RMS lies to the midpoint between two (0-7), lp

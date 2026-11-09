@@ -247,7 +247,7 @@ struct Model : ModelX96<f_DEC, LV> {
           Sn = sg + 1, fs = 1;
         // (where the first guess is the staircase's, the second the ABITS across the nearer edge of
         // its energies: a miss's, nearly always)
-        const int ms = Sn == sg + 1 ? sm : 0, alt = ms ? (ms <= 6 ? sg - 1 : sg + 1) : -1;
+        const int ms = Sn == sg + 1 ? sm : 0, alt = ms ? (ms <= 8 ? sg - 1 : sg + 1) : -1;
         v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
                        s.pmode[ch][b], lbd, nb, mx, Sn, near_e ? 14 : nn, sc, eq, ms,
                        alt >= lo && alt <= hi ? alt + 1 : 0);
