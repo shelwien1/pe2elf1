@@ -54,6 +54,13 @@ struct WavIn {
     if (s < 0 || (U64)s >= got || c >= nch) return 0;
     return ring[c][s & (WAV_WIN - 1)];
   }
+  // samples s..s + n - 1 of channel c (as at()'s): in the ring where they are there in a row, else
+  // copied into buf
+  INLINE const S32* span(int c, S64 s, int n, S32* buf) const {
+    if (s >= 0 && (U64)(s + n) <= got && c < nch && (s & (WAV_WIN - 1)) + n <= WAV_WIN) return ring[c] + (s & (WAV_WIN - 1));
+    for (int i = 0; i < n; i++) buf[i] = at(c, s + i);
+    return buf;
+  }
   // the samples up to s (not included) read, those before from given up (s - from <= WAV_WIN)
   void need(S64 from, S64 s) {
     if (!ok) return;

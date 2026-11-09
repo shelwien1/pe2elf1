@@ -110,11 +110,10 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     const int k = lpg4_9[ch][b];
     if (k < 2 || k > 9) return k < 2 ? 0 : 9;
     int bq = 0;
-    S64 bdist = pvq_dist(0, lpc9[ch][b]);
-    for (int q = 1; q < 4096; q++) {
-      const S64 d = pvq_dist(q, lpc9[ch][b]);
-      if (d < bdist) bdist = d, bq = q;
-    }
+    S64* const d = this->pvqd;
+    pvq_dists(lpc9[ch][b], d);
+    for (int q = 1; q < 4096; q++)
+      if (d[q] < d[bq]) bq = q;
     return clip(pvq_gain4(bq, xh9[ch][b], X9[ch][b], nsmp9) - 2, 1, 8);
   }
 
@@ -129,7 +128,9 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
                          bd ? imin(lpg4_9[ch][b], 27) : 0, bd ? x96_pmode_gain(ch, b) : 9);
       case F_PVQ:
         if (bd) {
-          for (int q = 0; q < 4096; q++) cand[q].k = pvq_dist(q, lpc9[ch][b]), cand[q].i = q;
+          S64* const d = this->pvqd;
+          pvq_dists(lpc9[ch][b], d);
+          for (int q = 0; q < 4096; q++) cand[q].k = d[q], cand[q].i = q;
           return code_cand(4096, 12, (int)v, VK_PVQ, ch, b, lpg9[ch][b], lrank9[ch][b][VK_PVQ]);
         }
         return side_index(SF_PVQ, ch, b, v, 12, hpv[ch][b], 8, 0);

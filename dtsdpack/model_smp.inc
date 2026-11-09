@@ -45,6 +45,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // it, where it was tried; its tries; the ABITS (-s: those it said, those it said right)
   U32 abr[2], ab_n;
   U64 n_ab, n_abs, n_abhit;
+  int abfit_a[NCH][NSUB];   // the subframe's subbands' search's ABITS (-1 none), and its fit's distance
+  U64 abfit_d[NCH][NSUB];
+  struct AbCache {          // a bit allocation search's, where PMODE's made it (its window, its result)
+    int g, a0, a1, p, G, gc;
+    U64 gd;
+  } abc[NCH][NSUB];
+  U32 pv_n, pv_none;        // (code_pvq(): the predictors tried, those of which none fit)
   // the same of the HF VQ groups' nearest entries (code_hfvq()): how often one was near, of how
   // many tries; the tries (to 2048); the vectors
   U32 hfr[2], hf_n;
@@ -54,6 +61,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   int lpg4[NCH][NSUB];     // and in quarters of them
   U8 lrank[NCH][NSUB][VK_N];  // the subband's last rank of each kind (vqr's lh)
   KeyIx cand[4096];        // the candidates of a rank
+  S64 pvqd[4096];          // (the ADPCM code book's distances: pvq_dists(); not on the stack, which a
+                           // coroutine's yield copies, 64 KB at most: Lib3/coro3b.inc)
   // the LFE (64x) against the WAV's LFE channel (bind.lfe)
   int lfe_on;              // the subframe's LFE samples are coded against the audio's
   int lfe_n;               // how many
@@ -241,16 +250,57 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const int k = lpg4[ch][b];
     if (k < 2 || k > 9) return k < 2 ? 0 : 9;
     int bq = 0;
-    S64 bd = pvq_dist(0, lpc[ch][b]);
-    for (int q = 1; q < 4096; q++) {
-      const S64 d = pvq_dist(q, lpc[ch][b]);
-      if (d < bd) bd = d, bq = q;
-    }
+    S64* const d = this->pvqd;
+    pvq_dists(lpc[ch][b], d);
+    for (int q = 1; q < 4096; q++)
+      if (d[q] < d[bq]) bq = q;
     return clip(pvq_gain4(bq, xh[ch][b], X[ch][b], nsmp) - 2, 1, 8);
   }
-  // Channel ch's subband b's ADPCM predictor v: its rank by the distance from the subband's LPC
-  S64 code_pvq(int ch, int b, S64 v) {
-    for (int q = 0; q < 4096; q++) cand[q].k = pvq_dist(q, lpc[ch][b]), cand[q].i = q;
+  // Channel ch's subband b's ADPCM predictor v: its rank by the distance from the subband's LPC.
+  // (Where the scale factor search's rule is taken, a decoded WAV's: of the first 16 in that order,
+  // the first whose prediction leaves values that fit a quantizer's lattice, by the bit allocation
+  // search, to a 64th of a step squared a value, first: a decoded WAV's values less the decoder's
+  // prediction are its dequantized indexes.)
+  S64 code_pvq(const CoreRec& r, const CoreSub& s, int ch, int b, S64 v) {
+    S64* const d = this->pvqd;
+    pvq_dists(lpc[ch][b], d);
+    for (int q = 0; q < 4096; q++) cand[q].k = d[q], cand[q].i = q;
+    if (ss_rule()) {
+      const int K = pv_none * 4 > pv_n ? 4 : 16;  // (fewer where few fit: a 96/24 stream's core's)
+      int top[16], nk = 0;  // (the order's first K, the first first)
+      for (int q = 0; q < 4096; q++) {
+        int k = nk;
+        while (k > 0 && key_less(cand[q], cand[top[k - 1]])) k--;
+        if (k >= K) continue;
+        for (int z = imin(nk, K - 1); z > k; z--) top[z] = top[z - 1];
+        top[k] = q;
+        nk = imin(nk + 1, K);
+      }
+      for (int k = 0; k < nk; k++) {
+        S64 x[NSMP];
+        S64 h[4] = {xh[ch][b][0], xh[ch][b][1], xh[ch][b][2], xh[ch][b][3]};
+        const int n = s.nssc * 8;
+        for (int j = 0; j < n; j++) {
+          const S64 y = X[ch][b][j];
+          x[j] = y - adpcm_pred_x(top[k], h);
+          h[3] = h[2], h[2] = h[1], h[1] = h[0], h[0] = y;
+        }
+        int near;
+        const int e = 1 + scale_pred(x, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
+        const U8 sv = ab_seen[1][b][imin(e, 128)];
+        const S32 og = sv ? sv : hist.abits[ch][b];
+        if (!og) break;
+        const int g = og - 1, a0 = imax(1, g - 3), a1 = imin(26, g + 3);
+        int conf;
+        U64 d = ~0ull;
+        if (abits_search(r, ch, x, n, g, a0, a1, e - 1, &conf, &d, (U64)n << 10)) {
+          cand[top[k]].k = -1;
+          break;
+        }
+        pv_none += k == nk - 1;
+      }
+      if (++pv_n >= 1u << 16) pv_n >>= 1, pv_none >>= 1;
+    }
     return code_cand(4096, 12, (int)v, VK_PVQ, ch, b, lpg[ch][b]);
   }
   // Channel ch's subband b's HF VQ vector v (its scale factor coded): the rank of its group by the
@@ -303,7 +353,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // ADPCM prediction off) are what the decoder made of the indexes, or of a VQ vector (hfb), at the
   // step and scale factor; so of the entries from p - 3 to p + 5, the one whose reconstruction lies
   // nearest them, where nearer by 4 times the next best's error at least (else -1; a lossless WAV's
-  // values are the encoder's input: none is); *conf the log2 of that ratio less 2, to 7
+  // values are the encoder's input: none is; a VQ subband's all the same, *conf -1); *conf the
+  // log2 of that ratio less 2, to 7
   int scale_search(const CoreRec& r, const CoreSub& s, int ch, int b, int hfb, const S64* v, int n, int p, int* conf) {
     const U32* tab = r.shuff[ch] == 6 ? SF7 : SF6;
     const int nt = sf_entries(r.shuff[ch]), a = s.abits[ch][b];
@@ -344,7 +395,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (best < 0 || e2 < 0) return -1;
     const S128 eps = (S128)n << (2 * AQ_F - 6);  // (an eighth of a unit a value)
     const S128 ratio = (e2 + eps) / (e1 + eps);
-    if (ratio < 4) return -1;
+    if (ratio < 4) return hfb ? (*conf = -1, best) : -1;  // (the RMS's is rarely a decoded VQ subband's)
     *conf = imin(bitlen128((U128)ratio) - 3, SB_N - 1);
     return best;
   }
@@ -364,10 +415,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // factor; so of ABITS a0..a1 (g the guess) and the scale factors p - 3 to p + 5, the pair whose
   // lattice lies nearest them in its steps (a finer one fits as nearly but in more of its steps, a
   // coarser one misses the values between its points): 1 + its ABITS, where an index it makes isn't
-  // 0 (else 0: the values say nothing); *conf the log2 of the next pair's distance over its, 0-7.
+  // 0 (else 0: the values say nothing); *conf the log2 of the next pair's distance over its, 0-7,
+  // *dbest its distance (norm_dist()'s). (Only the pairs under cut: 0 where none is.)
   // (The pairs by their distance at the 2 largest values, each one's whole distance, the largest
   // values first, while it could still be less than the second best's: as trying them all does.)
-  int abits_search(const CoreRec& r, int ch, const S64* v, int n, int g, int a0, int a1, int p, int* conf) {
+  int abits_search(const CoreRec& r, int ch, const S64* v, int n, int g, int a0, int a1, int p, int* conf, U64* dbest,
+                   U64 cut = ~0ull) {
     constexpr int NP = 27 * 9, NK = 2;
     const int nt = sf_entries(r.shuff[ch]), nk = imin(n, NK);
     auto mag = [](S64 x) { return x < 0 ? -x : x; };
@@ -407,16 +460,17 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         np++;
       }
     }
-    if (!np) return 0;
-    int ord[NP];  // (by that distance, stably)
+    int ord[NP], no = 0;  // (by that distance, stably; those under cut)
     for (int k = 0; k < np; k++) {
-      int m = k;
+      if (pr[k].d >= cut) continue;
+      int m = no++;
       while (m > 0 && pr[ord[m - 1]].d > pr[k].d) ord[m] = ord[m - 1], m--;
       ord[m] = k;
     }
-    U64 d1 = ~0ull, d2 = ~0ull;
+    if (!no) return 0;
+    U64 d1 = ~0ull, d2 = cut;
     int best = -1, bnz = 0;
-    for (int k = 0; k < np && pr[ord[k]].d < d2; k++) {
+    for (int k = 0; k < no && pr[ord[k]].d < d2; k++) {
       const int at = ord[k];
       const QErr& q = qe[at];
       S128 e = pr[at].e, lim = ~(U128)0 >> 1;
@@ -435,7 +489,56 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const U64 eps = 2 * (U64)n;  // (2^-15 steps squared a value)
     const U64 ratio = d2 == ~0ull ? ~0ull : (d2 + eps) / (d1 + eps);
     *conf = imin(bit_len(ratio) - 1, 7);
+    *dbest = d1;
     return 1 + pr[best].a;
+  }
+  // The TMODE a decoded WAV says (the transient search), its ABITS known: where the subband's values
+  // fit one scale factor's lattice (to a 64th of a step squared a value), none (0, *conf 7); else
+  // the subsubframe from which two scale factors' fit best, where 4 times better than one at least
+  // (else -1), *conf the log2 of that ratio less 2, to 7. (Each part's scale factor the nearest of
+  // those from 3 below its RMS rule's to 5 above; the whole's fit the bit allocation search's,
+  // where that found this ABITS.)
+  int tmode_search(const CoreRec& r, const CoreSub& s, int ch, int b, int* conf) {
+    const int a = s.abits[ch][b], ns = s.nssc;
+    if (!a || ns < 2) return -1;
+    S64 x[NSMP];
+    const int n = scale_values(s, ch, b, 0, ns, x);
+    const U32* tab = r.shuff[ch] == 6 ? SF7 : SF6;
+    const int nt = sf_entries(r.shuff[ch]);
+    S64 lo, hi;
+    quant_range(r, ch, a, lo, hi);
+    auto part = [&](int j0, int j1) {  // (subsubframes j0..j1 - 1: their fit)
+      const S64* v = x + 8 * j0;
+      const int m = 8 * (j1 - j0);
+      int near;
+      const int p = scale_pred(v, m, tab, nt, &near);
+      U64 bd = ~0ull;
+      for (int i = imax(p - 3, 0); i <= imin(p + 5, nt - 1); i++) {
+        const S64 ss = step_for(r, ch, a, i);
+        if (ss <= 0) continue;
+        QErr q;
+        q.set(ss, lo, hi);
+        S128 e = 0;
+        int nz = 0;
+        for (int k = 0; k < m; k++) e += q.err(v[k], &nz);
+        const U64 d = norm_dist(e, ss);
+        if (d < bd) bd = d;
+      }
+      return bd;
+    };
+    const U64 d0 = abfit_a[ch][b] == a ? abfit_d[ch][b] : part(0, ns);
+    if (d0 < ((U64)n << 10)) return *conf = 7, 0;
+    U64 bk = ~0ull;
+    int best = -1;
+    for (int k = 1; k < ns; k++) {
+      const U64 d1 = part(0, k), d2 = part(k, ns), d = d1 + d2 < d1 ? ~0ull : d1 + d2;
+      if (d < bk) bk = d, best = k;
+    }
+    const U64 eps = 2 * (U64)n;
+    if (best < 0 || bk == ~0ull || (d0 == ~0ull ? false : (d0 + eps) / (bk + eps) < 4)) return -1;
+    const U64 ratio = d0 == ~0ull ? ~0ull : (d0 + eps) / (bk + eps);
+    *conf = imin(bit_len(ratio) - 3, 7);
+    return best;
   }
   // a squared distance e (2^-2AQ_F) in the step ss's (2^-22) squared, times 2^16 (to 2^64 - 1)
   static U64 norm_dist(S128 e, S64 ss) {
@@ -473,7 +576,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (p >= 0) {
       if (tried && ss_rule()) {
         p = pss;
-        if (ps >= 0) near = conf;
+        if (ps >= 0) near = imax(conf, 0);
       } else {
         p = pb;
       }

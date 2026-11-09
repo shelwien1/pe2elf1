@@ -14,7 +14,8 @@ constexpr int NHF = 80;  // (the levels' contexts take parts of a field's number
 // bits before the extension (and, at places 1-3, XXCH's other bits)
 enum { HX_KIND, HX_RAWLEN, HX_TAILZ, HX_TAILNZ, HX_GAPZ, HX_GAPNZ, HX_N };
 // sid's fields
-enum { SF_PMODE, SF_PVQ, SF_TMODE, SF_JSHUFF, SF_JSCALE, SF_HFVQ, SF_LFE, SF_N };
+// (SF_TMSR, SF_PMSR: TMODE against the transient search, PMODE against the values' fit)
+enum { SF_PMODE, SF_PVQ, SF_TMODE, SF_JSHUFF, SF_JSCALE, SF_HFVQ, SF_LFE, SF_TMSR, SF_PMSR, SF_N };
 
 // decisions per context (ND, mantissa nodes MND), sign contexts (NG); the nodes of each:
 //   hdr  code() of a field's value less its last one (nodes 0-12, the sign by field), and 13 the

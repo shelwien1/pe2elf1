@@ -56,16 +56,64 @@ struct Bind {
 // sample o, as the encoder's makes them (FFmpeg dcaenc's transform, by the prototype filter fir),
 // in 2^-AQ_F of the decoder's units (its gain, 2, in): x[nb]. (M 32 the core's, by its prototype;
 // 64 the 64-band filterbank's, X96's, whose lower 32 bands are a 96 kHz stream's core.)
+// (the prototype filters' and the cosines' halves, for analyze_m()'s 64-bit sums: f = h 2^20 + l,
+// c = h 2^31 + l, l from 0)
+struct SplitTabs {
+  S32 fh[3][1024], fl[3][1024];  // FIR_NONPERFECT, FIR_PERFECT, FIR_64
+  S32 ch32[32][32], cl32[32][32], ch64[64][64], cl64[64][64];
+  SplitTabs() {
+    const S64* const f[3] = {FIR_NONPERFECT, FIR_PERFECT, FIR_64};
+    for (int t = 0; t < 3; t++)
+      for (int m = 0; m < (t == 2 ? 1024 : 512); m++) fh[t][m] = (S32)(f[t][m] >> 20), fl[t][m] = (S32)(f[t][m] & 0xFFFFF);
+    for (int b = 0; b < 32; b++)
+      for (int i = 0; i < 32; i++) ch32[b][i] = (S32)(COSQ[b][i] >> 31), cl32[b][i] = (S32)(COSQ[b][i] & 0x7FFFFFFF);
+    for (int b = 0; b < 64; b++)
+      for (int i = 0; i < 64; i++) ch64[b][i] = (S32)(COSQ64[b][i] >> 31), cl64[b][i] = (S32)(COSQ64[b][i] & 0x7FFFFFFF);
+  }
+};
+static const SplitTabs split_tabs;
+
 template <int M>
 static void analyze_m(const WavIn& w, int c, S64 o, const S64* fir, const S64 (*cq)[M], S64* x, int nb) {
   constexpr int L = 16 * M, H = M / 2;
+  S32 buf[L];
+  const S32* sp = w.span(c, o - L, L, buf);
+  S32 mx = 0;
+  for (int m = 0; m < L; m++) mx |= sp[m] < 0 ? ~sp[m] : sp[m];
   S128 acc[2 * M];
-  memset(acc, 0, sizeof acc);
-  for (int m = 0; m < L; m++) acc[m & (2 * M - 1)] += (S128)w.at(c, o - L + m) * fir[m];
+  S64 a[M];
+  if (mx < (1 << 24)) {  // (samples of 25 bits at most: every sum in 64 bits, the halves' products, the same)
+    const int t = fir == FIR_64 ? 2 : fir == FIR_PERFECT ? 1 : 0;
+    const S32 *fh = split_tabs.fh[t], *fl = split_tabs.fl[t];
+    S64 sh[2 * M], sl[2 * M];
+    for (int i = 0; i < 2 * M; i++) sh[i] = sl[i] = 0;
+    for (int k = 0; k < L; k += 2 * M)
+      for (int i = 0; i < 2 * M; i++) sh[i] += (S64)sp[k + i] * fh[k + i], sl[i] += (S64)sp[k + i] * fl[k + i];
+    for (int i = 0; i < 2 * M; i++) acc[i] = (S128)sh[i] * (1 << 20) + sl[i];
+  } else {
+    for (int i = 0; i < 2 * M; i++) acc[i] = 0;
+    for (int m = 0; m < L; m++) acc[m & (2 * M - 1)] += (S128)sp[m] * fir[m];
+  }
   for (int k = H; k < M; k++) acc[k] -= acc[M - 1 - k];
   for (int k = M; k < M + H; k++) acc[k] += acc[3 * M - 1 - k];
-  S64 a[M];
-  for (int i = 0; i < M; i++) a[i] = (S64)(acc[i + H] >> 20);  // (2^-24 of a sample)
+  S64 amax = 0;
+  for (int i = 0; i < M; i++) a[i] = (S64)(acc[i + H] >> 20), amax |= a[i] < 0 ? ~a[i] : a[i];  // (2^-24 of a sample)
+  if (amax < ((S64)1 << 46)) {  // (a = h 2^23 + l: the products in 56 bits, 64 of them in 62)
+    const S32(*chp)[M] = (const S32(*)[M])(M == 64 ? &split_tabs.ch64[0][0] : &split_tabs.ch32[0][0]);
+    const S32(*clp)[M] = (const S32(*)[M])(M == 64 ? &split_tabs.cl64[0][0] : &split_tabs.cl32[0][0]);
+    S32 ah[M], al[M];
+    for (int i = 0; i < M; i++) ah[i] = (S32)(a[i] >> 23), al[i] = (S32)(a[i] & 0x7FFFFF);
+    for (int b = 0; b < nb; b++) {
+      S64 hh = 0, hl = 0, lh = 0, ll = 0;
+      for (int i = 0; i < M; i++) {
+        hh += (S64)ah[i] * chp[b][i], hl += (S64)ah[i] * clp[b][i];
+        lh += (S64)al[i] * chp[b][i], ll += (S64)al[i] * clp[b][i];
+      }
+      const S128 r = (S128)hh * ((S64)1 << 54) + (S128)hl * (1 << 23) + (S128)lh * ((S64)1 << 31) + ll;
+      x[b] = (S64)((r + ((S128)1 << (84 - AQ_F))) >> (85 - AQ_F));  // (2 r: 2^-(24 + 62) to 2^-AQ_F)
+    }
+    return;
+  }
   for (int b = 0; b < nb; b++) {
     S128 r = 0;
     for (int i = 0; i < M; i++) r += (S128)a[i] * cq[b][i];
@@ -399,6 +447,24 @@ static INLINE S64 pvq_dist(int q, const S64* alpha) {
   }
   return d;
 }
+// every entry's (into d[4096]): as pvq_dist()'s, in 32-bit differences (alpha within 2^27, lpc4()'s;
+// the entries times 2^11 within 2^26), the code book by coefficient
+struct PvqT {
+  S32 v[4][4096];
+  PvqT() {
+    for (int q = 0; q < 4096; q++)
+      for (int m = 0; m < 4; m++) v[m][q] = ADPCM_VB[q][m] * (1 << 11);
+  }
+};
+static const PvqT pvq_t;
+static void pvq_dists(const S64* alpha, S64* d) {
+  const S32 a0 = (S32)alpha[0], a1 = (S32)alpha[1], a2 = (S32)alpha[2], a3 = (S32)alpha[3];
+  const S32 *v0 = pvq_t.v[0], *v1 = pvq_t.v[1], *v2 = pvq_t.v[2], *v3 = pvq_t.v[3];
+  for (int q = 0; q < 4096; q++) {
+    const S32 e0 = a0 - v0[q], e1 = a1 - v1[q], e2 = a2 - v2[q], e3 = a3 - v3[q];
+    d[q] = (S64)e0 * e0 + (S64)e1 * e1 + (S64)e2 * e2 + (S64)e3 * e3;
+  }
+}
 
 // The HF VQ code book as the encoder searches it: groups of 32 entries, the group whose mean is
 // nearest first, then the entry of the group nearest; the samples x (n, 2^-AQ_F) as 16 / sc times
@@ -514,12 +580,10 @@ static int select_rank(KeyIx* a, int n, int r) {
 }
 // how far the best of n candidates beats the next: 0 (within 1/16) to 7 (8 times), 8 by all
 static int key_margin(const KeyIx* a, int n) {
-  int b = 0;
+  int b = 0, s = -1;  // (the first two)
   for (int i = 1; i < n; i++)
-    if (key_less(a[i], a[b])) b = i;
-  int s = -1;
-  for (int i = 0; i < n; i++)
-    if (i != b && (s < 0 || key_less(a[i], a[s]))) s = i;
+    if (key_less(a[i], a[b])) s = b, b = i;
+    else if (s < 0 || key_less(a[i], a[s])) s = i;
   if (s < 0) return 0;
   const S128 d1 = a[b].k, d2 = a[s].k;
   if (d1 <= 0) return d2 > 0 ? 8 : 0;

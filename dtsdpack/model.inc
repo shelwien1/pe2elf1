@@ -148,15 +148,35 @@ struct Model : ModelX96<f_DEC, LV> {
         break;
     }
     switch (fid) {
-      case F_PMODE:  // (against the gain of the predictor the encoder would choose: ec, ab)
+      case F_PMODE: {  // (against the gain of the predictor the encoder would choose: ec, ab; where the scale
+                       // factor search's rule is taken, against how the values fit the lattice the bit
+                       // allocation search finds in them as they are, the context ac: to a 64th of a step
+                       // squared a value 0, to 16 64ths 1, worse 2, none found 3)
         account(CAT_SIDE);
-        v = side_code(SF_PMODE, ch, b, v, 0, 1, 1, hist.pmode[ch][b], b ? s.pmode[ch][b - 1] + 1 : 0,
-                      bound[ch] ? ac[ch][b] : 8, bound[ch] ? imin(B::lpg4[ch][b], 27) : 0,
-                      bound[ch] ? B::pmode_gain(ch, b) : 9);
+        B::abc[ch][b].g = -1;
+        int fit = -1;
+        if (bound[ch] && B::ss_rule() && es[ch][b]) {
+          const int e = es[ch][b], n = s.nssc * 8;
+          const S32 og = ab_guess(ch, b, 0, e);
+          if (og) {
+            auto& k = B::abc[ch][b];
+            k.g = og - 1, k.a0 = imax(1, k.g - 3), k.a1 = imin(26, k.g + 3), k.p = e - 1, k.gc = 0, k.gd = ~0ull;
+            k.G = B::abits_search(r, ch, B::X[ch][b], n, k.g, k.a0, k.a1, k.p, &k.gc, &k.gd);
+            fit = !k.G ? 3 : k.gd < ((U64)n << 10) ? 0 : k.gd < ((U64)n << 14) ? 1 : 2;
+          }
+        }
+        if (fit >= 0)
+          v = side_code(SF_PMSR, ch, b, v, 0, 1, 1, hist.pmode[ch][b], b ? s.pmode[ch][b - 1] + 1 : 0, fit,
+                        imin(B::lpg4[ch][b], 27), B::pmode_gain(ch, b));
+        else
+          v = side_code(SF_PMODE, ch, b, v, 0, 1, 1, hist.pmode[ch][b], b ? s.pmode[ch][b - 1] + 1 : 0,
+                        bound[ch] ? ac[ch][b] : 8, bound[ch] ? imin(B::lpg4[ch][b], 27) : 0,
+                        bound[ch] ? B::pmode_gain(ch, b) : 9);
         break;
+      }
       case F_PVQ:
         account(CAT_SIDE);
-        if (bound[ch]) v = B::code_pvq(ch, b, v);
+        if (bound[ch]) v = B::code_pvq(r, s, ch, b, v);
         else v = side_index(SF_PVQ, ch, b, v, 12, hist.pvq[ch][b], 8, 0);
         break;
       case F_ABITS: {  // (against the audio's energy, as the scale factor its RMS makes, and how it changed)
@@ -196,14 +216,19 @@ struct Model : ModelX96<f_DEC, LV> {
           else if (e + k <= 128 && sn[k]) sv = sn[k], near_e = 1;
         }
         // (the search's, where it is right clearly more often than the first guess without it: it
-        // the first guess, its sureness and whether it is that one the context sc)
+        // the first guess, its sureness and whether it is that one the context sc; PMODE's, where it
+        // made the same)
         const S32 og = sv ? sv : hist.abits[ch][b];
         int G = 0, gc = 0, sc = 0;
+        U64 gd = 0;
         if (srch && nx) {
           const int g = og ? og - 1 : 1, a0 = og ? imax(imax((int)lo, 1), g - 3) : imax((int)lo, 1),
                     a1 = og ? imin((int)hi, g + 3) : (int)hi;
-          if (a0 <= a1) G = B::abits_search(r, ch, x, nx, g, a0, a1, e - 1, &gc);
+          const auto& k = B::abc[ch][b];
+          if (!s.pmode[ch][b] && k.g == g && k.a0 == a0 && k.a1 == a1 && k.p == e - 1) G = k.G, gc = k.gc, gd = k.gd;
+          else if (a0 <= a1) G = B::abits_search(r, ch, x, nx, g, a0, a1, e - 1, &gc, &gd);
         }
+        B::abfit_a[ch][b] = G - 1, B::abfit_d[ch][b] = gd;
         S32 Sn = sv;
         if (srch && G && B::ab_rule()) {
           Sn = G, sc = 1 + 2 * imin(gc, 6) + (G == og);
@@ -223,11 +248,19 @@ struct Model : ModelX96<f_DEC, LV> {
         B::n_ab++;
         break;
       }
-      case F_TMODE:
+      case F_TMODE: {  // (against the transient search's, where the scale factor search's rule is taken: its
+                       // sureness the context ac is)
         account(CAT_SIDE);
-        v = side_code(SF_TMODE, ch, b, v, lo, hi, 0, hist.tmode[ch][b], 0, bound[ch] ? ac[ch][b] : 8,
-                      1 + imin(s.abits[ch][b], 26), bound[ch] ? ec[ch][b] : 9);
+        int gt = -1, gc = 0;
+        if (bound[ch] && B::ss_rule()) gt = B::tmode_search(r, s, ch, b, &gc);
+        if (gt >= 0)
+          v = side_code(SF_TMSR, ch, b, v, lo, hi, 0, 1 + gt, hist.tmode[ch][b], gc, 1 + imin(s.abits[ch][b], 26),
+                        ec[ch][b]);
+        else
+          v = side_code(SF_TMODE, ch, b, v, lo, hi, 0, hist.tmode[ch][b], 0, bound[ch] ? ac[ch][b] : 8,
+                        1 + imin(s.abits[ch][b], 26), bound[ch] ? ec[ch][b] : 9);
         break;
+      }
       case F_SCALES:
         account(CAT_SCALE);
         v = code_scale(r, s, ch, b, cur_j, v);
@@ -288,6 +321,17 @@ struct Model : ModelX96<f_DEC, LV> {
     return true;
   }
   bool val(int fid, S64 lo, S64 hi, S64& v) { return code(fid, v, lo, hi, 0); }
+  // channel ch's subband b's ABITS first guess (1 + it, 0 none), as F_ABITS's: the ABITS seen at
+  // its energy e (pm: whether it predicts), within 2, else its last
+  S32 ab_guess(int ch, int b, int pm, int e) const {
+    const U8* sn = &B::ab_seen[pm][b][imin(e, 128)];
+    int sv = *sn;
+    for (int k = 1; !sv && k <= 2; k++) {
+      if (e - k >= 1 && sn[-k]) sv = sn[-k];
+      else if (e + k <= 128 && sn[k]) sv = sn[k];
+    }
+    return sv ? sv : hist.abits[ch][b];
+  }
   bool raw(int fid, int n, U8* p) {
     const int kind = fid == F_tail ? 0 : fid == F_xgap ? 1 : fid == F_xhrest ? 2 : fid == F_xcrest ? 3 : fid == F_xpad ? 4 : -1;
     if (kind < 0) fatal("internal error: raw bits of %s", field_name[fid]);

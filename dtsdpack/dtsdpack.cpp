@@ -30,7 +30,8 @@
 // books on them, nearly every ADPCM predictor and HF VQ vector; the WAV's LFE channel decimated,
 // nearly every LFE sample; and the ABITS a subband had at its energy before, most bit allocations.
 // A decoded (lossy) WAV's subband samples are the decoder's: they lie on the lattice of the core's
-// step and scale factor, which says nearly every bit allocation and scale factor (the searches).
+// step and scale factor, which says nearly every bit allocation, scale factor, transient and ADPCM
+// predictor (the searches).
 // c finds how the core's channels and blocks line up with the WAV's, each channel one of the WAV's
 // or a mix of two of them (a 7.1 stream's core is a downmix: each surround its side and rear
 // surround), and keeps it in the header; the model codes each element against what the audio makes
@@ -56,7 +57,7 @@
 //   raw  bytes kept as bytes, the bits after the subframes, the extension's other bits
 // (Whether a subband sample's index is the audio's goes straight to the coder: model_smp.inc.)
 //
-// File format: "dtsdpack", the format version 7, the level, the WAV's binding (how the core lines
+// File format: "dtsdpack", the format version 8, the level, the WAV's binding (how the core lines
 // up with it, and what the WAV was: coro.inc), then the range coded chunks (kind: end, a frame as
 // records, bytes between frames, a frame kept as bytes; then the records or a length and the
 // bytes); after the end, the CRC-32 of the core stream.
