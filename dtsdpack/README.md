@@ -62,7 +62,7 @@ s2.dtsc: 50008260 -> 396620 bytes (0.79%, -9); 24855 frames, 24855 packed; 0 byt
   subband samples                40631706      31539    0.08%
   bits after the subframes         108518          1    0.00%
   total                          50008260     398447    0.80%
-  the audio's indexes: 99.89% of the samples; the RMS's scale factors: 98.76%
+  the audio's indexes: 99.89% of the samples; the audio's scale factors: 98.76%
   the encoder's searches on the audio: 84.90% of the ADPCM predictors; HF VQ: 78.10% of the groups, 91.65% of the vectors in them
   the binding: core channel 0 = WAV 2; core channel 1 = WAV 0; core channel 2 = WAV 1; core channel 3 = WAV 4; core channel 4 = WAV 5; LFE = WAV 3
 ```
@@ -116,23 +116,23 @@ extension kept as bytes (about 140 of each frame's 1024), the 6.1 one went to 26
 Streams of FFmpeg's samples site (`samples.ffmpeg.org/A-codecs/DTS/dts/`, some 5 MB pieces of
 longer ones) and FATE's `dts_es.dts`, their cores against FFmpeg's decodes (lossless for DTS-HD MA,
 lossy for the others: the decoder's output, which the core's indexes are mostly the re-analysis
-of):
+of, and whose values the scale factor search finds its scale factors in):
 
 | Stream | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 124477 (6.59%) | the 96 kHz decode's 64-band analysis's lower half (95.99% of its indexes); its X96 extension, 12% of each frame, the upper half and the residuals (99.97%) |
+| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 105167 (5.57%) | the 96 kHz decode's 64-band analysis's lower half (95.99% of its indexes); its X96 extension, 12% of each frame, the upper half and the residuals (99.97%) |
 | `Master Audio 5.0 96khz.dts` | 1768548 | 29017 (1.64%) | the 96 kHz WAV's 64-band analysis's lower half (99.57%) |
 | `Master Audio 7.1.dts` | 1945604 | 28696 (1.47%) | a downmix of its 7.1 |
 | `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 15574 (0.56%) | its 3.1 |
-| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 133906 (2.56%) | 6.1 by XCH, decoded |
-| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 15302 (3.04%) | the same |
-| `open bitrate.dts` (stereo, open rate) | 5242416 | 114806 (2.19%) | decoded (99.99% of the indexes; 30.85% before the binding's fit stopped trusting silent subbands at fine steps: below) |
+| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 72724 (1.39%) | 6.1 by XCH, decoded |
+| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 9826 (1.95%) | the same |
+| `open bitrate.dts` (stereo, open rate) | 5242416 | 44305 (0.85%) | decoded (99.99% of the indexes, 98.40% of the scale factors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, and 2.19% before the scale factor search) |
 
 No stream at hand has XXCH in its core substream: FATE's XXCH samples (`xxch_71_24_48_2046`,
 `xbr_xxch_71_24_48_3840`, `x96_xxch_71_24_96_3840`, 7 frames each) have it in their extension
 substreams. Their XXCH frames moved into their core frames after the subframes (EXT_AUDIO set,
 EXT_AUDIO_ID 6), the extension substream dropped, make core-substream XXCH streams that FFmpeg
-decodes as 7.1; dtsdpack round-trips them against those decodes (21.74%, 22.70%, 16.60%). Their
+decodes as 7.1; dtsdpack round-trips them against those decodes (21.74%, 22.70%, 16.35%). Their
 signal is a silent frame, then white noise near full scale; the decoder undoes XXCH's downmix
 pre-scaling (every core channel times 1.41), so the decodes clip, and only partly line up with
 any core (their own cores against their core-only decodes, which don't clip, make 18.91%).
@@ -192,6 +192,14 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   ADPCM subband's prediction residual): 98.8% of them. The tables' first entries repeat values (1,
   1, 2, 2, 2, 2, 3, ...), and among those the encoder's choice is not the rule's (the HF VQ
   subbands, quiet, are there: 90% of theirs): the model knows when the prediction is one of them.
+  A decoded WAV isn't the encoder's input, and its RMS makes the encoder's scale factors less often
+  (58% of `open bitrate.dts`'s, 0.7% of its HF VQ subbands'); but its values are the decoder's,
+  the indexes dequantized at the step and scale factor, or a VQ vector scaled. So the scale factor
+  search tries the entries from 3 below the RMS rule's to 5 above, rebuilds the values as the
+  decoder would at each (the indexes nearest them in the quantizer's range, dequantized as it does;
+  the VQ vector the two-stage search finds, scaled as it does), and takes the one whose
+  reconstruction lies nearest, where its error is a quarter of the next best's at most (its ratio a
+  context): 98.40% of `open bitrate.dts`'s scale factors.
 - **The ADPCM predictors**: Levinson-Durbin on the autocorrelation of the subframe's subband samples
   and the 4 before them, then the code book's entry nearest the coefficients. The predictor is coded
   as its rank in that order (`vqr`, as a bucket and the bits below its top): it is the first 85% of
@@ -224,11 +232,14 @@ samples (the residuals). On them, X96's elements as the core's, with histories o
 99.97% of `96-24.dts`'s indexes. Its decoded WAV's joint subbands are their source's times the
 joint scale factor, so where the source has a level the scale factor is the projection of the one
 on the other (100% of those); a subband without bits is the decoder's noise, uniform to half the
-scale factor, so its scale factor is 2.1 times the peak (94%). Each kind of subband's rule, and the
-RMS rule, are counted as the stream goes, and the one right more often is the prediction: a
-lossless WAV may make the RMS rule the better. The core's scale factors get the same choice, with a
-second rule (the first entry above 0.99 times the RMS: `96-24.dts`'s core's, 67% where the RMS
-rule's is 49%).
+scale factor, so its scale factor is 2.1 times the peak (94%). Each kind of subband's rule, the
+RMS rule and the scale factor search (for X96's subbands with bits or VQ vectors: their vectors
+16 samples) are counted as the stream goes, and the one right more often is the prediction: a
+lossless WAV makes the RMS rule the better. The core's scale factors get the same choice, among the
+RMS rule, the search, and the first entry above 0.99 times the RMS (`96-24.dts`'s core's, 67% where
+the RMS rule's is 49%; the search's, 89%). The search costs: it is tried in its first 2048 scale
+factors, then while it alone is right in one try in 64 at least, and otherwise in one scale factor
+in 64, so a lossless WAV's stream loses no time to it.
 
 c finds how the core lines up with the WAV before it starts (`call.inc`'s `find_alignment()`, in
 doubles; the header keeps the result). The offset: from the core's first 4 MB, the 64 blocks with
@@ -294,7 +305,7 @@ files.
 
 ### The format
 
-"dtsdpack", the format's version (4), the level, the WAV's binding (the offset; each core channel's
+"dtsdpack", the format's version (5), the level, the WAV's binding (the offset; each core channel's
 WAV channel, the second of its mix and their gains, Q23; the LFE's channel; the WAV's samples to
 the core's, 1 or 2; the WAV's format, size and the CRC-32 of its first 64 KB), then the
 range coded chunks (a frame as records, bytes between frames, a frame kept as bytes), the end, and
@@ -311,10 +322,9 @@ the CRC-32 of the core stream, which `d` checks.
   the extension substream).
 - A decoded WAV can't say what X96's joint scale factors are where their source decodes to
   silence: those are coded against their last values alone (most of `96-24.dts`'s X96 bytes).
-- Against a decoded WAV, the scale factors are the RMS rule's less often (58% of `open bitrate.dts`'s,
-  most of its bytes): the decode's RMS isn't the encoder's input's, least of all where a coarse
-  quantizer or a VQ vector made the decode (its values are exact multiples of the scale factor,
-  which a search could find, but doesn't yet).
+- The scale factor search can't see through the decoder's noise: X96's subbands without bits keep
+  the peak rule (94%), and a clipped decode (as the full decodes of FATE's XXCH samples are) has
+  values that aren't the decoder's reconstruction, where it isn't sure.
 - One thread, one level.
 
 ## Build

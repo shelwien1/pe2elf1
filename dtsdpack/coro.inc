@@ -14,8 +14,9 @@ enum { BO_OFF = 0, BO_MAP = 4, BO_MAP2 = BO_MAP + NCH, BO_G1 = BO_MAP2 + NCH, BO
        DP_BIND = BO_CRC + 4 };  // (the binding's bytes)
 enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND, DP_HEAD = DP_AT_BIND + DP_BIND };  // the header's
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
-constexpr int DP_VERSION = 4;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
-                               // extension as records; 4: a WAV at twice the core's rate, X96 and XXCH)
+constexpr int DP_VERSION = 5;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
+                               // extension as records; 4: a WAV at twice the core's rate, X96 and XXCH; 5: the
+                               // scale factor search)
 
 static void put_le(U8* p, U64 v, int n) {
   for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));
@@ -96,10 +97,10 @@ struct Stats {
         p += cost[i];
       }
       fprintf(stderr, "  %-28s %10.0f %10.0f %7.2f%%\n", "total", o / BYTE_BITS, p / BYTE_BITS, o ? PERCENT * p / o : 0.0);
-      if (smp) fprintf(stderr, "  the audio's indexes: %.2f%% of the samples; the RMS's scale factors: %.2f%%\n",
+      if (smp) fprintf(stderr, "  the audio's indexes: %.2f%% of the samples; the audio's scale factors: %.2f%%\n",
                        PERCENT * hits / smp, sf ? PERCENT * sf_hits / sf : 0.0);
       if (smp9 || sf9)
-        fprintf(stderr, "  X96: the audio's indexes: %.2f%% of the samples; the RMS's scale factors: %.2f%%\n",
+        fprintf(stderr, "  X96: the audio's indexes: %.2f%% of the samples; the audio's scale factors: %.2f%%\n",
                 smp9 ? PERCENT * hits9 / smp9 : 0.0, sf9 ? PERCENT * sf_hits9 / sf9 : 0.0);
       if (vq[VK_PVQ] || vq[VK_HFG])
         fprintf(stderr, "  the encoder's searches on the audio: %.2f%% of the ADPCM predictors; HF VQ: %.2f%% of the "

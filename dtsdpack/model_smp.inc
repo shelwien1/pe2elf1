@@ -37,7 +37,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   U8 ab_seen[2][NSUB][129];  // the ABITS each subband had the last time it had that energy (by pm; 1 + it, 0 none)
   int pscale[NCH][NSUB];   // their first scale factor's prediction (1 + it, 0 none)
   int hm[NCH];             // whether the channel's scale factor before was the prediction (0 none, 1 it was, 2 not)
-  U32 sfr[2];              // how often the RMS rule's scale factor was the core's, and scale_ceil()'s (halved as they grow)
+  // how often the RMS rule's scale factor was the core's, scale_ceil()'s, and scale_search()'s (the
+  // better of those two's where it isn't sure); the search's tries and those it alone was right in
+  // (halved as they grow)
+  U32 sfr[3], ss_n, ss_gain;
   S64 lpc[NCH][NSUB][4];   // the subframe's subbands' LPC (lpc4(): the encoder's ADPCM predictor is the entry nearest)
   int lpg[NCH][NSUB];      // and its prediction gain in halvings
   int lpg4[NCH][NSUB];     // and in quarters of them
@@ -255,14 +258,67 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
 
   // --- the scale factors -----------------------------------------------------------------------------
 
+  // The scale factor a decoded WAV says (the scale factor search): its values v (n of them, the
+  // ADPCM prediction off) are what the decoder made of the indexes, or of a VQ vector (hfb), at the
+  // step and scale factor; so of the entries from p - 3 to p + 5, the one whose reconstruction lies
+  // nearest them, where nearer by 4 times the next best's error at least (else -1; a lossless WAV's
+  // values are the encoder's input: none is); *conf the log2 of that ratio less 2, to 7
+  int scale_search(const CoreRec& r, const CoreSub& s, int ch, int b, int hfb, const S64* v, int n, int p, int* conf) {
+    const U32* tab = r.shuff[ch] == 6 ? SF7 : SF6;
+    const int nt = sf_entries(r.shuff[ch]), a = s.abits[ch][b];
+    S64 lo = 0, hi = 0;
+    int vq = 0;
+    if (!hfb) {
+      quant_range(r, ch, a, lo, hi);
+    } else {  // (the vector: the two-stage search's at the RMS's scale factor and 3 above, the nearer)
+      S128 bd = -1;
+      for (int k = 0; k < 2; k++) {
+        const S64 sc = tab[clip(p + 3 * k, 0, nt - 1)];
+        for (int g = 0; g < 32; g++) cand[g].k = hf_group_dist(g, v, n, sc), cand[g].i = g;
+        const int g = select_rank(cand, 32, 0);
+        for (int e = 0; e < 32; e++) cand[e].k = hf_dist(g * 32 + e, v, n, sc), cand[e].i = e;
+        const int q = g * 32 + select_rank(cand, 32, 0);
+        const S128 d = vq_err(v, n, q, sc);
+        if (bd < 0 || d < bd) bd = d, vq = q;
+      }
+    }
+    S128 e1 = -1, e2 = -1;
+    int best = -1;
+    for (int i = imax(p - 3, 0); i <= imin(p + 5, nt - 1); i++) {
+      S128 e;
+      if (hfb) {
+        e = vq_err(v, n, vq, tab[i]);
+      } else {
+        const S64 ss = step_for(r, ch, a, i);
+        if (ss <= 0) continue;
+        e = quant_err(v, n, ss, lo, hi);
+      }
+      if (best < 0 || e < e1) e2 = e1, e1 = e, best = i;
+      else if (e2 < 0 || e < e2) e2 = e;
+    }
+    if (best < 0 || e2 < 0) return -1;
+    const S128 eps = (S128)n << (2 * AQ_F - 6);  // (an eighth of a unit a value)
+    const S128 ratio = (e2 + eps) / (e1 + eps);
+    if (ratio < 4) return -1;
+    *conf = imin(bitlen128((U128)ratio) - 3, SB_N - 1);
+    return best;
+  }
+  // whether to try the search: in its first 2048 tries, while it is right alone in more than 1 of
+  // 64 of them, and in 1 of 64 scale factors (it costs, and a lossless WAV's search gains nothing)
+  bool search_on() const { return ss_n < 2048 || ss_gain * 64 > ss_n || !(n_sf & 63); }
+
   // Scale factor j (0 the first, 1 the second, after a transient) of channel ch's subband b, v in
-  // 0..max-1: against the one the audio's RMS makes, where the channel is bound, else the last
+  // 0..max-1: against the one the audio makes, where the channel is bound, else the last. Three
+  // rules make it from the audio's values, the one right clearly more often taken: the RMS rule; the
+  // first entry above 0.99 times the RMS (a 96/24 encoder's); the scale factor search (a decoded
+  // WAV's; where it isn't sure, the better of the others'), its sureness then the context the RMS
+  // rule's nearness is
   S64 code_scale(const CoreRec& r, const CoreSub& s, int ch, int b, int j, S64 v) {
     const int hfb = b >= r.nvqsub[ch], tm = hfb ? 0 : s.tmode[ch][b];
     const int max = r.shuff[ch] == 6 ? 128 : 64;
     M_scl_v D;
     tcx X_;
-    int p = -1, pc = -1, near = SB_N - 1;
+    int p = -1, pc = -1, ps = -1, near = SB_N - 1, conf = 0, tried = 0;
     if (bound[ch]) {
       S64 v_[NSMP];
       const int n = tm ? (j ? scale_values(s, ch, b, tm, s.nssc, v_) : scale_values(s, ch, b, 0, tm, v_))
@@ -270,10 +326,21 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (n) {
         p = scale_pred(v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
         pc = scale_ceil(v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]));
+        if (search_on()) ps = scale_search(r, s, ch, b, hfb, v_, n, p, &conf), tried = 1;
       }
     }
-    const int pr = p;  // (the other rule's, where it has been right clearly more often)
-    if (p >= 0 && sfr[1] > sfr[0] + 64 + sfr[0] / 8) p = pc;
+    // (the better of the two RMS rules, and the search where it is better still: where it isn't
+    // sure, that rule's)
+    const int base = sfr[1] > sfr[0] + 64 + sfr[0] / 8 ? 1 : 0, pr = p, pb = base ? pc : p;
+    const int pss = ps >= 0 ? ps : pb;
+    if (p >= 0) {
+      if (tried && sfr[2] > sfr[base] + 64 + sfr[base] / 8) {
+        p = pss;
+        if (ps >= 0) near = conf;
+      } else {
+        p = pb;
+      }
+    }
     const S32 A = hist.scale[ch][b], P = hist.pscale[ch][b];
     D.dp = p >= 0 ? sf_dup(r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p) : 0;
     D.kd = hfb ? 2 : j;
@@ -299,7 +366,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     n_sf++;
     if (pr >= 0) {
       sfr[0] += v == pr, sfr[1] += v == pc;
-      if (sfr[0] + sfr[1] >= 1u << 16) sfr[0] >>= 1, sfr[1] >>= 1;
+      if (tried) {
+        sfr[2] += v == pss;
+        ss_n++, ss_gain += ps >= 0 && v == ps && v != pr;
+        if (ss_n >= 1u << 16) ss_n >>= 1, ss_gain >>= 1;
+      }
+      if (sfr[0] + sfr[1] >= 1u << 16) sfr[0] >>= 1, sfr[1] >>= 1, sfr[2] >>= 1;
     }
     return v;
   }

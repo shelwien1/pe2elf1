@@ -41,7 +41,9 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
   // prediction, VQ vector, joint scale factor (+ 129), energy
   S32 hpm[NCH][NB], hpv[NCH][NB], hab[NCH][NB], hsc[NCH][NB], hps[NCH][NB], hvq[NCH][NB], hjs[NCH][NB], hen[NCH][NB];
   U64 n_smp9, n_hit9, n_sf9, n_sfhit9;  // (-s: X96's samples and scale factors, those the audio predicted)
-  U32 sfr9[3][2];  // how often x96_scale()'s rules were the stream's, by the subband's kind (halved as they grow)
+  // how often x96_scale()'s rules were the stream's, by the subband's kind; the search's tries and
+  // those it alone was right in (halved as they grow)
+  U32 sfr9[3][3], ss9_n, ss9_gain;
 
   // the step size times scale factor of channel ch's subband b (its ABITS 2 up: the quantizer's
   // ABITS + 1; no adjustment)
@@ -168,7 +170,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
         return v;
       }
       case F_SCALES:
-        return x96_scale(s, ch, b, v);
+        return x96_scale(r, s, ch, b, v);
       case F_JOIN_SHUFF:
         return side_code(SF_JSHUFF, ch, 0, v, lo, hi, 0, 0, 0, 8, 0, 9);
       case F_JOIN_SCALES: {  // (against the scale the audio's subband is of its source's, where the source has a level)
@@ -223,16 +225,71 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     return lo;
   }
 
+  // The X96 scale factor search (ModelSmp's scale_search()'s): at X96's steps (no adjustment), its
+  // quantizer's range; a VQ'd subband's vectors one each pair of subsubframes (16 samples), each the
+  // two-stage search's at the RMS's scale factor and 2 above, the nearer
+  int x96_search(const CoreRec& r, const X96Sub& s, int ch, int b, const S64* v, int n, int p, int* conf) {
+    const int ba = s.abits[ch][b], np = (n + 15) / 16;
+    S64 lo = 0, hi = 0;
+    int vq[2] = {0, 0};
+    if (ba >= 2) {
+      const int a = ba - 1, how = x96_coding(r, ch, a);
+      if (how == 3) {
+        hi = (BLOCK_LEVELS[a - 1] - 1) / 2, lo = -hi;
+      } else if (how == 2) {
+        hi = (1LL << (a - 4)) - 1, lo = -(1LL << (a - 4));
+      } else {
+        const HuffBook& hb = QB[a - 1][r.x96sel[ch][a - 1]];
+        lo = hb.minlev, hi = hb.minlev + hb.nlev - 1;
+      }
+    } else {
+      for (int pp = 0; pp < np && pp < 2; pp++) {
+        const S64* x = v + 16 * pp;
+        const int m = imin(16, n - 16 * pp);
+        S128 bd = -1;
+        for (int kk = 0; kk < 2; kk++) {
+          const S64 sc = SF6[clip(p + 2 * kk, 0, SF6_N - 1)];
+          for (int g = 0; g < 32; g++) cand[g].k = hf_group_dist(g, x, m, sc), cand[g].i = g;
+          const int g = select_rank(cand, 32, 0);
+          for (int e = 0; e < 32; e++) cand[e].k = hf_dist(g * 32 + e, x, m, sc), cand[e].i = e;
+          const int q = g * 32 + select_rank(cand, 32, 0);
+          const S128 d = vq_err(x, m, q, sc);
+          if (bd < 0 || d < bd) bd = d, vq[pp] = q;
+        }
+      }
+    }
+    S128 e1 = -1, e2 = -1;
+    int best = -1;
+    for (int i = imax(p - 3, 0); i <= imin(p + 5, SF6_N - 1); i++) {
+      S128 e = 0;
+      if (ba >= 2) {
+        e = quant_err(v, n, (S64)LOSSY_QUANT[ba - 1] * SF6[i], lo, hi);
+      } else {
+        for (int pp = 0; pp < np && pp < 2; pp++) e += vq_err(v + 16 * pp, imin(16, n - 16 * pp), vq[pp], SF6[i]);
+      }
+      if (best < 0 || e < e1) e2 = e1, e1 = e, best = i;
+      else if (e2 < 0 || e < e2) e2 = e;
+    }
+    if (best < 0 || e2 < 0) return -1;
+    const S128 eps = (S128)n << (2 * AQ_F - 6);
+    const S128 ratio = (e2 + eps) / (e1 + eps);
+    if (ratio < 4) return -1;
+    *conf = imin(bitlen128((U128)ratio) - 3, SB_N - 1);
+    return best;
+  }
+  bool x96_search_on() const { return ss9_n < 2048 || ss9_gain * 64 > ss9_n || !(n_sf9 & 63); }
+
   // Channel ch's subband b's scale factor v (0-63): against the one the audio makes, where the
-  // channel is bound, else the last. By the subband's kind (k: its bits, its VQ, neither) two rules,
-  // the one that has been right more often: the RMS rule (as the core's), and the kind's own, a
-  // decoded WAV's (where the subband has no bits, 2.1 times the peak: the decoder's noise is uniform
-  // to half the scale factor; VQ'd, 1.4 times the RMS)
-  S64 x96_scale(const X96Sub& s, int ch, int b, S64 v) {
+  // channel is bound, else the last. By the subband's kind (k: its bits, its VQ, neither) the rules,
+  // the one that has been right more often: the RMS rule (as the core's); the kind's own, a decoded
+  // WAV's (where the subband has no bits, 2.1 times the peak: the decoder's noise is uniform to half
+  // the scale factor; VQ'd, 1.4 times the RMS); the scale factor search (x96_search(): a decoded
+  // WAV's too, where the subband has bits or a VQ vector; where it isn't sure, the rule before's)
+  S64 x96_scale(const CoreRec& r, const X96Sub& s, int ch, int b, S64 v) {
     const int ba = s.abits[ch][b], k = ba >= 2 ? 0 : ba == 1 ? 1 : 2;
     M_scl_v D;
     tcx X_;
-    int p = -1, p0 = -1, p1 = -1, near = SB_N - 1;
+    int p = -1, p0 = -1, p1 = -1, ps = -1, pq = -1, conf = 0, tried = 0, near = SB_N - 1;
     if (bd9[ch]) {
       S64 x[NSMP];
       const int n = x96_values(s, ch, b, x);
@@ -248,6 +305,17 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
           p1 = scale_near(pk * 21 / 10, SF6, SF6_N);
         }
         if (p1 >= 0 && sfr9[k][1] + 64 >= sfr9[k][0]) p = p1, near = SB_N - 1;
+        if (k < 2 && x96_search_on()) {
+          S64 y[NSMP];
+          x96_values(s, ch, b, y);
+          ps = x96_search(r, s, ch, b, y, n, p0, &conf), tried = 1;
+        }
+        pq = ps >= 0 ? ps : p;
+        const U32 lead = imax(sfr9[k][0], sfr9[k][1]);
+        if (tried && sfr9[k][2] > lead + 64 + lead / 8) {
+          p = pq;
+          if (ps >= 0) near = conf;
+        }
       }
     }
     const S32 A = hsc[ch][b], P = hps[ch][b];
@@ -273,9 +341,14 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     }
     psc9[ch][b] = p + 1;
     n_sf9++;
-    if (p1 >= 0) {
-      sfr9[k][0] += v == p0, sfr9[k][1] += v == p1;
-      if (sfr9[k][0] + sfr9[k][1] >= 1u << 16) sfr9[k][0] >>= 1, sfr9[k][1] >>= 1;
+    if (p0 >= 0) {
+      sfr9[k][0] += v == p0, sfr9[k][1] += p1 >= 0 && v == p1;
+      if (tried) {
+        sfr9[k][2] += v == pq;
+        ss9_n++, ss9_gain += ps >= 0 && v == ps && v != p0 && v != p1;
+        if (ss9_n >= 1u << 16) ss9_n >>= 1, ss9_gain >>= 1;
+      }
+      if (sfr9[k][0] + sfr9[k][1] + sfr9[k][2] >= 1u << 16) sfr9[k][0] >>= 1, sfr9[k][1] >>= 1, sfr9[k][2] >>= 1;
     }
     return v;
   }

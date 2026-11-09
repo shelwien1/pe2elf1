@@ -112,14 +112,17 @@ static int gain_near(double g, S32* out) {
 
 // --- the decoder's subband samples (FFmpeg dca_core.c's, bit-exact) ---------------------------------
 
-// step size times scale factor of channel ch's subband b in subsubframe ssf (its transient's
-// second scale factor from its subsubframe on; adjusted where SEL picks a Huffman code)
-static INLINE S64 step_scale(const CoreRec& c, const CoreSub& s, int ch, int b, int ssf) {
-  const int a = s.abits[ch][b], tm = s.tmode[ch][b];
-  const int si = s.scale[ch][b][tm && ssf >= tm ? 1 : 0];
-  S64 scale = c.shuff[ch] == 6 ? SF7[si] : SF6[si & 63];
+// step size times scale factor si of channel ch's ABITS a (adjusted where SEL picks a Huffman code)
+static INLINE S64 step_for(const CoreRec& c, int ch, int a, int si) {
+  S64 scale = c.shuff[ch] == 6 ? SF7[si & 127] : SF6[si & 63];
   if (sample_coding(c, ch, a) == 1) scale = clip23((S64)SF_ADJ[c.adj[ch][a - 1]] * scale >> 22);
   return (S64)LOSSY_QUANT[a] * scale;
+}
+// step size times scale factor of channel ch's subband b in subsubframe ssf (its transient's
+// second scale factor from its subsubframe on)
+static INLINE S64 step_scale(const CoreRec& c, const CoreSub& s, int ch, int b, int ssf) {
+  const int tm = s.tmode[ch][b];
+  return step_for(c, ch, s.abits[ch][b], s.scale[ch][b][tm && ssf >= tm ? 1 : 0]);
 }
 static INLINE S32 dequantize(S32 q, S64 ss) {
   int shift = 0;
@@ -234,6 +237,30 @@ static int scale_ceil(const S64* v, int n, const U32* tab, int nt) {
     else lo = m + 1;
   }
   return lo;
+}
+
+// How far a decoded WAV's values v (n of them, 2^-AQ_F; the ADPCM prediction off) lie from what the
+// decoder makes of them at step and scale ss: the indexes nearest them, in lo..hi, dequantized as
+// it does (the squared distances' sum, 2^-2AQ_F; by one 64-bit division a value: |v| < 2^40)
+static S128 quant_err(const S64* v, int n, S64 ss, S64 lo, S64 hi) {
+  S128 e = 0;
+  for (int j = 0; j < n; j++) {
+    const S64 u = v[j] * 64;  // (Q22, as ss)
+    S64 q = (u < 0 ? -((-2 * u + ss) / (2 * ss)) : (2 * u + ss) / (2 * ss));
+    q = q < lo ? lo : q > hi ? hi : q;
+    const S64 d = v[j] - shl64(dequantize((S32)q, ss), AQ_F);
+    e += (S128)d * d;
+  }
+  return e;
+}
+// the same of a high-frequency VQ vector q at scale factor sc: its entries as the decoder scales them
+static S128 vq_err(const S64* v, int n, int q, S64 sc) {
+  S128 e = 0;
+  for (int j = 0; j < n; j++) {
+    const S64 d = v[j] - shl64(clip23((HF_VQ[q][j] * sc + 8) >> 4), AQ_F);
+    e += (S128)d * d;
+  }
+  return e;
 }
 
 // the scale factor of table tab (nt entries) nearest (linearly) to t (2^-AQ_F)
