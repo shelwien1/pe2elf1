@@ -14,8 +14,8 @@ constexpr S64 kRawLenMax = (S64)1 << 40;  // a chunk's length as decoded (more: 
 // frame's fields, the container's (NHFRAME + HX_*), then the XCH extension's (so the others keep
 // the numbers they had before XCH had fields: the levels' contexts take parts of them)
 static const int NHFRAME = 42;  // the core frame's hdr fields
-static_assert(F_LFEscaleIndex + 1 == NHFRAME && F_XCH == NHFRAME && F_XSICRC + 1 == F_PMODE,
-              "the hdr family's fields are the first of CORE_FIELDS, XCH's after the core's");
+static_assert(F_LFEscaleIndex + 1 == NHFRAME && F_XCH == NHFRAME && F_XXDCOEF + 1 == F_PMODE,
+              "the hdr family's fields are the first of CORE_FIELDS, the extensions' after the core's");
 struct FieldNums {
   S16 hdr[F_N];
 };
@@ -43,9 +43,9 @@ struct Hist {
   S32 pscale[NCH][NSUB], energy[NCH][NSUB];
   S32 lfe;
   // the last tail's bytes that aren't 0, at its end (tailn of them); the same of the bits before
-  // the XCH extension ([1])
-  U8 tail[2][MAX_FRAME];
-  S32 tailn[2];
+  // the extension ([1]) and XXCH's other bits ([2-4]: model_hdr.inc's code_tail())
+  U8 tail[5][MAX_FRAME];
+  S32 tailn[5];
 };
 
 // a value as a variable: 0 none (v 0), else 1 + it, to 1 + c (v as Hist keeps it: 1 + the value)

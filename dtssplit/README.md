@@ -275,7 +275,7 @@ alone takes 78.8%. [dtsdpack](../dtsdpack) is such a coder, and goes further: it
 encoder searched its code books (the ADPCM predictor is the entry nearest the LPC of the subframe
 and the 4 samples before it, the VQ vector the best of the group of 32 whose mean is nearest), how
 it decimated the LFE, and that its bit allocations follow the subbands' energies; the core takes
-396619 bytes (0.79%).
+396620 bytes (0.79%).
 
 That doesn't help dtssplit as it is. There the audio isn't stored: the WAV holds the residual,
 which is the audio less the core's decode, and the core is what predicts the audio. It helps a
@@ -286,7 +286,7 @@ compressor that stores the audio and derives the core from it:
 | the core (xz), the residual (FLAC), the meta file (xz) | 123368186 | 94.50% |
 | the same, the core by a model of its fields (78.8%) | about 118.7 MB | 90.9% |
 | the audio (FLAC), the core given the audio, the meta file | about 110.4 MB | 84.5% |
-| the audio (FLAC), the core by dtsdpack, the meta file (xz) | 108621981 | 83.20% |
+| the audio (FLAC), the core by dtsdpack, the meta file (xz) | 108621982 | 83.20% |
 
 The audio costs 29 MB more than the residual (106981478 against 78014446 bytes with FLAC), but
 the core costs 37-42 MB less. In such a compressor:

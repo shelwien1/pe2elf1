@@ -17,9 +17,11 @@
 // parsed into its record (syntax.inc: dts2tsv's walk of the core, down to every subband sample's
 // quantization index), written back as bits and compared with the frame: if that reproduces it,
 // the record is coded with a binary arithmetic coder, else the frame is kept as bytes, and so are
-// the bytes between frames, so compression is always lossless. A frame's XCH extension (6.1's back
-// centre) is in its record as one more channel. The same walk that reads a frame's bits and writes
-// them is, at record level, what codes and decodes the record (model.inc: the model is its IO).
+// the bytes between frames, so compression is always lossless. A frame's extension in the core
+// substream is in its record too: XCH's (6.1's back centre) and XXCH's channels (7.1's) after the
+// core's, X96's subbands (96 kHz) in its own syntax. The same walk that reads a frame's bits and
+// writes them is, at record level, what codes and decodes the record (model.inc: the model is its
+// IO).
 //
 // The WAV. The core was coded from the audio a DTS-HD MA stream's lossless extension decodes to:
 // that audio's subband samples, by the encoder's analysis filterbank (anal.inc, in integers), and
@@ -30,7 +32,9 @@
 // c finds how the core's channels and blocks line up with the WAV's, each channel one of the WAV's
 // or a mix of two of them (a 7.1 stream's core is a downmix: each surround its side and rear
 // surround), and keeps it in the header; the model codes each element against what the audio makes
-// of it. Without a WAV that lines up, the model codes the core by itself.
+// of it. A WAV at twice the core's rate (96 kHz) is analysed by the 64-band filterbank instead: its
+// lower half is the core's (a 96 kHz stream's core is), its upper half and the core's residuals
+// X96's. Without a WAV that lines up, the model codes the core by itself.
 //
 // The model. Each element is binarised and each decision goes to one of 8 families (fam.inc, as
 // m4vpack's, h264p's and ac3pack's): counters chosen by context indices, mixed in the logistic
@@ -46,10 +50,10 @@
 //   hit  whether an index that isn't the audio's is the one across the rounding boundary
 //   smp  the subband samples' indexes otherwise: magnitude and sign
 //   vqr  the ranks of the predictors and the HF VQ vectors in the encoder's search order
-//   raw  bytes kept as bytes, the bits after the subframes and those before XCH
+//   raw  bytes kept as bytes, the bits after the subframes, the extension's other bits
 // (Whether a subband sample's index is the audio's goes straight to the coder: model_smp.inc.)
 //
-// File format: "dtsdpack", the format version 3, the level, the WAV's binding (how the core lines
+// File format: "dtsdpack", the format version 4, the level, the WAV's binding (how the core lines
 // up with it, and what the WAV was: coro.inc), then the range coded chunks (kind: end, a frame as
 // records, bytes between frames, a frame kept as bytes; then the records or a length and the
 // bytes); after the end, the CRC-32 of the core stream.
@@ -190,7 +194,7 @@ static int compress(const char* in_name, const char* wav_name, const char* out_n
   Stats st;
   double cost[NCAT], orig[NCAT];
   int r = k.open(in_name, wav_name, out_name, o, "enc");
-  char bound[160];
+  char bound[192];
   if (r) return r;
   r = k.compress_one(o, st, cost, orig);
   // how the core lined up with the WAV (the summary's)
@@ -204,8 +208,9 @@ static int compress(const char* in_name, const char* wav_name, const char* out_n
     if (nm || ng) snprintf(mix, sizeof mix, "; %d of them mixes of two, %d scaled", nm, ng);
     if (!nb) snprintf(bound, sizeof bound, "the WAV not used (nothing lines up: correlation %.3f)", k.corr);
     else
-      snprintf(bound, sizeof bound, "%d channel%s%s against the WAV (offset %d, correlation %.4f%s)", nb, nb > 1 ? "s" : "",
-               k.bind.lfe >= 0 ? " and the LFE" : "", (int)k.bind.off, k.corr, mix);
+      snprintf(bound, sizeof bound, "%d channel%s%s against the WAV%s (offset %d, correlation %.4f%s)", nb,
+               nb > 1 ? "s" : "", k.bind.lfe >= 0 ? " and the LFE" : "",
+               k.bind.up == 2 ? "'s 64-band analysis" : "", (int)k.bind.off, k.corr, mix);
   }
   r = k.close(r);
   if (!r && !o.quiet) st.report(in_name, cost, orig, (double)k.s.pos, o.level, o.stats, bound);

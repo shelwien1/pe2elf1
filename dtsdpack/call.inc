@@ -212,7 +212,8 @@ struct Call {
   // How the core lines up with the WAV (bind, corr), from the stream's first n bytes at pre (eof:
   // all of it): the decoder's plain subband samples of bands 0-7 of the frames there, each block at
   // its place in the stream as the run counts them (every frame's NBLKS + 1), the PROBES with the
-  // most energy of those the WAV's window holds, searched for in the WAV (anal.inc's find_bind())
+  // most energy of those the WAV's window holds, searched for in the WAV (anal.inc's find_bind()):
+  // by the 64-band analysis where the WAV is at twice the core's rate (as the first frame has it)
   void find_alignment(pcU8 pre, size_t n, int eof) {
     static CoreRec r;                 // (large)
     static Probe pr_[4 * PROBES];     // the most energetic so far (a heap would do; few are kept)
@@ -220,10 +221,16 @@ struct Call {
     static S64 ln[LFE_PROBES], ly[LFE_PROBES];  // the LFE's samples (64x): their places, their values times their steps
     static U32 fpos[MIX_SEEN], flen[MIX_SEEN];   // the frames that parse, for the mixes: where, how long, their first block
     static S64 ft[MIX_SEEN];
-    int np = 0, nch = 0, filts = -1, nl = 0, nf = 0;
+    int np = 0, nch = 0, filts = -1, nl = 0, nf = 0, up = 1;
     S64 t = 0;
-    const S64 tmax = (WAV_WIN - 4096) / 32;  // (the probes' audio within the window from 0)
     if (!wav.ok) return;
+    for (size_t i = 0; i < n; i++) {
+      const int m = frame_at(pre + i, n - i, eof, &r);
+      if (!m) continue;
+      if (!core_parse(pre + i, m, r) && wav.rate && wav.rate == 2 * (U32)core_rate(r.sfreq)) up = 2;
+      break;
+    }
+    const S64 tmax = (WAV_WIN - 4096 * up) / (32 * up);  // (the probes' audio within the window from 0)
     for (size_t i = 0; i < n && t < tmax;) {
       const int m = frame_at(pre + i, n - i, eof, &r);
       if (!m) {
@@ -280,8 +287,8 @@ struct Call {
     S64 last = 0;
     for (int k = 0; k < nb; k++) last = best[k].t > last ? best[k].t : last;
     for (int k = 0; k < nl; k++) last = imax(last, 2 * ln[k]);
-    wav.need(0, 32 * (last + 1) + 1536 + 512);
-    bind = find_bind(wav, best, nb, nch, filts, &corr);
+    wav.need(0, 32 * up * (last + 1) + (1536 + 512) * up);
+    bind = find_bind(wav, best, nb, nch, filts, up, &corr);
     if (bind.map[0] >= 0) find_mixes(pre, fpos, flen, ft, nf, nch, filts);
     // the LFE: the WAV channel no core channel has whose decimation correlates best with it
     if (bind.map[0] < 0 || nl < 16) return;
@@ -292,7 +299,7 @@ struct Call {
       if (used) continue;
       double sxy = 0, sxx = 0, syy = 0;
       for (int k = 0; k < nl; k++) {
-        const double x = (double)lfe_decim(wav, wc, 64 * ln[k] + bind.off), y = (double)ly[k];
+        const double x = (double)lfe_decim(wav, wc, 64 * up * ln[k] + bind.off, up), y = (double)ly[k];
         sxy += x * y, sxx += x * x, syy += y * y;
       }
       const double c = sxx > 0 && syy > 0 ? sxy / sqrt(sxx * syy) : 0;
@@ -316,7 +323,7 @@ struct Call {
       for (int sf = 0; sf < r.nsubfs; sf++) {
         const CoreSub& s = r.sub[sf];
         for (int j = 0; j < s.nssc * 8; j++, tb++) {
-          for (int wc = 0; wc < wav.nch; wc++) analyze(wav, wc, 32 * tb + bind.off, fir, xw[wc]);
+          for (int wc = 0; wc < wav.nch; wc++) analyze(wav, wc, 32 * bind.up * tb + bind.off, bind.up, fir, xw[wc]);
           f(r, s, j, xw);
         }
       }
@@ -333,7 +340,7 @@ struct Call {
     static MixHits mh;
     S64 last = 0;
     for (int k = 0; k < nf; k++) last = imax(last, ft[k]);
-    wav.need(0, 32 * (last + 128) + bind.off + 512);
+    wav.need(0, 32 * bind.up * (last + 128) + bind.off + 512 * bind.up);
     memset((void*)&ms, 0, sizeof ms);
     memset((void*)&mh, 0, sizeof mh);
     ms.nw = wav.nch;

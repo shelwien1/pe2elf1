@@ -13,6 +13,7 @@ struct WavIn {
   FILE* f;
   int ok;        // a WAV it reads (else the core is coded without one)
   int nch, bps;  // its channels, its bytes a sample
+  U32 rate;      // its samples a second
   U64 nsamp;     // its samples a channel (as its header says, or to its end)
   U64 size;      // the file's bytes (0: not known, a pipe)
   U32 crc;       // the CRC-32 of its first WAV_PROBE bytes (or of all, where fewer)
@@ -90,6 +91,7 @@ struct WavIn {
       if (!memcmp(h + i, "fmt ", 4) && i + 24 <= n) {
         fmt = (int)le16(i + 8);
         nch = (int)le16(i + 10);
+        rate = le32(i + 12);
         bits = (int)le16(i + 22);
         if (fmt == 0xFFFE && sz >= 40 && i + 8 + 26 <= n) fmt = (int)le16(i + 8 + 24);  // (the subformat's)
       }

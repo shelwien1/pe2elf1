@@ -37,6 +37,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   U8 ab_seen[2][NSUB][129];  // the ABITS each subband had the last time it had that energy (by pm; 1 + it, 0 none)
   int pscale[NCH][NSUB];   // their first scale factor's prediction (1 + it, 0 none)
   int hm[NCH];             // whether the channel's scale factor before was the prediction (0 none, 1 it was, 2 not)
+  U32 sfr[2];              // how often the RMS rule's scale factor was the core's, and scale_ceil()'s (halved as they grow)
   S64 lpc[NCH][NSUB][4];   // the subframe's subbands' LPC (lpc4(): the encoder's ADPCM predictor is the entry nearest)
   int lpg[NCH][NSUB];      // and its prediction gain in halvings
   int lpg4[NCH][NSUB];     // and in quarters of them
@@ -55,6 +56,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   S8 lqs;
   U8 lmiss;
   LfeFit lfit;
+  // X96's, where the frame has it and the WAV is at twice the core's rate: each bound channel's
+  // 64-band analysis by block of the frame, and the core's decoded samples (X96's residuals are the
+  // one less the other: model_x96.inc)
+  int x96a;  // the frame's core pass keeps them
+  int fb0;   // the subframe's first block in the frame
+  S64 xa[NCH][NSUB96][128];
+  S32 yc[NCH][NSUB][128];
   U64 n_smp, n_hit, n_sf, n_sfhit;  // (-s: the samples, those the audio predicted; the same of the scale factors)
   U64 n_vq[VK_N], n_vqhit[VK_N];    // (and the ranks, those 0)
   // how often a subband sample's index wasn't the audio's, of how many (code_index()), by pm, hm and
@@ -73,7 +81,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // the LFE's decimated sample n (64x: its window ends at 64 n + the offset)
   S64 lfe_d(S64 n) {
     const int i = (int)(n & 63);
-    if (lfe_cn[i] != n) lfe_cn[i] = n, lfe_cv[i] = lfe_decim(*wav, bind.lfe, 64 * n + bind.off);
+    if (lfe_cn[i] != n) lfe_cn[i] = n, lfe_cv[i] = lfe_decim(*wav, bind.lfe, 64 * bind.up * n + bind.off, bind.up);
     return lfe_cv[i];
   }
   // a core frame not coded as records (kept as bytes): its blocks go by
@@ -86,20 +94,24 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   void smp_subframe(const CoreRec& r, int sf) {
     const CoreSub& s = r.sub[sf];
     t0 = tframe + r.nblk;
+    fb0 = r.nblk;
     nsmp = s.nssc * 8;
+    // (as the header says: whether X96 is there comes after the core's subframes)
+    if (!r.xpass) x96a = r.ext && r.ext_id == EXT_X96 && bind.up == 2 && wav && wav->ok;
     fir = r.filts ? FIR_PERFECT : FIR_NONPERFECT;
     for (int ch = 0; ch < NCH; ch++) bound[ch] = 0;
     lfe_on = 0;
     if (!wav || !wav->ok) return;
-    const S64 o0 = 32 * t0 + bind.off;
-    S64 lo = o0 - 512, hi = o0 + 32 * (S64)(nsmp - 1);
+    const int up = bind.up;
+    const S64 o0 = 32 * up * t0 + bind.off;
+    S64 lo = o0 - 512 * up, hi = o0 + 32 * up * (S64)(nsmp - 1);
     // the LFE (64x only), its samples' windows and the correction's around them
     const S64 n0 = t0 / 2;
     if (r.lff == 2 && !r.xpass && bind.lfe >= 0 && bind.lfe < wav->nch) {
       lfe_on = 1;
       lfe_n = 2 * r.lff * s.nssc;
-      lo = imin(lo, 64 * (n0 - LFE_K) + bind.off - 512);
-      hi = imax(hi, 64 * (n0 + lfe_n - 1 + LFE_K) + bind.off);
+      lo = imin(lo, 64 * up * (n0 - LFE_K) + bind.off - 512 * up);
+      hi = imax(hi, 64 * up * (n0 + lfe_n - 1 + LFE_K) + bind.off);
     }
     wav->need(lo, hi);
     for (int i = 0; lfe_on && i < lfe_n; i++) {
@@ -109,10 +121,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int ch = r.ch0(); ch < r.ch1(); ch++) {
       if (!bind.bound(ch, wav->nch)) continue;
       bound[ch] = 1;
-      S64 x[32];
+      S64 x[64];
       for (int j = 0; j < nsmp; j++) {
-        analyze_bound(*wav, bind, ch, o0 + 32 * j, fir, x);
+        analyze_bound(*wav, bind, ch, o0 + 32 * up * j, fir, x, x96a ? NSUB96 : NSUB);
         for (int b = 0; b < NSUB; b++) X[ch][b][j] = x[b];
+        for (int b = 0; x96a && b < NSUB96; b++) xa[ch][b][fb0 + j] = x[b];
       }
       const U32* tab = r.shuff[ch] == 6 ? SF7 : SF6;
       const int nt = sf_entries(r.shuff[ch]);
@@ -187,22 +200,24 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int p = 0; p < t - 1; p++) m = 2 * m + f_vqr.bit(VN_BIT + 3 * t + imin(p, 2), ENC && ((r >> (t - 2 - p)) & 1));
     return m;
   }
-  // the rank of index v among the n candidates (c), or the index of the rank coded (d); kind kd
-  int code_cand(int n, int nb, int v, int kd, int ch, int b, int gn) {
+  // the rank of index v among the n candidates (c), or the index of the rank coded (d); kind kd, the
+  // subband's last rank of the kind lh (lrank's, or X96's)
+  int code_cand(int n, int nb, int v, int kd, int ch, int b, int gn) { return code_cand(n, nb, v, kd, ch, b, gn, lrank[ch][b][kd]); }
+  int code_cand(int n, int nb, int v, int kd, int ch, int b, int gn, U8& lh) {
     M_vqr_v D;
     D.kd = kd;
     D.cc = chan_class(ch);
     D.bd = b;
     D.mg = key_margin(cand, n);
     D.gn = gn;
-    D.lh = lrank[ch][b][kd];
+    D.lh = lh;
     B::sel(f_vqr, D);
     int at = 0;
     if (ENC)
       while (cand[at].i != v) at++;
     const int r = code_rank(ENC ? rank_of(cand, n, at) : 0, nb);
     if (!ENC) v = select_rank(cand, n, r);
-    lrank[ch][b][kd] = r ? 2 : 1;
+    lh = r ? 2 : 1;
     n_vq[kd]++;
     n_vqhit[kd] += !r;
     return v;
@@ -247,13 +262,18 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const int max = r.shuff[ch] == 6 ? 128 : 64;
     M_scl_v D;
     tcx X_;
-    int p = -1, near = SB_N - 1;
+    int p = -1, pc = -1, near = SB_N - 1;
     if (bound[ch]) {
       S64 v_[NSMP];
       const int n = tm ? (j ? scale_values(s, ch, b, tm, s.nssc, v_) : scale_values(s, ch, b, 0, tm, v_))
                        : scale_values(s, ch, b, 0, s.nssc, v_);
-      if (n) p = scale_pred(v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
+      if (n) {
+        p = scale_pred(v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
+        pc = scale_ceil(v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]));
+      }
     }
+    const int pr = p;  // (the other rule's, where it has been right clearly more often)
+    if (p >= 0 && sfr[1] > sfr[0] + 64 + sfr[0] / 8) p = pc;
     const S32 A = hist.scale[ch][b], P = hist.pscale[ch][b];
     D.dp = p >= 0 ? sf_dup(r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p) : 0;
     D.kd = hfb ? 2 : j;
@@ -277,6 +297,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     if (!j) pscale[ch][b] = p + 1;
     n_sf++;
+    if (pr >= 0) {
+      sfr[0] += v == pr, sfr[1] += v == pc;
+      if (sfr[0] + sfr[1] >= 1u << 16) sfr[0] >>= 1, sfr[1] >>= 1;
+    }
     return v;
   }
 
@@ -316,7 +340,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     q2[ch][b] = q1[ch][b];
     q1[ch][b] = 1 + bit_len((U64)(v < 0 ? -v : v));
     qs[ch][b] = (S8)svar(v);
-    push_y(ch, b, clip23((S64)dequantize((S32)v, ss) + pred));
+    const S32 y = clip23((S64)dequantize((S32)v, ss) + pred);
+    push_y(ch, b, y);
+    if (x96a) yc[ch][b][fb0 + j] = y;
     return v;
   }
   // An index v (in lo..hi), smp's variables D: whether it is the audio's qp (where pk), whether the
@@ -448,6 +474,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           }
           if (pm) y = clip23(y + adpcm_pred(s.pvq[ch][b], yh[ch][b]));
           push_y(ch, b, (S32)y);
+          if (x96a) yc[ch][b][fb0 + j] = (S32)y;
         }
         if (b >= r.nsubs[ch] || (b < r.nvqsub[ch] && !s.abits[ch][b])) q1[ch][b] = q2[ch][b] = 0, qs[ch][b] = 0;
       }

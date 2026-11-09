@@ -32,16 +32,19 @@ static INLINE S128 shl128(S128 x, int k) { return (S128)((U128)x << k); }
 // How the core lines up with the WAV: the offset, and each core channel as the WAV's channel map
 // times g1 plus channel map2 times g2 (Q23; map2 -1: map's alone): a downmix, as a 7.1 stream's
 // core surrounds are (each its side and rear surround, all the core's channels at -3 dB), or
-// 6.1's (the surround and the back centre at -3 dB)
+// 6.1's (the surround and the back centre at -3 dB). up: the WAV's samples to the core's (1, or 2
+// for a WAV at twice its rate, whose 64-band analysis's lower half is the core: a 96 kHz stream's)
 constexpr S32 BIND_ONE = 1 << 23;
 struct Bind {
   S32 off;
+  S8 up;
   S8 map[NCH];   // each core channel's WAV channel (-1 none)
   S8 map2[NCH];  // the second of its mix (-1 none)
   S32 g1[NCH], g2[NCH];  // their gains (Q23)
   S8 lfe;        // the LFE's (-1 none)
   void none() {
     off = 0;
+    up = 1;
     for (int ch = 0; ch < NCH; ch++) map[ch] = map2[ch] = -1, g1[ch] = BIND_ONE, g2[ch] = 0;
     lfe = -1;
   }
@@ -49,32 +52,41 @@ struct Bind {
   bool bound(int ch, int nw) const { return map[ch] >= 0 && map[ch] < nw && map2[ch] < nw; }
 };
 
-// The subband samples of the 512 samples of WAV channel c before sample o, as the encoder's
-// analysis makes them (FFmpeg dcaenc's transform, by the prototype filter fir), in 2^-AQ_F of the
-// decoder's units (its gain, 2, in): x[32]
-static void analyze(const WavIn& w, int c, S64 o, const S64* fir, S64* x) {
-  S128 acc[64];
+// The first nb subband samples of an M-band analysis of the 16 M samples of WAV channel c before
+// sample o, as the encoder's makes them (FFmpeg dcaenc's transform, by the prototype filter fir),
+// in 2^-AQ_F of the decoder's units (its gain, 2, in): x[nb]. (M 32 the core's, by its prototype;
+// 64 the 64-band filterbank's, X96's, whose lower 32 bands are a 96 kHz stream's core.)
+template <int M>
+static void analyze_m(const WavIn& w, int c, S64 o, const S64* fir, const S64 (*cq)[M], S64* x, int nb) {
+  constexpr int L = 16 * M, H = M / 2;
+  S128 acc[2 * M];
   memset(acc, 0, sizeof acc);
-  for (int m = 0; m < 512; m++) acc[m & 63] += (S128)w.at(c, o - 512 + m) * fir[m];
-  for (int k = 16; k < 32; k++) acc[k] -= acc[31 - k];
-  for (int k = 32; k < 48; k++) acc[k] += acc[95 - k];
-  S64 a[32];
-  for (int i = 0; i < 32; i++) a[i] = (S64)(acc[i + 16] >> 20);  // (2^-24 of a sample)
-  for (int b = 0; b < 32; b++) {
+  for (int m = 0; m < L; m++) acc[m & (2 * M - 1)] += (S128)w.at(c, o - L + m) * fir[m];
+  for (int k = H; k < M; k++) acc[k] -= acc[M - 1 - k];
+  for (int k = M; k < M + H; k++) acc[k] += acc[3 * M - 1 - k];
+  S64 a[M];
+  for (int i = 0; i < M; i++) a[i] = (S64)(acc[i + H] >> 20);  // (2^-24 of a sample)
+  for (int b = 0; b < nb; b++) {
     S128 r = 0;
-    for (int i = 0; i < 32; i++) r += (S128)a[i] * COSQ[b][i];
+    for (int i = 0; i < M; i++) r += (S128)a[i] * cq[b][i];
     x[b] = (S64)((r + ((S128)1 << (84 - AQ_F))) >> (85 - AQ_F));  // (2 r: 2^-(24 + 62) to 2^-AQ_F)
   }
 }
+// the analysis of the WAV's samples to the core's up: 32 bands by the core's prototype fir (up
+// 1), 64 by the 64-band one (2: a WAV at twice the core's rate); its first nb bands into x
+static void analyze(const WavIn& w, int c, S64 o, int up, const S64* fir, S64* x, int nb = 32) {
+  if (up == 2) analyze_m<64>(w, c, o, FIR_64, COSQ64, x, nb);
+  else analyze_m<32>(w, c, o, fir, COSQ, x, nb);
+}
 
-// the subband samples of core channel ch as the binding b makes them from the WAV (analyze()'s):
-// its channel's, or the mix's
-static void analyze_bound(const WavIn& w, const Bind& b, int ch, S64 o, const S64* fir, S64* x) {
-  analyze(w, b.map[ch], o, fir, x);
+// the first nb subband samples of core channel ch as the binding b makes them from the WAV
+// (analyze()'s): its channel's, or the mix's
+static void analyze_bound(const WavIn& w, const Bind& b, int ch, S64 o, const S64* fir, S64* x, int nb = 32) {
+  analyze(w, b.map[ch], o, b.up, fir, x, nb);
   if (b.map2[ch] < 0 && b.g1[ch] == BIND_ONE) return;
-  S64 x2[32];
-  if (b.map2[ch] >= 0) analyze(w, b.map2[ch], o, fir, x2);
-  for (int k = 0; k < 32; k++) {
+  S64 x2[64];
+  if (b.map2[ch] >= 0) analyze(w, b.map2[ch], o, b.up, fir, x2, nb);
+  for (int k = 0; k < nb; k++) {
     const S128 v = (S128)x[k] * b.g1[ch] + (b.map2[ch] >= 0 ? (S128)x2[k] * b.g2[ch] : 0);
     x[k] = (S64)((v + (1 << 22)) >> 23);
   }
@@ -204,6 +216,36 @@ static int scale_pred(const S64* v, int n, const U32* tab, int nt, int* near) {
   const S64 dist = r > mid ? r - mid : mid - r;  // 0 .. step / 2
   *near = step ? imin((int)(dist * 2 * SB_N / step), SB_N - 1) : SB_N - 1;
   return p;
+}
+
+// The scale factor another encoder's rule picks (a 96/24 stream's core: model_smp.inc's code_scale()
+// takes the rule that has been right more often): the first entry of tab at least 0.99 times the
+// RMS of the n values v (2^-AQ_F)
+static int scale_ceil(const S64* v, int n, const U32* tab, int nt) {
+  S128 ss = 0;
+  if (n <= 0) return 0;
+  for (int j = 0; j < n; j++) ss += (S128)v[j] * v[j];
+  const S128 ms = ss / n * 9801;  // (0.99^2, times 10^4)
+  int lo = 0, hi = nt - 1;  // the first entry whose square, times 10^4, is >= that
+  while (lo < hi) {
+    const int m = (lo + hi) >> 1;
+    const S128 t = (S128)tab[m] << AQ_F;
+    if (t * t * 10000 >= ms) hi = m;
+    else lo = m + 1;
+  }
+  return lo;
+}
+
+// the scale factor of table tab (nt entries) nearest (linearly) to t (2^-AQ_F)
+static int scale_near(S64 t, const U32* tab, int nt) {
+  int lo = 0, hi = nt - 1;  // (the last entry at most t)
+  while (lo < hi) {
+    const int m = (lo + hi + 1) >> 1;
+    if (((S128)tab[m] << AQ_F) <= t) lo = m;
+    else hi = m - 1;
+  }
+  if (lo < nt - 1 && 2 * (S128)t >= (((S128)tab[lo] + tab[lo + 1]) << AQ_F)) lo++;
+  return lo;
 }
 
 // a bucket of x / y, |x| <= y, as -1..1 in n steps (0..n - 1); n / 2 where y is 0
@@ -383,10 +425,11 @@ constexpr S64 LFE_G = 290844593;  // the prototype's decimation to the units of 
 constexpr int LFE_K = 6, LFE_NT = 2 * LFE_K + 1;  // the correction's taps: the decimated samples K before to K after
 
 // the WAV channel c decimated by the prototype, the window ending at sample end, in the units
-// of an LFE value times its scale (lfe_scale())
-static S64 lfe_decim(const WavIn& w, int c, S64 end) {
+// of an LFE value times its scale (lfe_scale()); the WAV's samples to the core's up (2: every other
+// sample, an LFE channel having nothing above the core's band to alias)
+static S64 lfe_decim(const WavIn& w, int c, S64 end, int up) {
   S128 acc = 0;
-  for (int m = 0; m < 512; m++) acc += (S128)LFE_FIR[m] * w.at(c, end - 512 + m);
+  for (int m = 0; m < 512; m++) acc += (S128)LFE_FIR[m] * w.at(c, end - 512 * up + up * m);
   return (S64)((acc * LFE_G) >> 60);
 }
 // the LFE scale factor i's step (FFmpeg's: the 7-bit table's entry times the quantizer's 0.035,
@@ -510,35 +553,40 @@ struct Probe {
   U8 ok[NCH][8];
 };
 
-// the double-precision analysis of bands 0-7 (as analyze()'s, unscaled)
-static void analyze_d(const WavIn& w, int c, S64 o, const double* fir, double* x) {
-  double acc[64];
+// the double-precision analysis of bands 0-7 (as analyze_m()'s, unscaled), M bands
+template <int M>
+static void analyze_d(const WavIn& w, int c, S64 o, const double* fir, const S64 (*cq)[M], double* x) {
+  constexpr int L = 16 * M, H = M / 2;
+  double acc[2 * M];
   memset(acc, 0, sizeof acc);
-  for (int m = 0; m < 512; m++) acc[m & 63] += w.at(c, o - 512 + m) * fir[m];
-  for (int k = 16; k < 32; k++) acc[k] -= acc[31 - k];
-  for (int k = 32; k < 48; k++) acc[k] += acc[95 - k];
+  for (int m = 0; m < L; m++) acc[m & (2 * M - 1)] += w.at(c, o - L + m) * fir[m];
+  for (int k = H; k < M; k++) acc[k] -= acc[M - 1 - k];
+  for (int k = M; k < M + H; k++) acc[k] += acc[3 * M - 1 - k];
   for (int b = 0; b < 8; b++) {
     double r = 0;
-    for (int i = 0; i < 32; i++) r += acc[i + 16] * (double)COSQ[b][i];
+    for (int i = 0; i < M; i++) r += acc[i + H] * (double)cq[b][i];
     x[b] = r;
   }
 }
 
 // The WAV's channel and offset of each of the core's nch channels, from the probe blocks pr (n of
-// them): the offset and channel whose analysis correlates best with core channel 0 over offsets
-// -1024..1536, then each other channel's best at that offset; a channel whose best correlation is
-// under 0.9 is none. The WAV's samples the probes need must be in its window.
-static Bind find_bind(const WavIn& w, const Probe* pr, int n, int nch, int filts, double* corr0) {
+// them), the WAV's samples to the core's up (its analysis's: analyze()): the offset and channel
+// whose analysis correlates best with core channel 0 over offsets -1024..1536 (times up), then each
+// other channel's best at that offset; a channel whose best correlation is under 0.9 is none. The
+// WAV's samples the probes need must be in its window.
+static Bind find_bind(const WavIn& w, const Probe* pr, int n, int nch, int filts, int up, double* corr0) {
   Bind b;
   b.none();
+  b.up = (S8)up;
   *corr0 = 0;
   if (!w.ok || n <= 0) return b;
-  double fir[512];
-  for (int m = 0; m < 512; m++) fir[m] = (double)(filts ? FIR_PERFECT : FIR_NONPERFECT)[m];
+  static double fir[1024];
+  for (int m = 0; m < 512 * up; m++) fir[m] = (double)(up == 2 ? FIR_64 : filts ? FIR_PERFECT : FIR_NONPERFECT)[m];
   auto corr = [&](int ch, int wc, S64 off) {
     double sxy = 0, sxx = 0, syy = 0, x[8];
     for (int i = 0; i < n; i++) {
-      analyze_d(w, wc, 32 * pr[i].t + off, fir, x);
+      if (up == 2) analyze_d<64>(w, wc, 64 * pr[i].t + off, fir, COSQ64, x);
+      else analyze_d<32>(w, wc, 32 * pr[i].t + off, fir, COSQ, x);
       for (int k = 0; k < 8; k++)
         if (pr[i].ok[ch][k]) sxy += x[k] * pr[i].y[ch][k], sxx += x[k] * x[k], syy += (double)pr[i].y[ch][k] * pr[i].y[ch][k];
     }
@@ -548,7 +596,7 @@ static Bind find_bind(const WavIn& w, const Probe* pr, int n, int nch, int filts
   int bw = 0;
   S64 bo = 0;
   for (int wc = 0; wc < w.nch; wc++)
-    for (S64 off = -1024; off <= 1536; off++) {
+    for (S64 off = -1024 * up; off <= 1536 * up; off++) {
       const double r = corr(0, wc, off);
       if (r > best) best = r, bo = off, bw = wc;
     }

@@ -3,17 +3,19 @@
 
 // The stream: "dtsdpack", the format's version, the model's level; the WAV's binding (bind_put()):
 // how the core lines up with it (the offset, 4 bytes; each channel's WAV channel, 8 bytes, the
-// second WAV channel of its mix, 8, and their gains, 8 and 8 of 4 bytes; the LFE's channel, 1),
+// second WAV channel of its mix, 8, and their gains, 8 and 8 of 4 bytes; the LFE's channel, 1; the
+// WAV's samples to the core's, 1),
 // what the WAV was (whether it was one, its channels, its bytes a sample, its size, 8 bytes, and
 // the CRC-32 of its first 64 KB, 4); then the arithmetic coded data: the chunks (kind, then the
 // records of a frame, or a length and the bytes of bytes kept as bytes), the end, and the CRC-32
 // of the stream (32 bits at 1/2 each).
 enum { BO_OFF = 0, BO_MAP = 4, BO_MAP2 = BO_MAP + NCH, BO_G1 = BO_MAP2 + NCH, BO_G2 = BO_G1 + 4 * NCH,
-       BO_LFE = BO_G2 + 4 * NCH, BO_OK, BO_NCH, BO_BPS, BO_SIZE, BO_CRC = BO_SIZE + 8,
+       BO_LFE = BO_G2 + 4 * NCH, BO_UP, BO_OK, BO_NCH, BO_BPS, BO_SIZE, BO_CRC = BO_SIZE + 8,
        DP_BIND = BO_CRC + 4 };  // (the binding's bytes)
 enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND, DP_HEAD = DP_AT_BIND + DP_BIND };  // the header's
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
-constexpr int DP_VERSION = 3;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH extension as records)
+constexpr int DP_VERSION = 4;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
+                               // extension as records; 4: a WAV at twice the core's rate, X96 and XXCH)
 
 static void put_le(U8* p, U64 v, int n) {
   for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));
@@ -33,6 +35,7 @@ static void bind_put(U8* p, const Bind& b, const WavIn& w) {
     put_le(p + BO_G2 + 4 * ch, (U32)b.g2[ch], 4);
   }
   p[BO_LFE] = (U8)b.lfe;
+  p[BO_UP] = (U8)b.up;
   p[BO_OK] = (U8)w.ok;
   p[BO_NCH] = (U8)w.nch;
   p[BO_BPS] = (U8)w.bps;
@@ -49,6 +52,7 @@ static Bind bind_get(const U8* p) {
     b.g2[ch] = (S32)(U32)get_le(p + BO_G2 + 4 * ch, 4);
   }
   b.lfe = (S8)p[BO_LFE];
+  b.up = p[BO_UP] == 2 ? 2 : 1;
   return b;
 }
 static const char* bind_differs(const U8* p, const WavIn& w) {
@@ -65,6 +69,7 @@ struct Stats {
   double in_bytes, raw_bytes;
   U64 hits, smp, sf_hits, sf;  // (-s: the samples and scale factors the audio predicted)
   U64 vq[VK_N], vq_hits[VK_N];  // (and the code books' indexes, those its searches found)
+  U64 hits9, smp9, sf_hits9, sf9;  // (and X96's samples and scale factors)
 
   // c's summary line (out_bytes: the compressed size, at the level), and with -s the bytes by kind
   // of syntax element, the coder's cost and orig (CAT_*)
@@ -72,7 +77,7 @@ struct Stats {
               const char* bound) const {
     static const char* const cat_name[NCAT] = {"bytes kept as bytes", "headers, container", "side information",
                                                "bit allocations", "scale factors", "subband samples",
-                                               "bits after the subframes"};
+                                               "bits after the subframes", "X96's subbands"};
     int i;
     fprintf(stderr, "%s: %.0f -> %.0f bytes (%.2f%%, -%d); %llu frames, %llu packed", name, in_bytes, out_bytes,
             in_bytes ? PERCENT * out_bytes / in_bytes : 0.0, level, (unsigned long long)frames, (unsigned long long)packed);
@@ -84,6 +89,7 @@ struct Stats {
       double o = 0, p = 0;
       fprintf(stderr, "  %-28s %10s %10s\n", "bytes", "input", "packed");
       for (i = 0; i < NCAT; i++) {
+        if (i == CAT_X96 && !orig[i]) continue;  // (only where there is some)
         fprintf(stderr, "  %-28s %10.0f %10.0f %7.2f%%\n", cat_name[i], orig[i] / BYTE_BITS, cost[i] / BYTE_BITS,
                 orig[i] ? PERCENT * cost[i] / orig[i] : 0.0);
         o += orig[i];
@@ -92,6 +98,9 @@ struct Stats {
       fprintf(stderr, "  %-28s %10.0f %10.0f %7.2f%%\n", "total", o / BYTE_BITS, p / BYTE_BITS, o ? PERCENT * p / o : 0.0);
       if (smp) fprintf(stderr, "  the audio's indexes: %.2f%% of the samples; the RMS's scale factors: %.2f%%\n",
                        PERCENT * hits / smp, sf ? PERCENT * sf_hits / sf : 0.0);
+      if (smp9 || sf9)
+        fprintf(stderr, "  X96: the audio's indexes: %.2f%% of the samples; the RMS's scale factors: %.2f%%\n",
+                smp9 ? PERCENT * hits9 / smp9 : 0.0, sf9 ? PERCENT * sf_hits9 / sf9 : 0.0);
       if (vq[VK_PVQ] || vq[VK_HFG])
         fprintf(stderr, "  the encoder's searches on the audio: %.2f%% of the ADPCM predictors; HF VQ: %.2f%% of the "
                         "groups, %.2f%% of the vectors in them\n",

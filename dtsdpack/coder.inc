@@ -7,7 +7,7 @@
 // what the bits are spent on (-s): bytes kept as bytes; the headers and the container; the
 // subbands' side information (PMODE, PVQ, TMODE, the joint scale factors, the HF VQ vectors, the
 // LFE); the bit allocations; the scale factors; the subband samples; the bits after the subframes
-enum { CAT_RAW, CAT_HDR, CAT_SIDE, CAT_ABITS, CAT_SCALE, CAT_SMP, CAT_TAIL, NCAT };
+enum { CAT_RAW, CAT_HDR, CAT_SIDE, CAT_ABITS, CAT_SCALE, CAT_SMP, CAT_TAIL, CAT_X96, NCAT };
 
 constexpr int CO_PBITS = h264p::SCALElog;               // a probability's bits (code_bit()'s p)
 constexpr U32 CO_ONE = 1u << CO_PBITS;                  // (certain)

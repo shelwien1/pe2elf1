@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """mktables.py DCADATA.C OUT -- dtsdpack's tables.inc from FFmpeg's libavcodec/dcadata.c, all
-integers, so that what the analysis computes is the same everywhere: the QMF prototype filters as
-their single-precision values times 2^44, the cosine modulation of the encoder's analysis times
-2^62, and the quantizer, scale factor, ADPCM and high-frequency VQ tables as they are."""
+integers, so that what the analysis computes is the same everywhere: the QMF prototype filters (the
+core's two and the 64-band one) as their single-precision values times 2^44, the cosine modulation
+of the encoder's analysis (32 and 64 bands) times 2^62, and the quantizer, scale factor, ADPCM and high-frequency VQ tables as they are."""
 import math, re, struct, sys
 src = open(sys.argv[1]).read()
 
@@ -47,6 +47,11 @@ for nm, al in (('ff_dca_fir_32bands_perfect', 'FIR_PERFECT'), ('ff_dca_fir_32ban
     q = [int(round(x * 2 ** 44)) for x in v]
     out.append('// %s: the prototype filter (single precision, as FFmpeg has it) times 2^44' % al)
     arr('S64', al, ['%dLL' % x for x in q], 4)
+# the 64-band filterbank's prototype (X96's, and a 96 kHz WAV's analysis: the core is its lower half)
+v = [f32(x) for x in body('ff_dca_fir_64bands')]
+assert len(v) == 1024
+out.append('// FIR_64: the 64-band prototype filter (single precision) times 2^44')
+arr('S64', 'FIR_64', ['%dLL' % int(round(x * 2 ** 44)) for x in v], 4)
 # the LFE's 512-tap interpolation prototype (64x), as the encoder's decimation starts from it:
 # T[64 j + k] = lfe_fir_64[8 k + j], T[64 (7 - j) + 63 - k] the same (k < 32, j < 8), times 2^30
 lf = [f32(x) for x in body('ff_dca_lfe_fir_64')]
@@ -67,6 +72,14 @@ for b in range(32):
         cq.append('%dLL' % int(round(c * 2 ** 62)))
 out.append('// COS[b][i]: the analysis\'s cosine modulation, band b, term i, times 2^62')
 arr('S64', 'COSQ', cq, dims=(32, 32))
+# the same of the 64-band filterbank: cos(pi (2b + 1)(2(i + 64) + 1) / 256), the same signs
+cq = []
+for b in range(64):
+    for i in range(64):
+        c = math.cos(math.pi * (2 * b + 1) * (2 * (i + 64) + 1) / 256.0) * (-1 if (b + 1) & 2 else 1)
+        cq.append('%dLL' % int(round(c * 2 ** 62)))
+out.append('// COSQ64[b][i]: the 64-band analysis\'s, times 2^62')
+arr('S64', 'COSQ64', cq, dims=(64, 64))
 out.append('// the step sizes of the lossy quantizer by ABITS, the scale factors (6 and 7 bits), the scale')
 out.append('// factor adjustments, the ADPCM predictor code book (Q13), the high-frequency VQ code book')
 arr('U32', 'LOSSY_QUANT', ints('ff_dca_lossy_quant', 32))
@@ -76,5 +89,7 @@ arr('U32', 'SF_ADJ', ints('ff_dca_scale_factor_adj', 4))
 arr('S16', 'ADPCM_VB', ints('ff_dca_adpcm_vb', 4096 * 4), dims=(4096, 4))
 out.append('// the downmix coefficients (Q15, ascending): what a core channel mixed from the audio\'s is made with')
 arr('U16', 'DMIX', ints('ff_dca_dmixtable', 242))
+out.append('// the joint intensity scale factors (Q17; index 64 is 1): a joint subband is its source\'s times one')
+arr('U32', 'JOINT_SCALE', ints('ff_dca_joint_scale_factors', 129))
 arr('S8', 'HF_VQ', ints('ff_dca_high_freq_vq', 1024 * 32), dims=(1024, 32))
 open(sys.argv[2], 'w').write('\n'.join(out) + '\n')

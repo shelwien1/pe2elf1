@@ -142,14 +142,16 @@ struct ModelHdr {
     }
   }
 
-  // The bits after the subframes (nbits at p, the last byte's unused bits 0), or those before the
-  // XCH extension (gap): a flag whether they are all 0, else how many of their last bytes are not
-  // (from the first that isn't), and those bytes, against the last ones' of the kind at the same
-  // places from the end
-  void code_tail(pU8 p, int nbits, int gap) {
-    const int nb = (nbits + 7) / 8, zf = NHFRAME + (gap ? HX_GAPZ : HX_TAILZ), nf = NHFRAME + (gap ? HX_GAPNZ : HX_TAILNZ);
-    U8* const last = hist.tail[gap];
-    S32& lastn = hist.tailn[gap];
+  // The bits after the subframes (nbits at p, the last byte's unused bits 0), or (kind 1) those
+  // before the extension, or (2-4) XXCH's other bits (its headers' after their fields, its channel
+  // set's after its subframes): a flag whether they are all 0, else how many of their last bytes
+  // are not (from the first that isn't), and those bytes, against the last ones' of the kind at the
+  // same places from the end
+  void code_tail(pU8 p, int nbits, int kind) {
+    const int nb = (nbits + 7) / 8, zf = NHFRAME + (kind ? HX_GAPZ : HX_TAILZ), nf = NHFRAME + (kind ? HX_GAPNZ : HX_TAILNZ);
+    const int o = kind ? kind - 1 : 0;  // (the hdr fields' place: each kind its own)
+    U8* const last = hist.tail[kind];
+    S32& lastn = hist.tailn[kind];
     int nz = 0;
     if (!nb) return;
     if (ENC) {
@@ -157,13 +159,13 @@ struct ModelHdr {
       while (i < nb && !p[i]) i++;
       nz = nb - i;
     }
-    if (hdr_hist(zf, 0, 1, nz == 0)) {
+    if (hdr_hist(zf, o, 1, nz == 0)) {
       if (!ENC) memset(p, 0, (size_t)nb);
       return;
     }
-    nz = (int)checked(hdr_hist(nf, 0, 0xFFFF, nz), 1, nb);
+    nz = (int)checked(hdr_hist(nf, o, 0xFFFF, nz), 1, nb);
     if (!ENC) memset(p, 0, (size_t)(nb - nz));
-    raw_bytes(p + nb - nz, (size_t)nz, gap ? RC_GAP : RC_TAIL, last, lastn - nz, lastn, 1);
+    raw_bytes(p + nb - nz, (size_t)nz, kind ? RC_GAP : RC_TAIL, last, lastn - nz, lastn, 1);
     memcpy(last, p + nb - nz, (size_t)nz);
     lastn = nz;
   }

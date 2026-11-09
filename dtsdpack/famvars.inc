@@ -8,10 +8,10 @@
 // The fields the hdr family codes, each of their own values (fld): the core frame's header and
 // coding header, a subframe's header fields, then the container's (below), then the XCH
 // extension's; and the sid family's, a subband's side information (SF_*).
-constexpr int NHF = 64;
+constexpr int NHF = 80;  // (the levels' contexts take parts of a field's number: XXCH's, past 63, share theirs)
 // the container's fields, after the frame's: a chunk's kind, the length of bytes kept as bytes,
 // the bits after the subframes all zero, and how many of their last bytes are not; the same of the
-// bits before the XCH extension
+// bits before the extension (and, at places 1-3, XXCH's other bits)
 enum { HX_KIND, HX_RAWLEN, HX_TAILZ, HX_TAILNZ, HX_GAPZ, HX_GAPNZ, HX_N };
 // sid's fields
 enum { SF_PMODE, SF_PVQ, SF_TMODE, SF_JSHUFF, SF_JSCALE, SF_HFVQ, SF_LFE, SF_N };

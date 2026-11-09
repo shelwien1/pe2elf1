@@ -8,19 +8,21 @@
 // Its elements, as the families go, stacked in one line each on those below: what they share
 // (model_core.inc); the headers, the raw bytes and the container (model_hdr.inc); the side
 // information and the bit allocations (model_side.inc); the scale factors and the samples, against
-// the WAV's audio (model_smp.inc); and the model itself, the walk's IO.
+// the WAV's audio (model_smp.inc); X96's subbands (model_x96.inc); and the model itself, the walk's
+// IO.
 
 #include "model_core.inc"
 #include "model_hdr.inc"
 #include "model_side.inc"
 #include "model_smp.inc"
+#include "model_x96.inc"
 
 // The model of a run, at the level LV: compressing (f_DEC 0) or decompressing (1). Plain data, on
 // the zeroed pages of its run's coroutine (coro.inc): Init() as the run is made, start() as it
 // starts (its families' tables mapped), Quit() as it ends.
 template <int f_DEC, class LV>
-struct Model : ModelSmp<f_DEC, LV> {
-  typedef ModelSmp<f_DEC, LV> B;
+struct Model : ModelX96<f_DEC, LV> {
+  typedef ModelX96<f_DEC, LV> B;
   using B::ENC;
   using B::c;
   using B::cat;
@@ -122,10 +124,15 @@ struct Model : ModelSmp<f_DEC, LV> {
       v = B::lfe_scl;
       return good();
     }
-    if (fid == F_XFSIZE) {  // (less the one its sync word's distance to the frame's end makes, mod 2^10)
+    if (fid == F_XFSIZE) {  // (less the one its sync word's distance to the frame's end makes, mod 2^nbits)
       account(CAT_HDR);
-      const S64 e = (S64)r.fsize - (S64)((pos - 32) >> 3);
-      v = (hdr_field(fid, 1023, (v - e) & 1023) + e) & 1023;
+      const S64 e = (S64)r.fsize - (S64)((pos - 32) >> 3), m = ((S64)1 << nbits) - 1;
+      v = (hdr_field(fid, m, (v - e) & m) + e) & m;
+      return good();
+    }
+    if (r.xpass == 2 && field_kind[fid] != FK_H) {  // (X96's subbands: model_x96.inc)
+      account(CAT_X96);
+      v = checked(B::x96_code(r, cur_sf, fid, ch, b, cur_j, v, lo, hi), lo, hi);
       return good();
     }
     switch (field_kind[fid]) {
@@ -255,12 +262,13 @@ struct Model : ModelSmp<f_DEC, LV> {
   }
   bool val(int fid, S64 lo, S64 hi, S64& v) { return code(fid, v, lo, hi, 0); }
   bool raw(int fid, int n, U8* p) {
-    if (fid != F_tail && fid != F_xgap) fatal("internal error: raw bits of %s", field_name[fid]);
+    const int kind = fid == F_tail ? 0 : fid == F_xgap ? 1 : fid == F_xhrest ? 2 : fid == F_xcrest ? 3 : fid == F_xpad ? 4 : -1;
+    if (kind < 0) fatal("internal error: raw bits of %s", field_name[fid]);
 #ifdef DTSD_FSTAT
     c->fid = fid;
 #endif
     account(CAT_TAIL);
-    B::code_tail(p, n, fid == F_xgap);
+    B::code_tail(p, n, kind);
     pos += n;
     return good();
   }
@@ -273,7 +281,8 @@ struct Model : ModelSmp<f_DEC, LV> {
   void subframe(const CoreRec& r, int sf) {
     cur_sf = sf;
     B::sst = 0;
-    B::smp_subframe(r, sf);
+    if (r.xpass == 2) B::x96_subframe(r, sf);
+    else B::smp_subframe(r, sf);
   }
   void at(int ch, int b, int j) {
     cur_ch = ch;
@@ -282,6 +291,7 @@ struct Model : ModelSmp<f_DEC, LV> {
   }
   // the subframe done: its decoder's samples where no index made them, its values as the last ones
   void subframe_end(const CoreRec& r, int sf) {
+    if (r.xpass == 2) return B::x96_subframe_end(r, sf);
     const CoreSub& s = r.sub[sf];
     B::smp_fill(r, s);
     B::smp_subframe_end(r);

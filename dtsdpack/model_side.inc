@@ -89,7 +89,7 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
     f_abt.make(D, X);
     f_abt.select(X);
     const S32 c1 = Sn ? Sn : A, c2 = Sn ? A : Bw;
-    v = code_val(f_abt, X, 0, v, c1, c2, c1 ? c1 - 1 : c2 ? c2 - 1 : 0, (u32)b, lo, hi);
+    v = code_val(f_abt, X, 0, v, c1, c2, c1 ? c1 - 1 : c2 ? c2 - 1 : 0, (u32)imin(b, M_abt_NG - 1), lo, hi);  // (X96's subbands past 31: 31's)
     ast = !A ? 0 : v == A - 1 ? 1 : 2;
     return v;
   }
