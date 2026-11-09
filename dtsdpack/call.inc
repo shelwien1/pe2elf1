@@ -8,11 +8,14 @@ constexpr int MIX_FRAMES = 256;       // and the frames each channel's mix is (f
 constexpr int MIX_SEEN = 8192;        // (of the frames read first, at most)
 
 // The sums of a weighted least squares fit of each core channel's decoded subband samples (its
-// plain subbands', each by 1 / its step squared: the finer, the surer) against each of the WAV's
-// channels' analysis (Call::find_mixes()'s first pass)
+// plain subbands', each by 1 / its uncertainty squared: its quantization's, step^2 / 12, and the
+// WAV's own, sg^2, the finer the surer) against each of the WAV's channels' analysis
+// (Call::find_mixes()'s first pass)
 struct MixSums {
-  int nw;  // the WAV's channels
+  int nw;     // the WAV's channels
+  double sg;  // what the WAV's analysis can't tell apart (its rounding and the bands' leakage: decoder units)
   double G[NCH][WAV_CH][WAV_CH], C[NCH][WAV_CH], Y[NCH];  // (G's lower half)
+  double Cu[NCH][WAV_CH], Gu[NCH][WAV_CH];  // and unweighted (loud samples decide: Call::find_mixes())
   U64 N[NCH];
   void operator()(const CoreRec& r, const CoreSub& s, int j, S64 (*xw)[32]) {
     for (int ch = 0; ch < r.npchs + r.nxch; ch++)
@@ -20,9 +23,10 @@ struct MixSums {
         if (!s.abits[ch][b] || s.pmode[ch][b]) continue;
         const S64 ss = step_scale(r, s, ch, b, j >> 3);
         if (ss <= 0) continue;
-        const double y = dequantize(s.q[ch][b][j], ss), st = (double)ss / 4194304, wt = 1 / (st * st);
+        const double y = dequantize(s.q[ch][b][j], ss), st = (double)ss / 4194304, wt = 1 / (st * st / 12 + sg * sg);
         for (int i = 0; i < nw; i++) {
           const double xi = (double)xw[i][b] / 65536;
+          Cu[ch][i] += xi * y, Gu[ch][i] += xi * xi;
           C[ch][i] += wt * xi * y;
           for (int k = 0; k <= i; k++) G[ch][i][k] += wt * xi * ((double)xw[k][b] / 65536);
         }
@@ -37,7 +41,7 @@ struct MixCand {
   int w1, w2;
   S32 g1, g2;
 };
-constexpr int MIX_CANDS = 8;
+constexpr int MIX_CANDS = 11;
 struct MixHits {
   MixCand c[NCH][MIX_CANDS];
   int nc[NCH];
@@ -332,9 +336,10 @@ struct Call {
   // How each core channel lines up with the WAV's, the offset found (bind's map, map2, g1, g2): its
   // best single WAV channel and its best pair, by a weighted least squares fit over the frames read
   // first (MixSums), each with its gains as fitted and as the downmix table's entries either side
-  // (gain_near()); of those, the one that makes the most of the channel's indexes exactly (MixHits;
-  // by 0.5% of them at least over the ones before it), where that is a fifth of them at least
-  // (else the channel isn't bound)
+  // (gain_near()), and the channel the alignment found, as it is and by the table's gains of an
+  // unweighted fit; of those, the one that makes the most of the channel's indexes exactly
+  // (MixHits; by 0.5% of them at least over the ones before it), where that is a fifth of them at
+  // least (else the channel isn't bound)
   void find_mixes(pcU8 pre, const U32* pos, const U32* len, const S64* ft, int nf, int nch, int filts) {
     static MixSums ms;
     static MixHits mh;
@@ -344,6 +349,9 @@ struct Call {
     memset((void*)&ms, 0, sizeof ms);
     memset((void*)&mh, 0, sizeof mh);
     ms.nw = wav.nch;
+    // (a silent subband the encoder gave a fine step and indexes of 0, as an open rate's may, is
+    // the WAV's rounding noise there: without the WAV's uncertainty such samples outweigh the rest)
+    ms.sg = 0.5 * (wav.bps == 2 ? 256 : 1);
     mix_pass(pre, pos, len, ft, nf, nch, filts, ms);
     const int nw = wav.nch;
     auto g = [&](int ch, int i, int k) { return i >= k ? ms.G[ch][i][k] : ms.G[ch][k][i]; };
@@ -364,10 +372,22 @@ struct Call {
           if (res2 < rp) rp = res2, pi = i, pk = k, pa = x, pb = z;
         }
       }
-      // the candidates, in order of preference: one channel by the table's gains (the nearer first),
-      // by the fit's; two channels by the table's, by the fit's
+      // the candidates, in order of preference: the channel the alignment found, as it is and by the
+      // table's gains of the unweighted fit (the weighted one can miss them: a decoded WAV's analysis
+      // isn't the core's where the filterbank's reconstruction errs most, beside a sudden loud
+      // onset, and those samples' fine steps outweigh the rest); one channel by the table's gains
+      // (the nearer first), by the fit's; two channels by the table's, by the fit's
       int& n = mh.nc[ch];
       S32 ga[2], gb[2];
+      if (bind.map[ch] >= 0) {
+        const int w = bind.map[ch];
+        mh.c[ch][n++] = MixCand{w, -1, BIND_ONE, 0};
+        if (ms.Gu[ch][w] > 0) {
+          const int na = gain_near(ms.Cu[ch][w] / ms.Gu[ch][w], ga);
+          for (int a = 0; a < na; a++)
+            if (ga[a] != BIND_ONE) mh.c[ch][n++] = MixCand{w, -1, ga[a], 0};
+        }
+      }
       if (si >= 0) {
         const int na = gain_near(gs, ga);
         for (int a = 0; a < na; a++) mh.c[ch][n++] = MixCand{si, -1, ga[a], 0};

@@ -126,15 +126,16 @@ of):
 | `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 15574 (0.56%) | its 3.1 |
 | `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 133906 (2.56%) | 6.1 by XCH, decoded |
 | FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 15302 (3.04%) | the same |
-| `open bitrate.dts` (stereo, open rate) | 5242416 | 1617464 (30.85%) | decoded, but only part of it lines up (66% of the indexes) |
+| `open bitrate.dts` (stereo, open rate) | 5242416 | 114806 (2.19%) | decoded (99.99% of the indexes; 30.85% before the binding's fit stopped trusting silent subbands at fine steps: below) |
 
 No stream at hand has XXCH in its core substream: FATE's XXCH samples (`xxch_71_24_48_2046`,
 `xbr_xxch_71_24_48_3840`, `x96_xxch_71_24_96_3840`, 7 frames each) have it in their extension
 substreams. Their XXCH frames moved into their core frames after the subframes (EXT_AUDIO set,
 EXT_AUDIO_ID 6), the extension substream dropped, make core-substream XXCH streams that FFmpeg
-decodes as 7.1; dtsdpack round-trips them against those decodes (34.59%, 37.53%, 41.60%: their
-signals near full scale make their cores line up poorly with any decode, as their original cores
-with theirs, 35%).
+decodes as 7.1; dtsdpack round-trips them against those decodes (21.74%, 22.70%, 16.60%). Their
+signal is a silent frame, then white noise near full scale; the decoder undoes XXCH's downmix
+pre-scaling (every core channel times 1.41), so the decodes clip, and only partly line up with
+any core (their own cores against their core-only decodes, which don't clip, make 18.91%).
 
 ## How it works
 
@@ -238,11 +239,18 @@ lossless extension's primary channel set is the 5.1 the core was coded from, eac
 and the rear surround, every channel scaled: coefficients of DTS's downmix table, FFmpeg's
 `ff_dca_dmixtable`, Q15). So over
 up to 256 of the frames read first, a weighted least squares fit (each decoded subband sample by 1 /
-its step squared: the finer, the surer) of the core channel against every WAV channel and every
-pair of them gives its best single channel and its best pair, each with its gains as fitted and as
-the downmix table's entries either side (signed); of those, the one that makes the most of the
-channel's indexes exactly is its binding (a simpler one unless another makes 0.5% more), if it
-makes a fifth of them. The LFE gets the remaining WAV channel whose decimation correlates best with
+its uncertainty squared: its quantization's, step^2 / 12, and the WAV's own, half a unit, 128 for a
+16-bit WAV: the finer, the surer) of the core channel against every WAV channel and every pair of
+them gives its best single channel and its best pair, each with its gains as fitted and as the
+downmix table's entries either side (signed); with the channel the alignment found as it is and
+by the table's gains of an unweighted fit, the candidates. Of those, the one that makes the most of
+the channel's indexes exactly is its binding (a simpler one unless another makes 0.5% more), if it
+makes a fifth of them. (Against a decoded WAV, two kinds of samples break a fit by steps alone: a
+silent subband the encoder gave a fine step, as `open bitrate.dts`'s has ABITS 24 at the smallest
+scale factor, all its indexes 0, where the WAV has its rounding; and silence beside a sudden loud
+onset, where the decoder's filterbank, FILTS 0's not quite perfect reconstruction, leaves a few
+percent of the onset in the WAV. Their fine steps made them outweigh everything else, and the
+fit's gains came out at 0.017 for a channel that is its WAV channel as it is.) The LFE gets the remaining WAV channel whose decimation correlates best with
 the first 1024 LFE samples. `-s` shows the binding:
 
 ```
@@ -303,6 +311,10 @@ the CRC-32 of the core stream, which `d` checks.
   the extension substream).
 - A decoded WAV can't say what X96's joint scale factors are where their source decodes to
   silence: those are coded against their last values alone (most of `96-24.dts`'s X96 bytes).
+- Against a decoded WAV, the scale factors are the RMS rule's less often (58% of `open bitrate.dts`'s,
+  most of its bytes): the decode's RMS isn't the encoder's input's, least of all where a coarse
+  quantizer or a VQ vector made the decode (its values are exact multiples of the scale factor,
+  which a search could find, but doesn't yet).
 - One thread, one level.
 
 ## Build
