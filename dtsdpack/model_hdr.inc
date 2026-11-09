@@ -149,11 +149,13 @@ struct ModelHdr {
   // set's after its subframes): as the bytes they end in (their last bit a byte's last: the frame's
   // bytes, which their patterns go by, as the encoder's words before the extension's sync word and
   // its fill to a 32-bit boundary do), a flag whether they are all 0, else how many of those bytes
-  // are not (from the first that isn't), and those bytes, against the last ones' of the kind at the
-  // same places from the end
+  // are not (from the first that isn't), how many of those end them as 0s, and the bytes between,
+  // against the last ones' of the kind at the same places from the end
   void code_tail(pU8 p, int nbits, int kind) {
     const int nb = (nbits + 7) / 8, zf = NHFRAME + (kind ? HX_GAPZ : HX_TAILZ), nf = NHFRAME + (kind ? HX_GAPNZ : HX_TAILNZ);
-    const int o = kind ? kind - 1 : 0;  // (the hdr fields' place: each kind its own)
+    // (the hdr fields' place: each kind its own; the bits after the subframes' and those before the
+    // extension's, by their bits to the next 32-bit boundary: their fills' odds go by them)
+    const int o = kind > 1 ? kind - 1 : (kind ? 4 : 0) + ((nbits & 31) >> 1);
     const int sh = 8 * nb - nbits, k0 = BYTE_BITS - sh;  // (the first byte's bits)
     U8* const last = hist.tail[kind];
     S32& lastn = hist.tailn[kind];
@@ -171,8 +173,12 @@ struct ModelHdr {
       return;
     }
     nz = (int)checked(hdr_hist(nf, o, 0xFFFF, nz), 1, nb);
-    if (!ENC) memset(q, 0, (size_t)(nb - nz));
-    raw_bytes(q + nb - nz, (size_t)nz, kind ? RC_GAP : RC_TAIL, last, lastn - nz, lastn, 1, 0, nz == nb ? k0 : BYTE_BITS);
+    int tz = 0;  // (and how many of those end it as 0s: a 32-bit word of them, the fill's)
+    if (ENC)
+      while (tz < nz - 1 && !q[nb - 1 - tz]) tz++;
+    tz = (int)checked(hdr_hist(NHFRAME + (kind ? HX_GAPTZ : HX_TAILTZ), o, 0xFFFF, tz), 0, nz - 1);
+    if (!ENC) memset(q, 0, (size_t)nb);
+    raw_bytes(q + nb - nz, (size_t)(nz - tz), kind ? RC_GAP : RC_TAIL, last, lastn - nz, lastn, 1, 0, nz == nb ? k0 : BYTE_BITS);
     memcpy(last, q + nb - nz, (size_t)nz);
     lastn = nz;
     if (!ENC)  // (back as they were, from the first byte)

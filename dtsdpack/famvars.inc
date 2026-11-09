@@ -12,7 +12,7 @@ constexpr int NHF = 80;  // (the levels' contexts take parts of a field's number
 // the container's fields, after the frame's: a chunk's kind, the length of bytes kept as bytes,
 // the bits after the subframes all zero, and how many of their last bytes are not; the same of the
 // bits before the extension (and, at places 1-3, XXCH's other bits)
-enum { HX_KIND, HX_RAWLEN, HX_TAILZ, HX_TAILNZ, HX_GAPZ, HX_GAPNZ, HX_N };
+enum { HX_KIND, HX_RAWLEN, HX_TAILZ, HX_TAILNZ, HX_GAPZ, HX_GAPNZ, HX_TAILTZ, HX_GAPTZ, HX_N };
 // sid's fields
 // (SF_TMSR, SF_PMSR: TMODE against the transient search, PMODE against the values' fit)
 enum { SF_PMODE, SF_PVQ, SF_TMODE, SF_JSHUFF, SF_JSCALE, SF_HFVQ, SF_LFE, SF_TMSR, SF_PMSR, SF_N };
