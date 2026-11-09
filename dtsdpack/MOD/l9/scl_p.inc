@@ -55,6 +55,8 @@ void D9_scl_make( const M_scl_v & D, tcx & X ) {
   j = 0;
   j = j*2 + (((pk)>0+(1-1)));
   j = j*9 + D9_scl_j_bd[__min(31,__max(0,(bd)-(1-1)))];
+  j = j*3 + (((cc)>0+(1-1))+((cc)>1+(1-1)));
+  j = j*10 + D9_scl_j_nb[__min(9,__max(0,(nb)-(1-1)))];
 
   k = 0;
   k = k*2 + (((pk)>0+(1-1)));
@@ -71,6 +73,7 @@ void D9_scl_make( const M_scl_v & D, tcx & X ) {
   s = s*2 + (((pk)>0+(1-1)));
   s = s*4 + D9_scl_s_pn[__min(7,__max(0,(pn)-(1-1)))];
   s = s*4 + D9_scl_s_dp[__min(3,__max(0,(dp)-(1-1)))];
+  s = s*3 + (((cc)>0+(1-1))+((cc)>1+(1-1)));
 
   f = 0;
   f = f*3 + (((kd)>0+(1-1))+((kd)>2+(1-1)));

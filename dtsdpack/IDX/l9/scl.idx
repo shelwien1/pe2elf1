@@ -51,6 +51,8 @@ Index j
  j_kd: kd, 1!000
  j_pk: pk, 1!1
  j_bd: bd, 1!0110100110001000100000000000001
+ j_cc: cc, 1!11
+ j_nb: nb, 1!111111111
 
 Index k
  k_kd: kd, 1!000
@@ -69,6 +71,7 @@ Index s
  s_pk: pk, 1!1
  s_pn: pn, 1!1100001
  s_dp: dp, 1!111
+ s_cc: cc, 1!11
 
 Index f
  f_kd: kd, 1!101

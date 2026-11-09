@@ -349,10 +349,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     stair_add(t, x - L.c0 - L.d, v);
     L.cost += ab_bits(v), L.n++;
-    int bk = AL_ND, bs = L.sc[AL_ND];
+    int bk = AL_ND;  // (a quarter of an ABITS's score off for each unit from the centre)
+    S32 bs = 4 * L.sc[AL_ND];
     for (int k = 1; k <= AL_ND; k++) {
-      if (L.sc[AL_ND - k] > bs) bs = L.sc[AL_ND - k], bk = AL_ND - k;
-      if (L.sc[AL_ND + k] > bs) bs = L.sc[AL_ND + k], bk = AL_ND + k;
+      const S32 s1 = 4 * L.sc[AL_ND - k] - k, s2 = 4 * L.sc[AL_ND + k] - k;
+      if (s1 > bs) bs = s1, bk = AL_ND - k;
+      if (s2 > bs) bs = s2, bk = AL_ND + k;
     }
     L.d = bk - AL_ND;
   }
@@ -796,6 +798,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.lp = A && P ? dvar(A - P) : 9;
     D.hm = hm[ch];
     D.bd = b;
+    D.cc = chan_class(ch);
+    D.nb = bound[ch] && b ? clip((es[ch][b - 1] - es[ch][b]) / 2, -4, 4) + 4 : 9;
     f_scl.make(D, X_);
     f_scl.select(X_);
     if (p >= 0) {
@@ -927,6 +931,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.hm = lfe_hm;
     D.bd = 0;
     D.dp = sf_dup(SF7, SF7_N, p);
+    D.cc = 0;
+    D.nb = 9;
     f_scl.make(D, X_);
     f_scl.select(X_);
     if (f_scl.bit(CN_HIT, ENC && v == p)) v = p;

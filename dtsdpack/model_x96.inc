@@ -334,6 +334,8 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     D.lp = A && P ? dvar(A - P) : 9;
     D.hm = hm9[ch];
     D.bd = b;
+    D.cc = chan_class(ch);
+    D.nb = 9;
     this->f_scl.make(D, X_);
     this->f_scl.select(X_);
     if (p >= 0) {
