@@ -14,9 +14,9 @@ enum { BO_OFF = 0, BO_MAP = 4, BO_MAP2 = BO_MAP + NCH, BO_G1 = BO_MAP2 + NCH, BO
        DP_BIND = BO_CRC + 4 };  // (the binding's bytes)
 enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND, DP_HEAD = DP_AT_BIND + DP_BIND };  // the header's
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
-constexpr int DP_VERSION = 5;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
+constexpr int DP_VERSION = 6;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
                                // extension as records; 4: a WAV at twice the core's rate, X96 and XXCH; 5: the
-                               // scale factor search)
+                               // scale factor search; 6: the bit allocation search)
 
 static void put_le(U8* p, U64 v, int n) {
   for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));
@@ -71,6 +71,7 @@ struct Stats {
   U64 hits, smp, sf_hits, sf;  // (-s: the samples and scale factors the audio predicted)
   U64 vq[VK_N], vq_hits[VK_N];  // (and the code books' indexes, those its searches found)
   U64 hits9, smp9, sf_hits9, sf9;  // (and X96's samples and scale factors)
+  U64 ab, ab_srch, ab_hits;        // (and the ABITS, those the bit allocation search said, those it said right)
 
   // c's summary line (out_bytes: the compressed size, at the level), and with -s the bytes by kind
   // of syntax element, the coder's cost and orig (CAT_*)
@@ -99,6 +100,9 @@ struct Stats {
       fprintf(stderr, "  %-28s %10.0f %10.0f %7.2f%%\n", "total", o / BYTE_BITS, p / BYTE_BITS, o ? PERCENT * p / o : 0.0);
       if (smp) fprintf(stderr, "  the audio's indexes: %.2f%% of the samples; the audio's scale factors: %.2f%%\n",
                        PERCENT * hits / smp, sf ? PERCENT * sf_hits / sf : 0.0);
+      if (ab_srch)
+        fprintf(stderr, "  the bit allocation search: %.2f%% of the ABITS, right in %.2f%% of them\n",
+                PERCENT * ab_srch / ab, PERCENT * ab_hits / ab_srch);
       if (smp9 || sf9)
         fprintf(stderr, "  X96: the audio's indexes: %.2f%% of the samples; the audio's scale factors: %.2f%%\n",
                 smp9 ? PERCENT * hits9 / smp9 : 0.0, sf9 ? PERCENT * sf_hits9 / sf9 : 0.0);

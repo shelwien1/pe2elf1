@@ -3,6 +3,7 @@
 
 constexpr size_t PRE_READ = 4 * MIB;  // c: the stream's start, read first to find the alignment
 constexpr int PROBES = 64;            // the blocks the alignment is found from
+static_assert(PROBES <= PROBES_MAX, "find_bind()'s");
 constexpr int LFE_PROBES = 1024;      // and the LFE samples its channel is
 constexpr int MIX_FRAMES = 256;       // and the frames each channel's mix is (find_mixes())
 constexpr int MIX_SEEN = 8192;        // (of the frames read first, at most)

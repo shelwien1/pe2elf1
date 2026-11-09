@@ -41,9 +41,9 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
   // prediction, VQ vector, joint scale factor (+ 129), energy
   S32 hpm[NCH][NB], hpv[NCH][NB], hab[NCH][NB], hsc[NCH][NB], hps[NCH][NB], hvq[NCH][NB], hjs[NCH][NB], hen[NCH][NB];
   U64 n_smp9, n_hit9, n_sf9, n_sfhit9;  // (-s: X96's samples and scale factors, those the audio predicted)
-  // how often x96_scale()'s rules were the stream's, by the subband's kind; the search's tries and
-  // those it alone was right in (halved as they grow)
-  U32 sfr9[3][3], ss9_n, ss9_gain;
+  // how often x96_scale()'s rules were the stream's, by the subband's kind (halved as they grow);
+  // the search's tries (to 2048)
+  U32 sfr9[3][3], ss9_n;
 
   // the step size times scale factor of channel ch's subband b (its ABITS 2 up: the quantizer's
   // ABITS + 1; no adjustment)
@@ -165,7 +165,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
           else if (e + k <= 64 && sn[k]) sv = sn[k], near_e = 1;
         }
         v = abits_code(ch, b, v, lo, hi, hab[ch][b], b > b0 ? s.abits[ch][b - 1] + 1 : 0, e, de, ls, s.pmode[ch][b], lbd, nb,
-                       mx, sv, near_e ? 14 : nn);
+                       mx, sv, near_e ? 14 : nn, 0);
         if (sn) *sn = (U8)(checked(v, lo, hi) + 1);
         return v;
       }
@@ -277,7 +277,13 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     *conf = imin(bitlen128((U128)ratio) - 3, SB_N - 1);
     return best;
   }
-  bool x96_search_on() const { return ss9_n < 2048 || ss9_gain * 64 > ss9_n || !(n_sf9 & 63); }
+  // (as search_on(): kind k's rule, the search's where it is right clearly more often than the
+  // better of the others)
+  bool x96_rule(int k) const {
+    const U32 lead = imax(sfr9[k][0], sfr9[k][1]);
+    return sfr9[k][2] > lead + 64 + lead / 8;
+  }
+  bool x96_search_on(int k) const { return ss9_n < 2048 || x96_rule(k) || !(n_sf9 & 63); }
 
   // Channel ch's subband b's scale factor v (0-63): against the one the audio makes, where the
   // channel is bound, else the last. By the subband's kind (k: its bits, its VQ, neither) the rules,
@@ -305,14 +311,13 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
           p1 = scale_near(pk * 21 / 10, SF6, SF6_N);
         }
         if (p1 >= 0 && sfr9[k][1] + 64 >= sfr9[k][0]) p = p1, near = SB_N - 1;
-        if (k < 2 && x96_search_on()) {
+        if (k < 2 && x96_search_on(k)) {
           S64 y[NSMP];
           x96_values(s, ch, b, y);
           ps = x96_search(r, s, ch, b, y, n, p0, &conf), tried = 1;
         }
         pq = ps >= 0 ? ps : p;
-        const U32 lead = imax(sfr9[k][0], sfr9[k][1]);
-        if (tried && sfr9[k][2] > lead + 64 + lead / 8) {
+        if (tried && x96_rule(k)) {
           p = pq;
           if (ps >= 0) near = conf;
         }
@@ -345,8 +350,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
       sfr9[k][0] += v == p0, sfr9[k][1] += p1 >= 0 && v == p1;
       if (tried) {
         sfr9[k][2] += v == pq;
-        ss9_n++, ss9_gain += ps >= 0 && v == ps && v != p0 && v != p1;
-        if (ss9_n >= 1u << 16) ss9_n >>= 1, ss9_gain >>= 1;
+        ss9_n += ss9_n < 2048;
       }
       if (sfr9[k][0] + sfr9[k][1] + sfr9[k][2] >= 1u << 16) sfr9[k][0] >>= 1, sfr9[k][1] >>= 1, sfr9[k][2] >>= 1;
     }

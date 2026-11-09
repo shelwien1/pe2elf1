@@ -38,9 +38,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   int pscale[NCH][NSUB];   // their first scale factor's prediction (1 + it, 0 none)
   int hm[NCH];             // whether the channel's scale factor before was the prediction (0 none, 1 it was, 2 not)
   // how often the RMS rule's scale factor was the core's, scale_ceil()'s, and scale_search()'s (the
-  // better of those two's where it isn't sure); the search's tries and those it alone was right in
-  // (halved as they grow)
-  U32 sfr[3], ss_n, ss_gain;
+  // better of those two's where it isn't sure; halved as they grow); the search's tries (to 2048)
+  U32 sfr[3], ss_n;
+  // the same of the bit allocation search's ABITS (abits_search()) and the first guess's without
+  // it, where it was tried; its tries; the ABITS (-s: those it said, those it said right)
+  U32 abr[2], ab_n;
+  U64 n_ab, n_abs, n_abhit;
   S64 lpc[NCH][NSUB][4];   // the subframe's subbands' LPC (lpc4(): the encoder's ADPCM predictor is the entry nearest)
   int lpg[NCH][NSUB];      // and its prediction gain in halvings
   int lpg4[NCH][NSUB];     // and in quarters of them
@@ -303,9 +306,100 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     *conf = imin(bitlen128((U128)ratio) - 3, SB_N - 1);
     return best;
   }
-  // whether to try the search: in its first 2048 tries, while it is right alone in more than 1 of
-  // 64 of them, and in 1 of 64 scale factors (it costs, and a lossless WAV's search gains nothing)
-  bool search_on() const { return ss_n < 2048 || ss_gain * 64 > ss_n || !(n_sf & 63); }
+  // whether to try the search: in its first 2048 tries, while its rule is the one taken, and in 1
+  // of 64 scale factors (it costs, and a lossless WAV's gains nothing); the rule: the search's
+  // where it is right clearly more often than the better of the others
+  int sf_base() const { return sfr[1] > sfr[0] + 64 + sfr[0] / 8 ? 1 : 0; }
+  bool ss_rule() const { return sfr[2] > sfr[sf_base()] + 64 + sfr[sf_base()] / 8; }
+  bool search_on() const { return ss_n < 2048 || ss_rule() || !(n_sf & 63); }
+  // the same of the bit allocation search, of the ABITS
+  bool ab_rule() const { return abr[1] > abr[0] + 32 + abr[0] / 32; }
+  bool ab_search_on() const { return ab_n < 2048 || abr[1] * 4 > abr[0] * 3 || !(n_ab & 63); }
+
+  // The ABITS a decoded WAV says (the bit allocation search): its values v (n of them, the ADPCM
+  // prediction off) are what the decoder made of indexes at the step of the ABITS and a scale
+  // factor; so of ABITS a0..a1 (g the guess) and the scale factors p - 3 to p + 5, the pair whose
+  // lattice lies nearest them in its steps (a finer one fits as nearly but in more of its steps, a
+  // coarser one misses the values between its points): 1 + its ABITS, where an index it makes isn't
+  // 0 (else 0: the values say nothing); *conf the log2 of the next pair's distance over its, 0-7.
+  // (The pairs by their distance at the 2 largest values, each one's whole distance, the largest
+  // values first, while it could still be less than the second best's: as trying them all does.)
+  int abits_search(const CoreRec& r, int ch, const S64* v, int n, int g, int a0, int a1, int p, int* conf) {
+    constexpr int NP = 27 * 9, NK = 2;
+    const int nt = sf_entries(r.shuff[ch]), nk = imin(n, NK);
+    auto mag = [](S64 x) { return x < 0 ? -x : x; };
+    S64 w[NSMP];  // (the values, the largest first)
+    for (int j = 0; j < n; j++) {
+      int k = j;
+      while (k > 0 && mag(w[k - 1]) < mag(v[j])) w[k] = w[k - 1], k--;
+      w[k] = v[j];
+    }
+    struct Pair {
+      U64 d;  // (its distance at the largest values: at most its whole one's)
+      S128 e;
+      int nz;
+      S8 a, i;
+    } pr[NP];
+    QErr qe[NP];
+    int np = 0;
+    const int i0 = imax(p - 3, 0), i1 = imin(p + 5, nt - 1);
+    // (from the guesses out, g's and p: of equal distances the nearer pair)
+    const int ga = clip(g, a0, a1);
+    for (int ka = 0; ka <= 2 * (a1 - a0); ka++) {
+      const int a = ka & 1 ? ga + (ka + 1) / 2 : ga - ka / 2;
+      if (a < a0 || a > a1) continue;
+      S64 lo, hi;
+      quant_range(r, ch, a, lo, hi);
+      for (int ki = 0; ki <= 2 * (i1 - i0); ki++) {
+        const int i = ki & 1 ? p + (ki + 1) / 2 : p - ki / 2;
+        if (i < i0 || i > i1) continue;
+        const S64 ss = step_for(r, ch, a, i);
+        if (ss <= 0 || np >= NP) continue;
+        QErr& q = qe[np];
+        Pair& x = pr[np];
+        q.set(ss, lo, hi);
+        x.e = 0, x.nz = 0;
+        for (int k = 0; k < nk; k++) x.e += q.err(w[k], &x.nz);
+        x.d = norm_dist(x.e, ss), x.a = (S8)a, x.i = (S8)i;
+        np++;
+      }
+    }
+    if (!np) return 0;
+    int ord[NP];  // (by that distance, stably)
+    for (int k = 0; k < np; k++) {
+      int m = k;
+      while (m > 0 && pr[ord[m - 1]].d > pr[k].d) ord[m] = ord[m - 1], m--;
+      ord[m] = k;
+    }
+    U64 d1 = ~0ull, d2 = ~0ull;
+    int best = -1, bnz = 0;
+    for (int k = 0; k < np && pr[ord[k]].d < d2; k++) {
+      const int at = ord[k];
+      const QErr& q = qe[at];
+      S128 e = pr[at].e, lim = ~(U128)0 >> 1;
+      int nz = pr[at].nz, j = nk;
+      if (d2 != ~0ull) {  // (a distance past lim is past d2's: in doubles, made larger)
+        const double l = (double)d2 * (double)q.ss * (double)q.ss / 268435456.0 * (1 + 1e-9);
+        if (l < 1e36) lim = (S128)l + 1;
+      }
+      while (j < n && e <= lim) e += q.err(w[j++], &nz);
+      if (e > lim) continue;
+      const U64 d = norm_dist(e, q.ss);
+      if (d < d1) d2 = d1, d1 = d, best = at, bnz = nz;
+      else if (d < d2) d2 = d;
+    }
+    if (best < 0 || !bnz) return 0;
+    const U64 eps = 2 * (U64)n;  // (2^-15 steps squared a value)
+    const U64 ratio = d2 == ~0ull ? ~0ull : (d2 + eps) / (d1 + eps);
+    *conf = imin(bit_len(ratio) - 1, 7);
+    return 1 + pr[best].a;
+  }
+  // a squared distance e (2^-2AQ_F) in the step ss's (2^-22) squared, times 2^16 (to 2^64 - 1)
+  static U64 norm_dist(S128 e, S64 ss) {
+    const U128 num = (U128)e << 28, den = (U128)((S128)ss * ss);
+    const U128 q = num / den;
+    return q >> 64 ? ~0ull : (U64)q;
+  }
 
   // Scale factor j (0 the first, 1 the second, after a transient) of channel ch's subband b, v in
   // 0..max-1: against the one the audio makes, where the channel is bound, else the last. Three
@@ -331,10 +425,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     // (the better of the two RMS rules, and the search where it is better still: where it isn't
     // sure, that rule's)
-    const int base = sfr[1] > sfr[0] + 64 + sfr[0] / 8 ? 1 : 0, pr = p, pb = base ? pc : p;
+    const int pr = p, pb = sf_base() ? pc : p;
     const int pss = ps >= 0 ? ps : pb;
     if (p >= 0) {
-      if (tried && sfr[2] > sfr[base] + 64 + sfr[base] / 8) {
+      if (tried && ss_rule()) {
         p = pss;
         if (ps >= 0) near = conf;
       } else {
@@ -368,8 +462,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       sfr[0] += v == pr, sfr[1] += v == pc;
       if (tried) {
         sfr[2] += v == pss;
-        ss_n++, ss_gain += ps >= 0 && v == ps && v != pr;
-        if (ss_n >= 1u << 16) ss_n >>= 1, ss_gain >>= 1;
+        ss_n += ss_n < 2048;
       }
       if (sfr[0] + sfr[1] >= 1u << 16) sfr[0] >>= 1, sfr[1] >>= 1, sfr[2] >>= 1;
     }

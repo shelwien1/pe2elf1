@@ -162,11 +162,13 @@ struct Model : ModelX96<f_DEC, LV> {
       case F_ABITS: {  // (against the audio's energy, as the scale factor its RMS makes, and how it changed)
         account(CAT_ABITS);
         int e = bound[ch] ? es[ch][b] : 0;
+        const int srch = e && B::ab_search_on();
+        S64 x[NSMP];
+        int nx = 0;
+        if (e && (s.pmode[ch][b] || srch)) nx = B::scale_values(s, ch, b, 0, s.nssc, x);
         if (e && s.pmode[ch][b]) {  // (an ADPCM subband's: its prediction's residual's)
-          S64 x[NSMP];
           int near;
-          const int n = B::scale_values(s, ch, b, 0, s.nssc, x);
-          e = 1 + scale_pred(x, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
+          e = 1 + scale_pred(x, nx, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
         }
         B::eab[ch][b] = e;
         const int le = hist.energy[ch][b];
@@ -191,9 +193,32 @@ struct Model : ModelX96<f_DEC, LV> {
           if (e - k >= 1 && sn[-k]) sv = sn[-k], near_e = 1;
           else if (e + k <= 128 && sn[k]) sv = sn[k], near_e = 1;
         }
+        // (the search's, where it is right clearly more often than the first guess without it: it
+        // the first guess, its sureness and whether it is that one the context sc)
+        const S32 og = sv ? sv : hist.abits[ch][b];
+        int G = 0, gc = 0, sc = 0;
+        if (srch && nx) {
+          const int g = og ? og - 1 : 1, a0 = og ? imax(imax((int)lo, 1), g - 3) : imax((int)lo, 1),
+                    a1 = og ? imin((int)hi, g + 3) : (int)hi;
+          if (a0 <= a1) G = B::abits_search(r, ch, x, nx, g, a0, a1, e - 1, &gc);
+        }
+        S32 Sn = sv;
+        if (srch && G && B::ab_rule()) {
+          Sn = G, sc = 1 + 2 * imin(gc, 6) + (G == og);
+          B::n_abs++;
+        }
         v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
-                       s.pmode[ch][b], lbd, nb, mx, sv, near_e ? 14 : nn);
-        if (sn) *sn = (U8)(checked(v, lo, hi) + 1);
+                       s.pmode[ch][b], lbd, nb, mx, Sn, near_e ? 14 : nn, sc);
+        v = checked(v, lo, hi);
+        if (sn) *sn = (U8)(v + 1);
+        if (sc) B::n_abhit += v == G - 1;
+        if (srch) {
+          const int ro = og && v == og - 1, rs = G ? v == G - 1 : ro;
+          B::abr[0] += ro, B::abr[1] += rs;
+          if (B::abr[0] + B::abr[1] >= 1u << 16) B::abr[0] >>= 1, B::abr[1] >>= 1;
+          B::ab_n += B::ab_n < 2048;
+        }
+        B::n_ab++;
         break;
       }
       case F_TMODE:

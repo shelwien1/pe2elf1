@@ -253,6 +253,33 @@ static S128 quant_err(const S64* v, int n, S64 ss, S64 lo, S64 hi) {
   }
   return e;
 }
+// quant_err()'s at one step and scale, value by value, for the searches that try many: the index
+// by a reciprocal, then made exact (the same indexes as its divisions)
+struct QErr {
+  S64 ss, lo, hi, ssh;  // (ssh, shift: dequantize()'s)
+  int shift;
+  double inv;
+  void set(S64 ss_, S64 lo_, S64 hi_) {
+    ss = ss_, lo = lo_, hi = hi_, ssh = ss, shift = 0;
+    if (ss > (1 << 23)) {
+      shift = ilog2((U64)(ss >> 23)) + 1;
+      ssh = ss >> shift;
+    }
+    inv = 1.0 / (double)ss;
+  }
+  // value v's squared distance; *nz set where its index isn't 0
+  INLINE S128 err(S64 v, int* nz) const {
+    const S64 u = v * 64, a = u < 0 ? -u : u, t = 2 * a + ss;  // (the index: floor(t / 2ss))
+    S64 q = (S64)((double)a * inv + 0.5);
+    while (q > 0 && 2 * q * ss > t) q--;
+    while (2 * (q + 1) * ss <= t) q++;
+    if (u < 0) q = -q;
+    q = q < lo ? lo : q > hi ? hi : q;
+    *nz |= q != 0;
+    const S64 d = v - shl64(clip23(rshift(q * ssh, 22 - shift)), AQ_F);
+    return (S128)d * d;
+  }
+};
 // the same of a high-frequency VQ vector q at scale factor sc: its entries as the decoder scales them
 static S128 vq_err(const S64* v, int n, int q, S64 sc) {
   S128 e = 0;
@@ -574,59 +601,145 @@ struct LfeFit {
 
 // A core's first frames, for the alignment: the decoder's plain subband samples of bands 0-7 (those
 // without ADPCM) of a block of it, by channel
+constexpr int PROBES_MAX = 64;  // (at most: call.inc's PROBES)
 struct Probe {
   S64 t;  // the block
   S32 y[NCH][8];
   U8 ok[NCH][8];
 };
 
-// the double-precision analysis of bands 0-7 (as analyze_m()'s, unscaled), M bands
+// the double-precision analysis of bands 0-7 (as analyze_m()'s, unscaled), M bands, of the 16 M
+// samples from s (the window's first: those before the block's place), by fir and the cosines cq
 template <int M>
-static void analyze_d(const WavIn& w, int c, S64 o, const double* fir, const S64 (*cq)[M], double* x) {
+static void analyze_d(const double* s, const double* fir, const double (*cq)[M], double* x) {
   constexpr int L = 16 * M, H = M / 2;
   double acc[2 * M];
-  memset(acc, 0, sizeof acc);
-  for (int m = 0; m < L; m++) acc[m & (2 * M - 1)] += w.at(c, o - L + m) * fir[m];
+  for (int i = 0; i < 2 * M; i++) acc[i] = 0;
+  for (int k = 0; k < L; k += 2 * M)  // (each acc[] by m in order: analyze_m()'s sums)
+    for (int i = 0; i < 2 * M; i++) acc[i] += s[k + i] * fir[k + i];
   for (int k = H; k < M; k++) acc[k] -= acc[M - 1 - k];
   for (int k = M; k < M + H; k++) acc[k] += acc[3 * M - 1 - k];
-  for (int b = 0; b < 8; b++) {
-    double r = 0;
-    for (int i = 0; i < M; i++) r += acc[i + H] * (double)cq[b][i];
-    x[b] = r;
-  }
+  double r[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+  for (int i = 0; i < M; i++)
+    for (int b = 0; b < 8; b++) r[b] += acc[i + H] * cq[b][i];
+  for (int b = 0; b < 8; b++) x[b] = r[b];
 }
 
 // The WAV's channel and offset of each of the core's nch channels, from the probe blocks pr (n of
 // them), the WAV's samples to the core's up (its analysis's: analyze()): the offset and channel
 // whose analysis correlates best with core channel 0 over offsets -1024..1536 (times up), then each
 // other channel's best at that offset; a channel whose best correlation is under 0.9 is none. The
-// WAV's samples the probes need must be in its window.
+// WAV's samples the probes need must be in its window. (The offsets by the 16 probes of most
+// energy in core channel 0 first, the 64 places best by them then by all the probes: the best of
+// those, as a search of all of them by all the probes finds it, where it is among them.)
 static Bind find_bind(const WavIn& w, const Probe* pr, int n, int nch, int filts, int up, double* corr0) {
   Bind b;
   b.none();
   b.up = (S8)up;
   *corr0 = 0;
   if (!w.ok || n <= 0) return b;
-  static double fir[1024];
+  constexpr int NB1 = 16, NC = 64, SPAN = (2560 + 1) * 2 + 1024;  // (a probe's samples over the offsets, up 2)
+  const int M = 32 * up, L = 16 * M;
+  const S64 olo = -1024 * up, ohi = 1536 * up;
+  const int span = (int)(ohi - olo) + L;
+  static double fir[1024], cq32[8][32], cq64[8][64], seg[PROBES_MAX * SPAN];
   for (int m = 0; m < 512 * up; m++) fir[m] = (double)(up == 2 ? FIR_64 : filts ? FIR_PERFECT : FIR_NONPERFECT)[m];
-  auto corr = [&](int ch, int wc, S64 off) {
-    double sxy = 0, sxx = 0, syy = 0, x[8];
+  for (int k = 0; k < 8; k++) {
+    for (int i = 0; i < 32; i++) cq32[k][i] = (double)COSQ[k][i];
+    for (int i = 0; i < 64; i++) cq64[k][i] = (double)COSQ64[k][i];
+  }
+  if (n > PROBES_MAX) n = PROBES_MAX;
+  int seg_wc = -1;
+  auto load = [&](int wc) {  // (the probes' windows of WAV channel wc)
+    if (seg_wc == wc) return;
+    seg_wc = wc;
     for (int i = 0; i < n; i++) {
-      if (up == 2) analyze_d<64>(w, wc, 64 * pr[i].t + off, fir, COSQ64, x);
-      else analyze_d<32>(w, wc, 32 * pr[i].t + off, fir, COSQ, x);
+      const S64 o = (S64)M * pr[i].t + olo - L;
+      for (int k = 0; k < span; k++) seg[(size_t)i * span + k] = w.at(wc, o + k);
+    }
+  };
+  auto corr = [&](int ch, S64 off, const int* pi, int np) {
+    double sxy = 0, sxx = 0, syy = 0, x[8];
+    for (int j = 0; j < np; j++) {
+      const int i = pi ? pi[j] : j;
+      const double* s = seg + (size_t)i * span + (off - olo);
+      if (up == 2) analyze_d<64>(s, fir, cq64, x);
+      else analyze_d<32>(s, fir, cq32, x);
       for (int k = 0; k < 8; k++)
         if (pr[i].ok[ch][k]) sxy += x[k] * pr[i].y[ch][k], sxx += x[k] * x[k], syy += (double)pr[i].y[ch][k] * pr[i].y[ch][k];
     }
     return sxx > 0 && syy > 0 ? sxy / sqrt(sxx * syy) : 0;
   };
+  // the probes of most energy in channel 0, in their order
+  int p1[NB1], n1 = 0;
+  if (n > NB1) {
+    double e[PROBES_MAX];
+    for (int i = 0; i < n; i++) {
+      e[i] = 0;
+      for (int k = 0; k < 8; k++)
+        if (pr[i].ok[0][k]) e[i] += (double)pr[i].y[0][k] * pr[i].y[0][k];
+    }
+    U8 pick[PROBES_MAX] = {0};
+    for (int j = 0; j < NB1; j++) {
+      int bi = -1;
+      for (int i = 0; i < n; i++)
+        if (!pick[i] && (bi < 0 || e[i] > e[bi])) bi = i;
+      pick[bi] = 1;
+    }
+    for (int i = 0; i < n; i++)
+      if (pick[i]) p1[n1++] = i;
+  }
   double best = -2;
   int bw = 0;
   S64 bo = 0;
-  for (int wc = 0; wc < w.nch; wc++)
-    for (S64 off = -1024 * up; off <= 1536 * up; off++) {
-      const double r = corr(0, wc, off);
-      if (r > best) best = r, bo = off, bw = wc;
+  // (the decoders' usual delays first, in the search's order: where one correlates all but
+  // perfectly, it is the best)
+  static const int USUAL[] = {0, 256, 512, 1024};
+  for (int wc = 0; wc < w.nch; wc++) {
+    load(wc);
+    for (int u = 0; u < 4; u++) {
+      const double r = corr(0, (S64)USUAL[u] * up, nullptr, n);
+      if (r > best) best = r, bo = (S64)USUAL[u] * up, bw = wc;
     }
+  }
+  if (best >= 0.999) n1 = -1;  // (no search)
+  else best = -2;
+  struct Cand {
+    double r;
+    int wc;
+    S64 off;
+  } cd[NC];
+  int nc = 0;
+  for (int wc = 0; wc < w.nch && n1 >= 0; wc++) {
+    load(wc);
+    for (S64 off = olo; off <= ohi; off++) {
+      if (!n1) {
+        const double r = corr(0, off, nullptr, n);
+        if (r > best) best = r, bo = off, bw = wc;
+        continue;
+      }
+      const double r = corr(0, off, p1, n1);
+      if (nc < NC) cd[nc++] = Cand{r, wc, off};
+      else {
+        int lo = 0;
+        for (int k = 1; k < NC; k++)
+          if (cd[k].r < cd[lo].r) lo = k;
+        if (r > cd[lo].r) cd[lo] = Cand{r, wc, off};
+      }
+    }
+  }
+  if (n1 > 0) {  // (by all the probes, in the search's order: its first best)
+    for (int k = 1; k < nc; k++)
+      for (int z = k; z > 0 && (cd[z - 1].wc > cd[z].wc || (cd[z - 1].wc == cd[z].wc && cd[z - 1].off > cd[z].off)); z--) {
+        const Cand t = cd[z];
+        cd[z] = cd[z - 1], cd[z - 1] = t;
+      }
+    for (int k = 0; k < nc; k++) {
+      load(cd[k].wc);
+      const double r = corr(0, cd[k].off, nullptr, n);
+      if (r > best) best = r, bo = cd[k].off, bw = cd[k].wc;
+    }
+  }
   *corr0 = best;
   if (best < 0.9) return b;
   b.off = (S32)bo;
@@ -635,7 +748,8 @@ static Bind find_bind(const WavIn& w, const Probe* pr, int n, int nch, int filts
     double bc = -2;
     int bwc = -1;
     for (int wc = 0; wc < w.nch; wc++) {
-      const double r = corr(ch, wc, bo);
+      load(wc);
+      const double r = corr(ch, bo, nullptr, n);
       if (r > bc) bc = r, bwc = wc;
     }
     if (bc >= 0.9) b.map[ch] = (S8)bwc;
