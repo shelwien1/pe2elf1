@@ -168,10 +168,10 @@ struct Model : ModelX96<f_DEC, LV> {
         if (fit >= 0)
           v = side_code(SF_PMSR, ch, b, v, 0, 1, 1, hist.pmode[ch][b], b ? s.pmode[ch][b - 1] + 1 : 0, fit,
                         imin(B::lpg4[ch][b], 27), B::pmode_gain(ch, b));
-        else
+        else  // (a quiet subband, its RMS rule's scale factor under 100, predicts as one that wouldn't gain)
           v = side_code(SF_PMODE, ch, b, v, 0, 1, 1, hist.pmode[ch][b], b ? s.pmode[ch][b - 1] + 1 : 0,
                         bound[ch] ? ac[ch][b] : 8, bound[ch] ? imin(B::lpg4[ch][b], 27) : 0,
-                        bound[ch] ? B::pmode_gain(ch, b) : 9);
+                        !bound[ch] ? 9 : (r.shuff[ch] == 6 ? SF7 : SF6)[es[ch][b] - 1] < 100 ? 0 : B::pmode_gain(ch, b));
         break;
       }
       case F_PVQ:
@@ -273,9 +273,13 @@ struct Model : ModelX96<f_DEC, LV> {
         if (gt >= 0)
           v = side_code(SF_TMSR, ch, b, v, lo, hi, 0, 1 + gt, hist.tmode[ch][b], gc, 1 + imin(s.abits[ch][b], 26),
                         ec[ch][b]);
-        else
-          v = side_code(SF_TMODE, ch, b, v, lo, hi, 0, hist.tmode[ch][b], 0, bound[ch] ? ac[ch][b] : 8,
-                        1 + imin(s.abits[ch][b], 26), bound[ch] ? ec[ch][b] : 9);
+        else if (bound[ch]) {  // (a lossless WAV's: against the rule, its class the context ac)
+          int tg;
+          const int tc = B::tmode_rule(s, ch, b, &tg);
+          v = side_code(SF_TMODE, ch, b, v, lo, hi, 0, 1 + (tc >= 3 ? tg : 0), hist.tmode[ch][b], tc,
+                        1 + imin(s.abits[ch][b], 26), ec[ch][b]);
+        } else
+          v = side_code(SF_TMODE, ch, b, v, lo, hi, 0, hist.tmode[ch][b], 0, 8, 1 + imin(s.abits[ch][b], 26), 9);
         break;
       }
       case F_SCALES:

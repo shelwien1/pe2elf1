@@ -590,7 +590,9 @@ static int select_rank(KeyIx* a, int n, int r) {
   }
   return a[r].i;
 }
-// how far the best of n candidates beats the next: 0 (within 1/16) to 7 (8 times), 8 by all
+// how far the best of n candidates beats the next: 0 (within 1/256), 1 (1/128) ... 11 (by 4 times
+// or more), 12 by all (where the encoder's search misses, it is nearly always a near tie: 40% of
+// `s.2.dts`'s HF VQ groups within 1/256 are the first, 83% from 1/32 to 1/16)
 static int key_margin(const KeyIx* a, int n) {
   int b = 0, s = -1;  // (the first two)
   for (int i = 1; i < n; i++)
@@ -598,10 +600,10 @@ static int key_margin(const KeyIx* a, int n) {
     else if (s < 0 || key_less(a[i], a[s])) s = i;
   if (s < 0) return 0;
   const S128 d1 = a[b].k, d2 = a[s].k;
-  if (d1 <= 0) return d2 > 0 ? 8 : 0;
-  const S128 x = (d2 - d1) / ((d1 >> 4) + 1);  // (16ths of d1)
+  if (d1 <= 0) return d2 > 0 ? 12 : 0;
+  const S128 x = (d2 - d1) / ((d1 >> 8) + 1);  // (256ths of d1)
   int m = 0;
-  while (m < 8 && x >= ((S128)1 << m)) m++;
+  while (m < 11 && x >= ((S128)1 << m)) m++;
   return m;
 }
 

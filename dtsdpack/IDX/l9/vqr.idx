@@ -12,22 +12,22 @@ Const 0
 
 Index a
  a_kd: kd, 1!01
- a_mg: mg, 1!11011110
+ a_mg: mg, 1!111111111111
 
 Index b
  b_kd: kd, 1!01
- b_mg: mg, 1!00000000
+ b_mg: mg, 1!000000000000
  b_gn: gn, 1!000100000000000
 
 Index c
  c_kd: kd, 1!11
  c_bd: bd, 1!0010000100001000100000010000011
- c_mg: mg, 1!11001100
+ c_mg: mg, 1!111111111111
 
 Index d
  d_kd: kd, 1!11
  d_lh: lh, 1!11
- d_mg: mg, 1!10010100
+ d_mg: mg, 1!111111111111
 
 Index e
  e_kd: kd, 1!01
@@ -41,7 +41,7 @@ Index h
 
 Index i
  i_kd: kd, 1!10
- i_mg: mg, 1!10100010
+ i_mg: mg, 1!111111111111
  i_lh: lh, 1!11
  i_gn: gn, 1!110010000000000
 
@@ -53,7 +53,7 @@ Index j
 Index k
  k_kd: kd, 1!11
  k_cc: cc, 1!11
- k_mg: mg, 1!10010001
+ k_mg: mg, 1!111111111111
 
 Index l
  l_kd: kd, 1!00
@@ -61,7 +61,7 @@ Index l
 
 Index s
  s_kd: kd, 1!10
- s_mg: mg, 1!01101010
+ s_mg: mg, 1!111111111111
 
 Index f
  f_kd: kd, 1!11
@@ -71,7 +71,7 @@ Index m
  m_kd: kd, 1!00
 
 Index w
- w_mg: mg, 1!00000000
+ w_mg: mg, 1!000000000000
 
 Index t
  t_kd: kd, 1!11

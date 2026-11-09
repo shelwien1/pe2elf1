@@ -357,6 +357,30 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     L.d = bk - AL_ND;
   }
 
+  // A lossless WAV's transient (TMODE) as encoders make it: where a subsubframe's energy is 8 times
+  // the one before's at least, the largest such rise's (*tg, 1 to nssc - 1, else 0); how likely, the
+  // class returned: 0 no such rise; 1 the subband predicts, 2 it is 20 or above (the encoders seen
+  // make no transient in either); else 3 + 2 times the rise's doublings past 3 (to 2) + whether
+  // ABITS is 10 or more (the likelier, the more of both)
+  int tmode_rule(const CoreSub& s, int ch, int b, int* tg) {
+    S128 e[NSSF];
+    for (int k = 0; k < s.nssc; k++) {
+      e[k] = 1;
+      for (int j = 8 * k; j < 8 * k + 8; j++) e[k] += (S128)X[ch][b][j] * X[ch][b][j];
+    }
+    int best = 0, bh = -1;
+    for (int k = 1; k < s.nssc; k++) {
+      int h = 0;  // (the rise in doublings, to 6)
+      while (h < 6 && e[k] >= (e[k - 1] << (h + 1))) h++;
+      if (h > bh) bh = h, best = k;
+    }
+    *tg = 0;
+    if (bh < 3) return 0;
+    *tg = best;
+    if (s.pmode[ch][b]) return 1;
+    if (b >= 20) return 2;
+    return 3 + 2 * imin(bh - 3, 2) + (s.abits[ch][b] >= 10);
+  }
   // the 4 samples before the subframe's of channel ch's subband b (h[0] the last) as the encoder's
   // ADPCM had them: the decoder's (an encoder runs its ADPCM closed, so a lossless WAV's predictor,
   // PMODE and residual start from them), the audio's own where the scale factor search's rule is

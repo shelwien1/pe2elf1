@@ -110,7 +110,7 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 // hit: pm 0 a subband sample, 1 one of an ADPCM subband, 2 an LFE sample; nr, nl, ab, ql, hm as
 //      smp's
 // vqr: kd what is ranked (VK_*), cc, bd, mg how far the best candidate beats the next (0 within
-//      1/16 to 7 by 8 times, 8 by all), gn the prediction gain of the subband's LPC in halvings
+//      1/256, 1 within 1/128 ... 11 by 4 times or more, 12 by all), gn the prediction gain of the subband's LPC in halvings
 //      (VK_PVQ: 0-15) or its scale factor / 8 (0-15), lh the subband's last rank of the kind (0
 //      none, 1 the best, 2 another)
 // raw: c1, c2 the bytes before, code what the bytes are (0 between frames, 1 a frame kept as bytes,
