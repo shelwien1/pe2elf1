@@ -150,8 +150,9 @@ struct ModelHdr {
   // bytes, which their patterns go by, as the encoder's words before the extension's sync word and
   // its fill to a 32-bit boundary do), a flag whether they are all 0, else how many of those bytes
   // are not (from the first that isn't), how many of those end them as 0s, and the bytes between,
-  // against the last ones' of the kind at the same places from the end
-  void code_tail(pU8 p, int nbits, int kind) {
+  // against the last ones' of the kind at the same places from the end (with auxiliary data, a0
+  // its sync word's byte: from it)
+  void code_tail(pU8 p, int nbits, int kind, int a0 = -1) {
     const int nb = (nbits + 7) / 8, zf = NHFRAME + (kind ? HX_GAPZ : HX_TAILZ), nf = NHFRAME + (kind ? HX_GAPNZ : HX_TAILNZ);
     // (the hdr fields' place: each kind its own; the bits after the subframes' and those before the
     // extension's, by their bits to the next 32-bit boundary: their fills' odds go by them)
@@ -178,9 +179,14 @@ struct ModelHdr {
       while (tz < nz - 1 && !q[nb - 1 - tz]) tz++;
     tz = (int)checked(hdr_hist(NHFRAME + (kind ? HX_GAPTZ : HX_TAILTZ), o, 0xFFFF, tz), 0, nz - 1);
     if (!ENC) memset(q, 0, (size_t)nb);
-    raw_bytes(q + nb - nz, (size_t)(nz - tz), kind ? RC_GAP : RC_TAIL, last, lastn - nz, lastn, 1, 0, nz == nb ? k0 : BYTE_BITS);
+    // (against the last's at the same places from the end; an aux tail's from its sync word, where
+    // the last had one: a0, its byte here)
+    S32& ls = hist.tailsync;
+    const long clof = !kind && a0 >= 0 && ls >= 0 ? (long)ls + (nb - nz) - a0 : (long)lastn - nz;
+    raw_bytes(q + nb - nz, (size_t)(nz - tz), kind ? RC_GAP : RC_TAIL, last, clof, lastn, 1, 0, nz == nb ? k0 : BYTE_BITS);
     memcpy(last, q + nb - nz, (size_t)nz);
     lastn = nz;
+    if (!kind) ls = a0 >= nb - nz ? a0 - (nb - nz) : -1;
     if (!ENC)  // (back as they were, from the first byte)
       for (int i = 0; i < nb; i++) p[i] = (U8)((q[i] << sh) | (i + 1 < nb && sh ? q[i + 1] >> (8 - sh) : 0));
   }

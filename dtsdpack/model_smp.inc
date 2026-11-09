@@ -34,6 +34,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   int ac[NCH][NSUB], es[NCH][NSUB], ec[NCH][NSUB];  // the subframe's subbands' autocorrelation, energy, its change
   int eq[NCH][NSUB];       // and where in its scale factor's bucket the energy lies (scale_quarter())
   int esmax[NCH];          // the channel's loudest subband's energy (es)
+  S64 tlev[NCH][NSMP];     // the channel's level at each of the subframe's samples: the root of the sum of its subband
+                           // samples' squares (2^-AQ_F)
   int eab[NCH][NSUB];      // the energy ABITS was coded against (es; an ADPCM subband's residual's)
   U8 ab_seen[2][NSUB][129];  // the ABITS each subband had the last time it had that energy (by pm; 1 + it, 0 none)
   // the bit allocations' staircases (stair_guess()), by pass (the core's, the extension's), pm and
@@ -209,6 +211,14 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       }
       esmax[ch] = 0;
       for (int b = 0; b < NSUB; b++) esmax[ch] = imax(esmax[ch], es[ch][b]);
+      for (int j = 0; j < nsmp; j++) {  // (the floor square root: IEEE's sqrt the start, integer steps exact)
+        U128 t = 0;
+        for (int b = 0; b < NSUB; b++) t += (U128)((S128)X[ch][b][j] * X[ch][b][j]);
+        S64 q = (S64)sqrt((double)t);
+        while (q > 0 && (U128)((S128)q * q) > t) q--;
+        while ((U128)((S128)(q + 1) * (q + 1)) <= t) q++;
+        tlev[ch][j] = q;
+      }
     }
   }
   // the subframe done: the audio's last subband samples, as the next one's history; the LFE's
@@ -853,7 +863,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.sq = bound[ch] ? svar(qp) : 0;
     D.s1 = qs[ch][b];
     int how;
-    v = code_index(D, v, bound[ch], qp, alt, lo, hi, &how);
+    v = code_index(D, v, bound[ch], qp, alt, lo, hi, &how, bound[ch] && !ss_rule() ? near_bucket(dist, (S128)tlev[ch][j] << 22, 28) : -1);
     miss[ch][b] = (U8)(miss[ch][b] << 1 | (bound[ch] && how != 0));
     n_smp++;
     n_hit += how == 0;
@@ -868,7 +878,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // An index v (in lo..hi), smp's variables D: whether it is the audio's qp (where pk), whether the
   // one on the other side of the rounding boundary (alt), else its magnitude and sign; *how which
   // (0 the audio's, 1 the other side's, 2 coded)
-  S64 code_index(const M_smp_v& D, S64 v, int pk, S64 qp, S64 alt, S64 lo, S64 hi, int* how) {
+  // (nt: how near the boundary against the channel's level at the sample, a lossless WAV's: the
+  // encoder's arithmetic errs by about the level of all its signal there, its loudest subband's
+  // the lesser guess; -1 none: against that, D.nl)
+  S64 code_index(const M_smp_v& D, S64 v, int pk, S64 qp, S64 alt, S64 lo, S64 hi, int* how, int nt = -1) {
     *how = 2;
     if (pk) {
       const int kd = D.ab == 27 ? 2 : D.pm;
@@ -886,7 +899,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         // analysis's differ, by how near the boundary it lies: by how often an index this near
         // wasn't (the cell's counts, from its row's where it has few), straight to the coder (its
         // probabilities are finer than the families')
-        U32 *cell = hit_c[kd][D.hm][D.nr][D.nl], *row = hit_r[kd][D.hm][D.nl];
+        const int nl = nt >= 0 ? nt : D.nl;
+        U32 *cell = hit_c[kd][D.hm][D.nr][nl], *row = hit_r[kd][D.hm][nl];
         const U64 pr = ((U64)(2 * row[0] + 1) << CO_PBITS) / (2 * (U64)row[1] + 2);
         const U64 pc = (((U64)cell[0] << CO_PBITS) + HIT_PRIOR * pr) / (cell[1] + HIT_PRIOR);
         hit = c->code_bit((U32)(pc < 1 ? 1 : pc > CO_ONE - 1 ? CO_ONE - 1 : pc), ENC && v == qp);

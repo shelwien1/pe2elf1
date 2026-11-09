@@ -46,6 +46,7 @@ struct Hist {
   // the extension ([1]) and XXCH's other bits ([2-4]: model_hdr.inc's code_tail())
   U8 tail[5][MAX_FRAME];
   S32 tailn[5];
+  S32 tailsync;  // (the last aux tail's sync word, its place among those bytes: code_tail(); -1 none)
 };
 
 // a value as a variable: 0 none (v 0), else 1 + it, to 1 + c (v as Hist keeps it: 1 + the value)

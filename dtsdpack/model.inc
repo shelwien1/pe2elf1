@@ -360,7 +360,15 @@ struct Model : ModelX96<f_DEC, LV> {
     c->fid = fid;
 #endif
     account(CAT_TAIL);
-    B::code_tail(p, n, kind);
+    // (with auxiliary data, the bits after the subframes are its byte count, 0s to a 32-bit
+    // boundary, its sync word and the data: their bytes from that boundary, where they end with
+    // the frame's byte)
+    int a0 = -1;
+    if (!kind && rec->auxf && !((pos + n) & 7)) {
+      const S64 bnd = (pos + 6 + 31) & ~(S64)31, first = pos + n - 8 * (S64)((n + 7) / 8);
+      if (bnd < pos + n) a0 = (int)((bnd - first) / 8);
+    }
+    B::code_tail(p, n, kind, a0);
     pos += n;
     return good();
   }
