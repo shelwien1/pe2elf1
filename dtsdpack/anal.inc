@@ -240,11 +240,15 @@ static INLINE int near_bucket(S128 d, S128 u, int k) {
 // The scale factor of table tab (nt entries) nearest (linearly) to the RMS of the n values v
 // (2^-AQ_F), as dtsreq found the encoder's; *near how near the RMS lies to the midpoint between it
 // and the next entry the other way (0 there, SB_N - 1 far)
+static int scale_pred_ms(S128 ms, const U32* tab, int nt, int* near);
 static int scale_pred(const S64* v, int n, const U32* tab, int nt, int* near) {
   S128 ss = 0;
   if (n <= 0) return *near = SB_N - 1, 0;
   for (int j = 0; j < n; j++) ss += (S128)v[j] * v[j];
-  const S128 ms = ss / n;  // 2^-2AQ_F
+  return scale_pred_ms(ss / n, tab, nt, near);
+}
+// the same of their mean square ms (2^-2AQ_F)
+static int scale_pred_ms(S128 ms, const U32* tab, int nt, int* near) {
   auto sq = [](S128 x) { return x * x; };
   int lo = 0, hi = nt - 1;  // the last entry whose square is <= ms (0 where none)
   while (lo < hi) {

@@ -38,8 +38,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
                            // samples' squares (2^-AQ_F)
   int eab[NCH][NSUB];      // the energy ABITS was coded against (es; an ADPCM subband's residual's)
   U8 ab_seen[2][NSUB][129];  // the ABITS each subband had the last time it had that energy (by pm; 1 + it, 0 none)
-  // the bit allocations' staircases (stair_guess()), by pass (the core's, the extension's), pm and
-  // subband; each pass's level
+  // the bit allocations' staircases (stair_guess()), by pass (the core's, the extension's) and
+  // subband (an ADPCM subband's, by its residual's energy, the same); each pass's level
   // (the energies in 128ths of a doubling)
   static constexpr int AL_ND = 512, AL_NK = 2 * AL_ND + 1;  // (the level's search: 4 doublings either side)
   static constexpr int AB_RC = 1024;  // (the rate control's: 8 doublings either side of the last level)
@@ -47,16 +47,31 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   struct AbStair {
     S32 lo[32], hi[32];  // each ABITS's energies, less the level
     U32 has;             // (a bit per ABITS)
-  } ab_st[2][2][NSUB];
+  } ab_st[2][NSUB], ab_snap[2][NSUB];  // (ab_snap: as they were at the subframe's first ABITS)
   struct AbLevel {
     S32 c0, d;      // the subframe's centre and the shift from it
     S32 sc[AL_NK];  // how many of the subframe's ABITS each shift (less AL_ND) made the staircases'
     S64 cost, tgt;  // their cost (ab_bits()), and what the next subframe's aims at (the last ones' average)
     int n, set;     // (how many; whether the centre is set: at the subframe's first ABITS)
+    S64 avail, rb;  // the frame's bits from the subframe's first ABITS on, and what the samples' bits
+                    // (bud_bits()) come to past them, the last subframes' average (quarter bits)
+    int rn;         // (how many subframes rb is of, to 1000)
+    int nobs;       // the subframe's ABITS so far: each one's subband, ABITS and fine energy
+    struct {
+      S32 x;
+      U8 b, v;
+    } obs[NCH * NSUB];
   } abl[2];
   S32 fe_s[NCH][NSUB];  // the subframe's subbands' fine energies (FE_NONE: none)
+  S16 bud_b[NCH][NSUB][27];    // the bits (in quarters) their samples would take at each ABITS (bud_bits(); -1 not yet)
+  S64 bud_v[NCH][NSUB][NSMP];  // their values (an ADPCM subband's residual)
+  int bud_n[NCH][NSUB], bud_si[NCH][NSUB];  // (how many; the RMS rule's scale factor)
   U64 n_st, n_sthit;  // (-s: the ABITS a staircase said, those it said right)
   int pscale[NCH][NSUB];   // their first scale factor's prediction (1 + it, 0 none)
+  // a lossless WAV's VQ subbands' scale factors, by subband: how often the RMS rule was right with
+  // noise of 2^-(49 - k) the channel's power added, k 1 to VN_K - 1, or none (k 0): code_scale()
+  static constexpr int VN_K = 20;
+  U32 vqn_hit[NSUB][VN_K], vqn_n[NSUB];
   int hm[NCH];             // whether the channel's scale factor before was the prediction (0 none, 1 it was, 2 not)
   // how often the RMS rule's scale factor was the core's, scale_ceil()'s, and scale_search()'s (the
   // better of those two's where it isn't sure; halved as they grow); the search's tries (to 2048)
@@ -239,9 +254,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // to frame. A subband's staircase keeps, for each ABITS, the fine energies (fine_energy(), less the
   // level) it was last seen at, as intervals monotone in the energy, the newest winning; its guess
   // at an energy, the ABITS of the interval it lies in, or of the nearer of the two either side.
-  // The pass's level: from the subframe's centre, the rate control's (level_centre(): where the
-  // staircases' ABITS would cost what the last subframes' did), the shift at which the staircases
-  // made the most of the subframe's ABITS so far (within AL_ND; of those, the nearest).
+  // The pass's level: from the subframe's centre, the rate control's (level_centre()), the shift at
+  // which the staircases made the most of the subframe's ABITS so far (within AL_ND; of those, the
+  // nearest). The encoders seen fill their frames to within 16 bits, and the bits a subband's
+  // samples take at an ABITS are the audio's (bud_bits(): its values quantized at the RMS rule's
+  // scale factor, by the frame's codes, are the stream's to the bit): so the core's centre is where
+  // the staircases' ABITS would take the bits the frame has for them (its bits from the subframe's
+  // first ABITS on, less what those of the last subframes' ABITS left of theirs); until a subframe
+  // has been seen, and in the extension's pass, where they would cost (ab_bits()) what the last
+  // subframes' did. The subframe's ABITS all known, the staircases have them at its last level.
   // the fine energy of the n values v: 128 times the log2 of their mean square (FE_NONE: all 0)
   static S32 fine_energy(const S64* v, int n) {
     U128 e = 0;
@@ -307,23 +328,46 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // the subframe's first ABITS (all its PMODE and PVQ known): its subbands' fine energies, and the
   // centre as the encoder's rate control would make it: the level at which the staircases' ABITS
   // cost what the last subframes' did (the nearer of the two either side; within AB_RC)
-  void level_centre(const CoreRec& r, const CoreSub& s, int p) {
+  // (at the subframe's first ABITS, at bit at of the frame)
+  void level_centre(const CoreRec& r, const CoreSub& s, int p, U64 at) {
     AbLevel& L = abl[p];
     L.set = 1;
+    L.nobs = 0;
+    memcpy(ab_snap[p], ab_st[p], sizeof ab_snap[p]);
     for (int ch = r.ch0(); ch < r.ch1(); ch++)
       for (int b = 0; b < r.nvqsub[ch]; b++) {
         fe_s[ch][b] = FE_NONE;
         if (!bound[ch]) continue;
-        S64 x[NSMP];
+        S64* const x = bud_v[ch][b];
         const int n = scale_values(s, ch, b, 0, s.nssc, x);
+        int near;
         fe_s[ch][b] = fine_energy(x, n);
+        bud_n[ch][b] = n;
+        bud_si[ch][b] = scale_pred(x, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
+        memset(bud_b[ch][b], 0xFF, sizeof bud_b[ch][b]);
       }
+    L.avail = 4 * ((S64)r.fsize * 8 - (S64)at);
+    if (!p && L.rn) {  // (the samples' bits fall as the level rises: the nearer either side)
+      const S64 T = L.avail + L.rb;
+      S32 lo = L.c0 - AB_RC, hi = L.c0 + AB_RC;
+      S64 tl = bud_total(r, s, lo), th = bud_total(r, s, hi);
+      if (tl <= T) hi = lo, th = tl;
+      else if (th > T) lo = hi, tl = th;
+      while (hi - lo > 1) {
+        const S32 m = lo + (hi - lo) / 2;
+        const S64 tm = bud_total(r, s, m);
+        if (tm > T) lo = m, tl = tm;
+        else hi = m, th = tm;
+      }
+      L.c0 = clip(tl - T < T - th ? lo : hi, -AL_C, AL_C);
+      return;
+    }
     if (L.tgt <= 0) return;
     auto cost = [&](S32 l) {
       S64 c = 0;
       for (int ch = r.ch0(); ch < r.ch1(); ch++)
         for (int b = 0; b < r.nvqsub[ch]; b++)
-          if (fe_s[ch][b] != FE_NONE) c += ab_bits(stair_guess(ab_st[p][s.pmode[ch][b]][b], fe_s[ch][b] - l));
+          if (fe_s[ch][b] != FE_NONE) c += ab_bits(stair_guess(ab_st[p][b], fe_s[ch][b] - l));
       return c;
     };
     S32 lo = L.c0 - AB_RC, hi = L.c0 + AB_RC;  // (the cost falls as the level rises)
@@ -337,6 +381,60 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       else hi = m, chi = cm;
     }
     L.c0 = clip(clo - L.tgt < L.tgt - chi ? lo : hi, -AL_C, AL_C);
+  }
+  // the bits (in quarters) channel ch's subband b's samples would take at ABITS a: its values
+  // quantized at the RMS rule's scale factor (as requant() does), by the code the frame's header
+  // gives the ABITS
+  int bud_bits(const CoreRec& r, int ch, int b, int a) {
+    if (a <= 0 || a > 26) return 0;
+    S16& t = bud_b[ch][b][a];
+    if (t >= 0) return t;
+    const int how = sample_coding(r, ch, a), n = bud_n[ch][b];
+    int sum = 0;
+    if (how == 2) {
+      sum = 4 * (a - 3) * n;
+    } else if (how == 3) {
+      sum = BLOCK_BITS[a - 1] * n;
+    } else {
+      const HuffBook& hb = QB[a - 1][r.sel[ch][a - 1]];
+      const S64 ss = step_for(r, ch, a, bud_si[ch][b]), lo = hb.minlev, hi = hb.minlev + hb.nlev - 1;
+      for (int j = 0; j < n; j++) {
+        const S64 v = bud_v[ch][b][j];  // (|v| < 2^41)
+        S64 q = ss > 0 ? ((v < 0 ? -v : v) * 128 + ss) / (2 * ss) : 0;
+        if (v < 0) q = -q;
+        sum += 4 * hb.elen[(q < lo ? lo : q > hi ? hi : q) - lo];
+      }
+    }
+    return t = (S16)sum;
+  }
+  // the bits the core's bound subbands' samples would take at level l (a subband the staircase says
+  // nothing of, at its last ABITS)
+  S64 bud_total(const CoreRec& r, const CoreSub& s, S32 l) {
+    S64 t = 0;
+    for (int ch = r.ch0(); ch < r.ch1(); ch++)
+      if (bound[ch])
+        for (int b = 0; b < r.nvqsub[ch]; b++) {
+          int g = fe_s[ch][b] == FE_NONE ? -1 : stair_guess(ab_st[0][b], fe_s[ch][b] - l);
+          if (g < 0) g = hist.abits[ch][b] ? hist.abits[ch][b] - 1 : 0;
+          t += bud_bits(r, ch, b, g);
+        }
+    return t;
+  }
+  // pass p's subframe's ABITS all known: the staircases as they were at its first, each of its ABITS
+  // then added at its last level; and (the core's) what its samples' bits came to past the frame's
+  // bits from its first ABITS on
+  void level_commit(const CoreRec& r, const CoreSub& s, int p) {
+    AbLevel& L = abl[p];
+    if (!L.set) return;
+    memcpy(ab_st[p], ab_snap[p], sizeof ab_snap[p]);
+    for (int i = 0; i < L.nobs; i++) stair_add(ab_st[p][L.obs[i].b], L.obs[i].x - L.c0 - L.d, L.obs[i].v);
+    if (p) return;
+    S64 e = 0;
+    for (int ch = r.ch0(); ch < r.ch1(); ch++)
+      if (bound[ch])
+        for (int b = 0; b < r.nvqsub[ch]; b++) e += bud_bits(r, ch, b, s.abits[ch][b]);
+    L.rb = L.rn ? L.rb + (e - L.avail - L.rb) / 2 : e - L.avail;
+    L.rn += L.rn < 1000;
   }
   // pass p's guess on the staircase t at the energy x
   int level_guess(int p, const AbStair& t, S32 x) const { return stair_guess(t, x - abl[p].c0 - abl[p].d); }
@@ -361,6 +459,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       for (S64 k = k0; k <= k1; k++) L.sc[k]++;
     }
     stair_add(t, x - L.c0 - L.d, v);
+    L.obs[L.nobs].x = x, L.obs[L.nobs].b = (U8)(&t - ab_st[p]), L.obs[L.nobs].v = (U8)v, L.nobs++;
     L.cost += ab_bits(v), L.n++;
     int bk = AL_ND;  // (a 16th of an ABITS's score off for each unit from the centre)
     S32 bs = 16 * L.sc[AL_ND];
@@ -789,6 +888,29 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         if (search_on()) ps = scale_search(r, s, ch, b, hfb, v_, n, p, &conf), tried = 1;
       }
     }
+    // (a lossless WAV's VQ subband: the RMS rule with the noise that has made it right the most
+    // often, where clearly more often than none: `s.2.dts`'s encoder's top subband is as though
+    // its values had noise of about 2^-39 the channel's power in them, at its quietest)
+    int kv = -1, pn_[VN_K];
+    if (p >= 0 && hfb && !(tried && ss_rule())) {
+      S64 v_[NSMP];
+      const int n = scale_values(s, ch, b, 0, s.nssc, v_);
+      S128 ms = 0, pw = 0;
+      for (int k = 0; k < n; k++) ms += (S128)v_[k] * v_[k];
+      ms /= n;
+      for (int bb = 0; bb < r.nsubs[ch]; bb++) {
+        S128 e = 0;
+        for (int k = 0; k < nsmp; k++) e += (S128)X[ch][bb][k] * X[ch][bb][k];
+        pw += e / nsmp;
+      }
+      int nr;
+      kv = 0;
+      for (int k = 0; k < VN_K; k++) {
+        pn_[k] = scale_pred_ms(ms + (k ? pw >> (49 - k) : 0), r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &nr);
+        if (vqn_hit[b][k] > vqn_hit[b][kv]) kv = k;
+      }
+      if (kv && vqn_hit[b][kv] > vqn_hit[b][0] + 16 + vqn_hit[b][0] / 32) p = pn_[kv];
+    }
     // (the better of the two RMS rules, and the search where it is better still: where it isn't
     // sure, that rule's)
     const int pr = p, pb = sf_base() ? pc : p;
@@ -825,6 +947,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       else v = checked((A ? A - 1 : 0) + f_scl.codes(X_, ENC ? v - (A ? A - 1 : 0) : 0, (u32)D.kd), 0, max - 1);
     }
     if (!j) pscale[ch][b] = p + 1;
+    if (kv >= 0) {
+      for (int k = 0; k < VN_K; k++) vqn_hit[b][k] += pn_[k] == v;
+      if (++vqn_n[b] >= 1u << 16) {
+        vqn_n[b] >>= 1;
+        for (int k = 0; k < VN_K; k++) vqn_hit[b][k] >>= 1;
+      }
+    }
     n_sf++;
     if (pr >= 0) {
       sfr[0] += v == pr, sfr[1] += v == pc;

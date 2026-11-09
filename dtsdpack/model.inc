@@ -189,8 +189,8 @@ struct Model : ModelX96<f_DEC, LV> {
         // (the staircase's guess at the values' fine energy, less the level: model_smp.inc; the
         // subframe's first ABITS sets the level's centre)
         const int pass = r.xpass ? 1 : 0;
-        if (!B::abl[pass].set) B::level_centre(r, s, pass);
-        auto& st = B::ab_st[pass][s.pmode[ch][b]][b];
+        if (!B::abl[pass].set) B::level_centre(r, s, pass, pos);
+        auto& st = B::ab_st[pass][b];
         const S32 fe = e ? B::fe_s[ch][b] : B::FE_NONE;
         const int sg = fe != B::FE_NONE ? B::level_guess(pass, st, fe) : -1;
         const int sm = fe != B::FE_NONE ? B::level_margin(pass, st, fe, sg) : 0;
@@ -393,6 +393,7 @@ struct Model : ModelX96<f_DEC, LV> {
   void subframe_end(const CoreRec& r, int sf) {
     if (r.xpass == 2) return B::x96_subframe_end(r, sf);
     const CoreSub& s = r.sub[sf];
+    B::level_commit(r, s, r.xpass ? 1 : 0);
     B::smp_fill(r, s);
     B::smp_subframe_end(r);
     for (int ch = r.ch0(); ch < r.ch1(); ch++)
