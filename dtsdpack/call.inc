@@ -249,8 +249,8 @@ struct Call {
         S64 tb = t;
         for (int sf = 0; sf < r.nsubfs; sf++) {
           const CoreSub& s = r.sub[sf];
-          for (int k = 0; r.lff == 2 && k < 4 * s.nssc && nl < LFE_PROBES; k++, nl++)
-            ln[nl] = tb / 2 + k, ly[nl] = s.lfe[k] * lfe_scale(s.lfescale);
+          for (int k = 0; r.lff == 2 && k < 4 * s.nssc && nl < LFE_PROBES; k++)  // (those not 0: a silent start says nothing)
+            if (s.lfe[k]) ln[nl] = tb / 2 + k, ly[nl++] = s.lfe[k] * lfe_scale(s.lfescale);
           for (int j = 0; j < s.nssc * 8; j++, tb++) {
             Probe q;
             double e = 0;

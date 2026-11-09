@@ -22,6 +22,7 @@ struct ModelHdr {
   int st, nch;  // the frame's: whether the field before kept its last value, how many changed
   int lastkind, lastkind2;  // the chunks before's kinds (1 + the kind, 0 none)
   int rawprev, rawprev2;    // the raw bytes before
+  U8 tq[MAX_FRAME];         // (code_tail()'s bytes)
   S64 rawat;                // the bytes of the chunk kept as bytes coded so far
 
   void cat(int k) {
@@ -124,18 +125,19 @@ struct ModelHdr {
   // tree (nodes 1-255), after the bytes before, by its place (at0 + its own, or from the end where
   // back), and the byte of the last field of the kind at its place (cl[i + clof], ncl of them; cl
   // none: none)
-  void raw_bytes(pU8 p, size_t n, int code, pcU8 cl, long clof, long ncl, int back, S64 at0 = 0) {
+  void raw_bytes(pU8 p, size_t n, int code, pcU8 cl, long clof, long ncl, int back, S64 at0 = 0, int kb0 = BYTE_BITS) {
     M_raw_v D;
     D.code = code;
     for (size_t i = 0; i < n; i++) {
       const long j = (long)i + clof;
-      int x = 1;
+      const int kb = i ? BYTE_BITS : kb0;  // (the first byte's bits: its high ones 0, not coded)
+      int x = 1 << (BYTE_BITS - kb);
       D.c1 = rawprev;
       D.c2 = rawprev2;
       D.at = tc_qlog(back ? (S64)(n - 1 - i) : at0 + (S64)i);
       D.cl = cl && j >= 0 && j < ncl ? 1 + cl[j] : 0;
       sel(f_raw, D);
-      for (int k = BYTE_BITS - 1; k >= 0; k--) x = x * 2 + f_raw.bit(x, ENC && ((p[i] >> k) & 1));
+      for (int k = kb - 1; k >= 0; k--) x = x * 2 + f_raw.bit(x, ENC && ((p[i] >> k) & 1));
       p[i] = (U8)(x - BYTE_VALUES);
       rawprev2 = rawprev;
       rawprev = p[i];
@@ -144,19 +146,24 @@ struct ModelHdr {
 
   // The bits after the subframes (nbits at p, the last byte's unused bits 0), or (kind 1) those
   // before the extension, or (2-4) XXCH's other bits (its headers' after their fields, its channel
-  // set's after its subframes): a flag whether they are all 0, else how many of their last bytes
+  // set's after its subframes): as the bytes they end in (their last bit a byte's last: the frame's
+  // bytes, which their patterns go by, as the encoder's words before the extension's sync word and
+  // its fill to a 32-bit boundary do), a flag whether they are all 0, else how many of those bytes
   // are not (from the first that isn't), and those bytes, against the last ones' of the kind at the
   // same places from the end
   void code_tail(pU8 p, int nbits, int kind) {
     const int nb = (nbits + 7) / 8, zf = NHFRAME + (kind ? HX_GAPZ : HX_TAILZ), nf = NHFRAME + (kind ? HX_GAPNZ : HX_TAILNZ);
     const int o = kind ? kind - 1 : 0;  // (the hdr fields' place: each kind its own)
+    const int sh = 8 * nb - nbits, k0 = BYTE_BITS - sh;  // (the first byte's bits)
     U8* const last = hist.tail[kind];
     S32& lastn = hist.tailn[kind];
+    U8* const q = tq;
     int nz = 0;
     if (!nb) return;
-    if (ENC) {
+    if (ENC) {  // (the bits shifted to end with a byte)
+      for (int i = 0; i < nb; i++) q[i] = (U8)(((i ? p[i - 1] << 8 : 0) | p[i]) >> sh);
       int i = 0;
-      while (i < nb && !p[i]) i++;
+      while (i < nb && !q[i]) i++;
       nz = nb - i;
     }
     if (hdr_hist(zf, o, 1, nz == 0)) {
@@ -164,10 +171,12 @@ struct ModelHdr {
       return;
     }
     nz = (int)checked(hdr_hist(nf, o, 0xFFFF, nz), 1, nb);
-    if (!ENC) memset(p, 0, (size_t)(nb - nz));
-    raw_bytes(p + nb - nz, (size_t)nz, kind ? RC_GAP : RC_TAIL, last, lastn - nz, lastn, 1);
-    memcpy(last, p + nb - nz, (size_t)nz);
+    if (!ENC) memset(q, 0, (size_t)(nb - nz));
+    raw_bytes(q + nb - nz, (size_t)nz, kind ? RC_GAP : RC_TAIL, last, lastn - nz, lastn, 1, 0, nz == nb ? k0 : BYTE_BITS);
+    memcpy(last, q + nb - nz, (size_t)nz);
     lastn = nz;
+    if (!ENC)  // (back as they were, from the first byte)
+      for (int i = 0; i < nb; i++) p[i] = (U8)((q[i] << sh) | (i + 1 < nb && sh ? q[i + 1] >> (8 - sh) : 0));
   }
 
   // the container: a chunk's kind (CK_*), the length of one kept as bytes, its bytes

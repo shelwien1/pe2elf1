@@ -165,7 +165,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
           else if (e + k <= 64 && sn[k]) sv = sn[k], near_e = 1;
         }
         v = abits_code(ch, b, v, lo, hi, hab[ch][b], b > b0 ? s.abits[ch][b - 1] + 1 : 0, e, de, ls, s.pmode[ch][b], lbd, nb,
-                       mx, sv, near_e ? 14 : nn, 0);
+                       mx, sv, near_e ? 14 : nn, 0, 4);
         if (sn) *sn = (U8)(checked(v, lo, hi) + 1);
         return v;
       }

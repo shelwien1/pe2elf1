@@ -221,6 +221,22 @@ static int scale_pred(const S64* v, int n, const U32* tab, int nt, int* near) {
   return p;
 }
 
+// Where the RMS of the n values v (2^-AQ_F) lies in the bucket of tab's entry i (nt entries; the
+// RMS rule's: the RMS nearer it than either neighbour), in quarters: 0-3 (4 none: an end's bucket)
+static int scale_quarter(const S64* v, int n, const U32* tab, int nt, int i) {
+  if (n <= 0 || i <= 0 || i >= nt - 1) return 4;
+  S128 ss = 0;
+  for (int j = 0; j < n; j++) ss += (S128)v[j] * v[j];
+  const S128 ms = ss / n;
+  auto sq = [](S128 x) { return x * x; };
+  S64 r = (S64)sqrt((double)ms);  // (the floor square root, as scale_pred()'s)
+  while (r > 0 && sq(r) > ms) r--;
+  while (sq((S128)r + 1) <= ms) r++;
+  const S64 lm = ((S64)tab[i - 1] + tab[i]) << (AQ_F - 1), um = ((S64)tab[i] + tab[i + 1]) << (AQ_F - 1);
+  if (um <= lm) return 4;
+  return clip((int)((S128)(r - lm) * 4 / (um - lm)), 0, 3);
+}
+
 // The scale factor another encoder's rule picks (a 96/24 stream's core: model_smp.inc's code_scale()
 // takes the rule that has been right more often): the first entry of tab at least 0.99 times the
 // RMS of the n values v (2^-AQ_F)
@@ -418,6 +434,50 @@ static INLINE S128 hf_dist(int q, const S64* x, int n, S64 sc) {
     d += e * e;
   }
   return d;
+}
+
+// The distance of group g's entry nearest the samples x (as hf_dist()'s), or cap where that is
+// more: the samples by jo (n of them, the largest first), each entry's sum left where it reaches
+// the nearest's so far (the same)
+static S128 hf_group_min(int g, const S64* x, const U8* jo, int n, S64 sc, S128 cap) {
+  S128 best = cap;
+  for (int i = 0; i < 32; i++) {
+    const S8* const e8 = HF_VQ[g * 32 + i];
+    S128 d = 0;
+    for (int k = 0; k < n && d < best; k++) {
+      const int j = jo[k];
+      const S128 e = (S128)x[j] * 16 - shl128((S128)e8[j] * sc, AQ_F);
+      d += e * e;
+    }
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+// the entry of all nearest the samples x (n of them; as hf_dist()'s), the guess q0 first: the
+// samples the largest first, each entry's sum left where it reaches the nearest's so far (the same)
+static int hf_nearest(const S64* x, int n, S64 sc, int q0) {
+  U8 jo[NSMP];
+  auto mag = [](S64 a) { return a < 0 ? -a : a; };
+  for (int j = 0; j < n; j++) {
+    int k = j;
+    while (k > 0 && mag(x[jo[k - 1]]) < mag(x[j])) jo[k] = jo[k - 1], k--;
+    jo[k] = (U8)j;
+  }
+  S128 best = -1;
+  int bq = q0;
+  for (int t = -1; t < 1024; t++) {
+    const int q = t < 0 ? q0 : t;
+    if (t == q0) continue;
+    S128 d = 0;
+    for (int k = 0; k < n && (best < 0 || d < best); k++) {
+      const int j = jo[k];
+      const S128 e = (S128)x[j] * 16 - shl128((S128)HF_VQ[q][j] * sc, AQ_F);
+      d += e * e;
+    }
+    if (best < 0 || d < best) best = d, bq = q;
+  }
+  return bq;
 }
 
 // Candidates in the order of their distance (k), ties by index (i): the rank of one, and the one of

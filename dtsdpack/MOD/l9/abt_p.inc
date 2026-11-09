@@ -53,6 +53,7 @@ void D9_abt_make( const M_abt_v & D, tcx & X ) {
   k = k*2 + (((sn)>0+(1-1)));
   k = k*12 + D9_abt_k_nn[__min(15,__max(0,(nn)-(1-1)))];
   k = k*15 + D9_abt_k_sc[__min(14,__max(0,(sc)-(1-1)))];
+  k = k*5 + D9_abt_k_eq[__min(4,__max(0,(eq)-(1-1)))];
 
   l = 0;
   l = l*20 + D9_abt_l_bd[__min(31,__max(0,(bd)-(1-1)))];

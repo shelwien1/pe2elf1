@@ -166,9 +166,11 @@ struct Model : ModelX96<f_DEC, LV> {
         S64 x[NSMP];
         int nx = 0;
         if (e && (s.pmode[ch][b] || srch)) nx = B::scale_values(s, ch, b, 0, s.nssc, x);
+        int eq = e ? B::eq[ch][b] : 4;
         if (e && s.pmode[ch][b]) {  // (an ADPCM subband's: its prediction's residual's)
           int near;
           e = 1 + scale_pred(x, nx, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
+          eq = scale_quarter(x, nx, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), e - 1);
         }
         B::eab[ch][b] = e;
         const int le = hist.energy[ch][b];
@@ -208,7 +210,7 @@ struct Model : ModelX96<f_DEC, LV> {
           B::n_abs++;
         }
         v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
-                       s.pmode[ch][b], lbd, nb, mx, Sn, near_e ? 14 : nn, sc);
+                       s.pmode[ch][b], lbd, nb, mx, Sn, near_e ? 14 : nn, sc, eq);
         v = checked(v, lo, hi);
         if (sn) *sn = (U8)(v + 1);
         if (sc) B::n_abhit += v == G - 1;

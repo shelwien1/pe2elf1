@@ -32,6 +32,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   S8 qs[NCH][NSUB];
   U8 miss[NCH][NSUB];      // the subband's last 8 indexes, a bit each: not the audio's
   int ac[NCH][NSUB], es[NCH][NSUB], ec[NCH][NSUB];  // the subframe's subbands' autocorrelation, energy, its change
+  int eq[NCH][NSUB];       // and where in its scale factor's bucket the energy lies (scale_quarter())
   int esmax[NCH];          // the channel's loudest subband's energy (es)
   int eab[NCH][NSUB];      // the energy ABITS was coded against (es; an ADPCM subband's residual's)
   U8 ab_seen[2][NSUB][129];  // the ABITS each subband had the last time it had that energy (by pm; 1 + it, 0 none)
@@ -44,6 +45,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // it, where it was tried; its tries; the ABITS (-s: those it said, those it said right)
   U32 abr[2], ab_n;
   U64 n_ab, n_abs, n_abhit;
+  // the same of the HF VQ groups' nearest entries (code_hfvq()): how often one was near, of how
+  // many tries; the tries (to 2048); the vectors
+  U32 hfr[2], hf_n;
+  U64 n_hfvq;
   S64 lpc[NCH][NSUB][4];   // the subframe's subbands' LPC (lpc4(): the encoder's ADPCM predictor is the entry nearest)
   int lpg[NCH][NSUB];      // and its prediction gain in halvings
   int lpg4[NCH][NSUB];     // and in quarters of them
@@ -152,6 +157,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         ac[ch][b] = ratio_bucket(cr, e, 8);
         int near;
         es[ch][b] = 1 + scale_pred(v, nsmp, tab, nt, &near);
+        eq[ch][b] = scale_quarter(v, nsmp, tab, nt, es[ch][b] - 1);
         // how the energy changes: the largest rise from a subsubframe to the next, in halvings
         // (0 none: one subsubframe; 1 none to 8 more than 2^7 times)
         int up = 0;
@@ -249,12 +255,44 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   }
   // Channel ch's subband b's HF VQ vector v (its scale factor coded): the rank of its group by the
   // groups' means, then its rank in the group
+  // (The groups by their nearest entries instead, where the nearest of all lies within 1/64 of the
+  // values' energy: a decoded WAV's values are the vector's, whatever the encoder's search; a
+  // lossless WAV's aren't, and where the encoder's order misses, the group is near its first. A
+  // group's nearest entry counts at 16 times the nearest of all at most. They are found in the
+  // first 2048 vectors, while that has been so in 1 of 8, and in 1 vector in 64.)
   S64 code_hfvq(const CoreRec& r, const CoreSub& s, int ch, int b, S64 v) {
     const int si = s.scale[ch][b][0];
     const S64 sc = r.shuff[ch] == 6 ? SF7[si] : SF6[si & 63];
     const S64* x = X[ch][b];
-    for (int g = 0; g < 32; g++) cand[g].k = hf_group_dist(g, x, nsmp, sc), cand[g].i = g;
+    const int tried = hf_min_on();
+    S128 gm[32], md[32], en = 0;
+    int f0 = 0;
+    for (int g = 0; g < 32; g++) gm[g] = hf_group_dist(g, x, nsmp, sc), f0 = gm[g] < gm[f0] ? g : f0;
+    int mn = 0;
+    if (tried) {
+      U8 jo[NSMP];  // (the samples, the largest first)
+      auto mag = [](S64 a) { return a < 0 ? -a : a; };
+      for (int j = 0; j < nsmp; j++) {
+        int k = j;
+        while (k > 0 && mag(x[jo[k - 1]]) < mag(x[j])) jo[k] = jo[k - 1], k--;
+        jo[k] = (U8)j;
+        en += (S128)x[j] * 16 * ((S128)x[j] * 16);  // (hf_dist()'s units)
+      }
+      S128 near = hf_group_min(f0, x, jo, nsmp, sc, en + 1);  // (the nearest of all: the means' first group's first)
+      for (int g = 0; g < 32; g++)
+        if (g != f0) near = hf_group_min(g, x, jo, nsmp, sc, near);
+      const S128 cap = 16 * near + 1;
+      for (int g = 0; g < 32; g++) md[g] = hf_group_min(g, x, jo, nsmp, sc, cap);
+      mn = near * 64 < en;
+    }
+    for (int g = 0; g < 32; g++) cand[g].k = mn ? md[g] : gm[g], cand[g].i = g;
     const int g = code_cand(32, 5, (int)v >> 5, VK_HFG, ch, b, imin(si >> 3, 15));
+    if (tried) {
+      hfr[0] += mn, hfr[1]++;
+      if (hfr[1] >= 1u << 16) hfr[0] >>= 1, hfr[1] >>= 1;
+      hf_n += hf_n < 2048;
+    }
+    n_hfvq++;
     for (int i = 0; i < 32; i++) cand[i].k = hf_dist(g * 32 + i, x, nsmp, sc), cand[i].i = i;
     return g * 32 + code_cand(32, 5, (int)v & 31, VK_HFV, ch, b, imin(si >> 3, 15));
   }
@@ -273,16 +311,20 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     int vq = 0;
     if (!hfb) {
       quant_range(r, ch, a, lo, hi);
-    } else {  // (the vector: the two-stage search's at the RMS's scale factor and 3 above, the nearer)
+    } else {  // (the vector: the two-stage search's at the RMS's scale factor and 3 above, and the
+              // nearest entry of all at each, the nearest of those: a decoded WAV's is the vector)
       S128 bd = -1;
       for (int k = 0; k < 2; k++) {
         const S64 sc = tab[clip(p + 3 * k, 0, nt - 1)];
         for (int g = 0; g < 32; g++) cand[g].k = hf_group_dist(g, v, n, sc), cand[g].i = g;
         const int g = select_rank(cand, 32, 0);
         for (int e = 0; e < 32; e++) cand[e].k = hf_dist(g * 32 + e, v, n, sc), cand[e].i = e;
-        const int q = g * 32 + select_rank(cand, 32, 0);
-        const S128 d = vq_err(v, n, q, sc);
-        if (bd < 0 || d < bd) bd = d, vq = q;
+        const int q2 = g * 32 + select_rank(cand, 32, 0), qn = hf_nearest(v, n, sc, q2);
+        for (int z = 0; z < 2; z++) {
+          const int q = z ? qn : q2;
+          const S128 d = vq_err(v, n, q, sc);
+          if (bd < 0 || d < bd) bd = d, vq = q;
+        }
       }
     }
     S128 e1 = -1, e2 = -1;
@@ -315,6 +357,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // the same of the bit allocation search, of the ABITS
   bool ab_rule() const { return abr[1] > abr[0] + 32 + abr[0] / 32; }
   bool ab_search_on() const { return ab_n < 2048 || abr[1] * 4 > abr[0] * 3 || !(n_ab & 63); }
+  bool hf_min_on() const { return hf_n < 2048 || hfr[0] * 8 > hfr[1] || !(n_hfvq & 63); }
 
   // The ABITS a decoded WAV says (the bit allocation search): its values v (n of them, the ADPCM
   // prediction off) are what the decoder made of indexes at the step of the ABITS and a scale
