@@ -66,7 +66,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // the LFE (64x) against the WAV's LFE channel (bind.lfe)
   int lfe_on;              // the subframe's LFE samples are coded against the audio's
   int lfe_n;               // how many
-  S64 lfe_f[4 * NSSF][LFE_NT];  // each one's decimated samples around it
+  S64 lfe_f[4 * NSSF][LFE_NF];  // each one's decimated samples around it (the last values after them: code_lfe()'s)
+  S64 lfe_past[LFE_NP];    // the last LFE values (times their steps; [0] the last)
   S64 lfe_p[4 * NSSF];     // and its prediction (the value times its step)
   int lfe_scl;             // their scale factor (the walk has it after them: coded with the first)
   S64 lfe_st;              // its step
@@ -75,7 +76,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   S32 lq1, lq2;            // the last two LFE indexes (as q1, q2, qs, miss)
   S8 lqs;
   U8 lmiss;
-  LfeFit lfit;
+  LfeFit<LFE_NT> lfit;      // the correction without the last values
+  LfeFit<LFE_NF> lfit2;     // and with them
+  U32 lfh[2];               // how often each one's prediction was the value (halved as they grow)
   // X96's, where the frame has it and the WAV is at twice the core's rate: each bound channel's
   // 64-band analysis by block of the frame, and the core's decoded samples (X96's residuals are the
   // one less the other: model_x96.inc)
@@ -95,6 +98,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     bind = b;
     tnext = 0;
     lfit.init();
+    lfit2.init();
     for (int i = 0; i < 64; i++) lfe_cn[i] = -1;
     lfe_lp = 9;
   }
@@ -134,9 +138,14 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       hi = imax(hi, 64 * up * (n0 + lfe_n - 1 + LFE_K) + bind.off);
     }
     wav->need(lo, hi);
+    S64 past[LFE_NP];  // (for the scale factor's prediction: the subframe's values as predicted)
+    for (int k = 0; k < LFE_NP; k++) past[k] = lfe_past[k];
     for (int i = 0; lfe_on && i < lfe_n; i++) {
       for (int k = 0; k < LFE_NT; k++) lfe_f[i][k] = lfe_d(n0 + i + k - LFE_K);
-      lfe_p[i] = lfit.predict(lfe_f[i]);
+      for (int k = 0; k < LFE_NP; k++) lfe_f[i][LFE_NT + k] = past[k];
+      lfe_p[i] = lfe_pred(lfe_f[i]);
+      for (int k = LFE_NP - 1; k > 0; k--) past[k] = past[k - 1];
+      past[0] = lfe_p[i];
     }
     for (int ch = r.ch0(); ch < r.ch1(); ch++) {
       if (!bind.bound(ch, wav->nch)) continue;
@@ -185,7 +194,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // the subframe done: the audio's last subband samples, as the next one's history; the LFE's
   // correction fit again
   void smp_subframe_end(const CoreRec& r) {
-    if (lfe_on) lfit.refit();
+    if (lfe_on) lfit.refit(), lfit2.refit();
     for (int ch = r.ch0(); ch < r.ch1(); ch++) {
       if (!bound[ch]) continue;
       for (int b = 0; b < NSUB; b++)
@@ -739,11 +748,17 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     lfe_st = lfe_scale(v);
     return v;
   }
+  // the LFE's prediction from its features f: the fit's that has predicted the values more often
+  // (with the last values the better against a decoded WAV, and for some lossless ones)
+  S64 lfe_pred(const S64* f) const { return lfh[1] > lfh[0] ? lfit2.predict(f) : lfit.predict(f); }
   // LFE sample i of the subframe (its value v): against its prediction at the scale factor's step
   S64 code_lfe(int i, S64 v) {
     S64 alt;
     S128 dist;
     int how;
+    for (int k = 0; k < LFE_NP; k++) lfe_f[i][LFE_NT + k] = lfe_past[k];  // (the values decoded)
+    const S64 p1 = lfit.predict(lfe_f[i]), p2 = lfit2.predict(lfe_f[i]);
+    lfe_p[i] = lfh[1] > lfh[0] ? p2 : p1;
     const S64 qp = requant(lfe_p[i], lfe_st << 6, -128, 127, &dist, &alt);
     M_smp_v D;
     D.ab = 27;
@@ -767,6 +782,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     n_smp++;
     n_hit += how == 0;
     lfit.add(lfe_f[i], v * lfe_st);
+    lfit2.add(lfe_f[i], v * lfe_st);
+    {  // (whether each prediction's index was the value)
+      S128 dd;
+      S64 al;
+      lfh[0] += requant(p1, lfe_st << 6, -128, 127, &dd, &al) == v, lfh[1] += requant(p2, lfe_st << 6, -128, 127, &dd, &al) == v;
+      if (lfh[0] + lfh[1] >= 1u << 12) lfh[0] >>= 1, lfh[1] >>= 1;
+    }
+    for (int k = LFE_NP - 1; k > 0; k--) lfe_past[k] = lfe_past[k - 1];
+    lfe_past[0] = v * lfe_st;
     return v;
   }
 

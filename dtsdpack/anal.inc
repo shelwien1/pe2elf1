@@ -613,6 +613,7 @@ static int key_margin(const KeyIx* a, int n) {
 // squares fit learns as the stream goes (LfeFit), makes nearly all of them.
 constexpr S64 LFE_G = 290844593;  // the prototype's decimation to the units of v times its scale (Q30; found)
 constexpr int LFE_K = 6, LFE_NT = 2 * LFE_K + 1;  // the correction's taps: the decimated samples K before to K after
+constexpr int LFE_NP = 7, LFE_NF = LFE_NT + LFE_NP;  // and the last LFE values (a decoded WAV's LFE is their interpolation)
 
 // the WAV channel c decimated by the prototype, the window ending at sample end, in the units
 // of an LFE value times its scale (lfe_scale()); the WAV's samples to the core's up (2: every other
@@ -673,12 +674,16 @@ static S64 sf_int(Sf a, int q) {
   return e <= -63 ? (a.m < 0 ? -1 : 0) : a.m >> -e;
 }
 
-// The correction's least squares fit: the decimated samples around each LFE sample (f, LFE_NT of
-// them) against the LFE value times its scale (y), the older ones forgotten (by 1/128 a frame),
-// ridged toward no correction. Plain data: init(), then add() each sample, refit() each frame.
+// The correction's least squares fit: the decimated samples around each LFE sample (f, NF of
+// them: LFE_NT, or LFE_NF with the last LFE values, as a decoded WAV's LFE is the decoder's
+// interpolation of the values, 8 of them in each of its samples, so with the last ones the fit
+// sees the next alone) against the LFE value times its scale (y), the older ones forgotten (by
+// 1/128 a frame), ridged toward no correction. Plain data: init(), then add() each sample,
+// refit() each frame.
+template <int NF>
 struct LfeFit {
-  S128 G[LFE_NT][LFE_NT], c[LFE_NT];  // the sums of f f' and f y
-  S64 w[LFE_NT];                      // the correction (Q30)
+  S128 G[NF][NF], c[NF];  // the sums of f f' and f y
+  S64 w[NF];              // the correction (Q30)
 
   void init() {
     memset((void*)this, 0, sizeof *this);
@@ -686,11 +691,11 @@ struct LfeFit {
   }
   S64 predict(const S64* f) const {
     S128 p = 0;
-    for (int k = 0; k < LFE_NT; k++) p += (S128)w[k] * f[k];
+    for (int k = 0; k < NF; k++) p += (S128)w[k] * f[k];
     return (S64)(p >> 30);
   }
   void add(const S64* f, S64 y) {
-    for (int i = 0; i < LFE_NT; i++) {
+    for (int i = 0; i < NF; i++) {
       for (int j = 0; j <= i; j++) G[i][j] += (S128)f[i] * f[j];
       c[i] += (S128)f[i] * y;
     }
@@ -698,38 +703,38 @@ struct LfeFit {
   // (G + r I) w = c + r e_K by LDL', r the mean diagonal / 2^23 (w as it was where that fails)
   void refit() {
     S128 tr = 0;
-    for (int i = 0; i < LFE_NT; i++) {
+    for (int i = 0; i < NF; i++) {
       for (int j = 0; j <= i; j++) G[i][j] -= G[i][j] >> 7;
       c[i] -= c[i] >> 7;
       tr += G[i][i];
     }
     if (tr <= 0) return;
-    const Sf r = sf_make(tr / LFE_NT / ((S128)1 << 23) + 1, 0);
-    Sf L[LFE_NT][LFE_NT], D[LFE_NT], z[LFE_NT];
-    for (int j = 0; j < LFE_NT; j++) {
+    const Sf r = sf_make(tr / NF / ((S128)1 << 23) + 1, 0);
+    Sf L[NF][NF], D[NF], z[NF];
+    for (int j = 0; j < NF; j++) {
       Sf d = sf_add(sf_make(G[j][j], 0), r);
       for (int k = 0; k < j; k++) d = sf_sub(d, sf_mul(sf_mul(L[j][k], L[j][k]), D[k]));
       if (d.m <= 0) return;
       D[j] = d;
-      for (int i = j + 1; i < LFE_NT; i++) {
+      for (int i = j + 1; i < NF; i++) {
         Sf a = sf_make(G[i][j], 0);
         for (int k = 0; k < j; k++) a = sf_sub(a, sf_mul(sf_mul(L[i][k], L[j][k]), D[k]));
         L[i][j] = sf_div(a, d);
       }
     }
-    for (int i = 0; i < LFE_NT; i++) {  // L z = b, then D, then L' w = z
+    for (int i = 0; i < NF; i++) {  // L z = b, then D, then L' w = z
       Sf b = sf_make(c[i], 0);
       if (i == LFE_K) b = sf_add(b, r);
       for (int k = 0; k < i; k++) b = sf_sub(b, sf_mul(L[i][k], z[k]));
       z[i] = b;
     }
-    for (int i = 0; i < LFE_NT; i++) z[i] = sf_div(z[i], D[i]);
-    for (int i = LFE_NT - 1; i >= 0; i--) {
+    for (int i = 0; i < NF; i++) z[i] = sf_div(z[i], D[i]);
+    for (int i = NF - 1; i >= 0; i--) {
       Sf x = z[i];
-      for (int k = i + 1; k < LFE_NT; k++) x = sf_sub(x, sf_mul(L[k][i], z[k]));
+      for (int k = i + 1; k < NF; k++) x = sf_sub(x, sf_mul(L[k][i], z[k]));
       z[i] = x;
     }
-    for (int i = 0; i < LFE_NT; i++) w[i] = sf_int(z[i], 30);
+    for (int i = 0; i < NF; i++) w[i] = sf_int(z[i], 30);
   }
 };
 
