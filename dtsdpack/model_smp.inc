@@ -504,7 +504,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     return code_cand(4096, 12, (int)v, VK_PVQ, ch, b, lpg[ch][b]);
   }
   // Channel ch's subband b's HF VQ vector v (its scale factor coded): the rank of its group by the
-  // groups' means, then its rank in the group
+  // groups' centroids (anal.inc's HF_GC), then its rank in the group
   // (The groups by their nearest entries instead, where the nearest of all lies within 1/64 of the
   // values' energy: a decoded WAV's values are the vector's, whatever the encoder's search; a
   // lossless WAV's aren't, and where the encoder's order misses, the group is near its first. A
@@ -528,7 +528,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         jo[k] = (U8)j;
         en += (S128)x[j] * 16 * ((S128)x[j] * 16);  // (hf_dist()'s units)
       }
-      S128 near = hf_group_min(f0, x, jo, nsmp, sc, en + 1);  // (the nearest of all: the means' first group's first)
+      S128 near = hf_group_min(f0, x, jo, nsmp, sc, en + 1);  // (the nearest of all: the centroids' first group's first)
       for (int g = 0; g < 32; g++)
         if (g != f0) near = hf_group_min(g, x, jo, nsmp, sc, near);
       const S128 cap = 16 * near + 1;
