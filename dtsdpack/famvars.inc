@@ -80,16 +80,20 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      last prediction (0-8, 9 none), pm whether the subband predicts (ADPCM), st how the subband
 //      below's ABITS changed from its last (0-8, 9 none), nb the energy less its neighbours'
 //      larger, in halves of scale factor steps (-4..4 as 0-8, 9 none), mx the loudest subband's in
-//      the channel less it, in 4 steps (0-15, 16 none), sn the ABITS the subband had the last time
-//      it had this energy, in any channel (1 + it, 0 none: the first guess), sd whether that is the
-//      last one (0 none, 1 it is, 2 not), nn the ABITS seen at the energies either side less sn
-//      (below's, -1..1 as 0-2 or 3 none, times 4, plus above's; 15 none; 14: sn is the nearest
+//      the channel less it, in 4 steps (0-15, 16 none), sn the first guess (1 + it, 0 none): the
+//      bit allocation search's (sc), else the staircase's (sm), else the ABITS the subband had the
+//      last time it had this energy, in any channel (the one seen), sd whether sn is the last one
+//      (0 none, 1 it is, 2 not), nn the ABITS seen at the energies either side less the one seen
+//      (below's, -1..1 as 0-2 or 3 none, times 4, plus above's; 15 none; 14: that is the nearest
 //      energy's, none having been seen at this one), sc where sn is the bit allocation search's
 //      ABITS (a decoded WAV's), how sure it is: 1 + 2 times the log2 of its margin over the next
 //      pair (to 6) + 1 where it is the first guess without the search (0 none), eq where in its
 //      scale factor's bucket the energy lies, in quarters (0-3, 4 none: the encoder's thresholds
 //      fall inside the buckets, so where the ABITS seen at the energy above or below differs, its
-//      side's quarter makes the change likelier)
+//      side's quarter makes the change likelier), sm where sn is the staircase's (model_smp.inc's
+//      level_guess()), how near the energy lies to where its guess changes and on which side
+//      (level_margin(): 0 none, 1-6 below, 7-12 above, by 0, 1, 2-3, 4-7, 8-15, more 32nds of a
+//      doubling)
 // scl: kd (0 a subband's first scale factor, 1 its second, after its transient, 2 a high-frequency
 //      VQ subband's, 3 the LFE's), ab its ABITS (1 + it, 0 none), pm whether it predicts, pk whether the audio
 //      predicts the scale factor, pn how near its RMS lies to the midpoint between two (0-7), lp
@@ -115,7 +119,7 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      the byte at the place in the last field of the kind (0 none, else 1 + it)
 #define M_hdr_VARS(X) X(fld) X(lv) X(l2) X(pos) X(st) X(nch)
 #define M_sid_VARS(X) X(fld) X(cc) X(bd) X(lv) X(pq) X(st) X(ac) X(ab) X(ec)
-#define M_abt_VARS(X) X(bd) X(cc) X(la) X(lb) X(es) X(de) X(ls) X(pm) X(st) X(nb) X(mx) X(sn) X(sd) X(nn) X(sc) X(eq)
+#define M_abt_VARS(X) X(bd) X(cc) X(la) X(lb) X(es) X(de) X(ls) X(pm) X(st) X(nb) X(mx) X(sn) X(sd) X(nn) X(sc) X(eq) X(sm)
 #define M_scl_VARS(X) X(kd) X(ab) X(pm) X(pk) X(pn) X(lp) X(hm) X(bd) X(dp)
 #define M_hit_VARS(X) X(pm) X(nr) X(nl) X(ab) X(ql) X(hm)
 #define M_smp_VARS(X) X(ab) X(hw) X(pk) X(nr) X(nl) X(ql) X(hm) X(pm) X(bd) X(m1) X(m2) X(sq) X(s1)

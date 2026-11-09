@@ -186,6 +186,14 @@ struct Model : ModelX96<f_DEC, LV> {
         S64 x[NSMP];
         int nx = 0;
         if (e && (s.pmode[ch][b] || srch)) nx = B::scale_values(s, ch, b, 0, s.nssc, x);
+        // (the staircase's guess at the values' fine energy, less the level: model_smp.inc; the
+        // subframe's first ABITS sets the level's centre)
+        const int pass = r.xpass ? 1 : 0;
+        if (!B::abl[pass].set) B::level_centre(r, s, pass);
+        auto& st = B::ab_st[pass][s.pmode[ch][b]][b];
+        const S32 fe = e ? B::fe_s[ch][b] : B::FE_NONE;
+        const int sg = fe != B::FE_NONE ? B::level_guess(pass, st, fe) : -1;
+        const int sm = fe != B::FE_NONE ? B::level_margin(pass, st, fe, sg) : 0;
         int eq = e ? B::eq[ch][b] : 4;
         if (e && s.pmode[ch][b]) {  // (an ADPCM subband's: its prediction's residual's)
           int near;
@@ -217,7 +225,8 @@ struct Model : ModelX96<f_DEC, LV> {
         }
         // (the search's, where it is right clearly more often than the first guess without it: it
         // the first guess, its sureness and whether it is that one the context sc; PMODE's, where it
-        // made the same)
+        // made the same; else the staircase's, where it has one, else the one seen; the staircase's
+        // margin the context sm where the first guess is its)
         const S32 og = sv ? sv : hist.abits[ch][b];
         int G = 0, gc = 0, sc = 0;
         U64 gd = 0;
@@ -230,14 +239,18 @@ struct Model : ModelX96<f_DEC, LV> {
         }
         B::abfit_a[ch][b] = G - 1, B::abfit_d[ch][b] = gd;
         S32 Sn = sv;
+        int fs = 0;  // (whether the first guess is the staircase's)
         if (srch && G && B::ab_rule()) {
           Sn = G, sc = 1 + 2 * imin(gc, 6) + (G == og);
           B::n_abs++;
-        }
+        } else if (sg >= 0)
+          Sn = sg + 1, fs = 1;
         v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
-                       s.pmode[ch][b], lbd, nb, mx, Sn, near_e ? 14 : nn, sc, eq);
+                       s.pmode[ch][b], lbd, nb, mx, Sn, near_e ? 14 : nn, sc, eq, Sn == sg + 1 ? sm : 0);
         v = checked(v, lo, hi);
         if (sn) *sn = (U8)(v + 1);
+        if (fe != B::FE_NONE) B::level_add(pass, st, fe, (int)v);
+        if (fs) B::n_st++, B::n_sthit += v == sg;
         if (sc) B::n_abhit += v == G - 1;
         if (srch) {
           const int ro = og && v == og - 1, rs = G ? v == G - 1 : ro;

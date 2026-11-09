@@ -627,6 +627,13 @@ static S64 lfe_decim(const WavIn& w, int c, S64 end, int up) {
 // times 16): an LFE value v is v times it
 static INLINE S64 lfe_scale(int i) { return ((S64)4697620 * SF7[i & 127] + (1 << 22)) >> 23; }
 
+// floor(32 log2(a)), a > 0 (the bit allocations' staircase's energies: model_smp.inc): the top 31
+// bits' place, and the fraction by the thresholds 2^30 2^(k/32), k 1-31, rounded up (exactly)
+static const U32 LOG2_32[31] = {
+    1097253709, 1121280436, 1145833281, 1170923762, 1196563654, 1222764986, 1249540053, 1276901417,
+    1304861917, 1333434673, 1362633090, 1392470869, 1422962011, 1454120822, 1485961921, 1518500250,
+    1551751076, 1585730000, 1620452966, 1655936265, 1692196548, 1729250827, 1767116489, 1805811302,
+    1845353420, 1885761399, 1927054196, 1969251188, 2012372174, 2056437387, 2101467502};
 // A number m 2^e (m 0, or |m| in [2^61, 2^62)), as the fit computes: the same everywhere
 struct Sf {
   S64 m;
@@ -635,6 +642,14 @@ struct Sf {
 static INLINE int bitlen128(U128 a) {
   const U64 hi = (U64)(a >> 64), lo = (U64)a;
   return hi ? 128 - __builtin_clzll(hi) : lo ? 64 - __builtin_clzll(lo) : 0;
+}
+static INLINE S32 fine_log2(U128 a) {
+  const int L = bitlen128(a) - 1;
+  const U32 m = (U32)(L >= 30 ? a >> (L - 30) : a << (30 - L));
+  int f = 0;
+  for (int k = 16; k; k >>= 1)
+    if (f + k <= 31 && m >= LOG2_32[f + k - 1]) f += k;
+  return 32 * L + f;
 }
 static Sf sf_make(S128 m, int e) {
   Sf r = {0, 0};

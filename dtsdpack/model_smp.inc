@@ -36,6 +36,23 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   int esmax[NCH];          // the channel's loudest subband's energy (es)
   int eab[NCH][NSUB];      // the energy ABITS was coded against (es; an ADPCM subband's residual's)
   U8 ab_seen[2][NSUB][129];  // the ABITS each subband had the last time it had that energy (by pm; 1 + it, 0 none)
+  // the bit allocations' staircases (stair_guess()), by pass (the core's, the extension's), pm and
+  // subband; each pass's level
+  static constexpr int AL_ND = 128, AL_NK = 2 * AL_ND + 1;  // (the level's search: 4 doublings either side)
+  static constexpr int AB_RC = 256;  // (the rate control's: 8 doublings either side of the last level)
+  static constexpr S32 FE_NONE = -(1 << 30), AL_C = 1 << 13;
+  struct AbStair {
+    S32 lo[32], hi[32];  // each ABITS's energies, less the level
+    U32 has;             // (a bit per ABITS)
+  } ab_st[2][2][NSUB];
+  struct AbLevel {
+    S32 c0, d;      // the subframe's centre and the shift from it
+    S32 sc[AL_NK];  // how many of the subframe's ABITS each shift (less AL_ND) made the staircases'
+    S64 cost, tgt;  // their cost (ab_bits()), and what the next subframe's aims at (the last ones' average)
+    int n, set;     // (how many; whether the centre is set: at the subframe's first ABITS)
+  } abl[2];
+  S32 fe_s[NCH][NSUB];  // the subframe's subbands' fine energies (FE_NONE: none)
+  U64 n_st, n_sthit;  // (-s: the ABITS a staircase said, those it said right)
   int pscale[NCH][NSUB];   // their first scale factor's prediction (1 + it, 0 none)
   int hm[NCH];             // whether the channel's scale factor before was the prediction (0 none, 1 it was, 2 not)
   // how often the RMS rule's scale factor was the core's, scale_ceil()'s, and scale_search()'s (the
@@ -117,6 +134,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // channels, and their subbands' energy and how it goes
   void smp_subframe(const CoreRec& r, int sf) {
     const CoreSub& s = r.sub[sf];
+    level_start(r.xpass ? 1 : 0);
     t0 = tframe + r.nblk;
     fb0 = r.nblk;
     nsmp = s.nssc * 8;
@@ -200,6 +218,141 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       for (int b = 0; b < NSUB; b++)
         for (int k = 0; k < 4; k++) xh[ch][b][k] = X[ch][b][nsmp - 1 - k];
     }
+  }
+
+  // --- the bit allocations' staircases ---------------------------------------------------------------
+
+  // An encoder's ABITS rise with a subband's energy, at thresholds its rate control moves from frame
+  // to frame. A subband's staircase keeps, for each ABITS, the fine energies (fine_energy(), less the
+  // level) it was last seen at, as intervals monotone in the energy, the newest winning; its guess
+  // at an energy, the ABITS of the interval it lies in, or of the nearer of the two either side.
+  // The pass's level: from the subframe's centre, the rate control's (level_centre(): where the
+  // staircases' ABITS would cost what the last subframes' did), the shift at which the staircases
+  // made the most of the subframe's ABITS so far (within AL_ND; of those, the nearest).
+  // the fine energy of the n values v: 32 times the log2 of their mean square (FE_NONE: all 0)
+  static S32 fine_energy(const S64* v, int n) {
+    U128 e = 0;
+    for (int j = 0; j < n; j++) e += (U128)((S128)v[j] * v[j]);
+    return e ? fine_log2(e) - fine_log2((U128)n) : FE_NONE;
+  }
+  // the staircase t's ABITS at the energy x (-1 none)
+  static int stair_guess(const AbStair& t, S32 x) {
+    int kb = -1;
+    for (U32 m = t.has; m; m &= m - 1) {
+      const int k = __builtin_ctz(m);
+      if (x < t.lo[k]) return kb < 0 || t.lo[k] - x < x - t.hi[kb] ? k : kb;
+      if (x <= t.hi[k]) return k;
+      kb = k;
+    }
+    return kb;
+  }
+  // the energies at which it is v: a to z (false: v isn't on it)
+  static bool stair_region(const AbStair& t, int v, S64* a, S64* z) {
+    if (!(t.has >> v & 1)) return false;
+    const U32 below = t.has & ((1u << v) - 1), above = t.has & ~((2u << v) - 1);
+    *a = -((S64)1 << 40), *z = (S64)1 << 40;
+    if (below) {
+      const S64 h = (S64)t.hi[31 - __builtin_clz(below)] + t.lo[v];
+      *a = (h - (h & 1)) / 2 + 1;
+    }
+    if (above) {
+      const S64 h = (S64)t.hi[v] + t.lo[__builtin_ctz(above)];
+      *z = (h - (h & 1)) / 2;
+    }
+    return true;
+  }
+  // it is v at x: the intervals either side give way
+  static void stair_add(AbStair& t, S32 x, int v) {
+    const U32 bit = 1u << v;
+    if (t.has & bit) t.lo[v] = imin(t.lo[v], x), t.hi[v] = imax(t.hi[v], x);
+    else t.has |= bit, t.lo[v] = t.hi[v] = x;
+    for (U32 m = t.has & ~(bit | (bit - 1)); m; m &= m - 1) {
+      const int k = __builtin_ctz(m);
+      if (t.hi[k] <= x) t.has &= ~(1u << k);
+      else if (t.lo[k] <= x) t.lo[k] = x + 1;
+    }
+    for (U32 m = t.has & (bit - 1); m; m &= m - 1) {
+      const int k = __builtin_ctz(m);
+      if (t.lo[k] >= x) t.has &= ~(1u << k);
+      else if (t.hi[k] >= x) t.hi[k] = x - 1;
+    }
+  }
+  // a subframe of pass p starts: the last one's level, its cost into the target
+  void level_start(int p) {
+    AbLevel& L = abl[p];
+    L.c0 = clip(L.c0 + L.d, -AL_C, AL_C), L.d = 0;
+    memset(L.sc, 0, sizeof L.sc);
+    if (L.n) L.tgt = L.tgt ? (L.tgt + L.cost) >> 1 : L.cost;
+    L.cost = 0, L.n = 0, L.set = 0;
+  }
+  // the bits a sample at each ABITS takes, in 64ths (log2 of its levels)
+  static int ab_bits(int a) {
+    static const S16 t[27] = {0,   101, 149, 180, 203, 237, 262,  297,  320,  384,  448,  512,  576, 640,
+                              704, 768, 832, 896, 960, 1024, 1088, 1152, 1216, 1280, 1344, 1408, 1472};
+    return a >= 0 && a < 27 ? t[a] : 0;
+  }
+  // the subframe's first ABITS (all its PMODE and PVQ known): its subbands' fine energies, and the
+  // centre as the encoder's rate control would make it: the level at which the staircases' ABITS
+  // cost what the last subframes' did (the nearer of the two either side; within AB_RC)
+  void level_centre(const CoreRec& r, const CoreSub& s, int p) {
+    AbLevel& L = abl[p];
+    L.set = 1;
+    for (int ch = r.ch0(); ch < r.ch1(); ch++)
+      for (int b = 0; b < r.nvqsub[ch]; b++) {
+        fe_s[ch][b] = FE_NONE;
+        if (!bound[ch]) continue;
+        S64 x[NSMP];
+        const int n = scale_values(s, ch, b, 0, s.nssc, x);
+        fe_s[ch][b] = fine_energy(x, n);
+      }
+    if (L.tgt <= 0) return;
+    auto cost = [&](S32 l) {
+      S64 c = 0;
+      for (int ch = r.ch0(); ch < r.ch1(); ch++)
+        for (int b = 0; b < r.nvqsub[ch]; b++)
+          if (fe_s[ch][b] != FE_NONE) c += ab_bits(stair_guess(ab_st[p][s.pmode[ch][b]][b], fe_s[ch][b] - l));
+      return c;
+    };
+    S32 lo = L.c0 - AB_RC, hi = L.c0 + AB_RC;  // (the cost falls as the level rises)
+    S64 clo = cost(lo), chi = cost(hi);
+    if (clo <= L.tgt) hi = lo, chi = clo;
+    else if (chi > L.tgt) lo = hi, clo = chi;
+    while (hi - lo > 1) {
+      const S32 m = lo + (hi - lo) / 2;
+      const S64 cm = cost(m);
+      if (cm > L.tgt) lo = m, clo = cm;
+      else hi = m, chi = cm;
+    }
+    L.c0 = clip(clo - L.tgt < L.tgt - chi ? lo : hi, -AL_C, AL_C);
+  }
+  // pass p's guess on the staircase t at the energy x
+  int level_guess(int p, const AbStair& t, S32 x) const { return stair_guess(t, x - abl[p].c0 - abl[p].d); }
+  // and how sure it is, its guess g: how near x lies to the energies where the guess changes, the
+  // nearer's side (0 none; 1-6 below, 7-12 above: within 0, 1, 3, 7, 15 32nds of a doubling or
+  // farther)
+  int level_margin(int p, const AbStair& t, S32 x, int g) const {
+    S64 a, z;
+    if (g < 0 || !stair_region(t, g, &a, &z)) return 0;
+    const S64 y = (S64)x - abl[p].c0 - abl[p].d, lo = y - a, hi = z - y, m = lo < hi ? lo : hi;
+    return 1 + 6 * (lo >= hi) + (m < 1 ? 0 : m < 2 ? 1 : m < 4 ? 2 : m < 8 ? 3 : m < 16 ? 4 : 5);
+  }
+  // and its ABITS was v: the shifts at which the staircase would have said it count, then the
+  // staircase has it
+  void level_add(int p, AbStair& t, S32 x, int v) {
+    AbLevel& L = abl[p];
+    S64 a, z;
+    if (stair_region(t, v, &a, &z)) {  // (x - c0 - (k - AL_ND) in a..z)
+      const S64 k0 = clip((S64)x - L.c0 - z + AL_ND, 0, AL_NK), k1 = clip((S64)x - L.c0 - a + AL_ND, -1, AL_NK - 1);
+      for (S64 k = k0; k <= k1; k++) L.sc[k]++;
+    }
+    stair_add(t, x - L.c0 - L.d, v);
+    L.cost += ab_bits(v), L.n++;
+    int bk = AL_ND, bs = L.sc[AL_ND];
+    for (int k = 1; k <= AL_ND; k++) {
+      if (L.sc[AL_ND - k] > bs) bs = L.sc[AL_ND - k], bk = AL_ND - k;
+      if (L.sc[AL_ND + k] > bs) bs = L.sc[AL_ND + k], bk = AL_ND + k;
+    }
+    L.d = bk - AL_ND;
   }
 
   // the audio's values a scale factor scales (n of them into v): channel ch's subband b over its

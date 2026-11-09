@@ -69,7 +69,7 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
   // (Sn: the ABITS the subband had the last time it had this energy, in any channel: 1 + it, 0 none;
   // the first guess, then the last one, then the difference from the first of them there is)
   S64 abits_code(int ch, int b, S64 v, S64 lo, S64 hi, S32 A, S32 Bw, int es, int de, int ls, int pm, int lbd,
-                 int nb, int mx, S32 Sn, int nn, int sc, int eq) {
+                 int nb, int mx, S32 Sn, int nn, int sc, int eq, int sm) {
     M_abt_v D;
     tcx X;
     D.bd = b;
@@ -88,6 +88,7 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
     D.nn = nn;
     D.sc = sc;
     D.eq = eq;
+    D.sm = sm;
     f_abt.make(D, X);
     f_abt.select(X);
     const S32 c1 = Sn ? Sn : A, c2 = Sn ? A : Bw;

@@ -28,7 +28,8 @@
 // the core's own step sizes, scale factors and ADPCM predictions, give nearly every quantization
 // index the core has, and their RMS nearly every scale factor; the encoder's searches of its code
 // books on them, nearly every ADPCM predictor and HF VQ vector; the WAV's LFE channel decimated,
-// nearly every LFE sample; and the ABITS a subband had at its energy before, most bit allocations.
+// nearly every LFE sample; and the staircases of each subband's ABITS against its energy, less the
+// level the encoder's rate control sets for the frame, most bit allocations.
 // A decoded (lossy) WAV's subband samples are the decoder's: they lie on the lattice of the core's
 // step and scale factor, which says nearly every bit allocation, scale factor, transient and ADPCM
 // predictor (the searches).
@@ -48,8 +49,8 @@
 //        values
 //   sid  a subband's PMODE (against the gain of the predictor the encoder would choose), TMODE,
 //        joint scale factors; and where the WAV isn't bound, its predictor, HF VQ vector, the LFE
-//   abt  the bit allocations, against the bit allocation search's (a decoded WAV's) or the ABITS
-//        seen at the subband's energy, and the last ones
+//   abt  the bit allocations, against the bit allocation search's (a decoded WAV's) or the
+//        staircase's at the subband's energy, the ABITS seen at it, and the last ones
 //   scl  the scale factors, against the one the audio's RMS makes
 //   hit  whether an index that isn't the audio's is the one across the rounding boundary
 //   smp  the subband samples' indexes otherwise: magnitude and sign
@@ -57,7 +58,7 @@
 //   raw  bytes kept as bytes, the bits after the subframes, the extension's other bits
 // (Whether a subband sample's index is the audio's goes straight to the coder: model_smp.inc.)
 //
-// File format: "dtsdpack", the format version 11, the level, the WAV's binding (how the core lines
+// File format: "dtsdpack", the format version 12, the level, the WAV's binding (how the core lines
 // up with it, and what the WAV was: coro.inc), then the range coded chunks (kind: end, a frame as
 // records, bytes between frames, a frame kept as bytes; then the records or a length and the
 // bytes); after the end, the CRC-32 of the core stream.
