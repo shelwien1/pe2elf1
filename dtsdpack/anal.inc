@@ -520,30 +520,35 @@ static S128 hf_group_min(int g, const S64* x, const U8* jo, int n, S64 sc, S128 
   return best;
 }
 
-// the entry of all nearest the samples x (n of them; as hf_dist()'s), the guess q0 first: the
-// samples the largest first, each entry's sum left where it reaches the nearest's so far (the same)
-static int hf_nearest(const S64* x, int n, S64 sc, int q0) {
-  U8 jo[NSMP];
-  auto mag = [](S64 a) { return a < 0 ? -a : a; };
-  for (int j = 0; j < n; j++) {
-    int k = j;
-    while (k > 0 && mag(x[jo[k - 1]]) < mag(x[j])) jo[k] = jo[k - 1], k--;
-    jo[k] = (U8)j;
-  }
-  S128 best = -1;
-  int bq = q0;
-  for (int t = -1; t < 1024; t++) {
-    const int q = t < 0 ? q0 : t;
-    if (t == q0) continue;
-    S128 d = 0;
-    for (int k = 0; k < n && (best < 0 || d < best); k++) {
-      const int j = jo[k];
-      const S128 e = (S128)x[j] * 16 - shl128((S128)HF_VQ[q][j] * sc, AQ_F);
-      d += e * e;
+// the entry most nearly a multiple of the samples x (n of them, at most 32): the one whose
+// projection leaves the least, (x e)^2 / (e e) the most (the first of equals); its scale is free
+struct HfEnergies {
+  S32 e[1024][4];  // each entry's energy over its first 8, 16, 24, 32 values
+  HfEnergies() {
+    for (int q = 0; q < 1024; q++) {
+      S32 s = 0;
+      for (int j = 0; j < 32; j++) {
+        s += HF_VQ[q][j] * HF_VQ[q][j];
+        if ((j & 7) == 7) e[q][j >> 3] = s;
+      }
     }
-    if (best < 0 || d < best) best = d, bq = q;
   }
-  return bq;
+};
+static const HfEnergies hf_energies;
+static int hf_shape(const S64* x, int n) {
+  const int k = (n + 7) / 8 - 1;
+  int bq = -1;
+  S128 bd = 0;  // (the best's x e, squared, and e e: as a ratio)
+  S64 be = 1;
+  for (int q = 0; q < 1024; q++) {
+    const S64 ee = hf_energies.e[q][k];
+    if (ee <= 0) continue;
+    S64 d = 0;
+    for (int j = 0; j < n; j++) d += x[j] * HF_VQ[q][j];  // (|x| < 2^40: 2^47 a product, 2^52 the sum)
+    const S128 dd = (S128)(d >> 8) * (d >> 8);  // (2^88)
+    if (bq < 0 || dd * be > bd * ee) bd = dd, be = ee, bq = q;  // (2^88 times 2^19)
+  }
+  return bq < 0 ? 0 : bq;
 }
 
 // Candidates in the order of their distance (k), ties by index (i): the rank of one, and the one of
@@ -559,6 +564,13 @@ static int rank_of(const KeyIx* a, int n, int at) {
   return r;
 }
 static int select_rank(KeyIx* a, int n, int r) {
+  if (r <= 1 && n > r) {  // (the first or the second: by one pass)
+    int b = 0, s = -1;
+    for (int i = 1; i < n; i++)
+      if (key_less(a[i], a[b])) s = b, b = i;
+      else if (s < 0 || key_less(a[i], a[s])) s = i;
+    return a[r ? s : b].i;
+  }
   int lo = 0, hi = n - 1;
   while (lo < hi) {
     const KeyIx p = a[lo + (hi - lo) / 2];

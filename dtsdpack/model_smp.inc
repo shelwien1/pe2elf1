@@ -351,7 +351,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
 
   // The scale factor a decoded WAV says (the scale factor search): its values v (n of them, the
   // ADPCM prediction off) are what the decoder made of the indexes, or of a VQ vector (hfb), at the
-  // step and scale factor; so of the entries from p - 3 to p + 5, the one whose reconstruction lies
+  // step and scale factor; so of the entries from p - 3 to p + 5 (a VQ subband's to p + 12), the one whose reconstruction lies
   // nearest them, where nearer by 4 times the next best's error at least (else -1; a lossless WAV's
   // values are the encoder's input: none is; a VQ subband's all the same, *conf -1); *conf the
   // log2 of that ratio less 2, to 7
@@ -363,24 +363,29 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (!hfb) {
       quant_range(r, ch, a, lo, hi);
     } else {  // (the vector: the two-stage search's at the RMS's scale factor and 3 above, and the
-              // nearest entry of all at each, the nearest of those: a decoded WAV's is the vector)
+              // entry most nearly a multiple of the values at its best scale factor, the nearest of
+              // those: a decoded WAV's is the vector, its scale factor 1-12 above the RMS rule's)
       S128 bd = -1;
       for (int k = 0; k < 2; k++) {
         const S64 sc = tab[clip(p + 3 * k, 0, nt - 1)];
         for (int g = 0; g < 32; g++) cand[g].k = hf_group_dist(g, v, n, sc), cand[g].i = g;
         const int g = select_rank(cand, 32, 0);
         for (int e = 0; e < 32; e++) cand[e].k = hf_dist(g * 32 + e, v, n, sc), cand[e].i = e;
-        const int q2 = g * 32 + select_rank(cand, 32, 0), qn = hf_nearest(v, n, sc, q2);
-        for (int z = 0; z < 2; z++) {
-          const int q = z ? qn : q2;
-          const S128 d = vq_err(v, n, q, sc);
-          if (bd < 0 || d < bd) bd = d, vq = q;
+        const int q2 = g * 32 + select_rank(cand, 32, 0);
+        const S128 d = vq_err(v, n, q2, sc);
+        if (bd < 0 || d < bd) bd = d, vq = q2;
+      }
+      {  // (the entry most nearly a multiple of the values, at its best scale factor)
+        const int qs = hf_shape(v, n);
+        for (int i = imax(p - 3, 0); i <= imin(p + 12, nt - 1); i++) {
+          const S128 d = vq_err(v, n, qs, tab[i]);
+          if (d < bd) bd = d, vq = qs;
         }
       }
     }
     S128 e1 = -1, e2 = -1;
     int best = -1;
-    for (int i = imax(p - 3, 0); i <= imin(p + 5, nt - 1); i++) {
+    for (int i = imax(p - 3, 0); i <= imin(p + (hfb ? 12 : 5), nt - 1); i++) {
       S128 e;
       if (hfb) {
         e = vq_err(v, n, vq, tab[i]);
