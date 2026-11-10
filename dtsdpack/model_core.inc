@@ -47,6 +47,11 @@ struct Hist {
   U8 tail[5][MAX_FRAME];
   S32 tailn[5];
   S32 tailsync;  // (the last aux tail's sync word, its place among those bytes: code_tail(); -1 none)
+  // the last TC_K tails of each kind that weren't all 0 (as code_tail() has them, to TC_B bytes), the
+  // last first: their bits (0 none) and bytes
+  static constexpr int TC_K = 32, TC_B = 64;
+  S32 tcn[5][TC_K];
+  U8 tcb[5][TC_K][TC_B];
 };
 
 // a value as a variable: 0 none (v 0), else 1 + it, to 1 + c (v as Hist keeps it: 1 + the value)

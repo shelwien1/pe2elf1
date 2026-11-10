@@ -103,12 +103,12 @@ FFmpeg's small DTS-HD MA samples (`xll_*`, 7 frames each) round-trip too:
 
 | Sample | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `xll_51_24_48_768` | 7168 | 586 (8.18%) | the WAV's 5.1 |
-| `xll_71_24_48_768_0` | 7168 | 474 (6.61%) | a downmix of its 7.1: every channel at -3 dB, each surround its side and rear surround |
-| `xll_71_24_48_768_1` | 7168 | 558 (7.78%) | the same, the rear surrounds' sign inverted |
+| `xll_51_24_48_768` | 7168 | 574 (8.01%) | the WAV's 5.1 |
+| `xll_71_24_48_768_0` | 7168 | 464 (6.47%) | a downmix of its 7.1: every channel at -3 dB, each surround its side and rear surround |
+| `xll_71_24_48_768_1` | 7168 | 524 (7.31%) | the same, the rear surrounds' sign inverted |
 | `xll_xch_61_24_48_768` | 7168 | 982 (13.70%) | its 6.1's 5.1, the back centre in the surrounds at about -3 dB; and in the XCH extension, the back centre |
 | `xll_71_24_96_768` | 7168 | 401 (5.59%) | the 96 kHz WAV's 64-band analysis's lower half, a downmix as the 48 kHz one's |
-| `xll_51_16_192_768_1` | 7168 | 3433 (47.89%) | coded from a version of the 192 kHz WAV dtsdpack hasn't: nothing lines up |
+| `xll_51_16_192_768_1` | 7168 | 3427 (47.81%) | coded from a version of the 192 kHz WAV dtsdpack hasn't: nothing lines up |
 
 Before the downmixes were found, the 7.1 and 6.1 ones went to 36-38%: only 3 of their core's
 channels lined up with a WAV channel, and those at the wrong gain in the 7.1 ones. With its XCH
@@ -124,10 +124,10 @@ allocations in):
 | Stream | Core | dtsdpack | The core is |
 |---|---:|---:|---|
 | `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 86910 (4.60%) | the 96 kHz decode's 64-band analysis's lower half (95.99% of its indexes); its X96 extension, 12% of each frame, the upper half and the residuals (99.97%) |
-| `Master Audio 5.0 96khz.dts` | 1768548 | 12314 (0.70%) | the 96 kHz WAV's 64-band analysis's lower half (99.57%) |
-| `Master Audio 7.1.dts` | 1945604 | 12839 (0.66%) | a downmix of its 7.1 |
+| `Master Audio 5.0 96khz.dts` | 1768548 | 12067 (0.68%) | the 96 kHz WAV's 64-band analysis's lower half (99.57%) |
+| `Master Audio 7.1.dts` | 1945604 | 10509 (0.54%) | a downmix of its 7.1 |
 | `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 8479 (0.30%) | its 3.1 |
-| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 9779 (0.19%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
+| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 9780 (0.19%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
 | FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 3041 (0.60%) | the same (1.95%) |
 | `open bitrate.dts` (stereo, open rate) | 5242416 | 4788 (0.09%) | decoded (99.99% of the indexes, 99.95% of the scale factors, 98.23% of the bit allocations, 99.98% of the HF VQ groups, 96.68% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
 
@@ -135,7 +135,7 @@ No stream at hand has XXCH in its core substream: FATE's XXCH samples (`xxch_71_
 `xbr_xxch_71_24_48_3840`, `x96_xxch_71_24_96_3840`, 7 frames each) have it in their extension
 substreams. Their XXCH frames moved into their core frames after the subframes (EXT_AUDIO set,
 EXT_AUDIO_ID 6), the extension substream dropped, make core-substream XXCH streams that FFmpeg
-decodes as 7.1; dtsdpack round-trips them against those decodes (21.52%, 22.55%, 15.92%). Their
+decodes as 7.1; dtsdpack round-trips them against those decodes (21.67%, 22.65%, 15.90%). Their
 signal is a silent frame, then white noise near full scale; the decoder undoes XXCH's downmix
 pre-scaling (every core channel times 1.41), so the decodes clip, and only partly line up with
 any core (their own cores against their core-only decodes, which don't clip, make 18.91%).
@@ -183,8 +183,12 @@ bits to the next 32-bit boundary, the fill's odds going by them (`open bitrate.d
 Where the frame has auxiliary data (AUXF), the bits after the subframes are its byte count, 0s to
 a 32-bit boundary, its sync word and the data, which an encoder repeats frame after frame: those
 bytes go against the last frame's from that boundary, where the data is, not from the end
-(`Master Audio 7.1.dts`'s sit 24 or 28 bytes from it: 3.8% smaller). Where the extension doesn't
-parse, its bytes are the bits after the subframes again.
+(`Master Audio 7.1.dts`'s sit 24 or 28 bytes from it: 3.8% smaller). Even so, such a frame's
+bits cost a bit or two, more where the fill's size changes. So a tail of 8 bytes or more the same
+as one of the last 32 of its kind and size that weren't all 0 (the auxiliary data's are a few,
+one by the fill's size) is that one, coded as which, the last first (`Master Audio 7.1.dts` 4.0%
+smaller, `Master Audio 5.0 96khz.dts` 2.0%). Where the extension doesn't parse, its bytes are the
+bits after the subframes again.
 
 ### The audio
 
@@ -409,7 +413,13 @@ silent subband the encoder gave a fine step, as `open bitrate.dts`'s has ABITS 2
 scale factor, all its indexes 0, where the WAV has its rounding; and silence beside a sudden loud
 onset, where the decoder's filterbank, FILTS 0's not quite perfect reconstruction, leaves a few
 percent of the onset in the WAV. Their fine steps made them outweigh everything else, and the
-fit's gains came out at 0.017 for a channel that is its WAV channel as it is.) The LFE gets the remaining WAV channel whose decimation correlates best with
+fit's gains came out at 0.017 for a channel that is its WAV channel as it is.) The encoder mixed
+in the PCM, before its analysis: each sample's sum of the scaled channels rounded to the nearest
+integer (not each product rounded, nor the sum truncated). So a lossless WAV's mixed or scaled
+core channel, at the core's rate, is analysed as that rounded PCM, not as its channels' analyses
+mixed (`Master Audio 7.1.dts` 14.7% smaller: its indexes the audio's 99.64% of the time, from
+99.51%; the 7-frame 7.1 samples 2%; the XXCH samples' decodes, a decoder's mix, until the scale
+factor search shows them decoded, 0.4-0.7% bigger). The LFE gets the remaining WAV channel whose decimation correlates best with
 the first 1024 LFE samples that aren't 0 (`Master Audio 7.1.dts`'s first 1024 are all 0). `-s` shows the binding:
 
 ```

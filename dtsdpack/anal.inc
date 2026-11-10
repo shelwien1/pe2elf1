@@ -74,10 +74,17 @@ struct SplitTabs {
 static const SplitTabs split_tabs;
 
 template <int M>
+static void analyze_sp(const S32* sp, const S64* fir, const S64 (*cq)[M], S64* x, int nb);
+template <int M>
 static void analyze_m(const WavIn& w, int c, S64 o, const S64* fir, const S64 (*cq)[M], S64* x, int nb) {
-  constexpr int L = 16 * M, H = M / 2;
+  constexpr int L = 16 * M;
   S32 buf[L];
-  const S32* sp = w.span(c, o - L, L, buf);
+  analyze_sp<M>(w.span(c, o - L, L, buf), fir, cq, x, nb);
+}
+// (the same of the 16 M samples sp)
+template <int M>
+static void analyze_sp(const S32* sp, const S64* fir, const S64 (*cq)[M], S64* x, int nb) {
+  constexpr int L = 16 * M, H = M / 2;
   S32 mx = 0;
   for (int m = 0; m < L; m++) mx |= sp[m] < 0 ? ~sp[m] : sp[m];
   S128 acc[2 * M];
@@ -128,8 +135,19 @@ static void analyze(const WavIn& w, int c, S64 o, int up, const S64* fir, S64* x
 }
 
 // the first nb subband samples of core channel ch as the binding b makes them from the WAV
-// (analyze()'s): its channel's, or the mix's
-static void analyze_bound(const WavIn& w, const Bind& b, int ch, S64 o, const S64* fir, S64* x, int nb = 32) {
+// (analyze()'s): its channel's, or the mix's (pcm, a lossless WAV's at the core's rate: as its
+// encoder mixed, in the PCM, each sample's sum rounded to the nearest, a half up, then analyzed)
+static void analyze_bound(const WavIn& w, const Bind& b, int ch, S64 o, const S64* fir, S64* x, int nb = 32, bool pcm = false) {
+  if (pcm && b.up == 1 && !(b.map2[ch] < 0 && b.g1[ch] == BIND_ONE)) {
+    constexpr int L = 512;
+    S32 b1[L], b2[L], m[L];
+    const S32* s1 = w.span(b.map[ch], o - L, L, b1);
+    const S32* s2 = b.map2[ch] >= 0 ? w.span(b.map2[ch], o - L, L, b2) : nullptr;
+    for (int i = 0; i < L; i++)
+      m[i] = (S32)(((S64)s1[i] * b.g1[ch] + (s2 ? (S64)s2[i] * b.g2[ch] : 0) + (1 << 22)) >> 23);
+    analyze_sp<32>(m, fir, COSQ, x, nb);
+    return;
+  }
   analyze(w, b.map[ch], o, b.up, fir, x, nb);
   if (b.map2[ch] < 0 && b.g1[ch] == BIND_ONE) return;
   S64 x2[64];

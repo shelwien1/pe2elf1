@@ -221,7 +221,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       bound[ch] = 1;
       S64 x[64];
       for (int j = 0; j < nsmp; j++) {
-        analyze_bound(*wav, bind, ch, o0 + 32 * up * j, fir, x, x96a ? NSUB96 : NSUB);
+        analyze_bound(*wav, bind, ch, o0 + 32 * up * j, fir, x, x96a ? NSUB96 : NSUB, !ss_rule());
         for (int b = 0; b < NSUB; b++) X[ch][b][j] = x[b];
         for (int c = 0; c < CPL_N; c++) {
           const int tb = NSUB - 1 - c;

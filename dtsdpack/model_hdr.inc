@@ -152,6 +152,13 @@ struct ModelHdr {
   // are not (from the first that isn't), how many of those end them as 0s, and the bytes between,
   // against the last ones' of the kind at the same places from the end (with auxiliary data, a0
   // its sync word's byte: from it)
+  // a tail of the kind (nbits, its bytes q, nb of them, to TC_B) the cache's first, the last dropped
+  void tail_cache_add(int kind, int nbits, const U8* q, int nb) {
+    for (int j = Hist::TC_K - 1; j > 0; j--) hist.tcn[kind][j] = hist.tcn[kind][j - 1], memcpy(hist.tcb[kind][j], hist.tcb[kind][j - 1], Hist::TC_B);
+    hist.tcn[kind][0] = nbits;
+    memset(hist.tcb[kind][0], 0, Hist::TC_B);
+    memcpy(hist.tcb[kind][0], q, (size_t)nb);
+  }
   void code_tail(pU8 p, int nbits, int kind, int a0 = -1) {
     const int nb = (nbits + 7) / 8, zf = NHFRAME + (kind ? HX_GAPZ : HX_TAILZ), nf = NHFRAME + (kind ? HX_GAPNZ : HX_TAILNZ);
     // (the hdr fields' place: each kind its own; the bits after the subframes' and those before the
@@ -173,6 +180,27 @@ struct ModelHdr {
       if (!ENC) memset(p, 0, (size_t)nb);
       return;
     }
+    // (a tail of 8 bytes or more the same as one of the last ones of its kind and size, the last
+    // first: which, a flag for each, at the zero flag's places from 32; the auxiliary data's, its
+    // count, a fill to its 32-bit boundary and the same bytes, makes a few, one by the fill's size)
+    const int cache = nb <= Hist::TC_B;
+    for (int k = 0; cache && nb >= 8 && k < Hist::TC_K; k++) {
+      if (hist.tcn[kind][k] != nbits) continue;
+      U8* const cb = hist.tcb[kind][k];
+      if (!hdr_hist(zf, 32 + imin(k, 15), 1, ENC && !memcmp(cb, q, (size_t)nb))) continue;
+      if (!ENC) memcpy(q, cb, (size_t)nb);
+      for (int j = k; j > 0; j--) hist.tcn[kind][j] = hist.tcn[kind][j - 1], memcpy(hist.tcb[kind][j], hist.tcb[kind][j - 1], Hist::TC_B);
+      hist.tcn[kind][0] = nbits, memcpy(hist.tcb[kind][0], q, (size_t)nb);
+      int i = 0;
+      while (i < nb && !q[i]) i++;
+      nz = nb - i;
+      memcpy(last, q + nb - nz, (size_t)nz);  // (the state the bytes' coding leaves)
+      lastn = nz;
+      if (!kind) hist.tailsync = a0 >= nb - nz ? a0 - (nb - nz) : -1;
+      if (!ENC)
+        for (int j = 0; j < nb; j++) p[j] = (U8)((q[j] << sh) | (j + 1 < nb && sh ? q[j + 1] >> (8 - sh) : 0));
+      return;
+    }
     nz = (int)checked(hdr_hist(nf, o, 0xFFFF, nz), 1, nb);
     int tz = 0;  // (and how many of those end it as 0s: a 32-bit word of them, the fill's)
     if (ENC)
@@ -187,6 +215,7 @@ struct ModelHdr {
     memcpy(last, q + nb - nz, (size_t)nz);
     lastn = nz;
     if (!kind) ls = a0 >= nb - nz ? a0 - (nb - nz) : -1;
+    if (cache) tail_cache_add(kind, nbits, q, nb);
     if (!ENC)  // (back as they were, from the first byte)
       for (int i = 0; i < nb; i++) p[i] = (U8)((q[i] << sh) | (i + 1 < nb && sh ? q[i + 1] >> (8 - sh) : 0));
   }
