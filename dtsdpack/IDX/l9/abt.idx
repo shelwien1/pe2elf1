@@ -10,64 +10,64 @@ Debug 1
 Const 0
 
 Index a
- a_bd: bd, 1!1111111110111111110010101110000
+ a_bd: bd, 1!1111111111101110100110010110101
  a_es: es, &01111110
 
 Index b
- b_la: la, 1!001000000100000100000000000
- b_lb: lb, 1!010100000001000000000000100
+ b_la: la, 1!001000000100000000000101100
+ b_lb: lb, 1!100100000001000001100101100
 
 Index c
- c_sn: sn, 1!001111101101111110110101100
- c_la: la, 1!001100100111111011010000100
+ c_sn: sn, 1!110111111111111110111110100
+ c_la: la, 1!011111111111111111011001000
 
 Index d
- d_sn: sn, 1!001000000100000000000000100
- d_sd: sd, 1!01
- d_de: de, 1!100101011
- d_sc: sc, 1!00000100000000
- d_sm: sm, 1!1111111111111111
+ d_sn: sn, 1!011000000100000000000000000
+ d_sd: sd, 1!11
+ d_de: de, 1!101010010
+ d_sc: sc, 1!10100000000000
+ d_sm: sm, 1!1011010110110101
 
 Index e
- e_bd: bd, 1!1100000000100011111100000000000
- e_sn: sn, 1!010101011111100000001011100
+ e_bd: bd, 1!1101100001100000001010001001111
+ e_sn: sn, 1!110101010111110111011110000
 
 Index h
- h_lb: lb, 1!000000100111111101110000000
- h_es: es, &01011111
- h_bd: bd, 1!0101111111100011001101000000000
+ h_lb: lb, 1!010000000111111110101100100
+ h_es: es, &01111111
+ h_bd: bd, 1!0111111101110111101000000010101
 
 Index i
- i_es: es, &00111010
- i_nb: nb, 1!000000100
- i_la: la, 1!001011111111111111111111000
+ i_es: es, &00111110
+ i_nb: nb, 1!000000010
+ i_la: la, 1!111111111110111100011111100
 
 Index j
  j_es: es, &00000000
  j_de: de, 1!000000000
- j_pm: pm, 1!1
+ j_pm: pm, 1!0
 
 Index k
- k_sn: sn, 1!100000000000100000000000000
- k_nn: nn, 1!100110111100111
- k_sc: sc, 1!10000000000000
+ k_sn: sn, 1!100000000000100001001101000
+ k_nn: nn, 1!100011111100101
+ k_sc: sc, 1!01110000000000
  k_eq: eq, 1!0001
- k_sm: sm, 1!1111111111111111
+ k_sm: sm, 1!0011010110110101
 
 Index l
- l_bd: bd, 1!0000011100111000000101011010000
+ l_bd: bd, 1!0000100111110011010000001110000
  l_cc: cc, 1!11
- l_la: la, 1!001000010110000101110100000
+ l_la: la, 1!110010010010010000010100100
 
 Index s
  s_sn: sn, 1!101111111110000000000000000
  s_sd: sd, 1!10
- s_nn: nn, 1!000000000000001
- s_sc: sc, 1!11100100001100
- s_sm: sm, 1!1111111111111111
+ s_nn: nn, 1!000000000000000
+ s_sc: sc, 1!11100111000101
+ s_sm: sm, 1!1100101111001011
 
 Index f
- f_es: es, &01111000
+ f_es: es, &01110000
 
 Index m
  m_nn: nn, 1!001011100000010
@@ -76,7 +76,7 @@ Index w
  w_st: st, 1!100001001
 
 Index t
- t_bd: bd, 1!0001000000000000000000000110000
+ t_bd: bd, 1!0001000000000000000000000111000
 
 Index n
 #  Frozen: the mantissa mixer it is for mixes only by a hint, and nothing gives this family one.
@@ -89,38 +89,38 @@ Index g
 Number rA, 1, 0!00000000
 Number mwA, 1, 0!11101011
 Number rB, 1, 0!00000000
-Number mwB, 1, 0!10010001
-Number rC, 1, 0!11111100
-Number mwC, 1, 0!00111011
+Number mwB, 1, 0!10011111
+Number rC, 1, 0!11101001
+Number mwC, 1, 0!00001111
 Number rD, 1, 0!11111110
 Number mwD, 1, 0!00000010
 Number rE, 1, 0!00000000
-Number mwE, 1, 0!11010100
-Number rH, 1, 0!11001100
-Number mwH, 1, 0!01000100
-Number rI, 1, 0!10000011
-Number mwI, 1, 0!11111111
+Number mwE, 1, 0!10000000
+Number rH, 1, 0!10111111
+Number mwH, 1, 0!01000000
+Number rI, 1, 0!11001110
+Number mwI, 1, 0!10000011
 Number rJ, 1, 0!00000000
 Number mwJ, 1, 0!10000010
-Number rK, 1, 0!11111110
-Number mwK, 1, 0!00000101
-Number rL, 1, 0!10100111
-Number mwL, 1, 0!11010101
-Number lr, 1, 0!10000
-Number mb, 1, 0!01001100
+Number rK, 1, 0!11110110
+Number mwK, 1, 0!00010101
+Number rL, 1, 0!10111001
+Number mwL, 1, 0!11000001
+Number lr, 1, 0!10110
+Number mb, 1, 0!01000000
 Number rS1, 1, 0!01000
-Number rS2, 1, 0!00111
+Number rS2, 1, 0!00110
 Number qs, 1, 3!1101111
 Number qf, 1, 3!0011011
-Number bw, 1, 0!01011
-Number rT, 1, 0!00000100
-Number mwT, 1, 0!00001101
+Number bw, 1, 0!01001
+Number rT, 1, 0!00000111
+Number mwT, 1, 0!01000000
 Number mt, 1, 0!010
 #  the mantissa mixer's rates: frozen (Index n)
 ! Number lrm, 1, 0!11111
 ! Number mbm, 1, 0!00011001
-Number rG, 1, 0!11010000
-Number mwG, 1, 0!01110101
+Number rG, 1, 0!00010000
+Number mwG, 1, 0!00000111
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
 #  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.
