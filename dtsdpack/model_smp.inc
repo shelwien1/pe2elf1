@@ -775,7 +775,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
 #ifdef DTSD_HFDUMP
       if (ENC) hf_dump(x, sc, (int)v);
 #endif
-      if (f0 != (int)(v >> 5)) hg_learn(x, sc, (int)(v >> 5), f0);
+      // (not where the bottom subband's leak, 2^32 times as loud or more, swamps the top ones': their
+      // groups go by its noise as much as by the encoder's scores; `s.2.dts`'s core 0.3% smaller)
+      if (f0 != (int)(v >> 5) && lk < 3) hg_learn(x, sc, (int)(v >> 5), f0);
     }
     return v;
   }
@@ -1002,7 +1004,16 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       const int n = tm ? (j ? scale_values(s, ch, b, tm, s.nssc, v_) : scale_values(s, ch, b, 0, tm, v_))
                        : scale_values(s, ch, b, 0, s.nssc, v_);
       if (n) {
-        p = scale_pred(v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
+        // (a lossless WAV's top subband: its RMS with the bottom one's leak's noise in it, 2^-40 of
+        // that one's power, as the encoder's scale factor goes: 81.6% of `s.2.dts`'s, from 79.2%)
+        if (b == NSUB - 1 && cpl_on(r, ch, b)) {
+          S128 ms = 0, m0 = 0;
+          for (int i = 0; i < n; i++) ms += (S128)v_[i] * v_[i];
+          for (int i = 0; i < nsmp; i++) m0 += (S128)X[ch][0][i] * X[ch][0][i];
+          p = scale_pred_ms(ms / n + (m0 / nsmp >> 40), r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
+        } else {
+          p = scale_pred(v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
+        }
         pc = scale_ceil(v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]));
         if (search_on()) ps = scale_search(r, s, ch, b, hfb, v_, n, p, &conf), tried = 1;
       }
