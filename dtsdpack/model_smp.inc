@@ -63,6 +63,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     } obs[NCH * NSUB];
   } abl[2];
   S32 fe_s[NCH][NSUB];  // the subframe's subbands' fine energies (FE_NONE: none)
+  // the core's subframe's bit budget as its ABITS come (ab_budget()): the subbands coded, the bits
+  // their ABITS' samples take
+  U8 bg_done[NCH][NSUB];
+  S64 bg_used;
   S16 bud_b[NCH][NSUB][27];    // the bits (in quarters) their samples would take at each ABITS (bud_bits(); -1 not yet)
   S64 bud_v[NCH][NSUB][NSMP];  // their values (an ADPCM subband's residual)
   int bud_n[NCH][NSUB], bud_si[NCH][NSUB];  // (how many; the RMS rule's scale factor)
@@ -426,6 +430,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   void level_centre(const CoreRec& r, const CoreSub& s, int p, U64 at) {
     AbLevel& L = abl[p];
     L.set = 1;
+    if (!p) bg_used = 0, memset(bg_done, 0, sizeof bg_done);
     L.nobs = 0;
     memcpy(ab_snap[p], ab_st[p], sizeof ab_snap[p]);
     for (int ch = r.ch0(); ch < r.ch1(); ch++)
@@ -475,6 +480,29 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       else hi = m, chi = cm;
     }
     L.c0 = clip(clo - L.tgt < L.tgt - chi ? lo : hi, -AL_C, AL_C);
+  }
+  // The bits (in quarters) the core's subframe's samples may still take as channel ch's subband b's
+  // ABITS comes, less what the staircases' guesses for it and the subbands after it would take at
+  // the level as it is (the encoders fill their frames: abt's bg): what they take from the
+  // subframe's first ABITS on (abl's avail + rb), less the ABITS coded's, less those guesses'
+  S64 ab_budget(const CoreRec& r) {
+    const AbLevel& L = abl[0];
+    S64 rest = 0;
+    for (int c = r.ch0(); c < r.ch1(); c++)
+      if (bound[c])
+        for (int k = 0; k < r.nvqsub[c]; k++) {
+          if (bg_done[c][k]) continue;
+          int g = fe_s[c][k] == FE_NONE ? -1 : level_guess(0, ab_st[0][k], fe_s[c][k]);
+          if (g < 0) g = hist.abits[c][k] ? hist.abits[c][k] - 1 : 0;
+          rest += bud_bits(r, c, k, g);
+        }
+    return L.avail + L.rb - bg_used - rest;
+  }
+  // and channel ch's subband b's ABITS is v
+  void ab_budget_add(const CoreRec& r, int ch, int b, int v) {
+    if (bg_done[ch][b]) return;
+    bg_done[ch][b] = 1;
+    bg_used += bud_bits(r, ch, b, v);
   }
   // the bits (in quarters) channel ch's subband b's samples would take at ABITS a: its values
   // quantized at the RMS rule's scale factor (as requant() does), by the code the frame's header

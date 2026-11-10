@@ -248,10 +248,23 @@ struct Model : ModelX96<f_DEC, LV> {
         // (where the first guess is the staircase's, the second the ABITS across the nearer edge of
         // its energies: a miss's, nearly always)
         const int ms = Sn == sg + 1 ? sm : 0, alt = ms ? (ms <= 8 ? sg - 1 : sg + 1) : -1;
+        // (the budget: what the samples may still take, toward the edge ms says, in steps of this
+        // subband's bits across it; a lossless WAV's only: a decoded WAV's streams 0.1-0.9% bigger
+        // with it)
+        int bg = 0;
+        if (!pass && ms && B::abl[0].rn && bound[ch] && !B::ss_rule()) {
+          const S64 R = B::ab_budget(r), g0 = B::bud_bits(r, ch, b, sg);
+          const S64 st = ms <= 8 ? (sg > 0 ? g0 - B::bud_bits(r, ch, b, sg - 1) : 0) : B::bud_bits(r, ch, b, sg + 1) - g0;
+          if (st > 0) {
+            const S64 t = (ms <= 8 ? -R : R) * 2;  // (2 R / st: in half steps)
+            bg = t >= 4 * st ? 1 : t >= 2 * st ? 2 : t >= st ? 3 : t > -st ? 4 : t > -2 * st ? 5 : t > -4 * st ? 6 : 7;
+          }
+        }
         v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
                        s.pmode[ch][b], lbd, nb, mx, Sn, near_e ? 14 : nn, sc, eq, ms,
-                       alt >= lo && alt <= hi ? alt + 1 : 0);
+                       alt >= lo && alt <= hi ? alt + 1 : 0, bg);
         v = checked(v, lo, hi);
+        if (!pass && bound[ch]) B::ab_budget_add(r, ch, b, (int)v);
         if (sn) *sn = (U8)(v + 1);
         if (fe != B::FE_NONE) B::level_add(pass, st, fe, (int)v);
         if (fs) B::n_st++, B::n_sthit += v == sg;

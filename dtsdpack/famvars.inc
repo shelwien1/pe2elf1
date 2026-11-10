@@ -94,7 +94,12 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      side's quarter makes the change likelier), sm where sn is the staircase's (model_smp.inc's
 //      level_guess()), how near the energy lies to where its guess changes and on which side
 //      (level_margin(): 0 none, 1-8 below, 9-16 above, by 0, 1, 2-3, 4-7, 8-15, 16-31, 32-63, more
-//      128ths of a doubling)
+//      128ths of a doubling), bg where sm isn't 0, the core's: the bits its subframe's samples may
+//      still take (model_smp.inc's ab_budget()) toward that side's edge, in steps of the subband's
+//      bits there (1 two or more, 2 one to two, 3 a half to one, 4 within a half, 5-7 the same away
+//      from it; 0 none: the encoders fill their frames, so where the staircases would leave bits,
+//      an ABITS near its upper edge rises, and where they would take too many, one near its lower
+//      edge falls)
 // scl: kd (0 a subband's first scale factor, 1 its second, after its transient, 2 a high-frequency
 //      VQ subband's, 3 the LFE's), ab its ABITS (1 + it, 0 none), pm whether it predicts, pk whether the audio
 //      predicts the scale factor, pn how near its RMS lies to the midpoint between two (0-7), lp
@@ -126,7 +131,7 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      the byte at the place in the last field of the kind (0 none, else 1 + it)
 #define M_hdr_VARS(X) X(fld) X(lv) X(l2) X(pos) X(st) X(nch)
 #define M_sid_VARS(X) X(fld) X(cc) X(bd) X(lv) X(pq) X(st) X(ac) X(ab) X(ec)
-#define M_abt_VARS(X) X(bd) X(cc) X(la) X(lb) X(es) X(de) X(ls) X(pm) X(st) X(nb) X(mx) X(sn) X(sd) X(nn) X(sc) X(eq) X(sm)
+#define M_abt_VARS(X) X(bd) X(cc) X(la) X(lb) X(es) X(de) X(ls) X(pm) X(st) X(nb) X(mx) X(sn) X(sd) X(nn) X(sc) X(eq) X(sm) X(bg)
 #define M_scl_VARS(X) X(kd) X(ab) X(pm) X(pk) X(pn) X(lp) X(hm) X(bd) X(dp) X(cc) X(nb)
 #define M_hit_VARS(X) X(pm) X(nr) X(nl) X(ab) X(ql) X(hm)
 #define M_smp_VARS(X) X(ab) X(hw) X(pk) X(nr) X(nl) X(ql) X(hm) X(pm) X(bd) X(m1) X(m2) X(sq) X(s1)

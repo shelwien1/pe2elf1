@@ -25,7 +25,7 @@ void D9_hit_make( const M_hit_v & D, tcx & X ) {
   b = b*3 + (((pm)>0+(1-1))+((pm)>1+(1-1)));
 
   c = 0;
-  c = c*3 + (((nr)>13+(1-1))+((nr)>14+(1-1)));
+  c = c*2 + (((nr)>13+(1-1)));
   c = c*3 + (((hm)>0+(1-1))+((hm)>1+(1-1)));
 
   d = 0;
@@ -45,7 +45,7 @@ void D9_hit_make( const M_hit_v & D, tcx & X ) {
   i = i*2 + (((hm)>1+(1-1)));
 
   j = 0;
-  j = j*9 + D9_hit_j_nr[__min(15,__max(0,(nr)-(1-1)))];
+  j = j*8 + D9_hit_j_nr[__min(15,__max(0,(nr)-(1-1)))];
   j = j*9 + D9_hit_j_ql[__min(21,__max(0,(ql)-(1-1)))];
 
   k = 0;

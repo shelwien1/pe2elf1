@@ -4,7 +4,7 @@ static const byte D9_sid_a_fld[8+1]={ 0,1,2,3,4,5,6,7,8 };
 static const byte D9_sid_b_fld[8+1]={ 0,1,2,3,4,5,6,7,8 };
 
 static const byte D9_sid_c_fld[8+1]={ 0,1,2,3,4,5,6,7,8 };
-static const byte D9_sid_c_bd[31+1]={ 0,1,2,3,3,3,4,4,4,5,5,5,6,7,8,9,10,11,12,12,13,14,14,14,15,15,15,15,16,16,17,18 };
+static const byte D9_sid_c_bd[31+1]={ 0,1,2,3,3,3,3,4,4,5,6,7,7,8,9,10,11,12,13,13,14,15,15,15,16,16,16,16,17,18,19,20 };
 
 static const byte D9_sid_d_ac[8+1]={ 0,1,2,3,4,5,5,6,7 };
 
@@ -41,7 +41,7 @@ static const byte D9_sid_t_fld[8+1]={ 0,1,2,3,4,5,6,7,8 };
 static const int D9_sid_rA = (116+0) * (1);
 static const int D9_sid_mwA = (231+0) * (1);
 static const int D9_sid_rB = (249+0) * (1);
-static const int D9_sid_mwB = (78+0) * (1);
+static const int D9_sid_mwB = (14+0) * (1);
 static const int D9_sid_rC = (255+0) * (1);
 static const int D9_sid_mwC = (6+0) * (1);
 static const int D9_sid_rD = (254+0) * (1);
@@ -63,7 +63,7 @@ static const int D9_sid_mb = (96+0) * (1);
 static const int D9_sid_rS1 = (8+0) * (1);
 static const int D9_sid_rS2 = (4+0) * (1);
 static const int D9_sid_qs = (40+3) * (1);
-static const int D9_sid_qf = (61+3) * (1);
+static const int D9_sid_qf = (63+3) * (1);
 static const int D9_sid_bw = (12+0) * (1);
 static const int D9_sid_rT = (254+0) * (1);
 static const int D9_sid_mwT = (0+0) * (1);
@@ -91,7 +91,7 @@ static const int D9_sid_hN = (22+0) * (1);
 
 static const long long D9_sid_a_Volume = tc_vmul(tc_vmul(1, 9), (1<<1)); // 18
 static const long long D9_sid_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 9), (1<<1)), (1<<6)); // 1152
-static const long long D9_sid_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 9), 19), (1<<6)); // 10944
+static const long long D9_sid_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 9), 21), (1<<6)); // 12096
 static const long long D9_sid_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 8), (1<<1)); // 48
 static const long long D9_sid_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 1), 3), 24); // 72
 static const long long D9_sid_f_Volume = tc_vmul(tc_vmul(1, 2), 9); // 18
@@ -100,7 +100,7 @@ static const long long D9_sid_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 13), (1<
 static const long long D9_sid_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, 9), 7), (1<<1)); // 126
 static const long long D9_sid_j_Volume = tc_vmul(tc_vmul(1, 9), 2); // 18
 static const long long D9_sid_k_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 12), 5); // 120
-static const long long D9_sid_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 9), (1<<1)), 13), 9); // 2106
+static const long long D9_sid_l_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 9), (1<<2)), 13), 9); // 4212
 static const long long D9_sid_m_Volume = tc_vmul(1, 9); // 9
 static const long long D9_sid_n_Volume = tc_vmul(1, 9); // 9
 static const long long D9_sid_s_Volume = tc_vmul(tc_vmul(1, 9), (1<<1)); // 18
