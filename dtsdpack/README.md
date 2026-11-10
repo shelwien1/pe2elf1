@@ -99,7 +99,7 @@ in the tuning sets (below; the whole of `s.2.dts` since the HF VQ groups' scores
 `s.2.dts` in what the HF VQ groups' scores and the ADPCM predictors' codewords were learned from.
 A 96 kHz stream's 64-band analysis costs more: `96-24.dts`'s core (1.9 MB) compresses and
 decompresses in 3.2 seconds. The decoded WAVs' searches cost too; every stream below goes at about
-550 KB of core a second or more both ways, the 7-frame samples (7 KB, 9-21 ms each way, a third of
+500 KB of core a second or more both ways, the 7-frame samples (7 KB, 9-21 ms each way, a third of
 that the kernel mapping the pages they touch) at 330 KB a second or more: the searches run on
 every value of a stream's first 2048, which is all of theirs.
 
