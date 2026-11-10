@@ -112,12 +112,22 @@ FFmpeg's small DTS-HD MA samples (`xll_*`, 7 frames each) round-trip too:
 | `xll_71_24_48_768_1` | 7168 | 493 (6.88%) | the same, the rear surrounds' sign inverted |
 | `xll_xch_61_24_48_768` | 7168 | 969 (13.52%) | its 6.1's 5.1, the back centre in the surrounds at about -3 dB; and in the XCH extension, the back centre |
 | `xll_71_24_96_768` | 7168 | 385 (5.37%) | the 96 kHz WAV's 64-band analysis's lower half, a downmix as the 48 kHz one's |
-| `xll_51_16_192_768_1` | 7168 | 3444 (48.05%) | coded from a version of the 192 kHz WAV dtsdpack hasn't: nothing lines up |
+| `xll_51_16_192_768_1` | 7168 | 1801 (25.13%) | the 64-band analysis's lower half of the 192 kHz WAV decimated by 2, about |
+| `xll_51_16_192_768_0` | 7168 | 1778 (24.80%) | the same (the same WAV, another core) |
 
 Before the downmixes were found, the 7.1 and 6.1 ones went to 36-38%: only 3 of their core's
 channels lined up with a WAV channel, and those at the wrong gain in the 7.1 ones. With its XCH
 extension kept as bytes (about 140 of each frame's 1024), the 6.1 one went to 26.79%; before the
-64-band analysis, the 96 kHz one to 42.16%.
+64-band analysis, the 96 kHz one to 42.16%. The 192 kHz ones went to 48% until their WAV was
+decimated by 2 (`wav.inc`'s `WAV_DEC2`): the 96 kHz signal's 64-band analysis then lines up with
+their cores, as a 96 kHz stream's does with its WAV's, 7 samples later. A lowpass with its centre
+0.58 of an input sample earlier lines up best (by a least squares fit of the decimation filter to
+the cores' samples, and by their sizes); the samples' content ends below 15 kHz, where any flat
+lowpass does as well, so the cutoff, 40 kHz, is a guess. The fit is near, not exact: their
+cores' indexes are the audio's 82% of the time (the other samples' 95-99%), as in the best fit
+70% of the centre channel's (finely coded: 7 bits a sample) lie within half a step of it (a 48
+kHz sample's 91%), and no longer filter, nor a decimation by 4 to the 32-band analysis, does
+better.
 
 Streams of FFmpeg's samples site (`samples.ffmpeg.org/A-codecs/DTS/dts/`, some 5 MB pieces of
 longer ones) and FATE's `dts_es.dts`, their cores against FFmpeg's decodes (lossless for DTS-HD MA,
@@ -139,10 +149,24 @@ No stream at hand has XXCH in its core substream: FATE's XXCH samples (`xxch_71_
 `xbr_xxch_71_24_48_3840`, `x96_xxch_71_24_96_3840`, 7 frames each) have it in their extension
 substreams. Their XXCH frames moved into their core frames after the subframes (EXT_AUDIO set,
 EXT_AUDIO_ID 6), the extension substream dropped, make core-substream XXCH streams that FFmpeg
-decodes as 7.1; dtsdpack round-trips them against those decodes (21.64%, 22.63%, 15.88%). Their
+decodes as 7.1; dtsdpack round-trips them against those decodes (18.14%, 19.91%, 15.88%; 21.64%
+and 22.63% before the binding stopped taking a gain a clipped decode's fit makes, below). Their
 signal is a silent frame, then white noise near full scale; the decoder undoes XXCH's downmix
 pre-scaling (every core channel times 1.41), so the decodes clip, and only partly line up with
 any core (their own cores against their core-only decodes, which don't clip, make 18.91%).
+
+FATE's other DTS samples (`dcadec-suite`'s; 7 frames each, the 96 kHz ones 14) round-trip too,
+against FFmpeg's decodes of the whole streams. Their signal is the same noise near full scale, and
+their decodes clip too (0.3-1.2% of the samples):
+
+| Stream | Core | dtsdpack |
+|---|---:|---:|
+| `core_51_24_48_768_0`, `_1` (5.1) | 7168 | 2109 (29.42%), 2128 (29.69%) |
+| `xch_61_24_48_768` (6.1 by XCH) | 7168 | 2137 (29.81%) |
+| `x96_51_24_96_1509` (X96) | 14084 | 3779 (26.83%) |
+| `x96_xch_61_24_96_3840` | 14084 | 3079 (21.86%) |
+| `xbr_51_24_48_3840`, `xbr_xch_61_24_48_3840` (XBR: its residuals in the decode) | 14084 | 2758 (19.58%), 3832 (27.21%) |
+| `xll_x96_51_24_96_1509` (DTS-HD MA, X96) | 14084 | 2081 (14.78%) |
 
 ## How it works
 
@@ -521,8 +545,12 @@ its uncertainty squared: its quantization's, step^2 / 12, and the WAV's own, hal
 them gives its best single channel and its best pair, each with its gains as fitted and as the
 downmix table's entries either side (signed); with the channel the alignment found as it is and
 by the table's gains of an unweighted fit, the candidates. Of those, the one that makes the most of
-the channel's indexes exactly is its binding (a simpler one unless another makes 0.5% more), if it
-makes a fifth of them. (Against a decoded WAV, two kinds of samples break a fit by steps alone: a
+the channel's indexes exactly is its binding (a simpler one unless another makes 0.5% more; not one
+whose gains are all under 1/64), if it makes a fifth of them. (A clipped decode's distortion swamps
+a channel's quiet subbands at fine steps: their fit's gains came out at 0.00007 for channels that
+are their WAV channels as they are, and as most of those channels' indexes are 0, such a gain made
+more of them exactly than the right one: FATE's 5.1 and 6.1 samples' cores came out 36% and 18%
+bigger, the XXCH ones' 19% and 14%.) (Against a decoded WAV, two kinds of samples break a fit by steps alone: a
 silent subband the encoder gave a fine step, as `open bitrate.dts`'s has ABITS 24 at the smallest
 scale factor, all its indexes 0, where the WAV has its rounding; and silence beside a sudden loud
 onset, where the decoder's filterbank, FILTS 0's not quite perfect reconstruction, leaves a few
@@ -615,17 +643,19 @@ files.
 
 ### The format
 
-"dtsdpack", the format's version (17), the level, the WAV's binding (the offset; each core channel's
+"dtsdpack", the format's version (32), the level, the WAV's binding (the offset; each core channel's
 WAV channel, the second of its mix and their gains, Q23; the LFE's channel; the WAV's samples to
-the core's, 1 or 2; the WAV's format, size and the CRC-32 of its first 64 KB), then the
+the core's, 1, 2 or 4 (decimated by 2, then 2); the WAV's format, size and the CRC-32 of its first
+64 KB), then the
 range coded chunks (a frame as records, bytes between frames, a frame kept as bytes), the end, and
 the CRC-32 of the core stream, which `d` checks.
 
 ## What it doesn't do
 
 - A core channel is bound to at most two of the WAV's channels: one that mixes more (a stereo core
-  downmixed from 5.1) is bound to its best two, or isn't. A 192 kHz stream's core isn't bound at
-  all (nothing the 32- or 64-band analysis makes of its WAV lines up).
+  downmixed from 5.1) is bound to its best two, or isn't. A 192 kHz stream's WAV, decimated by 2
+  by a lowpass fitted to FFmpeg's two samples, lines up with its core only nearly (above); a
+  176.4 kHz one's is taken the same way, untried.
 - The LFE is predicted at 64x only (LFF 2); a 128x LFE (LFF 1) is coded by the model alone.
 - XXCH has been tried only on the streams made from FATE's (above), and only one channel set is
   parsed, as in FFmpeg; X96 and XXCH in the extension substream aren't in the core (dtssplit keeps

@@ -58,7 +58,7 @@
 //   raw  bytes kept as bytes, the bits after the subframes, the extension's other bits
 // (Whether a subband sample's index is the audio's goes straight to the coder: model_smp.inc.)
 //
-// File format: "dtsdpack", the format version 31, the level, the WAV's binding (how the core lines
+// File format: "dtsdpack", the format version 32, the level, the WAV's binding (how the core lines
 // up with it, and what the WAV was: coro.inc), then the range coded chunks (kind: end, a frame as
 // records, bytes between frames, a frame kept as bytes; then the records or a length and the
 // bytes); after the end, the CRC-32 of the core stream.
@@ -217,7 +217,8 @@ static int compress(const char* in_name, const char* wav_name, const char* out_n
     else
       snprintf(bound, sizeof bound, "%d channel%s%s against the WAV%s (offset %d, correlation %.4f%s)", nb,
                nb > 1 ? "s" : "", k.bind.lfe >= 0 ? " and the LFE" : "",
-               k.bind.up == 2 ? "'s 64-band analysis" : "", (int)k.bind.off, k.corr, mix);
+               k.bind.up == 2 ? k.bind.dec == 2 ? "'s 64-band analysis at half its rate" : "'s 64-band analysis" : "",
+               (int)k.bind.off, k.corr, mix);
   }
   r = k.close(r);
   if (!r && !o.quiet) st.report(in_name, cost, orig, (double)k.s.pos, o.level, o.stats, bound);

@@ -161,6 +161,7 @@ struct DtsCoro : CoIo<Coder<f_DEC> > {
     if (const char* why = bind_differs(h + DP_AT_BIND, *wav))
       return fail(E_DATA, "the WAV isn't the one it was compressed with (%s differs)", why);
     bind = bind_get(h + DP_AT_BIND);
+    wav->set_dec(bind.dec);
     coder_start();
     k.start(this, wav, bind);
     while ((kind = k.code_kind(CK_END)) != CK_END) {

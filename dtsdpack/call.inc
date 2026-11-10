@@ -237,6 +237,7 @@ struct Call {
       if (!m) continue;
       if (!core_parse(pre + i, m, r) && wav.rate) {
         core_hz = (U32)core_rate(r.sfreq);
+        if (wav.rate == 4 * core_hz) wav.set_dec(2);  // (decimated by 2: twice the core's rate)
         if (wav.rate == 2 * core_hz) up = 2;
         else if (wav.rate != core_hz) return;  // (nothing the analysis makes of it lines up: not searched)
       }
@@ -301,6 +302,7 @@ struct Call {
     for (int k = 0; k < nl; k++) last = imax(last, 2 * ln[k]);
     wav.need(0, 32 * up * (last + 1) + (1536 + 512) * up);
     bind = find_bind(wav, best, nb, nch, filts, up, &corr);
+    bind.dec = (S8)wav.dec;
     if (bind.map[0] >= 0) find_mixes(pre, fpos, flen, ft, nf, nch, filts);
     // the LFE: the WAV channel no core channel has whose decimation correlates best with it
     if (bind.map[0] < 0 || nl < 16) return;
@@ -354,8 +356,8 @@ struct Call {
   // first (MixSums), each with its gains as fitted and as the downmix table's entries either side
   // (gain_near()), and the channel the alignment found, as it is and by the table's gains of an
   // unweighted fit; of those, the one that makes the most of the channel's indexes exactly
-  // (MixHits; by 0.5% of them at least over the ones before it), where that is a fifth of them at
-  // least (else the channel isn't bound)
+  // (MixHits; by 0.5% of them at least over the ones before it; not one whose gains are all under
+  // 1/64), where that is a fifth of them at least (else the channel isn't bound)
   void find_mixes(pcU8 pre, const U32* pos, const U32* len, const S64* ft, int nf, int nch, int filts) {
     static MixSums ms;
     static MixHits mh;
@@ -423,9 +425,12 @@ struct Call {
     free(keep);
     for (int ch = 0; ch < NCH; ch++) {
       if (!mh.nc[ch] || !mh.n[ch]) continue;
-      int bk = 0;  // (the candidates in order of preference: one channel before two, the table's gains before the fit's)
-      for (int k = 1; k < mh.nc[ch]; k++)
-        if (mh.hits[ch][k] > mh.hits[ch][bk] + mh.n[ch] / 200) bk = k;
+      int bk = 0;  // (the candidates in order of preference: one channel before two, the table's gains before the fit's;
+      for (int k = 1; k < mh.nc[ch]; k++) {  // not one whose gains are all under 1/64, as a clipped WAV's fit makes:
+        const MixCand& m = mh.c[ch][k];        // its distortion swamps the quiet subbands with fine steps)
+        auto big = [](S32 g) { return (g < 0 ? -(S64)g : g) >= BIND_ONE / 64; };
+        if ((big(m.g1) || (m.w2 >= 0 && big(m.g2))) && mh.hits[ch][k] > mh.hits[ch][bk] + mh.n[ch] / 200) bk = k;
+      }
       const MixCand& m = mh.c[ch][bk];
       if (mh.hits[ch][bk] * 5 < mh.n[ch]) {
         bind.map[ch] = bind.map2[ch] = -1, bind.g1[ch] = BIND_ONE, bind.g2[ch] = 0;
