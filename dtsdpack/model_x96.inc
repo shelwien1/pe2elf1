@@ -22,6 +22,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
   static constexpr int NB = NSUB96;
   // the subframe's
   int nsmp9, bd9[NCH];          // its samples; whether the channel has the audio's (X9)
+  int fb9;                      // its first block in the frame
   S64 X9[NCH][NB][NSMP];        // the audio's subband samples (2^-AQ_F)
   int ac9[NCH][NB], es9[NCH][NB], ec9[NCH][NB], esmax9[NCH];
   S64 lpc9[NCH][NB][4];
@@ -55,6 +56,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
   // the core's decoded samples below band 32; their LPC, autocorrelation, energy and how it goes
   void x96_subframe(const CoreRec& r, int sf) {
     const CoreSub& cs = r.sub[sf];
+    fb9 = r.nblk;
     B::sst = 0;
     nsmp9 = cs.nssc * 8;
     for (int ch = 0; ch < NCH; ch++) bd9[ch] = 0;
@@ -176,7 +178,12 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
         const int src = r.x96joinx[ch] - 1;
         int p = -1, conf = 8;
         if (bd && src >= 0 && bd9[src]) p = x96_joint(r, ch, src, b, &conf);
-        const S32 A = p >= 0 ? p + 65 : hjs[ch][b], P = p >= 0 ? hjs[ch][b] : 0;  // (coded 128 up: index p is p - 64)
+        S32 A = p + 65, P = hjs[ch][b];  // (coded 128 up: index p is p - 64)
+        if (p < 0) {  // (else, the source too quiet to say, a quarter of the sum of the last one and the
+                      // subband below's, each 0 where none: each correlates 0.4 with it, `96-24.dts`'s)
+          const int u = (hjs[ch][b] ? hjs[ch][b] - 129 : 0) + (b > r.x96nsubs[ch] ? s.jscale[ch][b - 1] : 0);
+          A = 129 + ((u + 2) >> 2), P = 0;
+        }
         return side_code(SF_JSCALE, ch, b, v + 128, lo + 128, hi + 128, 0, A, P, conf, 0, 9) - 128;
       }
       case F_HFVQ:  // (a pair of subsubframes' vector: its 16 samples, at the subband's scale factor)
@@ -361,7 +368,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
   // sample j of channel ch's subband b (its index v in lo..hi): as ModelSmp's code_q(), at X96's
   // step and scale; then the decoder's sample, for the ADPCM predictions after it
   S64 x96_q(const CoreRec& r, const X96Sub& s, int ch, int b, int j, S64 v, S64 lo, S64 hi) {
-    const int a = s.abits[ch][b] - 1, pm = s.pmode[ch][b], bd = bd9[ch];
+    const int a = s.abits[ch][b] - 1, pm = s.pmode[ch][b], bd = bd9[ch] && !B::past_end(B::tframe + fb9 + j);
     const S64 ss = x96_ss(s, ch, b);
     const S32 pred = pm ? adpcm_pred(s.pvq[ch][b], yh9[ch][b]) : 0;
     S64 qp = 0, alt = 0;

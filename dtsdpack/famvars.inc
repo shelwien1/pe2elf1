@@ -106,7 +106,8 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      edge falls), ag where sn is the staircase's or the allocation table's, what the other one
 //      says (0 none, 1 the same, 2 the ABITS across sn's nearer edge, 3 another; 4 a transient's,
 //      whose guess at the other of its energies, the second guess, isn't sn: model_smp.inc's
-//      ab_transient())
+//      ab_transient()); where sn is the bit allocation search's, what the staircase's or table's
+//      guess says (0 none, 1 the same, 2 the last ABITS, 3 another)
 // scl: kd (0 a subband's first scale factor, 1 its second, after its transient, 2 a high-frequency
 //      VQ subband's, 3 the LFE's), ab its ABITS (1 + it, 0 none), pm whether it predicts, pk whether the audio
 //      predicts the scale factor, pn how near its RMS lies to the midpoint between two (0-7), lp

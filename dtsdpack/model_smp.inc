@@ -25,6 +25,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   S64 t0;         // the subframe's first
   int nsmp;       // the subframe's samples
   int ext_set;    // (the WAV's continuation past its end: 1 made, 2 taken or not: smp_subframe())
+  int past_on;    // (and whether the audio far past it is the encoder's: past_end())
   int bound[NCH];  // whether the subframe's channel has the audio's subband samples (X)
   S64 X[NCH][NSUB][NSMP];  // the audio's subband samples in the subframe (2^-AQ_F)
   S64 xh[NCH][NSUB][4];    // the audio's last 4 before the subframe (xh[.][.][0] the last)
@@ -241,6 +242,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   }
   // a core frame not coded as records (kept as bytes): its blocks go by
   void skip_blocks(int n) { tnext += n; }
+  // whether block t's analysis window lies past the WAV's end by more than WAV_PAST samples (at the
+  // core's rate), and the continuation there isn't the encoder's input: a stream cut from a longer
+  // one ends with its WAV, but its last frame, 512 samples ahead, has the audio that went on, which
+  // no continuation makes; there an index is coded without the audio (past_on, a bit, as smp_subframe()
+  // finds the continuation making fewer than half of those indexes)
+  bool past_far(S64 t) const { return wav && 32 * bind.up * t + bind.off - (S64)wav->nsamp > WAV_PAST * bind.up; }
+  bool past_end(S64 t) const { return past_on && past_far(t); }
 
   // --- the subframe's audio --------------------------------------------------------------------------
 
@@ -279,6 +287,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         ext_set = 2;
         const int m = ENC && ext_hits(r, s, o0, 1) > ext_hits(r, s, o0, 0);
         wav->ext_on = c->code_bit(CO_ONE / 2, m);
+        int hp = 0, np = 0;
+        if (ENC) ext_hits(r, s, o0, wav->ext_on, &hp, &np);
+        past_on = c->code_bit(CO_ONE / 2, ENC && 2 * hp < np);
       }
     }
     S64 past[LFE_NP];  // (for the scale factor's prediction: the subframe's values as predicted)
@@ -351,7 +362,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   }
   // (c) the subframe's indexes the analysis makes with the WAV's continuation past its end (on) or
   // with 0s there: those of its bound channels' subbands that neither predict nor are VQ ones
-  int ext_hits(const CoreRec& r, const CoreSub& s, S64 o0, int on) {
+  // (*hp, *np: those of the samples whose windows lie past the WAV's end by WAV_PAST, and of them)
+  int ext_hits(const CoreRec& r, const CoreSub& s, S64 o0, int on, int* hp = nullptr, int* np = nullptr) {
     wav->ext_on = on;
     int h = 0;
     for (int ch = r.ch0(); ch < r.ch1(); ch++) {
@@ -365,7 +377,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           S64 qlo, qhi, alt;
           S128 dist;
           quant_range(r, ch, a, qlo, qhi);
-          h += requant(x[b], step_scale(r, s, ch, b, j >> 3), qlo, qhi, &dist, &alt) == s.q[ch][b][j];
+          const int hit = requant(x[b], step_scale(r, s, ch, b, j >> 3), qlo, qhi, &dist, &alt) == s.q[ch][b][j];
+          h += hit;
+          if (hp && past_far(t0 + j)) *hp += hit, ++*np;
         }
       }
     }
@@ -1363,8 +1377,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     int p = -1, pc = -1, ps = -1, near = SB_N - 1, conf = 0, tried = 0;
     if (bound[ch]) {
       S64 v_[NSMP];
-      const int n = tm ? (j ? scale_values(s, ch, b, tm, s.nssc, v_) : scale_values(s, ch, b, 0, tm, v_))
-                       : scale_values(s, ch, b, 0, s.nssc, v_);
+      int n = tm ? (j ? scale_values(s, ch, b, tm, s.nssc, v_) : scale_values(s, ch, b, 0, tm, v_))
+                 : scale_values(s, ch, b, 0, s.nssc, v_);
+      if (past_on && n) {  // (without the values whose windows lie far past the WAV's end, where some are left)
+        const int j0 = tm && j ? tm * 8 : 0;
+        int m = 0;
+        for (int i = 0; i < n; i++)
+          if (!past_end(t0 + j0 + i)) v_[m++] = v_[i];
+        if (m) n = m;
+      }
       if (n) {
         // (a lossless WAV's top subband: its RMS with the bottom one's leak's noise in it, 2^-40 of
         // that one's power, as the encoder's scale factor goes: 81.6% of `s.2.dts`'s, from 79.2%)
@@ -1454,25 +1475,26 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const S32 pred = pm ? adpcm_pred(s.pvq[ch][b], yh[ch][b]) : 0;
     S64 qp = 0, alt = 0;
     S128 dist = 0;
-    if (bound[ch]) qp = requant(X[ch][b][j] - shl64(pred, AQ_F), ss, lo, hi, &dist, &alt);
+    const int bnd = bound[ch] && !past_end(t0 + j);  // (`s.2.dts`'s first 3 MB 5.0% smaller, cut streams 0.5-5.7%)
+    if (bnd) qp = requant(X[ch][b][j] - shl64(pred, AQ_F), ss, lo, hi, &dist, &alt);
     M_smp_v D;
     D.ab = a;
     D.hw = sample_coding(r, ch, a);
-    D.pk = bound[ch];
-    D.nr = bound[ch] ? near_bucket(dist, (S128)ss << AQ_F, 17) : 0;
+    D.pk = bnd;
+    D.nr = bnd ? near_bucket(dist, (S128)ss << AQ_F, 17) : 0;
     // (the encoder's arithmetic errs by about its signal's level: the channel's loudest subband's)
-    D.nl = bound[ch] ? near_bucket(dist, ((S128)(r.shuff[ch] == 6 ? SF7 : SF6)[imax(esmax[ch] - 1, 0)] << 38), 28) : 0;
-    D.ql = bound[ch] ? imin(bit_len((U64)(qp < 0 ? -qp : qp)), 21) : 0;
+    D.nl = bnd ? near_bucket(dist, ((S128)(r.shuff[ch] == 6 ? SF7 : SF6)[imax(esmax[ch] - 1, 0)] << 38), 28) : 0;
+    D.ql = bnd ? imin(bit_len((U64)(qp < 0 ? -qp : qp)), 21) : 0;
     D.hm = imin(__builtin_popcount(miss[ch][b]), 3);
     D.pm = pm;
     D.bd = b;
     D.m1 = q1[ch][b] ? imin(q1[ch][b] - 1, 21) : 22;
     D.m2 = q2[ch][b] ? imin(q2[ch][b] - 1, 21) : 22;
-    D.sq = bound[ch] ? svar(qp) : 0;
+    D.sq = bnd ? svar(qp) : 0;
     D.s1 = qs[ch][b];
     int how;
-    v = code_index(D, v, bound[ch], qp, alt, lo, hi, &how, bound[ch] && !ss_rule() ? near_bucket(dist, (S128)tlev[ch][j] << 22, 28) : -1);
-    miss[ch][b] = (U8)(miss[ch][b] << 1 | (bound[ch] && how != 0));
+    v = code_index(D, v, bnd, qp, alt, lo, hi, &how, bnd && !ss_rule() ? near_bucket(dist, (S128)tlev[ch][j] << 22, 28) : -1);
+    miss[ch][b] = (U8)(miss[ch][b] << 1 | (bnd && how != 0));
     n_smp++;
     n_hit += how == 0;
     q2[ch][b] = q1[ch][b];

@@ -896,6 +896,7 @@ static S64 sf_int(Sf a, int q) {
 // in it; Levinson's recursion in the soft float), run on for WAV_EXT samples. Made once, as the end
 // is read (where the model takes it or 0s: model_smp.inc's smp_subframe()).
 constexpr int WAV_LPC = 64, WAV_FIT = 4096, WAV_EXT = 2048;
+constexpr int WAV_PAST = 192;  // (and an index whose window lies past the end by more, without the audio: model_smp.inc's past_end())
 static void wav_extend(WavIn& w) {
   if (w.ext || !w.ok || w.got != w.nsamp) return;
   w.ext = (S32*)xmalloc(sizeof(S32) * (size_t)w.nch * WAV_EXT);

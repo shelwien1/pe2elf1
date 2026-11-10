@@ -275,9 +275,12 @@ struct Model : ModelX96<f_DEC, LV> {
             bg = t >= 4 * st ? 1 : t >= 2 * st ? 2 : t >= st ? 3 : t > -st ? 4 : t > -2 * st ? 5 : t > -4 * st ? 6 : 7;
           }
         }
-        // (what the other of the staircase and the table says)
+        // (what the other of the staircase and the table says; where the first guess is the
+        // search's, what the one taken of them says: 1 the same, 2 the last ABITS, 3 another, 0
+        // none: a decoded WAV's search, right in 99.99% where they agree, misses 20% where not)
         const int og2 = ut ? sg0 : tg;
-        const int ag = tro >= 0 && tro != sg ? 4 : !fs || og2 < 0 ? 0 : og2 == sg ? 1 : og2 == alt ? 2 : 3;
+        const int sa = !fs && G && Sn == G ? (sg < 0 ? 0 : sg == G - 1 ? 1 : hist.abits[ch][b] && sg == hist.abits[ch][b] - 1 ? 2 : 3) : -1;
+        const int ag = sa >= 0 ? sa : tro >= 0 && tro != sg ? 4 : !fs || og2 < 0 ? 0 : og2 == sg ? 1 : og2 == alt ? 2 : 3;
         v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
                        s.pmode[ch][b], lbd, nb, mx, Sn, near_e ? 14 : nn, sc, eq, ms,
                        alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag);
