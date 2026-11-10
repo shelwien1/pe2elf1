@@ -93,14 +93,15 @@ Exit codes:
 | 3 MB from its middle (5.7 s) | 1068372 | 7189 (0.67%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 7360 (0.31%) | | |
 
-Compressing the whole of `s.2.dts`'s core takes 33 seconds (1.5 MB of core a second) and 50 MB of
-memory, decompressing it 33 seconds and 42 MB, on one thread of a 2.1 GHz Xeon. The rows were all
+Compressing the whole of `s.2.dts`'s core takes 29 seconds (1.7 MB of core a second) and 50 MB of
+memory, decompressing it 30 seconds and 43 MB, on one thread of a 2.1 GHz Xeon. The rows were all
 in the tuning sets (below; the whole of `s.2.dts` since the HF VQ groups' scores were learned), and
 `s.2.dts` in what the HF VQ groups' scores and the ADPCM predictors' codewords were learned from.
 A 96 kHz stream's 64-band analysis costs more: `96-24.dts`'s core (1.9 MB) compresses and
-decompresses in 3.6 seconds. The decoded WAVs' searches cost too; every stream below goes at about
-500 KB of core a second or more both ways, but for the 7-frame samples, whose 20-90 ms are the
-program starting.
+decompresses in 3.2 seconds. The decoded WAVs' searches cost too; every stream below goes at about
+550 KB of core a second or more both ways, the 7-frame samples (7 KB, 9-21 ms each way, a third of
+that the kernel mapping the pages they touch) at 330 KB a second or more: the searches run on
+every value of a stream's first 2048, which is all of theirs.
 
 FFmpeg's small DTS-HD MA samples (`xll_*`, 7 frames each) round-trip too:
 
@@ -505,9 +506,12 @@ c finds how the core lines up with the WAV before it starts (`call.inc`'s `find_
 doubles; the header keeps the result). The offset: from the core's first 4 MB, the 64 blocks with
 the most energy, decoded to their plain subband samples, against the WAV's analysis for each of
 its channels at the decoders' usual delays (0, 256, 512 and 1024 samples, times 2 for the 64-band
-analysis): one that correlates with the core's channel 0 at 0.999 or more is the offset. Else at
-every offset of -1024..1536 (times 2), by the 16 blocks with the most energy in channel 0, then the
-64 best of those by all the blocks: the best for channel 0 gives it. Then each core channel, XCH's and XXCH's too (`find_mixes()`): a core may be a downmix of the WAV, as a DTS-HD MA 7.1 stream's is (its
+analysis): one that correlates with the core's channel 0 at 0.999 or more is the offset; one at
+0.99 or more is where the best of the offsets within 32 of it is (the 3 best by the 16 blocks with
+the most energy in channel 0, then by all of them), where that lies inside them. Else at every
+offset of -1024..1536 (times 2), by those 16 blocks, then the 64 best of those by all the blocks:
+the best for channel 0 gives it. (A WAV at neither the core's rate nor twice it isn't searched:
+nothing lines up.) Then each core channel, XCH's and XXCH's too (`find_mixes()`): a core may be a downmix of the WAV, as a DTS-HD MA 7.1 stream's is (its
 lossless extension's primary channel set is the 5.1 the core was coded from, each surround the side
 and the rear surround, every channel scaled: coefficients of DTS's downmix table, FFmpeg's
 `ff_dca_dmixtable`, Q15). So over

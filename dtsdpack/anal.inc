@@ -87,24 +87,28 @@ static void analyze_sp(const S32* sp, const S64* fir, const S64 (*cq)[M], S64* x
   constexpr int L = 16 * M, H = M / 2;
   S32 mx = 0;
   for (int m = 0; m < L; m++) mx |= sp[m] < 0 ? ~sp[m] : sp[m];
-  S128 acc[2 * M];
   S64 a[M];
-  if (mx < (1 << 24)) {  // (samples of 25 bits at most: every sum in 64 bits, the halves' products, the same)
+  if (mx < (1 << 24)) {  // (samples of 25 bits at most: every sum in 64 bits, the halves' products, the same;
+    // the sums s h 2^20 + s l folded as their halves, then floored: s h + (s l >> 20), within 2^48)
     const int t = fir == FIR_64 ? 2 : fir == FIR_PERFECT ? 1 : 0;
     const S32 *fh = split_tabs.fh[t], *fl = split_tabs.fl[t];
     S64 sh[2 * M], sl[2 * M];
     for (int i = 0; i < 2 * M; i++) sh[i] = sl[i] = 0;
     for (int k = 0; k < L; k += 2 * M)
       for (int i = 0; i < 2 * M; i++) sh[i] += (S64)sp[k + i] * fh[k + i], sl[i] += (S64)sp[k + i] * fl[k + i];
-    for (int i = 0; i < 2 * M; i++) acc[i] = (S128)sh[i] * (1 << 20) + sl[i];
+    for (int k = H; k < M; k++) sh[k] -= sh[M - 1 - k], sl[k] -= sl[M - 1 - k];
+    for (int k = M; k < M + H; k++) sh[k] += sh[3 * M - 1 - k], sl[k] += sl[3 * M - 1 - k];
+    for (int i = 0; i < M; i++) a[i] = sh[i + H] + (sl[i + H] >> 20);
   } else {
+    S128 acc[2 * M];
     for (int i = 0; i < 2 * M; i++) acc[i] = 0;
     for (int m = 0; m < L; m++) acc[m & (2 * M - 1)] += (S128)sp[m] * fir[m];
+    for (int k = H; k < M; k++) acc[k] -= acc[M - 1 - k];
+    for (int k = M; k < M + H; k++) acc[k] += acc[3 * M - 1 - k];
+    for (int i = 0; i < M; i++) a[i] = (S64)(acc[i + H] >> 20);
   }
-  for (int k = H; k < M; k++) acc[k] -= acc[M - 1 - k];
-  for (int k = M; k < M + H; k++) acc[k] += acc[3 * M - 1 - k];
   S64 amax = 0;
-  for (int i = 0; i < M; i++) a[i] = (S64)(acc[i + H] >> 20), amax |= a[i] < 0 ? ~a[i] : a[i];  // (2^-24 of a sample)
+  for (int i = 0; i < M; i++) amax |= a[i] < 0 ? ~a[i] : a[i];  // (2^-24 of a sample)
   if (amax < ((S64)1 << 46)) {  // (a = h 2^23 + l: the products in 56 bits, 64 of them in 62)
     const S32(*chp)[M] = (const S32(*)[M])(M == 64 ? &split_tabs.ch64[0][0] : &split_tabs.ch32[0][0]);
     const S32(*clp)[M] = (const S32(*)[M])(M == 64 ? &split_tabs.cl64[0][0] : &split_tabs.cl32[0][0]);
@@ -242,7 +246,8 @@ static INLINE S64 requant(S64 v, S64 ss, S64 lo, S64 hi, S128* dist, S64* alt) {
   const S128 num = shl128(v, 22), den = (S128)ss << AQ_F;
   const int neg = num < 0;
   const S128 a = neg ? -num : num;
-  const S128 qa = (2 * a + den) / (2 * den);  // floor(a / den + 1/2)
+  const S128 qa = !(a >> 61) && !(den >> 61) ? (S128)((2 * (U64)a + (U64)den) / (2 * (U64)den))  // (in 64 bits
+                                              : (2 * a + den) / (2 * den);  // where it fits) floor(a / den + 1/2)
   const S128 r = a - qa * den;                 // -den/2 .. den/2
   *dist = den / 2 - (r < 0 ? -r : r);
   S64 q = (S64)qa, o = r >= 0 ? q + 1 : q - 1;
@@ -553,8 +558,8 @@ static const S16 HF_GC[32][32] = {
 static INLINE S128 hf_group_dist(int g, const S64* x, int n, S64 sc) {
   S128 d = 0;
   for (int j = 0; j < n; j++) {
-    const S128 e = (S128)x[j] * 8192 - shl128((S128)HF_GC[g][j] * sc, AQ_F);
-    d += e * e;
+    const S64 e = x[j] * 8192 - shl64((S64)HF_GC[g][j] * sc, AQ_F);  // (|x| < 2^40, |HF_GC| < 2^14: 2^54)
+    d += (S128)e * e;
   }
   return d;
 }
@@ -570,8 +575,8 @@ static INLINE S128 hf_group_score(const S32 (*W)[16], const S64* E, int g, const
   if (n != 16) return hf_group_dist(g, x, n, sc);
   S128 d = 0;
   for (int j = 0; j < 16; j++) {
-    const S128 e = (S128)x[j] * 8192 - shl128((S128)W[g][j] * sc, AQ_F);
-    d += e * e;
+    const S64 e = x[j] * 8192 - shl64((S64)W[g][j] * sc, AQ_F);  // (|W| < 2^16: 2^56)
+    d += (S128)e * e;
   }
   return d + shl128((S128)E[g] * sc * sc, 32);
 }
@@ -579,59 +584,150 @@ static INLINE S128 hf_group_score(const S32 (*W)[16], const S64* E, int g, const
 static INLINE S128 hf_dist(int q, const S64* x, int n, S64 sc) {
   S128 d = 0;
   for (int j = 0; j < n; j++) {
-    const S128 e = (S128)x[j] * 16 - shl128((S128)HF_VQ[q][j] * sc, AQ_F);
-    d += e * e;
+    const S64 e = x[j] * 16 - shl64((S64)HF_VQ[q][j] * sc, AQ_F);  // (2^47)
+    d += (S128)e * e;
   }
   return d;
-}
-
-// The distance of group g's entry nearest the samples x (as hf_dist()'s), or cap where that is
-// more: the samples by jo (n of them, the largest first), each entry's sum left where it reaches
-// the nearest's so far (the same)
-static S128 hf_group_min(int g, const S64* x, const U8* jo, int n, S64 sc, S128 cap) {
-  S128 best = cap;
-  for (int i = 0; i < 32; i++) {
-    const S8* const e8 = HF_VQ[g * 32 + i];
-    S128 d = 0;
-    for (int k = 0; k < n && d < best; k++) {
-      const int j = jo[k];
-      const S128 e = (S128)x[j] * 16 - shl128((S128)e8[j] * sc, AQ_F);
-      d += e * e;
-    }
-    if (d < best) best = d;
-  }
-  return best;
 }
 
 // the entry most nearly a multiple of the samples x (n of them, at most 32): the one whose
 // projection leaves the least, (x e)^2 / (e e) the most (the first of equals); its scale is free
 struct HfEnergies {
-  S32 e[1024][4];  // each entry's energy over its first 8, 16, 24, 32 values
+  S32 e[4][1024];             // each entry's energy over its first 8, 16, 24, 32 values
+  double inv[4][1024], nz[4][1024];  // 1 over its square root (0 where it is 0); whether it isn't 0
   HfEnergies() {
     for (int q = 0; q < 1024; q++) {
       S32 s = 0;
       for (int j = 0; j < 32; j++) {
         s += HF_VQ[q][j] * HF_VQ[q][j];
-        if ((j & 7) == 7) e[q][j >> 3] = s;
+        if ((j & 7) == 7) e[j >> 3][q] = s, inv[j >> 3][q] = s > 0 ? 1 / sqrt((double)s) : 0, nz[j >> 3][q] = s > 0;
       }
     }
   }
 };
 static const HfEnergies hf_energies;
+// The dot products of x (n values, at most 32) with each entry's first n, exactly, and as doubles:
+// *dot and *dd, 1024 of each (valid to the next call); in doubles where |x| < 2^40 (whether: the
+// result; a product within 2^47, the sums 2^52, integers a double holds whatever their order), a
+// group's 32 entries at a time, as HfT32 has them; else in 64 bits. (The values' kept, 32 of them
+// by a hash: a subband's scale factor search, then its vector's, take the same.)
+struct HfT32 {
+  double t[32][32][32];  // group g's entries' value j: t[g][j]
+  HfT32() {
+    for (int q = 0; q < 1024; q++)
+      for (int j = 0; j < 32; j++) t[q >> 5][j][q & 31] = HF_VQ[q][j];
+  }
+};
+static const HfT32 hf_t32;
+static bool hf_dots(const S64* x, int n, const S64** dot, const double** dd) {
+  struct Kept {
+    S64 x[32], d[1024];
+    double f[1024];
+    int n;
+    bool small;
+  };
+  static Kept kept[32];
+  static bool init = false;
+  if (!init) {
+    for (int i = 0; i < 32; i++) kept[i].n = -1;
+    init = true;
+  }
+  U64 h = (U64)n;
+  for (int j = 0; j < n; j++) h = (h ^ (U64)x[j]) * 0x9E3779B97F4A7C15ull;
+  Kept& e = kept[h >> 59];
+  *dot = e.d, *dd = e.f;
+  if (e.n == n && !memcmp(x, e.x, sizeof(S64) * n)) return e.small;
+  S64 mx = 0;
+  for (int j = 0; j < n; j++) mx |= x[j] < 0 ? -x[j] : x[j];
+  if (mx >= (S64)1 << 40) {
+    for (int q = 0; q < 1024; q++) {
+      S64 d = 0;
+      for (int j = 0; j < n; j++) d += x[j] * HF_VQ[q][j];
+      e.d[q] = d, e.f[q] = (double)d;
+    }
+    e.small = false;
+  } else {
+    double xd[32];
+    for (int j = 0; j < n; j++) xd[j] = (double)x[j];
+    for (int g = 0; g < 32; g++) {
+      double a[32];
+      for (int i = 0; i < 32; i++) a[i] = 0;
+      for (int j = 0; j < n && mx; j++) {
+        const double* const t = hf_t32.t[g][j];
+        for (int i = 0; i < 32; i++) a[i] += xd[j] * t[i];
+      }
+      for (int i = 0; i < 32; i++) e.d[g * 32 + i] = (S64)a[i], e.f[g * 32 + i] = a[i];
+    }
+    e.small = true;
+  }
+  e.n = n;
+  memcpy(e.x, x, sizeof(S64) * n);
+  return e.small;
+}
 static int hf_shape(const S64* x, int n) {
   const int k = (n + 7) / 8 - 1;
+  const S64* dot;
+  const double* dd;
+  double sq[1024];
+  const bool small = hf_dots(x, n, &dot, &dd);
+  // (their x e over |e| in doubles first, -1 where e e is 0; then those within 2^-40 of the most,
+  // in order, exactly: of them, the first of the best, as comparing all of them finds it)
+  double top = -1;
+  if (small) {
+    const double *iv = hf_energies.inv[k], *nz = hf_energies.nz[k];
+    for (int q = 0; q < 1024; q++) {
+      const double a = fabs(floor(dd[q] * (1.0 / 256)));  // (dot >> 8: exactly)
+      sq[q] = a * iv[q] * nz[q] + (nz[q] - 1);
+    }
+    for (int q = 0; q < 1024; q++) top = sq[q] > top ? sq[q] : top;
+    if (top == 0)  // (all of them 0: the first)
+      for (int q = 0; q < 1024; q++)
+        if (sq[q] == 0) return q;
+  }
+  const double lim = top - top / 1099511627776.0;
   int bq = -1;
   S128 bd = 0;  // (the best's x e, squared, and e e: as a ratio)
   S64 be = 1;
   for (int q = 0; q < 1024; q++) {
-    const S64 ee = hf_energies.e[q][k];
-    if (ee <= 0) continue;
-    S64 d = 0;
-    for (int j = 0; j < n; j++) d += x[j] * HF_VQ[q][j];  // (|x| < 2^40: 2^47 a product, 2^52 the sum)
-    const S128 dd = (S128)(d >> 8) * (d >> 8);  // (2^88)
-    if (bq < 0 || dd * be > bd * ee) bd = dd, be = ee, bq = q;  // (2^88 times 2^19)
+    const S64 ee = hf_energies.e[k][q];
+    if (ee <= 0 || (small && sq[q] < lim)) continue;
+    const S64 d = dot[q];  // (|x| < 2^40: 2^47 a product, 2^52 the sum)
+    const S128 dd2 = (S128)(d >> 8) * (d >> 8);  // (2^88)
+    if (bq < 0 || dd2 * be > bd * ee) bd = dd2, be = ee, bq = q;  // (2^88 times 2^19)
   }
   return bq < 0 ? 0 : bq;
+}
+// Each group's entry nearest the samples x (n of them; at most 32): its distance (hf_dist()'s),
+// md[32], from their dot products with x (hf_dots()'s: dot; small, whether |x| < 2^40) and en,
+// x's energy in those units: en - 2^21 sc x e + 2^32 sc^2 e e, the same sum (where small,
+// en + 2^21 sc u, u = 2^11 sc e e - x e within 2^54)
+static void hf_group_mins(const S64* dot, bool small, int n, S64 sc, S128 en, S128* md) {
+  S32 et[1024];  // (the entries' energies over the n values)
+  if (!(n & 7)) memcpy(et, hf_energies.e[n / 8 - 1], sizeof et);
+  else
+    for (int q = 0; q < 1024; q++) {
+      et[q] = 0;
+      for (int j = 0; j < n; j++) et[q] += HF_VQ[q][j] * HF_VQ[q][j];
+    }
+  for (int g = 0; g < 32; g++) {
+    const S64* const dg = dot + g * 32;
+    const S32* const eg = et + g * 32;
+    if (small) {  // (sc < 2^23, e e < 2^19)
+      S64 m = ~(U64)0 >> 1;
+      for (int i = 0; i < 32; i++) {
+        const S64 u = shl64((S64)(S32)sc * eg[i], 11) - dg[i];
+        m = u < m ? u : m;
+      }
+      md[g] = en + (S128)m * shl64(sc, 21);
+    } else {
+      S128 m = 0;
+      for (int i = 0; i < 32; i++) {
+        const S128 d = en - shl128((S128)dg[i] * sc, 21) + shl128((S128)eg[i] * sc * sc, 32);
+        m = !i || d < m ? d : m;
+      }
+      md[g] = m;
+    }
+  }
 }
 
 // Candidates in the order of their distance (k), ties by index (i): the rank of one, and the one of
@@ -800,17 +896,29 @@ static void wav_extend(WavIn& w) {
   w.ext_n = WAV_EXT;
   static_assert(WAV_FIT <= WAV_WIN, "the samples fitted are in the window");
   const S64 N = (S64)w.nsamp, n = N < WAV_FIT ? N : WAV_FIT;  // (those fitted: the ring has them)
-  S64* const xw = (S64*)xmalloc(sizeof(S64) * WAV_FIT);  // (not on the coroutine's stack)
+  // (not on the coroutine's stack: the windowed samples, as h 2^24 + l, 0 <= l < 2^24, and h + l;
+  // the history and the continuation)
+  S32* const xh = (S32*)xmalloc(sizeof(S32) * (3 * WAV_FIT + WAV_LPC + WAV_EXT));
+  S32* const xl = xh + WAV_FIT;
+  S32* const xs = xl + WAV_FIT;
+  S32* const hb = xs + WAV_FIT;
   for (int c = 0; c < w.nch; c++) {
     S32* e = w.ext + (size_t)c * WAV_EXT;
     memset(e, 0, sizeof(S32) * WAV_EXT);
     if (n <= 2 * WAV_LPC) continue;
-    for (S64 k = 0; k < n; k++) xw[k] = (S64)w.at(c, N - n + k) * (k + 1) * (2 * n - k);  // (|x| < 2^23: within 2^46)
+    for (int k = 0; k < (int)n; k++) {
+      const S64 v = (S64)w.at(c, N - n + k) * (k + 1) * (2 * n - k);  // (|x| <= 2^23: within 2^48)
+      xh[k] = (S32)(v >> 24), xl[k] = (S32)(v & 0xFFFFFF), xs[k] = xh[k] + xl[k];
+    }
     S128 r[WAV_LPC + 1];
-    for (int l = 0; l <= WAV_LPC; l++) {
-      S128 t = 0;
-      for (S64 k = l; k < n; k++) t += (S128)xw[k] * xw[k - l];
-      r[l] = t;
+    for (int l = 0; l <= WAV_LPC; l++) {  // (the products' sums, h h, l l and (h + l)(h + l): within 2^62)
+      S64 hh = 0, ss = 0, ll = 0;
+      for (int k = l; k < (int)n; k++) {
+        hh += (S64)xh[k] * xh[k - l];
+        ss += (S64)xs[k] * xs[k - l];
+        ll += (S64)xl[k] * xl[k - l];
+      }
+      r[l] = shl128(hh, 48) + shl128(ss - hh - ll, 24) + ll;
     }
     if (r[0] <= 0) continue;
     Sf R[WAV_LPC + 1], a[WAV_LPC + 1], t[WAV_LPC + 1];
@@ -833,19 +941,31 @@ static void wav_extend(WavIn& w) {
     }
     if (m <= WAV_LPC) continue;  // (not a fit: 0s)
     S64 q[WAV_LPC + 1];  // (the predictor, Q30: x[t] by sum q_i x[t - i])
+    S64 qa = 0;          // (the sum of |q_i|, where under 2^39: the sums in 64 bits)
     for (int i = 1; i <= WAV_LPC; i++) {
       Sf u = a[i];
       u.m = -u.m;
       q[i] = sf_int(u, 30);
+      qa = qa < (S64)1 << 39 ? qa + (q[i] < 0 ? -q[i] : q[i]) : qa;
     }
+    for (int i = 0; i < WAV_LPC; i++) hb[i] = w.at(c, N - WAV_LPC + i);  // (the last samples, then e)
     for (int k = 0; k < WAV_EXT; k++) {
-      S128 p = 0;
-      for (int i = 1; i <= WAV_LPC; i++) p += (S128)q[i] * (k - i >= 0 ? e[k - i] : w.at(c, N + k - i));
-      const S64 v = (S64)((p + ((S128)1 << 29)) >> 30);
+      const S32* const h = hb + WAV_LPC + k;
+      S64 v;
+      if (qa < (S64)1 << 39) {  // (|x| <= 2^23)
+        S64 p = 0;
+        for (int i = 1; i <= WAV_LPC; i++) p += q[i] * h[-i];
+        v = (p + ((S64)1 << 29)) >> 30;
+      } else {
+        S128 p = 0;
+        for (int i = 1; i <= WAV_LPC; i++) p += (S128)q[i] * h[-i];
+        v = (S64)((p + ((S128)1 << 29)) >> 30);
+      }
       e[k] = (S32)(v < -(1 << 23) ? -(1 << 23) : v > (1 << 23) - 1 ? (1 << 23) - 1 : v);
+      hb[WAV_LPC + k] = e[k];
     }
   }
-  free(xw);
+  free(xh);
 }
 
 // The correction's least squares fit: the decimated samples around each LFE sample (f, NF of
@@ -948,9 +1068,11 @@ static void analyze_d(const double* s, const double* fir, const double (*cq)[M],
 // them), the WAV's samples to the core's up (its analysis's: analyze()): the offset and channel
 // whose analysis correlates best with core channel 0 over offsets -1024..1536 (times up), then each
 // other channel's best at that offset; a channel whose best correlation is under 0.9 is none. The
-// WAV's samples the probes need must be in its window. (The offsets by the 16 probes of most
-// energy in core channel 0 first, the 64 places best by them then by all the probes: the best of
-// those, as a search of all of them by all the probes finds it, where it is among them.)
+// WAV's samples the probes need must be in its window. (The decoders' usual delays first: where
+// one correlates all but perfectly, it; where by 0.99 or more, the best of the offsets within 32
+// of it, where that is inside them. Else the offsets by the 16 probes of most energy in core
+// channel 0 first, the 64 places best by them then by all the probes: the best of those, as a
+// search of all of them by all the probes finds it, where it is among them.)
 static Bind find_bind(const WavIn& w, const Probe* pr, int n, int nch, int filts, int up, double* corr0) {
   Bind b;
   b.none();
@@ -968,26 +1090,52 @@ static Bind find_bind(const WavIn& w, const Probe* pr, int n, int nch, int filts
     for (int i = 0; i < 64; i++) cq64[k][i] = (double)COSQ64[k][i];
   }
   if (n > PROBES_MAX) n = PROBES_MAX;
+  auto fetch = [&](int wc, S64 o, int len, double* d) {  // (samples o.. of WAV channel wc: at()'s, those
+    static S32 tmp[SPAN];                                  // read in a row from the ring)
+    const int k0 = (int)clip(-o, 0, len), k1 = (int)clip((S64)w.got - o, k0, len), nk = k1 - k0;
+    for (int k = 0; k < k0; k++) d[k] = 0;  // (before the WAV)
+    const S32* const q = w.span(wc, o + k0, nk, tmp);
+    double* const dk = d + k0;
+    for (int k = 0; k < nk; k++) dk[k] = q[k];
+    if (w.ext_on)  // (past what's read: its continuation, where made)
+      for (int k = k1; k < len; k++) d[k] = w.at(wc, o + k);
+    else
+      for (int k = k1; k < len; k++) d[k] = 0;
+  };
   int seg_wc = -1;
-  auto load = [&](int wc) {  // (the probes' windows of WAV channel wc)
+  auto load = [&](int wc) {  // (the probes' windows of WAV channel wc over all the offsets)
     if (seg_wc == wc) return;
     seg_wc = wc;
-    for (int i = 0; i < n; i++) {
-      const S64 o = (S64)M * pr[i].t + olo - L;
-      for (int k = 0; k < span; k++) seg[(size_t)i * span + k] = w.at(wc, o + k);
-    }
+    for (int i = 0; i < n; i++) fetch(wc, (S64)M * pr[i].t + olo - L, span, seg + (size_t)i * span);
   };
-  auto corr = [&](int ch, S64 off, const int* pi, int np) {
-    double sxy = 0, sxx = 0, syy = 0, x[8];
+  auto sums = [&](int ch, int i, const double* x, double* sm) {  // (probe i's to channel ch's sums)
+    for (int k = 0; k < 8; k++)
+      if (pr[i].ok[ch][k]) sm[0] += x[k] * pr[i].y[ch][k], sm[1] += x[k] * x[k], sm[2] += (double)pr[i].y[ch][k] * pr[i].y[ch][k];
+  };
+  auto anal = [&](const double* s, double* x) {
+    if (up == 2) analyze_d<64>(s, fir, cq64, x);
+    else analyze_d<32>(s, fir, cq32, x);
+  };
+  auto ratio = [](const double* sm) { return sm[1] > 0 && sm[2] > 0 ? sm[0] / sqrt(sm[1] * sm[2]) : 0; };
+  auto corr = [&](int ch, S64 off, const int* pi, int np) {  // (by the loaded windows)
+    double sm[3] = {0, 0, 0}, x[8];
     for (int j = 0; j < np; j++) {
       const int i = pi ? pi[j] : j;
-      const double* s = seg + (size_t)i * span + (off - olo);
-      if (up == 2) analyze_d<64>(s, fir, cq64, x);
-      else analyze_d<32>(s, fir, cq32, x);
-      for (int k = 0; k < 8; k++)
-        if (pr[i].ok[ch][k]) sxy += x[k] * pr[i].y[ch][k], sxx += x[k] * x[k], syy += (double)pr[i].y[ch][k] * pr[i].y[ch][k];
+      anal(seg + (size_t)i * span + (off - olo), x);
+      sums(ch, i, x, sm);
     }
-    return sxx > 0 && syy > 0 ? sxy / sqrt(sxx * syy) : 0;
+    return ratio(sm);
+  };
+  auto corr_at = [&](int wc, S64 off, int c0, int c1, double* r) {  // (channels c0..c1 - 1's at off,
+    static double win[1024];                                        // by the probes' windows there)
+    double sm[NCH][3], x[8];
+    for (int ch = c0; ch < c1; ch++) sm[ch][0] = sm[ch][1] = sm[ch][2] = 0;
+    for (int i = 0; i < n; i++) {
+      fetch(wc, (S64)M * pr[i].t + off - L, L, win);
+      anal(win, x);
+      for (int ch = c0; ch < c1; ch++) sums(ch, i, x, sm[ch]);
+    }
+    for (int ch = c0; ch < c1; ch++) r[ch] = ratio(sm[ch]);
   };
   // the probes of most energy in channel 0, in their order
   int p1[NB1], n1 = 0;
@@ -1014,15 +1162,49 @@ static Bind find_bind(const WavIn& w, const Probe* pr, int n, int nch, int filts
   // (the decoders' usual delays first, in the search's order: where one correlates all but
   // perfectly, it is the best)
   static const int USUAL[] = {0, 256, 512, 1024};
-  for (int wc = 0; wc < w.nch; wc++) {
-    load(wc);
+  for (int wc = 0; wc < w.nch; wc++)
     for (int u = 0; u < 4; u++) {
-      const double r = corr(0, (S64)USUAL[u] * up, nullptr, n);
+      double r;
+      corr_at(wc, (S64)USUAL[u] * up, 0, 1, &r);
       if (r > best) best = r, bo = (S64)USUAL[u] * up, bw = wc;
     }
-  }
   if (best >= 0.999) n1 = -1;  // (no search)
-  else best = -2;
+  else if (best >= 0.99) {  // (the offsets within 32 (times up) of it, by all the probes: their best
+    const S64 c = bo, r0 = 32 * up;  // where it is inside them; else the search)
+    const int ln = L + 2 * (int)r0 + 1;  // (each probe's samples over them)
+    static double loc[PROBES_MAX * (1024 + 2 * 64 + 1)];
+    S64 lb = c;
+    double lr = best;
+    for (int i = 0; i < n; i++) fetch(bw, (S64)M * pr[i].t + c - r0 - L, ln, loc + (size_t)i * ln);
+    auto lcorr = [&](S64 off, const int* pi, int np) {
+      double sm[3] = {0, 0, 0}, x[8];
+      for (int j = 0; j < np; j++) {
+        const int i = pi ? pi[j] : j;
+        anal(loc + (size_t)i * ln + (off - c + r0), x);
+        sums(0, i, x, sm);
+      }
+      return ratio(sm);
+    };
+    // (the 3 best by the 16 probes of most energy, where there are more; of those and it, the best
+    // by all of them, as of all the offsets in their order)
+    S64 tk[3] = {c, c, c};
+    double tr[3] = {-3, -3, -3};
+    for (S64 off = c - r0; off <= c + r0 && n1 > 0; off++) {
+      if (off == c) continue;
+      const double r = lcorr(off, p1, n1);
+      int k = 3;
+      while (k > 0 && r > tr[k - 1]) k--;
+      for (int z = 2; z > k; z--) tr[z] = tr[z - 1], tk[z] = tk[z - 1];
+      if (k < 3) tr[k] = r, tk[k] = off;
+    }
+    for (S64 off = c - r0; off <= c + r0; off++) {
+      if (off == c || (n1 > 0 && off != tk[0] && off != tk[1] && off != tk[2])) continue;
+      const double r = lcorr(off, nullptr, n);
+      if (r > lr) lr = r, lb = off;
+    }
+    if (lb > c - r0 && lb < c + r0) best = lr, bo = lb, n1 = -1;
+    else best = -2;
+  } else best = -2;
   struct Cand {
     double r;
     int wc;
@@ -1063,15 +1245,15 @@ static Bind find_bind(const WavIn& w, const Probe* pr, int n, int nch, int filts
   if (best < 0.9) return b;
   b.off = (S32)bo;
   b.map[0] = (S8)bw;
-  for (int ch = 1; ch < nch; ch++) {
-    double bc = -2;
-    int bwc = -1;
-    for (int wc = 0; wc < w.nch; wc++) {
-      load(wc);
-      const double r = corr(ch, bo, nullptr, n);
-      if (r > bc) bc = r, bwc = wc;
-    }
-    if (bc >= 0.9) b.map[ch] = (S8)bwc;
+  double bc[NCH], r[NCH];
+  int bwc[NCH];
+  for (int ch = 1; ch < nch; ch++) bc[ch] = -2, bwc[ch] = -1;
+  for (int wc = 0; wc < w.nch && nch > 1; wc++) {
+    corr_at(wc, bo, 1, nch, r);
+    for (int ch = 1; ch < nch; ch++)
+      if (r[ch] > bc[ch]) bc[ch] = r[ch], bwc[ch] = wc;
   }
+  for (int ch = 1; ch < nch; ch++)
+    if (bc[ch] >= 0.9) b.map[ch] = (S8)bwc[ch];
   return b;
 }

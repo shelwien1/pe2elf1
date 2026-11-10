@@ -211,7 +211,9 @@ static int compress(const char* in_name, const char* wav_name, const char* out_n
       if (k.bind.map[ch] >= 0) nb++, nm += k.bind.map2[ch] >= 0, ng += k.bind.map2[ch] < 0 && k.bind.g1[ch] != BIND_ONE;
     char mix[64] = "";
     if (nm || ng) snprintf(mix, sizeof mix, "; %d of them mixes of two, %d scaled", nm, ng);
-    if (!nb) snprintf(bound, sizeof bound, "the WAV not used (nothing lines up: correlation %.3f)", k.corr);
+    if (!nb && k.core_hz && k.wav.rate != k.core_hz && k.wav.rate != 2 * k.core_hz)
+      snprintf(bound, sizeof bound, "the WAV not used (at %u Hz, the core at %u)", (unsigned)k.wav.rate, (unsigned)k.core_hz);
+    else if (!nb) snprintf(bound, sizeof bound, "the WAV not used (nothing lines up: correlation %.3f)", k.corr);
     else
       snprintf(bound, sizeof bound, "%d channel%s%s against the WAV%s (offset %d, correlation %.4f%s)", nb,
                nb > 1 ? "s" : "", k.bind.lfe >= 0 ? " and the LFE" : "",

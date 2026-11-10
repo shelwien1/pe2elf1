@@ -7,6 +7,7 @@ static_assert(PROBES <= PROBES_MAX, "find_bind()'s");
 constexpr int LFE_PROBES = 1024;      // and the LFE samples its channel is
 constexpr int MIX_FRAMES = 256;       // and the frames each channel's mix is (find_mixes())
 constexpr int MIX_SEEN = 8192;        // (of the frames read first, at most)
+constexpr int MIX_KEEP = 1024;        // (their first blocks' analyses kept for the second pass)
 
 // The sums of a weighted least squares fit of each core channel's decoded subband samples (its
 // plain subbands', each by 1 / its uncertainty squared: its quantization's, step^2 / 12, and the
@@ -78,6 +79,7 @@ struct Call {
   RunCounts n;
   Bind bind;    // c: how the core lines up with the WAV
   double corr;  // and how well its channel 0 correlates there
+  U32 core_hz;  // the core's samples a second (as its first frame says; 0: not known)
 
   // from the file from to to (compare: s compares with to instead of writing it), the WAV wavf, its
   // progress line tagged tag: shown with -p, or where stderr is a terminal, but not with -q
@@ -95,6 +97,7 @@ struct Call {
     memset(&n, 0, sizeof n);
     bind.none();
     corr = 0;
+    core_hz = 0;
     pr.Init();
     if (o.progress || (!o.quiet && stderr_tty())) pr.start(tag, file_size(in));
   }
@@ -232,7 +235,11 @@ struct Call {
     for (size_t i = 0; i < n; i++) {
       const int m = frame_at(pre + i, n - i, eof, &r);
       if (!m) continue;
-      if (!core_parse(pre + i, m, r) && wav.rate && wav.rate == 2 * (U32)core_rate(r.sfreq)) up = 2;
+      if (!core_parse(pre + i, m, r) && wav.rate) {
+        core_hz = (U32)core_rate(r.sfreq);
+        if (wav.rate == 2 * core_hz) up = 2;
+        else if (wav.rate != core_hz) return;  // (nothing the analysis makes of it lines up: not searched)
+      }
       break;
     }
     const S64 tmax = (WAV_WIN - 4096 * up) / (32 * up);  // (the probes' audio within the window from 0)
@@ -314,21 +321,29 @@ struct Call {
 
   // a pass over (up to MIX_FRAMES of) the nf frames read first, at pre (where, how long, their
   // first blocks), evenly spaced: f(r, s, j, xw) for each block j of each of their subframes s,
-  // the WAV's channels' analysis there in xw
+  // the WAV's channels' analysis there in xw (those of the first keep_n blocks: in keep, where
+  // filled; else kept there, nw channels a block)
   template <class F>
-  void mix_pass(pcU8 pre, const U32* pos, const U32* len, const S64* ft, int nf, int nch, int filts, F& f) {
+  void mix_pass(pcU8 pre, const U32* pos, const U32* len, const S64* ft, int nf, int nch, int filts, F& f,
+                S64 (*keep)[32], int keep_n, bool filled) {
     static CoreRec r;
     static S64 xw[WAV_CH][32];
     const S64* fir = filts ? FIR_PERFECT : FIR_NONPERFECT;
-    const int ns = imin(nf, MIX_FRAMES);
+    const int ns = imin(nf, MIX_FRAMES), nw = wav.nch;
+    int nb = 0;
     for (int k = 0; k < ns; k++) {
       const int i = nf <= MIX_FRAMES ? k : (int)((S64)k * nf / MIX_FRAMES);
       if (core_parse(pre + pos[i], (int)len[i], r) || r.npchs != nch || r.filts != filts) continue;
       S64 tb = ft[i];
       for (int sf = 0; sf < r.nsubfs; sf++) {
         const CoreSub& s = r.sub[sf];
-        for (int j = 0; j < s.nssc * 8; j++, tb++) {
-          for (int wc = 0; wc < wav.nch; wc++) analyze(wav, wc, 32 * bind.up * tb + bind.off, bind.up, fir, xw[wc]);
+        for (int j = 0; j < s.nssc * 8; j++, tb++, nb++) {
+          S64(*const kp)[32] = nb < keep_n ? keep + (size_t)nb * nw : nullptr;
+          if (kp && filled) memcpy(xw, kp, sizeof(S64) * 32 * nw);
+          else {
+            for (int wc = 0; wc < nw; wc++) analyze(wav, wc, 32 * bind.up * tb + bind.off, bind.up, fir, xw[wc]);
+            if (kp) memcpy(kp, xw, sizeof(S64) * 32 * nw);
+          }
           f(r, s, j, xw);
         }
       }
@@ -353,7 +368,10 @@ struct Call {
     // (a silent subband the encoder gave a fine step and indexes of 0, as an open rate's may, is
     // the WAV's rounding noise there: without the WAV's uncertainty such samples outweigh the rest)
     ms.sg = 0.5 * (wav.bps == 2 ? 256 : 1);
-    mix_pass(pre, pos, len, ft, nf, nch, filts, ms);
+    // (the first pass's analyses, of its first MIX_KEEP blocks, for the second)
+    const int keep_n = MIX_KEEP;
+    S64(*const keep)[32] = (S64(*)[32])xmalloc(sizeof(S64) * 32 * wav.nch * (size_t)keep_n);
+    mix_pass(pre, pos, len, ft, nf, nch, filts, ms, keep, keep_n, false);
     const int nw = wav.nch;
     auto g = [&](int ch, int i, int k) { return i >= k ? ms.G[ch][i][k] : ms.G[ch][k][i]; };
     for (int ch = 0; ch < NCH; ch++) {  // (XCH's channel too: after the core's)
@@ -401,7 +419,8 @@ struct Call {
         mh.c[ch][n++] = MixCand{pi, pk, (S32)llround(pa * BIND_ONE), (S32)llround(pb * BIND_ONE)};
       }
     }
-    mix_pass(pre, pos, len, ft, nf, nch, filts, mh);
+    mix_pass(pre, pos, len, ft, nf, nch, filts, mh, keep, keep_n, true);
+    free(keep);
     for (int ch = 0; ch < NCH; ch++) {
       if (!mh.nc[ch] || !mh.n[ch]) continue;
       int bk = 0;  // (the candidates in order of preference: one channel before two, the table's gains before the fit's)

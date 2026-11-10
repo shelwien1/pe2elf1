@@ -1088,19 +1088,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int g = 0; g < 32; g++) gm[g] = hf_group_score(hgw, hge, g, x, nsmp, sc), f0 = gm[g] < gm[f0] ? g : f0;
     int mn = 0;
     if (tried) {
-      U8 jo[NSMP];  // (the samples, the largest first)
-      auto mag = [](S64 a) { return a < 0 ? -a : a; };
-      for (int j = 0; j < nsmp; j++) {
-        int k = j;
-        while (k > 0 && mag(x[jo[k - 1]]) < mag(x[j])) jo[k] = jo[k - 1], k--;
-        jo[k] = (U8)j;
-        en += (S128)x[j] * 16 * ((S128)x[j] * 16);  // (hf_dist()'s units)
-      }
-      S128 near = hf_group_min(f0, x, jo, nsmp, sc, en + 1);  // (the nearest of all: the centroids' first group's first)
-      for (int g = 0; g < 32; g++)
-        if (g != f0) near = hf_group_min(g, x, jo, nsmp, sc, near);
+      const S64* dot;
+      const double* dd;
+      const bool small = hf_dots(x, nsmp, &dot, &dd);
+      for (int j = 0; j < nsmp; j++) en += (S128)x[j] * 16 * ((S128)x[j] * 16);  // (hf_dist()'s units)
+      hf_group_mins(dot, small, nsmp, sc, en, md);
+      S128 near = en + 1;  // (the nearest of all)
+      for (int g = 0; g < 32; g++) near = md[g] < near ? md[g] : near;
       const S128 cap = 16 * near + 1;
-      for (int g = 0; g < 32; g++) md[g] = hf_group_min(g, x, jo, nsmp, sc, cap);
+      for (int g = 0; g < 32; g++) md[g] = md[g] < cap ? md[g] : cap;
       mn = near * 64 < en;
     }
     for (int g = 0; g < 32; g++) cand[g].k = mn ? md[g] : gm[g], cand[g].i = g;
@@ -1257,18 +1253,26 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         np++;
       }
     }
-    int ord[NP], no = 0;  // (by that distance, stably; those under cut)
-    for (int k = 0; k < np; k++) {
-      if (pr[k].d >= cut) continue;
-      int m = no++;
-      while (m > 0 && pr[ord[m - 1]].d > pr[k].d) ord[m] = ord[m - 1], m--;
-      ord[m] = k;
-    }
+    int ord[NP], no = 0;  // (those under cut, by that distance, the first of equals first: a heap)
+    for (int k = 0; k < np; k++)
+      if (pr[k].d < cut) ord[no++] = k;
     if (!no) return 0;
+    auto before = [&](int a, int b) { return pr[a].d < pr[b].d || (pr[a].d == pr[b].d && a < b); };
+    auto down = [&](int i) {
+      for (int c; (c = 2 * i + 1) < no; i = c) {
+        if (c + 1 < no && before(ord[c + 1], ord[c])) c++;
+        if (!before(ord[c], ord[i])) break;
+        const int t = ord[c];
+        ord[c] = ord[i], ord[i] = t;
+      }
+    };
+    for (int i = no / 2 - 1; i >= 0; i--) down(i);
     U64 d1 = ~0ull, d2 = cut;
     int best = -1, bnz = 0;
-    for (int k = 0; k < no && pr[ord[k]].d < d2; k++) {
-      const int at = ord[k];
+    while (no > 0 && pr[ord[0]].d < d2) {
+      const int at = ord[0];
+      ord[0] = ord[--no];
+      down(0);
       const QErr& q = qe[at];
       S128 e = pr[at].e, lim = ~(U128)0 >> 1;
       int nz = pr[at].nz, j = nk;
@@ -1340,6 +1344,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // a squared distance e (2^-2AQ_F) in the step ss's (2^-22) squared, times 2^16 (to 2^64 - 1)
   static U64 norm_dist(S128 e, S64 ss) {
     const U128 num = (U128)e << 28, den = (U128)((S128)ss * ss);
+    if (!(num >> 64) && !(den >> 64)) return (U64)num / (U64)den;  // (the same, in 64 bits)
     const U128 q = num / den;
     return q >> 64 ? ~0ull : (U64)q;
   }

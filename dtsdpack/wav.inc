@@ -67,7 +67,26 @@ struct WavIn {
   // copied into buf
   INLINE const S32* span(int c, S64 s, int n, S32* buf) const {
     if (s >= 0 && (U64)(s + n) <= got && c < nch && (s & (WAV_WIN - 1)) + n <= WAV_WIN) return ring[c] + (s & (WAV_WIN - 1));
-    for (int i = 0; i < n; i++) buf[i] = at(c, s + i);
+    // (else: 0s before the WAV, those read from the ring, then at()'s past them)
+    const int i0 = s < 0 ? (int)(-s < n ? -s : n) : 0;
+    int i1 = i0;
+    if (c < nch && s + i0 < (S64)got) {
+      i1 = (int)((S64)got - s < n ? (S64)got - s : n);
+      if (((s + i0) & (WAV_WIN - 1)) + (i1 - i0) > WAV_WIN) i1 = i0;  // (where the ring wraps: at()'s)
+    }
+    for (int i = 0; i < i0; i++) buf[i] = 0;
+    if (i1 > i0) memcpy(buf + i0, ring[c] + ((s + i0) & (WAV_WIN - 1)), sizeof(S32) * (size_t)(i1 - i0));
+    if (c >= nch || s + i1 >= (S64)got) {  // (past those read: the continuation where made, else 0s)
+      int i2 = i1;
+      if (c < nch && ext_on && got == nsamp && s + i1 - (S64)nsamp < ext_n) {
+        const S64 k = s + i1 - (S64)nsamp;
+        i2 = i1 + (int)(ext_n - k < n - i1 ? ext_n - k : n - i1);
+        memcpy(buf + i1, ext + (size_t)c * ext_n + k, sizeof(S32) * (size_t)(i2 - i1));
+      }
+      for (int i = i2; i < n; i++) buf[i] = 0;
+    } else {
+      for (int i = i1; i < n; i++) buf[i] = at(c, s + i);  // (where the ring wraps)
+    }
     return buf;
   }
   // the samples up to s (not included) read, those before from given up (s - from <= WAV_WIN)
