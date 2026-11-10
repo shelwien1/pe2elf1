@@ -493,6 +493,20 @@ static void pvq_dists(const S64* alpha, S64* d) {
     d[q] = (S64)e0 * e0 + (S64)e1 * e1 + (S64)e2 * e2 + (S64)e3 * e3;
   }
 }
+#include "pvqblocks.inc"
+// The DTS-HD Master Audio encoders search the code book in two stages: the nearest of 64 codewords
+// of their own, each a block of 64 entries (64 g to 64 g + 63), then the block's entry nearest the
+// coefficients (the nearest of all is their predictor 88-91% of the time, the two stages 99.6-99.8%,
+// by the codewords pvqblocks.inc learns from their streams). Block g's codeword's distance from the
+// coefficients alpha (Q24; the codewords in 2^-16, within 2^27 as alpha is)
+static INLINE S64 pvq_block_dist(int g, const S64* alpha) {
+  S64 d = 0;
+  for (int m = 0; m < 4; m++) {
+    const S64 e = alpha[m] - (S64)PV_GC[g][m] * 256;
+    d += e * e;
+  }
+  return d;
+}
 
 // The HF VQ code book as the encoders search it: groups of 32 entries, the group whose centroid is
 // nearest first, then the entry of the group nearest; the samples x (n, 2^-AQ_F) as 16 / sc times

@@ -11,106 +11,106 @@ Debug 1
 Const 0
 
 Index a
- a_kd: kd, 1!11
- a_mg: mg, 1!101111101101
+ a_kd: kd, 1!011
+ a_mg: mg, 1!101110010001
 
 Index b
- b_kd: kd, 1!01
- b_mg: mg, 1!111111000011
- b_gn: gn, 1!100111000010000
+ b_kd: kd, 1!011
+ b_mg: mg, 1!101101000011
+ b_gn: gn, 1!111111000000000
 
 Index c
- c_kd: kd, 1!11
- c_bd: bd, 1!1011000110000000010000100000111
- c_mg: mg, 1!111111010011
+ c_kd: kd, 1!111
+ c_bd: bd, 1!0010000000000000010111101100111
+ c_mg: mg, 1!111111010001
 
 Index d
- d_kd: kd, 1!01
+ d_kd: kd, 1!100
  d_lh: lh, 1!10
- d_mg: mg, 1!100000010001
+ d_mg: mg, 1!000001010001
 
 Index e
- e_kd: kd, 1!11
+ e_kd: kd, 1!110
  e_cc: cc, 1!11
- e_bd: bd, 1!0110100000110100000011110011111
+ e_bd: bd, 1!0000100000100010000001100011111
 
 Index h
- h_kd: kd, 1!10
- h_gn: gn, 1!100111101011100
- h_lh: lh, 1!00
+ h_kd: kd, 1!011
+ h_gn: gn, 1!100111010111100
+ h_lh: lh, 1!11
 
 Index i
- i_kd: kd, 1!10
- i_mg: mg, 1!111110100101
+ i_kd: kd, 1!101
+ i_mg: mg, 1!011010110001
  i_lh: lh, 1!11
- i_gn: gn, 1!111111001010000
+ i_gn: gn, 1!111111000000000
 
 Index j
- j_kd: kd, 1!10
- j_bd: bd, 1!1111100101011011010101100001001
+ j_kd: kd, 1!101
+ j_bd: bd, 1!0000000111011101111100000011001
  j_lh: lh, 1!01
 
 Index k
- k_kd: kd, 1!11
+ k_kd: kd, 1!011
  k_cc: cc, 1!11
- k_mg: mg, 1!100101011011
+ k_mg: mg, 1!100111101111
 
 Index l
- l_kd: kd, 1!00
- l_gn: gn, 1!110011101011000
+ l_kd: kd, 1!000
+ l_gn: gn, 1!100011101010000
 
 Index s
- s_kd: kd, 1!11
- s_mg: mg, 1!111011101011
+ s_kd: kd, 1!111
+ s_mg: mg, 1!101011101001
 
 Index f
- f_kd: kd, 1!11
- f_gn: gn, 1!111111100011100
+ f_kd: kd, 1!111
+ f_gn: gn, 1!111111100010100
 
 Index m
- m_kd: kd, 1!11
+ m_kd: kd, 1!111
 
 Index w
- w_mg: mg, 1!000100000101
+ w_mg: mg, 1!010100000011
 
 Index t
- t_kd: kd, 1!11
+ t_kd: kd, 1!111
 
 Index n
 #  Frozen: the mantissa mixer it is for mixes only by a hint, and nothing gives this family one.
-! n_kd: kd, 1!11
+! n_kd: kd, 1!111
 
 Index g
- g_kd: kd, 1!11
+ g_kd: kd, 1!111
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
-Number rA, 1, 0!00111010
-Number mwA, 1, 0!10100010
-Number rB, 1, 0!11110110
-Number mwB, 1, 0!11010110
-Number rC, 1, 0!10111010
+Number rA, 1, 0!00111110
+Number mwA, 1, 0!10001111
+Number rB, 1, 0!11110111
+Number mwB, 1, 0!00000001
+Number rC, 1, 0!10111011
 Number mwC, 1, 0!00000000
-Number rD, 1, 0!01100001
-Number mwD, 1, 0!11111100
-Number rE, 1, 0!11000010
-Number mwE, 1, 0!00000010
+Number rD, 1, 0!01110001
+Number mwD, 1, 0!11010011
+Number rE, 1, 0!11000110
+Number mwE, 1, 0!00000000
 Number rH, 1, 0!11111100
-Number mwH, 1, 0!10000001
-Number rI, 1, 0!11111110
+Number mwH, 1, 0!10000000
+Number rI, 1, 0!11011011
 Number mwI, 1, 0!00000010
-Number rJ, 1, 0!11101101
-Number mwJ, 1, 0!00011011
-Number rK, 1, 0!11111100
+Number rJ, 1, 0!11111110
+Number mwJ, 1, 0!01001100
+Number rK, 1, 0!11111110
 Number mwK, 1, 0!00000000
-Number rL, 1, 0!11111010
-Number mwL, 1, 0!10000111
+Number rL, 1, 0!11111111
+Number mwL, 1, 0!10001110
 Number lr, 1, 0!00111
-Number mb, 1, 0!01101110
+Number mb, 1, 0!01101111
 Number rS1, 1, 0!01000
 Number rS2, 1, 0!01000
 Number qs, 1, 3!0010111
 Number qf, 1, 3!1111010
-Number bw, 1, 0!01110
+Number bw, 1, 0!01111
 Number rT, 1, 0!10000000
 Number mwT, 1, 0!00000000
 Number mt, 1, 0!100

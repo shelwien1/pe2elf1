@@ -14,7 +14,7 @@ enum { BO_OFF = 0, BO_MAP = 4, BO_MAP2 = BO_MAP + NCH, BO_G1 = BO_MAP2 + NCH, BO
        DP_BIND = BO_CRC + 4 };  // (the binding's bytes)
 enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND, DP_HEAD = DP_AT_BIND + DP_BIND };  // the header's
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
-constexpr int DP_VERSION = 28;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
+constexpr int DP_VERSION = 29;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
                                // extension as records; 4: a WAV at twice the core's rate, X96 and XXCH; 5: the
                                // scale factor search; 6: the bit allocation search; 7: the bits after the
                                // subframes as the bytes they end in, the energy's quarter of its bucket, the
@@ -45,7 +45,9 @@ constexpr int DP_VERSION = 28;  // the format's (2: a core channel's binding a m
                                // search 4 either side, scl and abt tuned again; 26: the top
                                // subband's RMS with the leak's noise, the HF VQ scores not learning
                                // where it swamps the values; 27: hit and sid tuned again; 28: raw
-                               // and hdr tuned again)
+                               // and hdr tuned again; 29: the ADPCM predictor as its block's rank
+                               // by the encoders' codewords, then its rank in the block; vqr
+                               // tuned again)
 
 static void put_le(U8* p, U64 v, int n) {
   for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));
@@ -99,6 +101,7 @@ struct Stats {
   double in_bytes, raw_bytes;
   U64 hits, smp, sf_hits, sf;  // (-s: the samples and scale factors the audio predicted)
   U64 vq[VK_N], vq_hits[VK_N];  // (and the code books' indexes, those its searches found)
+  U64 pv, pv_hits;              // (the ADPCM predictors, those found: their blocks' and entries' ranks 0)
   U64 hits9, smp9, sf_hits9, sf9;  // (and X96's samples and scale factors)
   U64 ab, ab_srch, ab_hits;        // (and the ABITS, those the bit allocation search said, those it said right)
   U64 ab_st, ab_sthits;            // (those a staircase said, those it said right)
@@ -139,10 +142,10 @@ struct Stats {
       if (smp9 || sf9)
         fprintf(stderr, "  X96: the audio's indexes: %.2f%% of the samples; the audio's scale factors: %.2f%%\n",
                 smp9 ? PERCENT * hits9 / smp9 : 0.0, sf9 ? PERCENT * sf_hits9 / sf9 : 0.0);
-      if (vq[VK_PVQ] || vq[VK_HFG])
+      if (pv || vq[VK_HFG])
         fprintf(stderr, "  the encoder's searches on the audio: %.2f%% of the ADPCM predictors; HF VQ: %.2f%% of the "
                         "groups, %.2f%% of the vectors in them\n",
-                vq[VK_PVQ] ? PERCENT * vq_hits[VK_PVQ] / vq[VK_PVQ] : 0.0,
+                pv ? PERCENT * pv_hits / pv : 0.0,
                 vq[VK_HFG] ? PERCENT * vq_hits[VK_HFG] / vq[VK_HFG] : 0.0,
                 vq[VK_HFV] ? PERCENT * vq_hits[VK_HFV] / vq[VK_HFV] : 0.0);
     }

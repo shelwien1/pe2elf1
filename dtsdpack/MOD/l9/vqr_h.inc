@@ -1,65 +1,72 @@
 
-static const byte D9_vqr_a_mg[12+1]={ 0,1,1,2,3,4,5,6,6,7,8,8,9 };
+static const byte D9_vqr_a_mg[12+1]={ 0,1,1,2,3,4,4,4,5,5,5,5,6 };
 
-static const byte D9_vqr_b_mg[12+1]={ 0,1,2,3,4,5,6,6,6,6,6,7,8 };
-static const byte D9_vqr_b_gn[15+1]={ 0,1,1,1,2,3,4,4,4,4,4,5,5,5,5,5 };
+static const byte D9_vqr_b_mg[12+1]={ 0,1,1,2,3,3,4,4,4,4,4,5,6 };
+static const byte D9_vqr_b_gn[15+1]={ 0,1,2,3,4,5,6,6,6,6,6,6,6,6,6,6 };
 
-static const byte D9_vqr_c_bd[31+1]={ 0,1,1,2,3,3,3,3,4,5,5,5,5,5,5,5,5,5,6,6,6,6,6,7,7,7,7,7,7,8,9,10 };
-static const byte D9_vqr_c_mg[12+1]={ 0,1,2,3,4,5,6,6,7,7,7,8,9 };
+static const byte D9_vqr_c_kd[3+1]={ 0,1,2,3 };
+static const byte D9_vqr_c_bd[31+1]={ 0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,3,4,5,6,6,7,8,8,8,9,10,11 };
+static const byte D9_vqr_c_mg[12+1]={ 0,1,2,3,4,5,6,6,7,7,7,7,8 };
 
-static const byte D9_vqr_d_mg[12+1]={ 0,1,1,1,1,1,1,1,2,2,2,2,3 };
+static const byte D9_vqr_d_mg[12+1]={ 0,0,0,0,0,0,1,1,2,2,2,2,3 };
 
-static const byte D9_vqr_e_bd[31+1]={ 0,0,1,2,2,3,3,3,3,3,3,4,5,5,6,6,6,6,6,6,6,7,8,9,10,10,10,11,12,13,14,15 };
+static const byte D9_vqr_e_bd[31+1]={ 0,0,0,0,0,1,1,1,1,1,1,2,2,2,2,3,3,3,3,3,3,3,4,5,5,5,5,6,7,8,9,10 };
 
-static const byte D9_vqr_f_gn[15+1]={ 0,1,2,3,4,5,6,7,7,7,7,8,9,10,10,10 };
+static const byte D9_vqr_f_kd[3+1]={ 0,1,2,3 };
+static const byte D9_vqr_f_gn[15+1]={ 0,1,2,3,4,5,6,7,7,7,7,8,8,9,9,9 };
+
+static const byte D9_vqr_g_kd[3+1]={ 0,1,2,3 };
+
+static const byte D9_vqr_h_gn[15+1]={ 0,1,1,1,2,3,4,4,5,5,6,7,8,9,9,9 };
+
+static const byte D9_vqr_i_mg[12+1]={ 0,0,1,2,2,3,3,4,5,5,5,5,6 };
+static const byte D9_vqr_i_gn[15+1]={ 0,1,2,3,4,5,6,6,6,6,6,6,6,6,6,6 };
+
+static const byte D9_vqr_j_bd[31+1]={ 0,0,0,0,0,0,0,0,1,2,3,3,4,5,6,6,7,8,9,10,11,11,11,11,11,11,11,12,13,13,13,14 };
+
+static const byte D9_vqr_k_mg[12+1]={ 0,1,1,1,2,3,4,5,5,6,7,8,9 };
+
+static const byte D9_vqr_l_gn[15+1]={ 0,1,1,1,1,2,3,4,4,5,5,6,6,6,6,6 };
+
+static const byte D9_vqr_m_kd[3+1]={ 0,1,2,3 };
+
+static const byte D9_vqr_n_kd[3+1]={ 0,1,2,3 };
+
+static const byte D9_vqr_s_kd[3+1]={ 0,1,2,3 };
+static const byte D9_vqr_s_mg[12+1]={ 0,1,1,2,2,3,4,5,5,6,6,6,7 };
+
+static const byte D9_vqr_t_kd[3+1]={ 0,1,2,3 };
+
+static const byte D9_vqr_w_mg[12+1]={ 0,0,1,1,2,2,2,2,2,2,2,3,4 };
 
 
-static const byte D9_vqr_h_gn[15+1]={ 0,1,1,1,2,3,4,5,5,6,6,7,8,9,9,9 };
-
-static const byte D9_vqr_i_mg[12+1]={ 0,1,2,3,4,5,5,6,6,6,7,7,8 };
-static const byte D9_vqr_i_gn[15+1]={ 0,1,2,3,4,5,6,6,6,7,7,8,8,8,8,8 };
-
-static const byte D9_vqr_j_bd[31+1]={ 0,1,2,3,4,5,5,5,6,6,7,7,8,9,9,10,11,11,12,12,13,13,14,15,15,15,15,15,16,16,16,17 };
-
-static const byte D9_vqr_k_mg[12+1]={ 0,1,1,1,2,2,3,3,4,5,5,6,7 };
-
-static const byte D9_vqr_l_gn[15+1]={ 0,1,2,2,2,3,4,5,5,6,6,7,8,8,8,8 };
-
-
-
-static const byte D9_vqr_s_mg[12+1]={ 0,1,2,3,3,4,5,6,6,7,7,8,9 };
-
-
-static const byte D9_vqr_w_mg[12+1]={ 0,0,0,0,1,1,1,1,1,1,2,2,3 };
-
-
-static const int D9_vqr_rA = (58+0) * (1);
-static const int D9_vqr_mwA = (162+0) * (1);
-static const int D9_vqr_rB = (246+0) * (1);
-static const int D9_vqr_mwB = (214+0) * (1);
-static const int D9_vqr_rC = (186+0) * (1);
+static const int D9_vqr_rA = (62+0) * (1);
+static const int D9_vqr_mwA = (143+0) * (1);
+static const int D9_vqr_rB = (247+0) * (1);
+static const int D9_vqr_mwB = (1+0) * (1);
+static const int D9_vqr_rC = (187+0) * (1);
 static const int D9_vqr_mwC = (0+0) * (1);
-static const int D9_vqr_rD = (97+0) * (1);
-static const int D9_vqr_mwD = (252+0) * (1);
-static const int D9_vqr_rE = (194+0) * (1);
-static const int D9_vqr_mwE = (2+0) * (1);
+static const int D9_vqr_rD = (113+0) * (1);
+static const int D9_vqr_mwD = (211+0) * (1);
+static const int D9_vqr_rE = (198+0) * (1);
+static const int D9_vqr_mwE = (0+0) * (1);
 static const int D9_vqr_rH = (252+0) * (1);
-static const int D9_vqr_mwH = (129+0) * (1);
-static const int D9_vqr_rI = (254+0) * (1);
+static const int D9_vqr_mwH = (128+0) * (1);
+static const int D9_vqr_rI = (219+0) * (1);
 static const int D9_vqr_mwI = (2+0) * (1);
-static const int D9_vqr_rJ = (237+0) * (1);
-static const int D9_vqr_mwJ = (27+0) * (1);
-static const int D9_vqr_rK = (252+0) * (1);
+static const int D9_vqr_rJ = (254+0) * (1);
+static const int D9_vqr_mwJ = (76+0) * (1);
+static const int D9_vqr_rK = (254+0) * (1);
 static const int D9_vqr_mwK = (0+0) * (1);
-static const int D9_vqr_rL = (250+0) * (1);
-static const int D9_vqr_mwL = (135+0) * (1);
+static const int D9_vqr_rL = (255+0) * (1);
+static const int D9_vqr_mwL = (142+0) * (1);
 static const int D9_vqr_lr = (7+0) * (1);
-static const int D9_vqr_mb = (110+0) * (1);
+static const int D9_vqr_mb = (111+0) * (1);
 static const int D9_vqr_rS1 = (8+0) * (1);
 static const int D9_vqr_rS2 = (8+0) * (1);
 static const int D9_vqr_qs = (23+3) * (1);
 static const int D9_vqr_qf = (122+3) * (1);
-static const int D9_vqr_bw = (14+0) * (1);
+static const int D9_vqr_bw = (15+0) * (1);
 static const int D9_vqr_rT = (128+0) * (1);
 static const int D9_vqr_mwT = (0+0) * (1);
 static const int D9_vqr_mt = (4+0) * (1);
@@ -84,23 +91,23 @@ static const int D9_vqr_hT = (22+0) * (1);
 static const int D9_vqr_hN = (22+0) * (1);
 
 
-static const long long D9_vqr_a_Volume = tc_vmul(tc_vmul(1, 3), 10); // 30
-static const long long D9_vqr_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 9), 6); // 108
-static const long long D9_vqr_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 11), 10); // 330
+static const long long D9_vqr_a_Volume = tc_vmul(tc_vmul(1, 3), 7); // 21
+static const long long D9_vqr_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 7), 7); // 147
+static const long long D9_vqr_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 12), 9); // 432
 static const long long D9_vqr_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 4); // 16
-static const long long D9_vqr_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 3), 16); // 144
-static const long long D9_vqr_f_Volume = tc_vmul(tc_vmul(1, 3), 11); // 33
-static const long long D9_vqr_g_Volume = tc_vmul(1, 3); // 3
-static const long long D9_vqr_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 10), 1); // 20
-static const long long D9_vqr_i_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 9), 3), 9); // 486
-static const long long D9_vqr_j_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 18), 2); // 72
-static const long long D9_vqr_k_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 3), 8); // 72
-static const long long D9_vqr_l_Volume = tc_vmul(tc_vmul(1, 1), 9); // 9
-static const long long D9_vqr_m_Volume = tc_vmul(1, 3); // 3
-static const long long D9_vqr_n_Volume = tc_vmul(1, 3); // 3
-static const long long D9_vqr_s_Volume = tc_vmul(tc_vmul(1, 3), 10); // 30
-static const long long D9_vqr_t_Volume = tc_vmul(1, 3); // 3
-static const long long D9_vqr_w_Volume = tc_vmul(1, 4); // 4
+static const long long D9_vqr_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 3), 11); // 99
+static const long long D9_vqr_f_Volume = tc_vmul(tc_vmul(1, 4), 10); // 40
+static const long long D9_vqr_g_Volume = tc_vmul(1, 4); // 4
+static const long long D9_vqr_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 10), 3); // 90
+static const long long D9_vqr_i_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 3), 7), 3), 7); // 441
+static const long long D9_vqr_j_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 15), 2); // 90
+static const long long D9_vqr_k_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 3), 10); // 90
+static const long long D9_vqr_l_Volume = tc_vmul(tc_vmul(1, 1), 7); // 7
+static const long long D9_vqr_m_Volume = tc_vmul(1, 4); // 4
+static const long long D9_vqr_n_Volume = tc_vmul(1, 4); // 4
+static const long long D9_vqr_s_Volume = tc_vmul(tc_vmul(1, 4), 8); // 32
+static const long long D9_vqr_t_Volume = tc_vmul(1, 4); // 4
+static const long long D9_vqr_w_Volume = tc_vmul(1, 5); // 5
 
 #define D9_vqr_USES(X) X(kd) X(mg) X(gn) X(bd) X(lh) X(cc)
 

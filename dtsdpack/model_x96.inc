@@ -109,11 +109,9 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
   int x96_pmode_gain(int ch, int b) {
     const int k = lpg4_9[ch][b];
     if (k < 2 || k > 9) return k < 2 ? 0 : 9;
-    int bq = 0;
     S64* const d = this->pvqd;
     pvq_dists(lpc9[ch][b], d);
-    for (int q = 1; q < 4096; q++)
-      if (d[q] < d[bq]) bq = q;
+    const int bq = this->pvq_first(lpc9[ch][b], d);
     return clip(pvq_gain4(bq, xh9[ch][b], X9[ch][b], nsmp9) - 2, 1, 8);
   }
 
@@ -130,8 +128,8 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
         if (bd) {
           S64* const d = this->pvqd;
           pvq_dists(lpc9[ch][b], d);
-          for (int q = 0; q < 4096; q++) cand[q].k = d[q], cand[q].i = q;
-          return code_cand(4096, 12, (int)v, VK_PVQ, ch, b, lpg9[ch][b], lrank9[ch][b][VK_PVQ]);
+          return this->code_pvq2(lpc9[ch][b], d, -1, (int)v, ch, b, lpg9[ch][b], lrank9[ch][b][VK_PVQ],
+                                 lrank9[ch][b][VK_PVE]);
         }
         return side_index(SF_PVQ, ch, b, v, 12, hpv[ch][b], 8, 0);
       case F_ABITS: {  // (0 none, 1 VQ, else the quantizer's ABITS + 1: against the audio's energy, as ModelSmp's)

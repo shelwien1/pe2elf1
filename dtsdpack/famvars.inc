@@ -46,8 +46,9 @@ constexpr int LEN_TOPN = ((1 << LEN_TOP) - 1) * (LEN_MAX + 1);
 enum { QN_LEN = 2, QN_SIGN = QN_LEN + LEN_NODES + LEN_TOPN, QN_N };  // (0-1 unused: hit has those decisions)
 constexpr int RANK_BITS = 12;  // (a rank: 0 to 2^12 - 1, the ADPCM code book's)
 enum { VN_BKT = TC_NODE, VN_BIT = VN_BKT + RANK_BITS, VN_N = VN_BIT + 3 * (RANK_BITS + 1) };
-// what vqr ranks (kd): an ADPCM predictor, an HF VQ vector's group, the vector in its group
-enum { VK_PVQ, VK_HFG, VK_HFV, VK_N };
+// what vqr ranks (kd): an ADPCM predictor's block (anal.inc's pvq_block_dist()), an HF VQ vector's
+// group, the vector in its group, the ADPCM predictor in its block
+enum { VK_PVQ, VK_HFG, VK_HFV, VK_PVE, VK_N };
 constexpr int M_hdr_ND = HN_N, M_hdr_MND = TC_MNODE, M_hdr_NG = NHF;
 constexpr int M_sid_ND = SN_N, M_sid_MND = TC_MNODE, M_sid_NG = SF_N;
 constexpr int M_abt_ND = AN_N, M_abt_MND = TC_MNODE, M_abt_NG = 32;

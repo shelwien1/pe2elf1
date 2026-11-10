@@ -107,6 +107,18 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int g = 1; g < 32; g++) m = hge[g] < m ? hge[g] : m;
     for (int g = 0; g < 32; g++) hge[g] = clip(hge[g] - m, 0, (S64)1 << 40);
   }
+#ifdef DTSD_PVQDUMP
+  // (./mk.sh pvqdump: a lossless WAV's ADPCM predictor, appended to $DTSD_PVQDUMP: its index as a
+  // 32-bit integer and 32 bits of 0, the subband's LPC (lpc4()'s, 2^-24) as 64-bit ones;
+  // tools/pvqblocks.py reads them)
+  static void pvq_dump(const S64* alpha, int v) {
+    static FILE* f = getenv("DTSD_PVQDUMP") ? fopen(getenv("DTSD_PVQDUMP"), "ab") : nullptr;
+    if (!f) return;
+    const S32 h[2] = {v, 0};
+    fwrite(h, 4, 2, f);
+    fwrite(alpha, 8, 4, f);
+  }
+#endif
 #ifdef DTSD_HFDUMP
   // (./mk.sh hfdump: a lossless WAV's vector of 16 samples, appended to $DTSD_HFDUMP: its index and
   // scale factor as 32-bit integers, its samples as 64-bit ones; tools/hfgroups.py reads them)
@@ -159,11 +171,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     U64 gd;
   } abc[NCH][NSUB];
   U32 pv_n, pv_none;        // (code_pvq(): the predictors tried, those of which none fit)
+  U32 pvr[2];               // (code_pvq2(): how often the two-stage search's first was the predictor, the nearest of all's)
+  U64 n_pv, n_pvhit;        // (-s: the predictors, those first)
   // the same of the HF VQ groups' nearest entries (code_hfvq()): how often one was near, of how
   // many tries; the tries (to 2048); the vectors
   U32 hfr[2], hf_n;
   U64 n_hfvq;
-  S64 lpc[NCH][NSUB][4];   // the subframe's subbands' LPC (lpc4(): the encoder's ADPCM predictor is the entry nearest)
+  S64 lpc[NCH][NSUB][4];   // the subframe's subbands' LPC (lpc4(): the encoder's ADPCM predictor is its search's, pvq_first())
   int lpg[NCH][NSUB];      // and its prediction gain in halvings
   int lpg4[NCH][NSUB];     // and in quarters of them
   U8 lrank[NCH][NSUB][VK_N];  // the subband's last rank of each kind (vqr's lh)
@@ -635,33 +649,87 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     n_vqhit[kd] += !r;
     return v;
   }
+  // The ADPCM predictor's search, as the encoder's: the two stages (anal.inc's pvq_block_dist()),
+  // but where the nearest of all has been the predictor clearly more often (another encoder's)
+  bool pv_nearest() const { return pvr[1] > pvr[0] + 64 + pvr[0] / 8; }
+  // the predictor it would choose for the coefficients alpha, the entries' distances d
+  int pvq_first(const S64* alpha, const S64* d) const {
+    int g = 0;
+    if (pv_nearest()) {
+      for (int q = 1; q < 4096; q++)
+        if (d[q] < d[g]) g = q;
+      return g;
+    }
+    S64 bd = pvq_block_dist(0, alpha);
+    for (int k = 1; k < 64; k++) {
+      const S64 x = pvq_block_dist(k, alpha);
+      if (x < bd) bd = x, g = k;
+    }
+    int e = g * 64;
+    for (int q = e + 1; q < g * 64 + 64; q++)
+      if (d[q] < d[e]) e = q;
+    return e;
+  }
+  // Predictor v (index of the code book) for the coefficients alpha, the entries' distances d: its
+  // block's rank (by the codewords, or by each one's nearest entry: pv_nearest()) and its rank in
+  // the block (by d); fit, where >= 0, first in both (a decoded WAV's: code_pvq()); gn vqr's, the
+  // subband's last ranks of the two lb, le. The rule's tallies kept.
+  int code_pvq2(const S64* alpha, const S64* d, int fit, int v, int ch, int b, int gn, U8& lb, U8& le) {
+    const bool nr = pv_nearest();
+    int g0 = 0, q0 = 0;  // (the two stages' first, the nearest of all)
+    S64 bd = -1;
+    for (int k = 0; k < 64; k++) {
+      S64 m = d[k * 64];
+      int mq = k * 64;
+      for (int q = k * 64 + 1; q < k * 64 + 64; q++)
+        if (d[q] < m) m = d[q], mq = q;
+      if (d[mq] < d[q0]) q0 = mq;
+      const S64 x = pvq_block_dist(k, alpha);
+      if (bd < 0 || x < bd) bd = x, g0 = k;
+      cand[k].k = nr ? m : x, cand[k].i = k;
+    }
+    if (fit >= 0) cand[fit >> 6].k = -1;
+    const S64 h0 = n_vqhit[VK_PVQ] + n_vqhit[VK_PVE];
+    const int g = code_cand(64, 6, ENC ? v >> 6 : 0, VK_PVQ, ch, b, gn, lb);
+    for (int i = 0; i < 64; i++) cand[i].k = d[g * 64 + i], cand[i].i = i;
+    if (fit >= 0 && fit >> 6 == g) cand[fit & 63].k = -1;
+    v = g * 64 + code_cand(64, 6, ENC ? v & 63 : 0, VK_PVE, ch, b, gn, le);
+    n_pv++;
+    n_pvhit += (S64)(n_vqhit[VK_PVQ] + n_vqhit[VK_PVE]) == h0 + 2;
+    int e0 = g0 * 64;
+    for (int q = e0 + 1; q < g0 * 64 + 64; q++)
+      if (d[q] < d[e0]) e0 = q;
+    pvr[0] += e0 == v, pvr[1] += q0 == v;
+    if (pvr[0] + pvr[1] >= 1u << 16) pvr[0] >>= 1, pvr[1] >>= 1;
+    return v;
+  }
   // How the encoder would gain by predicting channel ch's subband b: 0 by less than 2^(1/2) (the
-  // LPC's gain), 9 by more than 2^(9/4), else by the gain of the entry nearest the LPC over the
-  // subframe, in quarters of halvings less 2 (1-8)
+  // LPC's gain), 9 by more than 2^(9/4), else by the gain of the entry its search would choose for
+  // the LPC (pvq_first()) over the subframe, in quarters of halvings less 2 (1-8)
   int pmode_gain(int ch, int b) {
     const int k = lpg4[ch][b];
     if (k < 2 || k > 9) return k < 2 ? 0 : 9;
-    int bq = 0;
     S64* const d = this->pvqd;
     pvq_dists(lpc[ch][b], d);
-    for (int q = 1; q < 4096; q++)
-      if (d[q] < d[bq]) bq = q;
+    const int bq = pvq_first(lpc[ch][b], d);
     S64 hd[4];
     hist4(ch, b, hd);
     return clip(pvq_gain4(bq, hd, X[ch][b], nsmp) - 2, 1, 8);
   }
-  // Channel ch's subband b's ADPCM predictor v: its rank by the distance from the subband's LPC.
-  // (Where the scale factor search's rule is taken, a decoded WAV's: of the first 16 in that order,
-  // the first whose prediction leaves values that fit a quantizer's lattice, by the bit allocation
-  // search, to a 64th of a step squared a value, first: a decoded WAV's values less the decoder's
-  // prediction are its dequantized indexes.)
+  // Channel ch's subband b's ADPCM predictor v: its ranks as the encoder's search would make them
+  // from the subband's LPC (code_pvq2()). (Where the scale factor search's rule is taken, a decoded
+  // WAV's: of the first 1024 by the distance from the LPC, or 4 where few have fitted, the first
+  // whose prediction leaves values that fit a quantizer's lattice, by the bit allocation search, to
+  // a 64th of a step squared a value, first: a decoded WAV's values less the decoder's prediction
+  // are its dequantized indexes.)
   KeyIx pvsel[4096];  // (code_pvq()'s selection, and its candidates' heap)
   int pvtop[4096];
   S64 code_pvq(const CoreRec& r, const CoreSub& s, int ch, int b, S64 v) {
     S64* const d = this->pvqd;
     pvq_dists(lpc[ch][b], d);
-    for (int q = 0; q < 4096; q++) cand[q].k = d[q], cand[q].i = q;
+    int fit = -1;
     if (ss_rule()) {
+      for (int q = 0; q < 4096; q++) cand[q].k = d[q], cand[q].i = q;
       const int K = pv_none * 4 > pv_n ? 4 : 1024;  // (fewer where few fit: a 96/24 stream's core's)
       // (the order's first K: the K-th by selection, those up to it on a heap, taken in order)
       int nk = 0, hn;
@@ -705,14 +773,17 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         int conf;
         U64 d = ~0ull;
         if (abits_search(r, ch, x, n, g, a0, a1, e - 1, &conf, &d, (U64)n << 10)) {
-          cand[qk].k = -1;
+          fit = qk;
           break;
         }
         pv_none += k == nk - 1;
       }
       if (++pv_n >= 1u << 16) pv_n >>= 1, pv_none >>= 1;
     }
-    return code_cand(4096, 12, (int)v, VK_PVQ, ch, b, lpg[ch][b]);
+#ifdef DTSD_PVQDUMP
+    if (ENC && !ss_rule()) pvq_dump(lpc[ch][b], (int)v);
+#endif
+    return code_pvq2(lpc[ch][b], d, fit, (int)v, ch, b, lpg[ch][b], lrank[ch][b][VK_PVQ], lrank[ch][b][VK_PVE]);
   }
   // Channel ch's subband b's HF VQ vector v (its scale factor coded): the rank of its group by the
   // groups' scores (anal.inc's hf_group_score(), as hgw learns them), then its rank in the group
