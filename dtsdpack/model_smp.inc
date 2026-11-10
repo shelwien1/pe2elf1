@@ -33,6 +33,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   S32 q1[NCH][NSUB], q2[NCH][NSUB];  // the subband's last two indexes (1 + their length, 0 none; with their signs in qs)
   S8 qs[NCH][NSUB];
   U8 miss[NCH][NSUB];      // the subband's last 8 indexes, a bit each: not the audio's
+  U32 chm[NCH];            // and the channel's last 32 (those coded against the audio)
   int ac[NCH][NSUB], es[NCH][NSUB], ec[NCH][NSUB];  // the subframe's subbands' autocorrelation, energy, its change
   int eq[NCH][NSUB];       // and where in its scale factor's bucket the energy lies (scale_quarter())
   int esmax[NCH];          // the channel's loudest subband's energy (es)
@@ -217,10 +218,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   S32 yc[NCH][NSUB][128];
   U64 n_smp, n_hit, n_sf, n_sfhit;  // (-s: the samples, those the audio predicted; the same of the scale factors)
   U64 n_vq[VK_N], n_vqhit[VK_N];    // (and the ranks, those 0)
-  // how often a subband sample's index wasn't the audio's, of how many (code_index()), by pm, hm and
-  // nearness: in each cell (nr, nl), and in each row (nl)
+  // how often a subband sample's index wasn't the audio's, of how many (code_index()), by pm, hm, cb
+  // and nearness: in each cell (nr, nl), and in each row (nl)
   static constexpr U32 HIT_PRIOR = 16, HIT_LIMIT = 1u << 18;
-  U32 hit_c[2][4][QB_N][QB_N][2], hit_r[2][4][QB_N][2];
+  U32 hit_c[2][4][4][QB_N][QB_N][2], hit_r[2][4][4][QB_N][2];
 
   void smp_start(WavIn* w, const Bind& b) {
     wav = w;
@@ -1493,8 +1494,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.sq = bnd ? svar(qp) : 0;
     D.s1 = qs[ch][b];
     int how;
-    v = code_index(D, v, bnd, qp, alt, lo, hi, &how, bnd && !ss_rule() ? near_bucket(dist, (S128)tlev[ch][j] << 22, 28) : -1);
+    // (cb: how many of the channel's last 32 missed, 0, 1, 2-3, more: where the WAV isn't what the
+    // encoder had, as in the frames after a cut stream's start (its decoder's state not the
+    // encoder's), nearly all of a channel's indexes miss by a step or two for a while; its
+    // subbands' own last 8 tell it 32 times later)
+    const int pc = __builtin_popcount(chm[ch]);
+    v = code_index(D, v, bnd, qp, alt, lo, hi, &how, bnd && !ss_rule() ? near_bucket(dist, (S128)tlev[ch][j] << 22, 28) : -1,
+                   pc >= 4 ? 3 : pc >= 2 ? 2 : pc);
     miss[ch][b] = (U8)(miss[ch][b] << 1 | (bnd && how != 0));
+    if (bnd) chm[ch] = chm[ch] << 1 | (how != 0);
     n_smp++;
     n_hit += how == 0;
     q2[ch][b] = q1[ch][b];
@@ -1511,7 +1519,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // (nt: how near the boundary against the channel's level at the sample, a lossless WAV's: the
   // encoder's arithmetic errs by about the level of all its signal there, its loudest subband's
   // the lesser guess; -1 none: against that, D.nl)
-  S64 code_index(const M_smp_v& D, S64 v, int pk, S64 qp, S64 alt, S64 lo, S64 hi, int* how, int nt = -1) {
+  S64 code_index(const M_smp_v& D, S64 v, int pk, S64 qp, S64 alt, S64 lo, S64 hi, int* how, int nt = -1, int cb = 0) {
     *how = 2;
     if (pk) {
       const int kd = D.ab == 27 ? 2 : D.pm;
@@ -1530,7 +1538,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         // wasn't (the cell's counts, from its row's where it has few), straight to the coder (its
         // probabilities are finer than the families')
         const int nl = nt >= 0 ? nt : D.nl;
-        U32 *cell = hit_c[kd][D.hm][D.nr][nl], *row = hit_r[kd][D.hm][nl];
+        U32 *cell = hit_c[kd][D.hm][cb][D.nr][nl], *row = hit_r[kd][D.hm][cb][nl];
         const U64 pr = ((U64)(2 * row[0] + 1) << CO_PBITS) / (2 * (U64)row[1] + 2);
         const U64 pc = (((U64)cell[0] << CO_PBITS) + HIT_PRIOR * pr) / (cell[1] + HIT_PRIOR);
         hit = c->code_bit((U32)(pc < 1 ? 1 : pc > CO_ONE - 1 ? CO_ONE - 1 : pc), ENC && v == qp);
