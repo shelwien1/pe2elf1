@@ -27,7 +27,8 @@ enum { SF_PMODE, SF_PVQ, SF_TMODE, SF_JSHUFF, SF_JSCALE, SF_HFVQ, SF_LFE, SF_TMS
 //        14 the last one (no prediction)
 //   hit  13 an LFE sample's index is the audio's (a subband sample's goes to the coder as it is:
 //        model_smp.inc's code_index()), 14 an index that isn't is the one on the other side of the
-//        rounding boundary
+//        rounding boundary, 15 one that isn't either lies within HIT_NEAR of the audio's, 16 on the
+//        side of that one (or above), 17-24 its distance in unary (by the side)
 //   smp  a sample's index otherwise: its magnitude, the length (the bits it takes) as a tree and
 //        the bits below the top (2-108: model_core.inc's code_len()), the rest in the mantissa
 //        plane; 109 the sign
@@ -53,7 +54,8 @@ constexpr int M_hdr_ND = HN_N, M_hdr_MND = TC_MNODE, M_hdr_NG = NHF;
 constexpr int M_sid_ND = SN_N, M_sid_MND = TC_MNODE, M_sid_NG = SF_N;
 constexpr int M_abt_ND = AN_N, M_abt_MND = TC_MNODE, M_abt_NG = 32;
 constexpr int M_scl_ND = CN_N, M_scl_MND = TC_MNODE, M_scl_NG = 4;
-enum { HT_HIT = TC_NODE, HT_ALT, HT_N };
+constexpr int HIT_NEAR = 4;  // (an index neither the audio's nor alt, within this of the audio's: its distance from it)
+enum { HT_HIT = TC_NODE, HT_ALT, HT_NEAR, HT_SIDE, HT_DIST, HT_N = HT_DIST + 2 * HIT_NEAR };
 constexpr int M_hit_ND = HT_N, M_hit_MND = 1, M_hit_NG = 1;
 constexpr int M_smp_ND = QN_N, M_smp_MND = TC_MNODE, M_smp_NG = 1;
 constexpr int M_vqr_ND = VN_N, M_vqr_MND = 1, M_vqr_NG = 1;

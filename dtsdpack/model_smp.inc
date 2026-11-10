@@ -1522,6 +1522,21 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       }
       if (hit) return *how = 0, qp;
       if (alt != qp && f_hit.bit(HT_ALT, ENC && v == alt)) return *how = 1, alt;
+      // (neither, the audio's 4 or more: where within HIT_NEAR of it, its side, alt's or the other
+      // (up or down where none is), and its distance in unary, from 2 on alt's side (1 is alt), else
+      // from 1; else its magnitude, below. A miss next to a small index costs less as its
+      // magnitude: 96-24.dts's, the X96 residuals' in its core's values)
+      if ((qp < 0 ? -qp : qp) >= 4) {
+        const int sa = alt > qp ? 1 : alt < qp ? -1 : 0;
+        const S64 d = ENC ? v - qp : 0, ad = d < 0 ? -d : d;
+        if (f_hit.bit(HT_NEAR, ENC && ad <= HIT_NEAR)) {
+          const int same = f_hit.bit(HT_SIDE, ENC && (sa ? (d > 0) == (sa > 0) : d > 0));
+          int k = same && sa ? 2 : 1;
+          while (k < HIT_NEAR && f_hit.bit(HT_DIST + (same ? HIT_NEAR : 0) + k, ENC && ad > k)) k++;
+          const S64 w = qp + (same ? (sa ? sa : 1) : (sa ? -sa : -1)) * k;
+          return w < lo ? lo : w > hi ? hi : w;
+        }
+      }
     }
     B::sel(f_smp, D);
     const S64 mmax = -lo > hi ? -lo : hi;
