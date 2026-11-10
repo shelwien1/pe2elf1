@@ -58,7 +58,7 @@
 //   raw  bytes kept as bytes, the bits after the subframes, the extension's other bits
 // (Whether a subband sample's index is the audio's goes straight to the coder: model_smp.inc.)
 //
-// File format: "dtsdpack", the format version 22, the level, the WAV's binding (how the core lines
+// File format: "dtsdpack", the format version 23, the level, the WAV's binding (how the core lines
 // up with it, and what the WAV was: coro.inc), then the range coded chunks (kind: end, a frame as
 // records, bytes between frames, a frame kept as bytes; then the records or a length and the
 // bytes); after the end, the CRC-32 of the core stream.

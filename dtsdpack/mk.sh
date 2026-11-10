@@ -15,6 +15,11 @@
 #                             with -DDTSD_DUMP; fam.inc)
 #      ./mk.sh famtune L      ./famtune: the families of -L coding their dumps again, the tuning
 #                             build (IDX/famtune.cpp)
+#      ./mk.sh hfdump DIR STREAM WAV...
+#                             the HF VQ vectors code_hfvq() ranks the groups of by their scores (a
+#                             lossless WAV's, of 16 samples), DIR/s<N>.hf per stream (dtsdpack
+#                             built with -DDTSD_HFDUMP), whence tools/hfgroups.py learns
+#                             hfgroups.inc: tools/hfgroups.py hfgroups.inc DIR/*.hf
 #
 #  Each level has its own IDX sources, IDX/l<L>/<family>.idx and the template of the level's
 #  families IDX/l<L>/family.inc (format: IDX/IDX-FORMAT.md), which IDX/idx2inc.pl turns into
@@ -205,6 +210,25 @@ case "${1:-}" in
     done
     echo "mk.sh: dumps of $n streams in $dir"
     ;;
+  hfdump)
+    dir=$(abspath "${2:?usage: ./mk.sh hfdump DIR STREAM WAV...}")
+    shift 2
+    [ $# -gt 0 ] && [ $(($# % 2)) = 0 ] || { echo "usage: ./mk.sh hfdump DIR STREAM WAV..." >&2; exit 2; }
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"; cleanup' EXIT
+    for l in $LEVELS; do generate "$l" 0 1; done
+    build "$tmp/dtsdpack" -DDTSD_HFDUMP
+    mkdir -p "$dir"
+    n=0
+    while [ $# -gt 0 ]; do
+      f=$dir/$(printf 's%03d.hf' $n)
+      rm -f "$f"
+      DTSD_HFDUMP=$f "$tmp/dtsdpack" c -q "$(abspath "$1")" "$(abspath "$2")" "$tmp/c"
+      shift 2
+      n=$((n + 1))
+    done
+    echo "mk.sh: the HF VQ vectors of $n streams in $dir"
+    ;;
   famtune)
     level "${2:?usage: ./mk.sh famtune L}"
     lv=$2
@@ -217,7 +241,7 @@ case "${1:-}" in
     count_maps ./famtune "./famtune for -$2"
     ;;
   *)
-    echo "usage: ./mk.sh release | mod | tuning L | check L STREAM WAV... | dump L DIR STREAM WAV... | famtune L   (levels: $LEVELS)" >&2
+    echo "usage: ./mk.sh release | mod | tuning L | check L STREAM WAV... | dump L DIR STREAM WAV... | famtune L | hfdump DIR STREAM WAV...   (levels: $LEVELS)" >&2
     exit 2
     ;;
 esac

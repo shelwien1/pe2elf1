@@ -71,7 +71,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // A lossless WAV's top subbands, VQ ones, as its encoder has them: subband NSUB - 1 - c with m
   // 2^-23 of subband c added, c 0 to CPL_N - 1, m one of cpl_m(c, k), k 0 to CPL_K - 1 (CPL_D[c]
   // the first): how often each has made the RMS rule's scale factor right, and the HF VQ search's
-  // group (code_scale(), code_hfvq()); the subframe's subbands as the analysis has them
+  // group (code_scale(), code_hfvq()); the subframe's subbands as the analysis has them (a WAV at
+  // the core's rate: a 64-band analysis's subbands 30 and 31 aren't the top ones)
   static constexpr int CPL_N = 2, CPL_K = 9;
   static int cpl_m(int c, int k) {
     static const S8 M[CPL_N][CPL_K] = {{0, -2, -4, -6, -8, -10, -12, -14, -16}, {-2, -1, 0, 1, 2, 3, 4, 5, 6}};
@@ -79,6 +80,44 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   }
   static int cpl_d(int c) { return c ? 5 : 4; }  // (-8: 2^-20 of the bottom subband from the top one; +3)
   U32 cpl_hit[CPL_N][CPL_K], cpl_n[CPL_N];
+  // The HF VQ groups' scores as this stream's encoder has them (code_hfvq()): hfgroups.inc's as it
+  // starts, learned on where a lossless WAV's 16 samples' first group wasn't the encoder's -- a
+  // perceptron's step of the vector (1/512 of it, then as the steps double from 1024, half as much
+  // each time, to 1/16384) to the encoder's group's W and from the first's, the same of 64 to their
+  // bias (anal.inc's hf_group_score(): e = -2 bias - |W|^2, kept from 0); the steps so far
+  S32 hgw[32][16];
+  S64 hge[32];
+  U32 hg_n;
+  void hg_learn(const S64* x, S64 sc, int t, int f) {
+    const int sh = 9 + imin(bit_len((U64)(hg_n >> 10)), 5);
+    hg_n += hg_n < (1u << 30);
+    const S64 den = sc << (sh + 3);  // (x / den: the vector u times 2^-sh, in 512ths)
+    for (int k = 0; k < 2; k++) {
+      const int g = k ? f : t;
+      S64 n0 = 0, n1 = 0;
+      for (int j = 0; j < 16; j++) {
+        const S64 a = x[j] < 0 ? -((-x[j] + den / 2) / den) : (x[j] + den / 2) / den;
+        n0 += (S64)hgw[g][j] * hgw[g][j];
+        hgw[g][j] = (S32)clip((S64)hgw[g][j] + (k ? -a : a), -65535, 65535);
+        n1 += (S64)hgw[g][j] * hgw[g][j];
+      }
+      hge[g] += (k ? 1 : -1) * ((S64)1 << (25 - sh)) - (n1 - n0);
+    }
+    S64 m = hge[0];
+    for (int g = 1; g < 32; g++) m = hge[g] < m ? hge[g] : m;
+    for (int g = 0; g < 32; g++) hge[g] = clip(hge[g] - m, 0, (S64)1 << 40);
+  }
+#ifdef DTSD_HFDUMP
+  // (./mk.sh hfdump: a lossless WAV's vector of 16 samples, appended to $DTSD_HFDUMP: its index and
+  // scale factor as 32-bit integers, its samples as 64-bit ones; tools/hfgroups.py reads them)
+  static void hf_dump(const S64* x, S64 sc, int v) {
+    static FILE* f = getenv("DTSD_HFDUMP") ? fopen(getenv("DTSD_HFDUMP"), "ab") : nullptr;
+    if (!f) return;
+    const S32 h[2] = {v, (S32)sc};
+    fwrite(h, 4, 2, f);
+    fwrite(x, 8, 16, f);
+  }
+#endif
   S64 xcpl[CPL_N][NCH][NSMP];
   // the k taken: the first's, but where another's has been right clearly more often
   int cpl_k(int c) const {
@@ -93,7 +132,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int i = 0; i < n; i++) y[i] = xcpl[c][ch][i] + rshift(X[ch][c][i] * cpl_m(c, k), 23);
   }
   bool cpl_on(const CoreRec& r, int ch, int b) const {
-    return b >= NSUB - CPL_N && b >= r.nvqsub[ch] && bound[ch] && !x96a && !ss_rule();
+    return b >= NSUB - CPL_N && b >= r.nvqsub[ch] && bound[ch] && !x96a && !ss_rule() && bind.up == 1;
   }
   // subband c's power over subband b's (NSUB - 1 - c's, one of them: on), in doublings, less o,
   // halved: in 0..hi (how much of the leak is left in it, the contexts of its scale factor and VQ
@@ -167,6 +206,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     tnext = 0;
     lfit.init();
     lfit2.init();
+    memcpy(hgw, HF_GW, sizeof hgw);
+    memcpy(hge, HF_GE, sizeof hge);
+    hg_n = 0;
     for (int i = 0; i < 64; i++) lfe_cn[i] = -1;
     lfe_lp = 9;
   }
@@ -226,7 +268,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         for (int c = 0; c < CPL_N; c++) {
           const int tb = NSUB - 1 - c;
           xcpl[c][ch][j] = x[tb];
-          if (tb >= r.nvqsub[ch] && !x96a && !ss_rule()) X[ch][tb][j] += rshift(x[c] * cpl_m(c, cpl_k(c)), 23);
+          if (tb >= r.nvqsub[ch] && !x96a && !ss_rule() && up == 1) X[ch][tb][j] += rshift(x[c] * cpl_m(c, cpl_k(c)), 23);
         }
         for (int b = 0; x96a && b < NSUB96; b++) xa[ch][b][fb0 + j] = x[b];
       }
@@ -656,7 +698,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     return code_cand(4096, 12, (int)v, VK_PVQ, ch, b, lpg[ch][b]);
   }
   // Channel ch's subband b's HF VQ vector v (its scale factor coded): the rank of its group by the
-  // groups' centroids (anal.inc's HF_GC), then its rank in the group
+  // groups' scores (anal.inc's hf_group_score(), as hgw learns them), then its rank in the group
   // (The groups by their nearest entries instead, where the nearest of all lies within 1/64 of the
   // values' energy: a decoded WAV's values are the vector's, whatever the encoder's search; a
   // lossless WAV's aren't, and where the encoder's order misses, the group is near its first. A
@@ -669,7 +711,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const int tried = hf_min_on();
     S128 gm[32], md[32], en = 0;
     int f0 = 0;
-    for (int g = 0; g < 32; g++) gm[g] = hf_group_dist(g, x, nsmp, sc), f0 = gm[g] < gm[f0] ? g : f0;
+    for (int g = 0; g < 32; g++) gm[g] = hf_group_score(hgw, hge, g, x, nsmp, sc), f0 = gm[g] < gm[f0] ? g : f0;
     int mn = 0;
     if (tried) {
       U8 jo[NSMP];  // (the samples, the largest first)
@@ -704,13 +746,19 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         S64 y[NSMP];
         cpl_values(c, ch, k, y, nsmp);
         int gb = 0;
-        S128 db = hf_group_dist(0, y, nsmp, sc);
+        S128 db = hf_group_score(hgw, hge, 0, y, nsmp, sc);
         for (int gg = 1; gg < 32; gg++) {
-          const S128 d = hf_group_dist(gg, y, nsmp, sc);
+          const S128 d = hf_group_score(hgw, hge, gg, y, nsmp, sc);
           if (d < db) db = d, gb = gg;
         }
         cpl_hit[c][k] += gb == (int)(v >> 5);
       }
+    }
+    if (!mn && nsmp == 16) {  // (the scores, where they ranked the groups)
+#ifdef DTSD_HFDUMP
+      if (ENC) hf_dump(x, sc, (int)v);
+#endif
+      if (f0 != (int)(v >> 5)) hg_learn(x, sc, (int)(v >> 5), f0);
     }
     return v;
   }

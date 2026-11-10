@@ -538,6 +538,23 @@ static INLINE S128 hf_group_dist(int g, const S64* x, int n, S64 sc) {
   }
   return d;
 }
+// The DTS-HD Master Audio encoders' group of a lossless WAV's 16 samples (their streams' subframes'
+// length) isn't the centroids' nearest: their silences (the samples all 0, 5-30% of the vectors)
+// take group 0's entry 0, and most of the other misses are near ties. A score learned from five
+// of their streams does better (hfgroups.inc, tools/hfgroups.py's from ./mk.sh hfdump's dumps): of
+// W (in 512ths) and e (in 2^-18), the least |16 x / sc - W_g|^2 + e_g, in hf_group_dist()'s units
+// (another length: hf_group_dist()). Each stream left out of the learning, its first group is the
+// encoder's in 81.6-96.7% of its vectors, against 61.3-89.0% by the centroids.
+#include "hfgroups.inc"
+static INLINE S128 hf_group_score(const S32 (*W)[16], const S64* E, int g, const S64* x, int n, S64 sc) {
+  if (n != 16) return hf_group_dist(g, x, n, sc);
+  S128 d = 0;
+  for (int j = 0; j < 16; j++) {
+    const S128 e = (S128)x[j] * 8192 - shl128((S128)W[g][j] * sc, AQ_F);
+    d += e * e;
+  }
+  return d + shl128((S128)E[g] * sc * sc, 32);
+}
 // entry q's distance (in 2^(AQ_F + 4) sc units)
 static INLINE S128 hf_dist(int q, const S64* x, int n, S64 sc) {
   S128 d = 0;
