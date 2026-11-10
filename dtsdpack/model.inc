@@ -160,7 +160,7 @@ struct Model : ModelX96<f_DEC, LV> {
           const S32 og = ab_guess(ch, b, 0, e);
           if (og) {
             auto& k = B::abc[ch][b];
-            k.g = og - 1, k.a0 = imax(1, k.g - 3), k.a1 = imin(26, k.g + 3), k.p = e - 1, k.gc = 0, k.gd = ~0ull;
+            k.g = og - 1, k.a0 = imax(1, k.g - 4), k.a1 = imin(26, k.g + 4), k.p = e - 1, k.gc = 0, k.gd = ~0ull;
             k.G = B::abits_search(r, ch, B::X[ch][b], n, k.g, k.a0, k.a1, k.p, &k.gc, &k.gd);
             fit = !k.G ? 3 : k.gd < ((U64)n << 10) ? 0 : k.gd < ((U64)n << 14) ? 1 : 2;
           }
@@ -231,8 +231,8 @@ struct Model : ModelX96<f_DEC, LV> {
         int G = 0, gc = 0, sc = 0;
         U64 gd = 0;
         if (srch && nx) {
-          const int g = og ? og - 1 : 1, a0 = og ? imax(imax((int)lo, 1), g - 3) : imax((int)lo, 1),
-                    a1 = og ? imin((int)hi, g + 3) : (int)hi;
+          const int g = og ? og - 1 : 1, a0 = og ? imax(imax((int)lo, 1), g - 4) : imax((int)lo, 1),
+                    a1 = og ? imin((int)hi, g + 4) : (int)hi;
           const auto& k = B::abc[ch][b];
           if (!s.pmode[ch][b] && k.g == g && k.a0 == a0 && k.a1 == a1 && k.p == e - 1) G = k.G, gc = k.gc, gd = k.gd;
           else if (a0 <= a1) G = B::abits_search(r, ch, x, nx, g, a0, a1, e - 1, &gc, &gd);

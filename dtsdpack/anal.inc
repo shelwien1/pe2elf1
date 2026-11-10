@@ -135,8 +135,9 @@ static void analyze(const WavIn& w, int c, S64 o, int up, const S64* fir, S64* x
 }
 
 // the first nb subband samples of core channel ch as the binding b makes them from the WAV
-// (analyze()'s): its channel's, or the mix's (pcm, a lossless WAV's at the core's rate: as its
-// encoder mixed, in the PCM, each sample's sum rounded to the nearest, a half up, then analyzed)
+// (analyze()'s): its channel's, or the mix's; a lossless WAV's (pcm) as its encoder made them: at
+// the core's rate, mixed in the PCM, each sample's sum rounded to the nearest, a half up, then
+// analyzed; at twice it (without X96: the caller's), by a 64-band analysis 1 - 1.4e-4 times this one
 static void analyze_bound(const WavIn& w, const Bind& b, int ch, S64 o, const S64* fir, S64* x, int nb = 32, bool pcm = false) {
   if (pcm && b.up == 1 && !(b.map2[ch] < 0 && b.g1[ch] == BIND_ONE)) {
     constexpr int L = 512;
@@ -149,13 +150,18 @@ static void analyze_bound(const WavIn& w, const Bind& b, int ch, S64 o, const S6
     return;
   }
   analyze(w, b.map[ch], o, b.up, fir, x, nb);
-  if (b.map2[ch] < 0 && b.g1[ch] == BIND_ONE) return;
-  S64 x2[64];
-  if (b.map2[ch] >= 0) analyze(w, b.map2[ch], o, b.up, fir, x2, nb);
-  for (int k = 0; k < nb; k++) {
-    const S128 v = (S128)x[k] * b.g1[ch] + (b.map2[ch] >= 0 ? (S128)x2[k] * b.g2[ch] : 0);
-    x[k] = (S64)((v + (1 << 22)) >> 23);
+  if (!(b.map2[ch] < 0 && b.g1[ch] == BIND_ONE)) {
+    S64 x2[64];
+    if (b.map2[ch] >= 0) analyze(w, b.map2[ch], o, b.up, fir, x2, nb);
+    for (int k = 0; k < nb; k++) {
+      const S128 v = (S128)x[k] * b.g1[ch] + (b.map2[ch] >= 0 ? (S128)x2[k] * b.g2[ch] : 0);
+      x[k] = (S64)((v + (1 << 22)) >> 23);
+    }
   }
+  // (the 64-band analysis by FFmpeg's prototype makes the encoder's index 1.66% of the time, 0.35%
+  // at 1 - 1.4e-4 times it, nearer at no other gain: 150324 2^-30 of it off)
+  if (pcm && b.up == 2)
+    for (int k = 0; k < nb; k++) x[k] -= rshift(x[k] * 150324, 30);
 }
 // a gain (as a fit makes it) as the downmix table's entries either side of it (Q23; a negative
 // gain the entries' negatives: the coefficients have a sign), where within 2% of it, the nearer
