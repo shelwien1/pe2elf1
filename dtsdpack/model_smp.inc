@@ -68,30 +68,41 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   int bud_n[NCH][NSUB], bud_si[NCH][NSUB];  // (how many; the RMS rule's scale factor)
   U64 n_st, n_sthit;  // (-s: the ABITS a staircase said, those it said right)
   int pscale[NCH][NSUB];   // their first scale factor's prediction (1 + it, 0 none)
-  // A lossless WAV's top subband less m 2^-23 of its bottom one, m 2k for k 0 to C31_K - 1 (C31_D
+  // A lossless WAV's top subbands, VQ ones, as its encoder has them: subband NSUB - 1 - c with m
+  // 2^-23 of subband c added, c 0 to CPL_N - 1, m one of cpl_m(c, k), k 0 to CPL_K - 1 (CPL_D[c]
   // the first): how often each has made the RMS rule's scale factor right, and the HF VQ search's
-  // group (code_scale(), code_hfvq()); the subframe's top subband as the analysis has it
-  static constexpr int C31_K = 9, C31_D = 4;
-  U32 c31_hit[C31_K], c31_n;
-  S64 x31o[NCH][NSMP];
-  // the m taken: C31_D's, but where another's has been right clearly more often
-  int c31_m() const {
+  // group (code_scale(), code_hfvq()); the subframe's subbands as the analysis has them
+  static constexpr int CPL_N = 2, CPL_K = 9;
+  static int cpl_m(int c, int k) {
+    static const S8 M[CPL_N][CPL_K] = {{0, -2, -4, -6, -8, -10, -12, -14, -16}, {-2, -1, 0, 1, 2, 3, 4, 5, 6}};
+    return M[c][k];
+  }
+  static int cpl_d(int c) { return c ? 5 : 4; }  // (-8: 2^-20 of the bottom subband from the top one; +3)
+  U32 cpl_hit[CPL_N][CPL_K], cpl_n[CPL_N];
+  S64 xcpl[CPL_N][NCH][NSMP];
+  // the k taken: the first's, but where another's has been right clearly more often
+  int cpl_k(int c) const {
     int k = 0;
-    for (int i = 1; i < C31_K; i++)
-      if (c31_hit[i] > c31_hit[k]) k = i;
-    return c31_hit[k] > c31_hit[C31_D] + 16 + c31_hit[C31_D] / 32 ? 2 * k : 2 * C31_D;
+    const U32* h = cpl_hit[c];
+    for (int i = 1; i < CPL_K; i++)
+      if (h[i] > h[k]) k = i;
+    return h[k] > h[cpl_d(c)] + 16 + h[cpl_d(c)] / 32 ? k : cpl_d(c);
   }
-  // the top subband's values, its m's: n of them into y
-  void c31_values(int ch, int k, S64* y, int n) const {
-    for (int i = 0; i < n; i++) y[i] = x31o[ch][i] - rshift(X[ch][0][i] * 2 * k, 23);
+  // channel ch's subband b (one of them: on) as k's: n values into y
+  void cpl_values(int c, int ch, int k, S64* y, int n) const {
+    for (int i = 0; i < n; i++) y[i] = xcpl[c][ch][i] + rshift(X[ch][c][i] * cpl_m(c, k), 23);
   }
-  // the bottom subband's power over the top one's, in doublings, less o, halved: in 0..hi (how
-  // much of the leak is left in a lossless WAV's top subband, the contexts of its scale factor and
-  // VQ vector, where the other's want it as they were: -1)
-  int c31_leak(const CoreRec& r, int ch, int b, int o, int hi) const {
-    if (b != NSUB - 1 || !bound[ch] || x96a || ss_rule() || b < r.nvqsub[ch]) return -1;
+  bool cpl_on(const CoreRec& r, int ch, int b) const {
+    return b >= NSUB - CPL_N && b >= r.nvqsub[ch] && bound[ch] && !x96a && !ss_rule();
+  }
+  // subband c's power over subband b's (NSUB - 1 - c's, one of them: on), in doublings, less o,
+  // halved: in 0..hi (how much of the leak is left in it, the contexts of its scale factor and VQ
+  // vector, where the others' want them as they were: -1)
+  int cpl_leak(const CoreRec& r, int ch, int b, int o, int hi) const {
+    if (!cpl_on(r, ch, b)) return -1;
+    const int c = NSUB - 1 - b;
     S128 p0 = 0, p1 = 0;
-    for (int i = 0; i < nsmp; i++) p0 += (S128)X[ch][0][i] * X[ch][0][i], p1 += (S128)X[ch][b][i] * X[ch][b][i];
+    for (int i = 0; i < nsmp; i++) p0 += (S128)X[ch][c][i] * X[ch][c][i], p1 += (S128)X[ch][b][i] * X[ch][b][i];
     return clip((bitlen128((U128)(p0 + 1)) - bitlen128((U128)(p1 + 1)) - o) / 2, 0, hi);
   }
   int hm[NCH];             // whether the channel's scale factor before was the prediction (0 none, 1 it was, 2 not)
@@ -212,8 +223,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       for (int j = 0; j < nsmp; j++) {
         analyze_bound(*wav, bind, ch, o0 + 32 * up * j, fir, x, x96a ? NSUB96 : NSUB);
         for (int b = 0; b < NSUB; b++) X[ch][b][j] = x[b];
-        x31o[ch][j] = x[NSUB - 1];
-        if (!x96a && !ss_rule()) X[ch][NSUB - 1][j] -= rshift(x[0] * c31_m(), 23);
+        for (int c = 0; c < CPL_N; c++) {
+          const int tb = NSUB - 1 - c;
+          xcpl[c][ch][j] = x[tb];
+          if (tb >= r.nvqsub[ch] && !x96a && !ss_rule()) X[ch][tb][j] += rshift(x[c] * cpl_m(c, cpl_k(c)), 23);
+        }
         for (int b = 0; x96a && b < NSUB96; b++) xa[ch][b][fb0 + j] = x[b];
       }
       const U32* tab = r.shuff[ch] == 6 ? SF7 : SF6;
@@ -674,7 +688,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       mn = near * 64 < en;
     }
     for (int g = 0; g < 32; g++) cand[g].k = mn ? md[g] : gm[g], cand[g].i = g;
-    const int lk = c31_leak(r, ch, b, 26, 15), gn = lk >= 0 ? lk : imin(si >> 3, 15);
+    const int lk = cpl_leak(r, ch, b, 26, 15), gn = lk >= 0 ? lk : imin(si >> 3, 15);
     const int g = code_cand(32, 5, (int)v >> 5, VK_HFG, ch, b, gn);
     if (tried) {
       hfr[0] += mn, hfr[1]++;
@@ -684,17 +698,18 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     n_hfvq++;
     for (int i = 0; i < 32; i++) cand[i].k = hf_dist(g * 32 + i, x, nsmp, sc), cand[i].i = i;
     v = g * 32 + code_cand(32, 5, (int)v & 31, VK_HFV, ch, b, gn);
-    if (b == NSUB - 1 && !x96a && !ss_rule()) {  // (each m's group by the centroids)
-      for (int k = 0; k < C31_K; k++) {
+    if (cpl_on(r, ch, b)) {  // (each m's group by the centroids)
+      const int c = NSUB - 1 - b;
+      for (int k = 0; k < CPL_K; k++) {
         S64 y[NSMP];
-        c31_values(ch, k, y, nsmp);
+        cpl_values(c, ch, k, y, nsmp);
         int gb = 0;
         S128 db = hf_group_dist(0, y, nsmp, sc);
         for (int gg = 1; gg < 32; gg++) {
           const S128 d = hf_group_dist(gg, y, nsmp, sc);
           if (d < db) db = d, gb = gg;
         }
-        c31_hit[k] += gb == (int)(v >> 5);
+        cpl_hit[c][k] += gb == (int)(v >> 5);
       }
     }
     return v;
@@ -951,7 +966,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.bd = b;
     D.cc = chan_class(ch);
     D.nb = bound[ch] && b ? clip((es[ch][b - 1] - es[ch][b]) / 2, -4, 4) + 4 : 9;
-    if (c31_leak(r, ch, b, 24, 8) >= 0) D.nb = c31_leak(r, ch, b, 24, 8);
+    if (cpl_leak(r, ch, b, 24, 8) >= 0) D.nb = cpl_leak(r, ch, b, 24, 8);
     f_scl.make(D, X_);
     f_scl.select(X_);
     if (p >= 0) {
@@ -964,16 +979,17 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       else v = checked((A ? A - 1 : 0) + f_scl.codes(X_, ENC ? v - (A ? A - 1 : 0) : 0, (u32)D.kd), 0, max - 1);
     }
     if (!j) pscale[ch][b] = p + 1;
-    if (b == NSUB - 1 && !j && !tm && !s.pmode[ch][b] && bound[ch] && !x96a && !ss_rule()) {  // (each m's RMS rule)
-      for (int k = 0; k < C31_K; k++) {
+    if (!j && cpl_on(r, ch, b)) {  // (each m's RMS rule)
+      const int c = NSUB - 1 - b;
+      for (int k = 0; k < CPL_K; k++) {
         S64 y[NSMP];
         int nr;
-        c31_values(ch, k, y, nsmp);
-        c31_hit[k] += scale_pred(y, nsmp, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &nr) == v;
+        cpl_values(c, ch, k, y, nsmp);
+        cpl_hit[c][k] += scale_pred(y, nsmp, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &nr) == v;
       }
-      if (++c31_n >= 1u << 16) {
-        c31_n >>= 1;
-        for (int k = 0; k < C31_K; k++) c31_hit[k] >>= 1;
+      if (++cpl_n[c] >= 1u << 16) {
+        cpl_n[c] >>= 1;
+        for (int k = 0; k < CPL_K; k++) cpl_hit[c][k] >>= 1;
       }
     }
     n_sf++;
@@ -1146,8 +1162,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     lqs = (S8)svar(v);
     n_smp++;
     n_hit += how == 0;
-    lfit.add(lfe_f[i], v * lfe_st);
-    lfit2.add(lfe_f[i], v * lfe_st);
+    lfit.add(lfe_f[i], v * lfe_st, lfe_st);
+    lfit2.add(lfe_f[i], v * lfe_st, lfe_st);
     {  // (whether each prediction's index was the value)
       S128 dd;
       S64 al;

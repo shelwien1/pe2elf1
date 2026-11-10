@@ -103,8 +103,8 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      channel's class (`s.2.dts`'s encoder puts its fronts' and surrounds' top subband 1-4 entries
 //      above the RMS rule's a third and a quarter of the time, its centre's 5%), nb the audio's
 //      energy in the subband below less this one's, in halves of scale factor steps (-4..4 as
-//      0-8, 9 none; the more the band below's, the likelier that; a lossless WAV's top subband's,
-//      VQ: its bottom subband's power over its own, in doublings less 24, halved, 0-8)
+//      0-8, 9 none; the more the band below's, the likelier that; a lossless WAV's top subbands',
+//      31 and 30, VQ: subband 0's or 1's power over their own, in doublings less 24, halved, 0-8)
 // smp: ab ABITS (1-26; 27 an LFE sample's), hw the code (1 Huffman, 2 plain, 3 block codes), pk whether the audio
 //      predicts the index, nr how near the rounding boundary its value lies, as log2 of its
 //      distance in steps (0-15: 2^-17 or nearer to 2^-2 or farther), nl the same in the channel's
@@ -116,9 +116,9 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      smp's
 // vqr: kd what is ranked (VK_*), cc, bd, mg how far the best candidate beats the next (0 within
 //      1/256, 1 within 1/128 ... 11 by 4 times or more, 12 by all), gn the prediction gain of the subband's LPC in halvings
-//      (VK_PVQ: 0-15) or its scale factor / 8 (0-15; a lossless WAV's top subband's, VQ: its
-//      bottom subband's power over its own, in doublings less 26, halved, model_smp.inc's
-//      c31_leak()), lh the subband's last rank of the kind (0 none, 1 the best, 2 another)
+//      (VK_PVQ: 0-15) or its scale factor / 8 (0-15; a lossless WAV's top subbands', 31 and 30,
+//      VQ: subband 0's or 1's power over their own, in doublings less 26, halved, model_smp.inc's
+//      cpl_leak()), lh the subband's last rank of the kind (0 none, 1 the best, 2 another)
 // raw: c1, c2 the bytes before, code what the bytes are (0 between frames, 1 a frame kept as bytes,
 //      2 the bits after the subframes, 3 those before the XCH extension), at the byte's place
 //      (tc_qlog; the tail's and the gap's from their end), cl

@@ -734,8 +734,9 @@ static S64 sf_int(Sf a, int q) {
 // The correction's least squares fit: the decimated samples around each LFE sample (f, NF of
 // them: LFE_NT, or LFE_NF with the last LFE values, as a decoded WAV's LFE is the decoder's
 // interpolation of the values, 8 of them in each of its samples, so with the last ones the fit
-// sees the next alone) against the LFE value times its scale (y), the older ones forgotten (by
-// 1/128 a frame), ridged toward no correction. Plain data: init(), then add() each sample,
+// sees the next alone) against the LFE value times its scale (y), each weighted by 1 over its
+// scale squared (what the coder pays for is the error in steps), the older ones forgotten (by
+// 1/32 a frame), ridged toward no correction. Plain data: init(), then add() each sample,
 // refit() each frame.
 template <int NF>
 struct LfeFit {
@@ -751,18 +752,21 @@ struct LfeFit {
     for (int k = 0; k < NF; k++) p += (S128)w[k] * f[k];
     return (S64)(p >> 30);
   }
-  void add(const S64* f, S64 y) {
+  // (st: y's scale, 1 or more; the weight 2^40 / (st^2 + 1), the products' 2^-20: f around y,
+  // within 2^30, the terms within 2^100)
+  void add(const S64* f, S64 y, S64 st) {
+    const S128 wq = ((S128)1 << 40) / ((S128)st * st + 1);
     for (int i = 0; i < NF; i++) {
-      for (int j = 0; j <= i; j++) G[i][j] += (S128)f[i] * f[j];
-      c[i] += (S128)f[i] * y;
+      for (int j = 0; j <= i; j++) G[i][j] += (S128)f[i] * f[j] * wq >> 20;
+      c[i] += (S128)f[i] * y * wq >> 20;
     }
   }
   // (G + r I) w = c + r e_K by LDL', r the mean diagonal / 2^23 (w as it was where that fails)
   void refit() {
     S128 tr = 0;
     for (int i = 0; i < NF; i++) {
-      for (int j = 0; j <= i; j++) G[i][j] -= G[i][j] >> 7;
-      c[i] -= c[i] >> 7;
+      for (int j = 0; j <= i; j++) G[i][j] -= G[i][j] >> 5;
+      c[i] -= c[i] >> 5;
       tr += G[i][i];
     }
     if (tr <= 0) return;
