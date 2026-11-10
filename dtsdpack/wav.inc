@@ -24,6 +24,8 @@ struct WavIn {
   U8* probe;         // the first bytes, the samples after the header in them not taken yet
   size_t pn, pat;    // their number, and where the next sample's bytes start
   char why[128];     // why it isn't a WAV it reads
+  S32* ext;          // past its end: each channel's continuation, ext_n samples of it (anal.inc's
+  int ext_n, ext_on;  // wav_extend()), where ext_on (else 0s)
 
   void init(FILE* fp) {
     memset(this, 0, sizeof *this);
@@ -46,12 +48,19 @@ struct WavIn {
     for (int c = 0; c < WAV_CH; c++) free(ring[c]), ring[c] = nullptr;
     free(rb);
     free(probe);
+    free(ext);
     rb = probe = nullptr;
+    ext = nullptr;
   }
 
-  // sample s of channel c: 0 outside the WAV; s in the window need() made
+  // sample s of channel c: 0 outside the WAV (past its end, its continuation where made); s in the
+  // window need() made
   INLINE S32 at(int c, S64 s) const {
-    if (s < 0 || (U64)s >= got || c >= nch) return 0;
+    if (s < 0 || c >= nch) return 0;
+    if ((U64)s >= got) {
+      const U64 k = (U64)s - nsamp;
+      return ext_on && got == nsamp && k < (U64)ext_n ? ext[(size_t)c * ext_n + (size_t)k] : 0;
+    }
     return ring[c][s & (WAV_WIN - 1)];
   }
   // samples s..s + n - 1 of channel c (as at()'s): in the ring where they are there in a row, else

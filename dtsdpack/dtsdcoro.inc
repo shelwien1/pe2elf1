@@ -140,6 +140,7 @@ struct DtsCoro : CoIo<Coder<f_DEC> > {
     st.hits9 = k.n_hit9, st.smp9 = k.n_smp9, st.sf_hits9 = k.n_sfhit9, st.sf9 = k.n_sf9;
     st.ab = k.n_ab, st.ab_srch = k.n_abs, st.ab_hits = k.n_abhit;
     st.ab_st = k.n_st, st.ab_sthits = k.n_sthit;
+    st.ab_tb = k.n_tb, st.ab_tbhits = k.n_tbhit;
     for (int i = 0; i < VK_N; i++) st.vq[i] = k.n_vq[i], st.vq_hits[i] = k.n_vqhit[i];
     st.pv = k.n_pv, st.pv_hits = k.n_pvhit;
     return 0;

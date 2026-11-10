@@ -189,11 +189,22 @@ struct Model : ModelX96<f_DEC, LV> {
         // (the staircase's guess at the values' fine energy, less the level: model_smp.inc; the
         // subframe's first ABITS sets the level's centre)
         const int pass = r.xpass ? 1 : 0;
-        if (!B::abl[pass].set) B::level_centre(r, s, pass, pos);
+        if (!B::abl[pass].set) B::level_centre(r, s, pass, pos), B::ap_start(pass);
         auto& st = B::ab_st[pass][b];
         const S32 fe = e ? B::fe_s[ch][b] : B::FE_NONE;
-        const int sg = fe != B::FE_NONE ? B::level_guess(pass, st, fe) : -1;
-        const int sm = fe != B::FE_NONE ? B::level_margin(pass, st, fe, sg) : 0;
+        // (the allocation table's, where it has missed less than the staircases: model_smp.inc)
+        const int sg0 = fe != B::FE_NONE ? B::level_guess(pass, st, fe) : -1;
+        int tm = 0;
+        const int tg = fe != B::FE_NONE ? B::ap_guess(pass, b, fe, &tm) : -1, ut = tg >= 0 && B::ap_rule(pass);
+        const int sg = ut ? tg : sg0;
+        const int sm = ut ? tm : fe != B::FE_NONE ? B::level_margin(pass, st, fe, sg0) : 0;
+        // (a transient's: the guesses at its values' energy and at those from it on's)
+        int gw = -1, ga = -1;
+        if (fe != B::FE_NONE && B::fe_a[ch][b] != B::FE_NONE) {
+          int m1;
+          gw = ut ? B::ap_guess(pass, b, B::fe_w[ch][b], &m1) : B::level_guess(pass, st, B::fe_w[ch][b]);
+          ga = ut ? B::ap_guess(pass, b, B::fe_a[ch][b], &m1) : B::level_guess(pass, st, B::fe_a[ch][b]);
+        }
         int eq = e ? B::eq[ch][b] : 4;
         if (e && s.pmode[ch][b]) {  // (an ADPCM subband's: its prediction's residual's)
           int near;
@@ -247,7 +258,11 @@ struct Model : ModelX96<f_DEC, LV> {
           Sn = sg + 1, fs = 1;
         // (where the first guess is the staircase's, the second the ABITS across the nearer edge of
         // its energies: a miss's, nearly always)
-        const int ms = Sn == sg + 1 ? sm : 0, alt = ms ? (ms <= 8 ? sg - 1 : sg + 1) : -1;
+        const int ms = Sn == sg + 1 ? sm : 0;
+        int alt = ms ? (ms <= 8 ? sg - 1 : sg + 1) : -1;
+        // (a transient's, the guess at the energy not taken is the second, where it differs)
+        const int tro = fs && gw >= 0 && ga >= 0 && gw != ga ? (sg == ga ? gw : ga) : -1;
+        if (tro >= 0 && tro != sg) alt = tro;
         // (the budget: what the samples may still take, toward the edge ms says, in steps of this
         // subband's bits across it; a lossless WAV's only: a decoded WAV's streams 0.1-0.9% bigger
         // with it)
@@ -260,13 +275,22 @@ struct Model : ModelX96<f_DEC, LV> {
             bg = t >= 4 * st ? 1 : t >= 2 * st ? 2 : t >= st ? 3 : t > -st ? 4 : t > -2 * st ? 5 : t > -4 * st ? 6 : 7;
           }
         }
+        // (what the other of the staircase and the table says)
+        const int og2 = ut ? sg0 : tg;
+        const int ag = tro >= 0 && tro != sg ? 4 : !fs || og2 < 0 ? 0 : og2 == sg ? 1 : og2 == alt ? 2 : 3;
         v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
                        s.pmode[ch][b], lbd, nb, mx, Sn, near_e ? 14 : nn, sc, eq, ms,
-                       alt >= lo && alt <= hi ? alt + 1 : 0, bg);
+                       alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag);
         v = checked(v, lo, hi);
         if (!pass && bound[ch]) B::ab_budget_add(r, ch, b, (int)v);
         if (sn) *sn = (U8)(v + 1);
-        if (fe != B::FE_NONE) B::level_add(pass, st, fe, (int)v);
+        if (fe != B::FE_NONE) {
+          B::level_add(pass, st, fe, (int)v);
+          B::ap_score(pass, sg0, tg, (int)v);
+          B::ap_add(pass, b, fe, (int)v);
+        }
+        if (ut) B::n_tb++, B::n_tbhit += v == tg;
+        if (gw >= 0 && ga >= 0) B::ab_ev[ch][b] = (U8)(gw == ga ? 3 : v == ga ? 2 : v == gw ? 1 : 0);
         if (fs) B::n_st++, B::n_sthit += v == sg;
         if (sc) B::n_abhit += v == G - 1;
         if (srch) {
@@ -288,7 +312,12 @@ struct Model : ModelX96<f_DEC, LV> {
                         ec[ch][b]);
         else if (bound[ch]) {  // (a lossless WAV's: against the rule, its class the context ac)
           int tg;
-          const int tc = B::tmode_rule(s, ch, b, &tg);
+          int tc = B::tmode_rule(s, ch, b, &tg);
+          if (tc >= 3) {  // (and what its ABITS said: 3 the values' energy, 6 or 8 that from the transient on)
+            const int ev = B::ab_ev[ch][b], r4 = tc >= 5;
+            tc = ev == 1 ? 3 : ev == 2 ? (r4 ? 8 : 6) : r4 ? 7 : 4 + (s.abits[ch][b] >= 10);
+            if (ev == 1) tg = 0;
+          }
           v = side_code(SF_TMODE, ch, b, v, lo, hi, 0, 1 + (tc >= 3 ? tg : 0), hist.tmode[ch][b], tc,
                         1 + imin(s.abits[ch][b], 26), ec[ch][b]);
         } else

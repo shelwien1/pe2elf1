@@ -24,6 +24,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   S64 tframe;     // the frame's first
   S64 t0;         // the subframe's first
   int nsmp;       // the subframe's samples
+  int ext_set;    // (the WAV's continuation past its end: 1 made, 2 taken or not: smp_subframe())
   int bound[NCH];  // whether the subframe's channel has the audio's subband samples (X)
   S64 X[NCH][NSUB][NSMP];  // the audio's subband samples in the subframe (2^-AQ_F)
   S64 xh[NCH][NSUB][4];    // the audio's last 4 before the subframe (xh[.][.][0] the last)
@@ -63,6 +64,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     } obs[NCH * NSUB];
   } abl[2];
   S32 fe_s[NCH][NSUB];  // the subframe's subbands' fine energies (FE_NONE: none)
+  S32 fe_w[NCH][NSUB], fe_a[NCH][NSUB];  // (a transient's: its values', those from it on; else FE_NONE)
+  U8 ab_ev[NCH][NSUB];  // what its ABITS said (1 the values', 2 those from the transient on; 0 neither, 3 both)
   // the core's subframe's bit budget as its ABITS come (ab_budget()): the subbands coded, the bits
   // their ABITS' samples take
   U8 bg_done[NCH][NSUB];
@@ -256,8 +259,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     lfe_on = 0;
     if (!wav || !wav->ok) return;
     const int up = bind.up;
-    const S64 o0 = 32 * up * t0 + bind.off;
-    S64 lo = o0 - 512 * up, hi = o0 + 32 * up * (S64)(nsmp - 1);
+    const S64 o0 = 32 * up * t0 + bind.off, hs = o0 + 32 * up * (S64)(nsmp - 1);
+    S64 lo = o0 - 512 * up, hi = hs;
     // the LFE (64x only), its samples' windows and the correction's around them
     const S64 n0 = t0 / 2;
     if (r.lff == 2 && !r.xpass && bind.lfe >= 0 && bind.lfe < wav->nch) {
@@ -267,6 +270,17 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       hi = imax(hi, 64 * up * (n0 + lfe_n - 1 + LFE_K) + bind.off);
     }
     wav->need(lo, hi);
+    // (past the WAV's end, its continuation: from where the subbands' analysis first reaches past
+    // it, or 0s, whichever makes more of that subframe's indexes, a bit: the encoder's input went
+    // on, or ended; the LFE's windows, reaching on further, have it before)
+    if (ext_set < 2 && hi > (S64)wav->nsamp && wav->got == wav->nsamp) {
+      if (!ext_set) ext_set = 1, wav_extend(*wav), wav->ext_on = 1;
+      if (hs > (S64)wav->nsamp) {
+        ext_set = 2;
+        const int m = ENC && ext_hits(r, s, o0, 1) > ext_hits(r, s, o0, 0);
+        wav->ext_on = c->code_bit(CO_ONE / 2, m);
+      }
+    }
     S64 past[LFE_NP];  // (for the scale factor's prediction: the subframe's values as predicted)
     for (int k = 0; k < LFE_NP; k++) past[k] = lfe_past[k];
     for (int i = 0; lfe_on && i < lfe_n; i++) {
@@ -334,6 +348,28 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         tlev[ch][j] = q;
       }
     }
+  }
+  // (c) the subframe's indexes the analysis makes with the WAV's continuation past its end (on) or
+  // with 0s there: those of its bound channels' subbands that neither predict nor are VQ ones
+  int ext_hits(const CoreRec& r, const CoreSub& s, S64 o0, int on) {
+    wav->ext_on = on;
+    int h = 0;
+    for (int ch = r.ch0(); ch < r.ch1(); ch++) {
+      if (!bind.bound(ch, wav->nch)) continue;
+      S64 x[64];
+      for (int j = 0; j < nsmp; j++) {
+        analyze_bound(*wav, bind, ch, o0 + 32 * bind.up * j, fir, x, x96a ? NSUB96 : NSUB, !ss_rule() && !x96a);
+        for (int b = 0; b < r.nvqsub[ch]; b++) {
+          const int a = s.abits[ch][b];
+          if (!a || s.pmode[ch][b]) continue;
+          S64 qlo, qhi, alt;
+          S128 dist;
+          quant_range(r, ch, a, qlo, qhi);
+          h += requant(x[b], step_scale(r, s, ch, b, j >> 3), qlo, qhi, &dist, &alt) == s.q[ch][b][j];
+        }
+      }
+    }
+    return h;
   }
   // the subframe done: the audio's last subband samples, as the next one's history; the LFE's
   // correction fit again
@@ -425,7 +461,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   }
   // the subframe's first ABITS (all its PMODE and PVQ known): its subbands' fine energies, and the
   // centre as the encoder's rate control would make it: the level at which the staircases' ABITS
-  // cost what the last subframes' did (the nearer of the two either side; within AB_RC)
+  // cost what the last subframes' did (the nearer of the two either side; within AB_RC); the
+  // core's, where their samples would take the frame's bits (above), and the same of the
+  // allocation table's ABITS (apl's c0t, within AB_RC of the last)
   // (at the subframe's first ABITS, at bit at of the frame)
   void level_centre(const CoreRec& r, const CoreSub& s, int p, U64 at) {
     AbLevel& L = abl[p];
@@ -435,12 +473,16 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     memcpy(ab_snap[p], ab_st[p], sizeof ab_snap[p]);
     for (int ch = r.ch0(); ch < r.ch1(); ch++)
       for (int b = 0; b < r.nvqsub[ch]; b++) {
-        fe_s[ch][b] = FE_NONE;
+        fe_s[ch][b] = fe_w[ch][b] = fe_a[ch][b] = FE_NONE, ab_ev[ch][b] = 0;
         if (!bound[ch]) continue;
         S64* const x = bud_v[ch][b];
         const int n = scale_values(s, ch, b, 0, s.nssc, x);
         int near;
         fe_s[ch][b] = fine_energy(x, n);
+        // (a transient's, its rise 3 doublings or more: the encoders' energy may be the part from it
+        // on, where its second scale factor is: ab_transient())
+        fe_w[ch][b] = fe_s[ch][b], ab_ev[ch][b] = 0;
+        fe_s[ch][b] = ab_transient(s, ch, b, x, n, p, fe_s[ch][b], &fe_a[ch][b]);
         bud_n[ch][b] = n;
         bud_si[ch][b] = scale_pred(x, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
         memset(bud_b[ch][b], 0xFF, sizeof bud_b[ch][b]);
@@ -459,6 +501,19 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         else hi = m, th = tm;
       }
       L.c0 = clip(tl - T < T - th ? lo : hi, -AL_C, AL_C);
+      // (and the table's: where its ABITS take those bits)
+      AbParLevel& A = apl[0];
+      lo = (A.cset ? A.c0t : L.c0) - AB_RC, hi = (A.cset ? A.c0t : L.c0) + AB_RC;
+      tl = bud_total_tab(r, lo), th = bud_total_tab(r, hi);
+      if (tl <= T) hi = lo, th = tl;
+      else if (th > T) lo = hi, tl = th;
+      while (hi - lo > 1) {
+        const S32 m = lo + (hi - lo) / 2;
+        const S64 tm = bud_total_tab(r, m);
+        if (tm > T) lo = m, tl = tm;
+        else hi = m, th = tm;
+      }
+      A.c0t = clip(tl - T < T - th ? lo : hi, -AL_C, AL_C), A.cset = 1;
       return;
     }
     if (L.tgt <= 0) return;
@@ -482,9 +537,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     L.c0 = clip(clo - L.tgt < L.tgt - chi ? lo : hi, -AL_C, AL_C);
   }
   // The bits (in quarters) the core's subframe's samples may still take as channel ch's subband b's
-  // ABITS comes, less what the staircases' guesses for it and the subbands after it would take at
-  // the level as it is (the encoders fill their frames: abt's bg): what they take from the
-  // subframe's first ABITS on (abl's avail + rb), less the ABITS coded's, less those guesses'
+  // ABITS comes, less what the guesses for it and the subbands after it would take at the level as
+  // it is (the table's where they are the first ones, else the staircases'; the encoders fill their
+  // frames: abt's bg): what they take from the subframe's first ABITS on (abl's avail + rb), less
+  // the ABITS coded's, less those guesses'
   S64 ab_budget(const CoreRec& r) {
     const AbLevel& L = abl[0];
     S64 rest = 0;
@@ -492,7 +548,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (bound[c])
         for (int k = 0; k < r.nvqsub[c]; k++) {
           if (bg_done[c][k]) continue;
-          int g = fe_s[c][k] == FE_NONE ? -1 : level_guess(0, ab_st[0][k], fe_s[c][k]);
+          int g = -1, m;
+          if (fe_s[c][k] != FE_NONE && ap_rule(0)) g = ap_guess(0, k, fe_s[c][k], &m);
+          if (g < 0) g = fe_s[c][k] == FE_NONE ? -1 : level_guess(0, ab_st[0][k], fe_s[c][k]);
           if (g < 0) g = hist.abits[c][k] ? hist.abits[c][k] - 1 : 0;
           rest += bud_bits(r, c, k, g);
         }
@@ -542,12 +600,58 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         }
     return t;
   }
+  // A lossless WAV's subband with a transient (where a subsubframe's mean square is 8 times the one
+  // before's or more, the largest such rise's; not an ADPCM subband's, not from 20 up: tmode_rule()):
+  // the encoders seen allocate its bits by the mean square of its values from the transient on,
+  // where the rise is a threshold or more: 3.9 doublings where those values' ABITS by the table is 9
+  // or less, an eighth of one less for each ABITS more, to 3 (`s.2.dts`: 99.9% of its transients
+  // from 4 doublings up, from 3 to 4 more the louder; the table at its last level, or 3.6 doublings);
+  // the fine energy the ABITS are guessed by (fe the subframe's; *fa those values', FE_NONE none)
+  S32 ab_transient(const CoreSub& s, int ch, int b, const S64* x, int n, int p, S32 fe, S32* fa_) const {
+    *fa_ = FE_NONE;
+    if (s.pmode[ch][b] || b >= 20 || s.nssc < 2 || fe == FE_NONE) return fe;
+    int tk = 0;
+    S32 tr = 0;
+    for (int k = 1; k < s.nssc; k++) {
+      const S32 e0 = fine_energy(x + 8 * (k - 1), 8), e1 = fine_energy(x + 8 * k, 8);
+      if (e1 == FE_NONE) continue;
+      const S32 rr = e0 == FE_NONE ? (S32)1 << 20 : e1 - e0;
+      if (rr > tr) tr = rr, tk = k;
+    }
+    if (!tk || tr < 3 * 128) return fe;
+    const S32 fa = *fa_ = fine_energy(x + 8 * tk, n - 8 * tk);
+    const AbPar& t = abp[p][b];
+    int th = 464;
+    if (t.set) {
+      const int g = ap_abits((S64)fa - apl[p].pri - apl[p].d - t.o);
+      th = clip(496 - 16 * (g - 9), 384, 496);
+    }
+    return tr >= th ? fa : fe;
+  }
+  // the bits the core's bound subbands' samples would take at the table's ABITS at level l (where it
+  // has none, the staircases', else the last ABITS)
+  S64 bud_total_tab(const CoreRec& r, S32 l) {
+    S64 t = 0;
+    for (int ch = r.ch0(); ch < r.ch1(); ch++)
+      if (bound[ch])
+        for (int b = 0; b < r.nvqsub[ch]; b++) {
+          int g = -1;
+          if (fe_s[ch][b] != FE_NONE) {
+            const AbPar& q = abp[0][b];
+            g = q.set ? ap_abits((S64)fe_s[ch][b] - l - q.o) : q.one ? 1 : stair_guess(ab_st[0][b], fe_s[ch][b] - l);
+          }
+          if (g < 0) g = hist.abits[ch][b] ? hist.abits[ch][b] - 1 : 0;
+          t += bud_bits(r, ch, b, g);
+        }
+    return t;
+  }
   // pass p's subframe's ABITS all known: the staircases as they were at its first, each of its ABITS
   // then added at its last level; and (the core's) what its samples' bits came to past the frame's
   // bits from its first ABITS on
   void level_commit(const CoreRec& r, const CoreSub& s, int p) {
     AbLevel& L = abl[p];
     if (!L.set) return;
+    ap_commit(p);
     memcpy(ab_st[p], ab_snap[p], sizeof ab_snap[p]);
     for (int i = 0; i < L.nobs; i++) stair_add(ab_st[p][L.obs[i].b], L.obs[i].x - L.c0 - L.d, L.obs[i].v);
     if (p) return;
@@ -591,6 +695,160 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (s2 > bs) bs = s2, bk = AL_ND + k;
     }
     L.d = bk - AL_ND;
+  }
+
+  // --- the lossless WAVs' encoders' allocation table ----------------------------------------------
+
+  // The DTS-HD MA encoders seen allocate by one table: a subband's ABITS is a (2 to 26; else 1)
+  // where its fine energy, less the level and its band's offset, is ap_edge(a) or more (in 1.5 dB
+  // steps: 64 units), the next's less; the bands' offsets are the stream's (bands 5-19 the same,
+  // 20-27 2 dB more each, the bottom ones lower, or the same). Fitted afterwards, a level per
+  // subframe, the staircases miss 0.6% of a lossless WAV's ABITS where their intervals as they come
+  // miss 1.6%. So each band's offset is the one most of its last ABITS (the newer the more) say at
+  // their subframes' levels; a subframe's level, the core's from the budget as the staircases'
+  // centre is (level_centre(), at the table's ABITS: c0t), the extension's that centre, plus how far
+  // the last subframes' levels lay from it, then the shift at which the table makes the most of the
+  // subframe's ABITS so far (as the staircases' level). Its guesses are the first ones where they
+  // have missed less than the staircases' (ap_rule()).
+  static constexpr int AP_W = 1024;  // (a band's offsets: within AP_W of its first)
+  static constexpr int AP_SH = 64;   // (the level: within AP_SH of the prior)
+  static constexpr S64 AP_FAR = (S64)1 << 40;
+  struct AbPar {
+    S32 c, o;              // the scores' centre (the band's first ABITS above 1's), its offset
+    U8 set, one, out;      // (whether c is set; ABITS 1 seen, with c unset; ABITS in a row the scores miss)
+    U32 sc[2 * AP_W + 1];  // each offset's score (ap_inc's)
+  } abp[2][NSUB];
+  struct AbParLevel {
+    U32 inc;          // (the scores' step: it grows, the older ones count less)
+    S32 pri, d;       // the subframe's prior level, the shift from it
+    S64 drift;        // the last subframes' levels less their centres (2^-10 units, an average)
+    int dset;         // (whether drift is)
+    S32 sc[AL_NK];    // how many of the subframe's ABITS each shift (less AL_ND) made the table's
+    int anch;         // whether the centre is the budget's (the core's) or the cost's (the extension's)
+    S32 c0t, cb;      // (the core's) the centre the budget makes of the table's ABITS; the one the prior is from
+    int cset;         // (whether c0t is)
+    U32 miss[2];      // the staircases' first guesses wrong, the table's (where both have one)
+  } apl[2];
+  U64 n_tb, n_tbhit;  // (-s: the ABITS the table said, those it said right)
+  // ABITS a's lower edge (a 2-27: 27 none)
+  static S64 ap_edge(int a) {
+    static const S16 K[11] = {0, 0, 0, 3, 5, 6, 8, 10, 12, 13, 17};
+    return a > 26 ? AP_FAR : a < 2 ? -AP_FAR : 64 * (S64)(a <= 10 ? K[a] : 17 + 4 * (a - 10));
+  }
+  // the table's ABITS at y
+  static int ap_abits(S64 y) {
+    if (y < 0) return 1;
+    if (y >= ap_edge(10)) return (int)imin(10 + (int)((y - ap_edge(10)) >> 8), 26);
+    int a = 2;
+    while (y >= ap_edge(a + 1)) a++;
+    return a;
+  }
+  // the subframe of pass p starts, its centre known
+  void ap_start(int p) {
+    AbParLevel& A = apl[p];
+    A.cb = !p && A.cset && abl[p].rn ? A.c0t : abl[p].c0;
+    A.pri = (S32)clip((S64)A.cb + (A.drift >= 0 ? (A.drift + 512) >> 10 : -((-A.drift + 512) >> 10)), -AL_C, AL_C);
+    A.d = 0;
+    A.anch = p ? abl[p].tgt > 0 : abl[p].rn > 0;
+    memset(A.sc, 0, sizeof A.sc);
+  }
+  // the table's ABITS for band b at the fine energy x (-1 none), and how sure it is (*m, as
+  // level_margin()'s)
+  int ap_guess(int p, int b, S32 x, int* m) const {
+    const AbPar& t = abp[p][b];
+    *m = 0;
+    if (!t.set) return t.one ? 1 : -1;
+    const S64 y = (S64)x - apl[p].pri - apl[p].d - t.o;
+    const int g = ap_abits(y);
+    const S64 lo = y - ap_edge(g), hi = ap_edge(g + 1) - 1 - y, mm = lo < hi ? lo : hi;
+    int k = 0;
+    while (k < 7 && mm >= ((S64)1 << k)) k++;
+    *m = 1 + 8 * (lo >= hi) + k;
+    return g;
+  }
+  // and its ABITS was v: the shifts at which the table would have said it count
+  void ap_add(int p, int b, S32 x, int v) {
+    const AbPar& t = abp[p][b];
+    AbParLevel& A = apl[p];
+    if (!t.set || v < 1 || v > 26) return;
+    // (edge(v) <= x - pri - s - o < edge(v + 1): x - pri - o - edge(v + 1) < s <= x - pri - o - edge(v))
+    const S64 y = (S64)x - A.pri - t.o;
+    const S64 k0 = clip(y - ap_edge(v + 1) + 1 + AL_ND, AL_ND - AP_SH, AL_ND + AP_SH + 1),
+              k1 = clip(y - ap_edge(v) + AL_ND, AL_ND - AP_SH - 1, AL_ND + AP_SH);
+    // (as the staircases': a 16th of an ABITS's score off for each unit from the prior; the best,
+    // the last one or one of those this ABITS raised; of equal ones the nearer the prior, then the
+    // lower)
+    auto score = [&](S64 k) { return 16 * (S64)A.sc[k] - (k > AL_ND ? k - AL_ND : AL_ND - k); };
+    auto better = [&](S64 k, S64 j) {
+      const S64 a = score(k), z = score(j);
+      const S64 dk = k > AL_ND ? k - AL_ND : AL_ND - k, dj = j > AL_ND ? j - AL_ND : AL_ND - j;
+      return a > z || (a == z && (dk < dj || (dk == dj && k < j)));
+    };
+    S64 bk = A.d + AL_ND;
+    for (S64 k = k0; k <= k1; k++) {
+      A.sc[k]++;
+      if (k != bk && better(k, bk)) bk = k;
+    }
+    A.d = (S32)(bk - AL_ND);
+  }
+  // pass p's subframe's ABITS all known (abl[p]'s obs): each band's offsets scored at its level, the
+  // level's distance from the centre into the average
+  void ap_commit(int p) {
+    AbParLevel& A = apl[p];
+    const AbLevel& L = abl[p];
+    const S64 lv = (S64)A.pri + A.d;
+    if (!A.anch) return;  // (a level of nothing yet: the stream's first subframe)
+    if (!A.inc) A.inc = 1 << 10;
+    for (int i = 0; i < L.nobs; i++) {
+      AbPar& t = abp[p][L.obs[i].b];
+      const int v = L.obs[i].v;
+      if (v < 1 || v > 26) continue;
+      const S64 x = (S64)L.obs[i].x - lv;
+      const S64 lo = v < 26 ? x - ap_edge(v + 1) + 1 : -AP_FAR, hi = v > 1 ? x - ap_edge(v) : AP_FAR;
+      // (a band's scores start at its first ABITS above 1; again where two in a row lie past them:
+      // the level has moved, as from a silence)
+      if (t.set && (hi < (S64)t.c - AP_W || lo > (S64)t.c + AP_W) && ++t.out >= 2) t.set = 0;
+      if (!t.set) {
+        if (v < 2) {
+          t.one = 1;
+          continue;
+        }
+        t.set = 1, t.out = 0, t.c = t.o = (S32)(((lo > hi - 255 ? lo : hi - 255) + hi) >> 1);
+        memset(t.sc, 0, sizeof t.sc);
+      }
+      const S64 i0 = clip(lo - t.c, -AP_W, AP_W + 1) + AP_W, i1 = clip(hi - t.c, -AP_W - 1, AP_W) + AP_W;
+      if (i0 > i1) continue;
+      t.out = 0;
+      // (the best: the last one, or one of those the ABITS raised; of equal ones, the nearer it)
+      const S64 cur = t.o - t.c + AP_W;
+      S64 bo = cur;
+      U32 best = t.sc[cur];
+      for (S64 k = i0; k <= i1; k++) {
+        t.sc[k] += A.inc;
+        const S64 dk = k > cur ? k - cur : cur - k, db = bo > cur ? bo - cur : cur - bo;
+        if (t.sc[k] > best || (t.sc[k] == best && dk < db)) best = t.sc[k], bo = k;
+      }
+      t.o = (S32)(bo - AP_W + t.c);
+      A.inc += A.inc >> 10;  // (each ABITS: the older ones' scores 1023/1024 of the newer's)
+      if (A.inc >= 1u << 20) {
+        for (int c = 0; c < NSUB; c++)
+          for (int k = 0; k <= 2 * AP_W; k++) abp[p][c].sc[k] >>= 10;
+        A.inc >>= 10;
+      }
+    }
+    const S64 dd = (lv - A.cb) * 1024;
+    A.drift = A.dset ? A.drift + (dd - A.drift) / 32 : dd;
+    A.dset = 1;
+  }
+  // whether the table's guesses are the first ones: its misses, of the last 1024 or so where both
+  // had one, fewer than the staircases' (by 2)
+  bool ap_rule(int p) const { return apl[p].miss[1] + 1 < apl[p].miss[0]; }
+  // pass p's ABITS v: the staircases' guess sg, the table's tg
+  void ap_score(int p, int sg, int tg, int v) {
+    if (sg < 0 || tg < 0) return;
+    U32* m = apl[p].miss;
+    m[0] += v != sg, m[1] += v != tg;
+    if (m[0] + m[1] >= 1024) m[0] >>= 1, m[1] >>= 1;
   }
 
   // A lossless WAV's transient (TMODE) as encoders make it: where a subsubframe's energy is 8 times

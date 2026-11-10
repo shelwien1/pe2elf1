@@ -786,6 +786,68 @@ static S64 sf_int(Sf a, int q) {
   return e <= -63 ? (a.m < 0 ? -1 : 0) : a.m >> -e;
 }
 
+// The WAV past its end (wav.inc's at()): the core runs 512 samples ahead of its WAV (a 96 kHz WAV's
+// 64-band analysis 1024), so the analysis of its last frame looks past the WAV's end, at what its
+// encoder had there; 0s there miss three quarters of that frame's indexes. Each channel's
+// continuation instead: the linear prediction of order WAV_LPC fitted to its last WAV_FIT samples
+// (their autocorrelation under a half parabola, the newest weighted most, a 10000th of white noise
+// in it; Levinson's recursion in the soft float), run on for WAV_EXT samples. Made once, as the end
+// is read (where the model takes it or 0s: model_smp.inc's smp_subframe()).
+constexpr int WAV_LPC = 64, WAV_FIT = 4096, WAV_EXT = 2048;
+static void wav_extend(WavIn& w) {
+  if (w.ext || !w.ok || w.got != w.nsamp) return;
+  w.ext = (S32*)xmalloc(sizeof(S32) * (size_t)w.nch * WAV_EXT);
+  w.ext_n = WAV_EXT;
+  static_assert(WAV_FIT <= WAV_WIN, "the samples fitted are in the window");
+  const S64 N = (S64)w.nsamp, n = N < WAV_FIT ? N : WAV_FIT;  // (those fitted: the ring has them)
+  S64* const xw = (S64*)xmalloc(sizeof(S64) * WAV_FIT);  // (not on the coroutine's stack)
+  for (int c = 0; c < w.nch; c++) {
+    S32* e = w.ext + (size_t)c * WAV_EXT;
+    memset(e, 0, sizeof(S32) * WAV_EXT);
+    if (n <= 2 * WAV_LPC) continue;
+    for (S64 k = 0; k < n; k++) xw[k] = (S64)w.at(c, N - n + k) * (k + 1) * (2 * n - k);  // (|x| < 2^23: within 2^46)
+    S128 r[WAV_LPC + 1];
+    for (int l = 0; l <= WAV_LPC; l++) {
+      S128 t = 0;
+      for (S64 k = l; k < n; k++) t += (S128)xw[k] * xw[k - l];
+      r[l] = t;
+    }
+    if (r[0] <= 0) continue;
+    Sf R[WAV_LPC + 1], a[WAV_LPC + 1], t[WAV_LPC + 1];
+    for (int l = 0; l <= WAV_LPC; l++) R[l] = sf_make(r[l] >> 20, 0);  // (within 2^107: 2^87 or so)
+    R[0] = sf_add(R[0], sf_make((r[0] >> 20) / 10000, 0));
+    const Sf one = sf_make(1, 0);
+    a[0] = one;
+    Sf err = R[0];
+    int m = 1;
+    for (; m <= WAV_LPC; m++) {
+      Sf acc = R[m];
+      for (int i = 1; i < m; i++) acc = sf_add(acc, sf_mul(a[i], R[m - i]));
+      Sf k = sf_div(acc, err);
+      k.m = -k.m;
+      for (int i = 1; i < m; i++) t[i] = sf_add(a[i], sf_mul(k, a[m - i]));
+      for (int i = 1; i < m; i++) a[i] = t[i];
+      a[m] = k;
+      err = sf_mul(err, sf_sub(one, sf_mul(k, k)));
+      if (err.m <= 0) break;
+    }
+    if (m <= WAV_LPC) continue;  // (not a fit: 0s)
+    S64 q[WAV_LPC + 1];  // (the predictor, Q30: x[t] by sum q_i x[t - i])
+    for (int i = 1; i <= WAV_LPC; i++) {
+      Sf u = a[i];
+      u.m = -u.m;
+      q[i] = sf_int(u, 30);
+    }
+    for (int k = 0; k < WAV_EXT; k++) {
+      S128 p = 0;
+      for (int i = 1; i <= WAV_LPC; i++) p += (S128)q[i] * (k - i >= 0 ? e[k - i] : w.at(c, N + k - i));
+      const S64 v = (S64)((p + ((S128)1 << 29)) >> 30);
+      e[k] = (S32)(v < -(1 << 23) ? -(1 << 23) : v > (1 << 23) - 1 ? (1 << 23) - 1 : v);
+    }
+  }
+  free(xw);
+}
+
 // The correction's least squares fit: the decimated samples around each LFE sample (f, NF of
 // them: LFE_NT, or LFE_NF with the last LFE values, as a decoded WAV's LFE is the decoder's
 // interpolation of the values, 8 of them in each of its samples, so with the last ones the fit

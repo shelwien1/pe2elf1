@@ -14,7 +14,7 @@ enum { BO_OFF = 0, BO_MAP = 4, BO_MAP2 = BO_MAP + NCH, BO_G1 = BO_MAP2 + NCH, BO
        DP_BIND = BO_CRC + 4 };  // (the binding's bytes)
 enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND, DP_HEAD = DP_AT_BIND + DP_BIND };  // the header's
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
-constexpr int DP_VERSION = 30;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
+constexpr int DP_VERSION = 31;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
                                // extension as records; 4: a WAV at twice the core's rate, X96 and XXCH; 5: the
                                // scale factor search; 6: the bit allocation search; 7: the bits after the
                                // subframes as the bytes they end in, the energy's quarter of its bucket, the
@@ -48,7 +48,11 @@ constexpr int DP_VERSION = 30;  // the format's (2: a core channel's binding a m
                                // and hdr tuned again; 29: the ADPCM predictor as its block's rank
                                // by the encoders' codewords, then its rank in the block; vqr
                                // tuned again; 30: the ABITS against what the subframe's bits
-                               // leave, abt, sid, scl and hit tuned again)
+                               // leave, abt, sid, scl and hit tuned again; 31: the ABITS by the
+                               // lossless WAVs' encoders' allocation table, a transient's by its
+                               // values from the transient on, TMODE against what the ABITS
+                               // said, the WAV's continuation past its end; abt, sid, scl, hit
+                               // and vqr tuned again)
 
 static void put_le(U8* p, U64 v, int n) {
   for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));
@@ -106,6 +110,7 @@ struct Stats {
   U64 hits9, smp9, sf_hits9, sf9;  // (and X96's samples and scale factors)
   U64 ab, ab_srch, ab_hits;        // (and the ABITS, those the bit allocation search said, those it said right)
   U64 ab_st, ab_sthits;            // (those a staircase said, those it said right)
+  U64 ab_tb, ab_tbhits;            // (those the allocation table said, those it said right)
 
   // c's summary line (out_bytes: the compressed size, at the level), and with -s the bytes by kind
   // of syntax element, the coder's cost and orig (CAT_*)
@@ -140,6 +145,9 @@ struct Stats {
       if (ab_st)
         fprintf(stderr, "  the bit allocations' staircases: %.2f%% of the ABITS, right in %.2f%% of them\n",
                 PERCENT * ab_st / ab, PERCENT * ab_sthits / ab_st);
+      if (ab_tb)
+        fprintf(stderr, "  the encoders' allocation table: %.2f%% of the ABITS, right in %.2f%% of them\n",
+                PERCENT * ab_tb / ab, PERCENT * ab_tbhits / ab_tb);
       if (smp9 || sf9)
         fprintf(stderr, "  X96: the audio's indexes: %.2f%% of the samples; the audio's scale factors: %.2f%%\n",
                 smp9 ? PERCENT * hits9 / smp9 : 0.0, sf9 ? PERCENT * sf_hits9 / sf9 : 0.0);

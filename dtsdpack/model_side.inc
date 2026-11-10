@@ -69,7 +69,7 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
   // (Sn: the first guess, 1 + it, 0 none; then Alt, the second (1 + it), else the last one; then the
   // difference from the first of them there is)
   S64 abits_code(int ch, int b, S64 v, S64 lo, S64 hi, S32 A, S32 Bw, int es, int de, int ls, int pm, int lbd,
-                 int nb, int mx, S32 Sn, int nn, int sc, int eq, int sm, S32 Alt = 0, int bg = 0) {
+                 int nb, int mx, S32 Sn, int nn, int sc, int eq, int sm, S32 Alt = 0, int bg = 0, int ag = 0) {
     M_abt_v D;
     tcx X;
     D.bd = b;
@@ -90,6 +90,7 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
     D.eq = eq;
     D.sm = sm;
     D.bg = bg;
+    D.ag = ag;
     f_abt.make(D, X);
     f_abt.select(X);
     const S32 c1 = Sn ? Sn : A, c2 = Alt ? Alt : Sn ? A : Bw;

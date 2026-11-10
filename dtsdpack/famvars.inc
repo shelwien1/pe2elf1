@@ -72,9 +72,11 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      lv its last value (0 none, else 1 + it, to 63), pq the value of the place before in the
 //      subframe (the subband below's; LFE: the sample before), st whether that one kept its last
 //      value, ac the audio's subband's lag-1 autocorrelation over the subframe (0-7, as -1..1; 8
-//      none), ab the subband's ABITS where coded before (1 + it; 0 none; PMODE: the gain of the
-//      subband's LPC, in quarters of halvings, to 27), ec how its energy changes over the
-//      subframe's subsubframes (0-8, 9 none; PMODE: model_smp.inc's pmode_gain())
+//      none; a lossless WAV's TMODE: the transient's class, model_smp.inc's tmode_rule() as what
+//      the ABITS said makes it, model.inc), ab the subband's ABITS where coded before (1 + it; 0
+//      none; PMODE: the gain of the subband's LPC, in quarters of halvings, to 27), ec how its
+//      energy changes over the subframe's subsubframes (0-8, 9 none; PMODE: model_smp.inc's
+//      pmode_gain())
 // abt: bd, cc, la the last ABITS (1 + it, 0 none), lb the subband below's in the subframe (1 + it,
 //      0 none), es the audio's energy in the subband as a scale factor index (the RMS rule's; 1 +
 //      it, 0 none), de its change from the last (0-8, 9 none), ls the last scale factor less the
@@ -99,7 +101,10 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      bits there (1 two or more, 2 one to two, 3 a half to one, 4 within a half, 5-7 the same away
 //      from it; 0 none: the encoders fill their frames, so where the staircases would leave bits,
 //      an ABITS near its upper edge rises, and where they would take too many, one near its lower
-//      edge falls)
+//      edge falls), ag where sn is the staircase's or the allocation table's, what the other one
+//      says (0 none, 1 the same, 2 the ABITS across sn's nearer edge, 3 another; 4 a transient's,
+//      whose guess at the other of its energies, the second guess, isn't sn: model_smp.inc's
+//      ab_transient())
 // scl: kd (0 a subband's first scale factor, 1 its second, after its transient, 2 a high-frequency
 //      VQ subband's, 3 the LFE's), ab its ABITS (1 + it, 0 none), pm whether it predicts, pk whether the audio
 //      predicts the scale factor, pn how near its RMS lies to the midpoint between two (0-7), lp
@@ -131,7 +136,7 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      the byte at the place in the last field of the kind (0 none, else 1 + it)
 #define M_hdr_VARS(X) X(fld) X(lv) X(l2) X(pos) X(st) X(nch)
 #define M_sid_VARS(X) X(fld) X(cc) X(bd) X(lv) X(pq) X(st) X(ac) X(ab) X(ec)
-#define M_abt_VARS(X) X(bd) X(cc) X(la) X(lb) X(es) X(de) X(ls) X(pm) X(st) X(nb) X(mx) X(sn) X(sd) X(nn) X(sc) X(eq) X(sm) X(bg)
+#define M_abt_VARS(X) X(bd) X(cc) X(la) X(lb) X(es) X(de) X(ls) X(pm) X(st) X(nb) X(mx) X(sn) X(sd) X(nn) X(sc) X(eq) X(sm) X(bg) X(ag)
 #define M_scl_VARS(X) X(kd) X(ab) X(pm) X(pk) X(pn) X(lp) X(hm) X(bd) X(dp) X(cc) X(nb)
 #define M_hit_VARS(X) X(pm) X(nr) X(nl) X(ab) X(ql) X(hm)
 #define M_smp_VARS(X) X(ab) X(hw) X(pk) X(nr) X(nl) X(ql) X(hm) X(pm) X(bd) X(m1) X(m2) X(sq) X(s1)
