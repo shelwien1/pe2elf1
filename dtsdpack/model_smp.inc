@@ -1554,7 +1554,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // the samples are coded by its step): against the one the predictions' RMS makes
   int code_lfe_scale(int v) {
     S64 x[4 * NSSF];
-    for (int i = 0; i < lfe_n; i++) x[i] = shl64(lfe_p[i], 12);  // (RMS / 16, in 2^-AQ_F: scale_pred()'s)
+    for (int i = 0; i < lfe_n; i++) x[i] = lfe_p[i] >> (LFE_Q - 12);  // (RMS / 16, in 2^-AQ_F: scale_pred()'s)
     int near;
     const int p = scale_pred(x, lfe_n, SF7, SF7_N, &near);
     M_scl_v D;
@@ -1579,7 +1579,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     n_sf++;
     n_sfhit += v == p;
     lfe_scl = v;
-    lfe_st = lfe_scale(v);
+    lfe_st = ss_rule() ? lfe_scale_dec(v) : lfe_scale(v);
     return v;
   }
   // the LFE's prediction from its features f: the fit's that has predicted the values more often

@@ -796,17 +796,23 @@ constexpr S64 LFE_G = 290844593;  // the prototype's decimation to the units of 
 constexpr int LFE_K = 6, LFE_NT = 2 * LFE_K + 1;  // the correction's taps: the decimated samples K before to K after
 constexpr int LFE_NP = 7, LFE_NF = LFE_NT + LFE_NP;  // and the last LFE values (a decoded WAV's LFE is their interpolation)
 
+constexpr int LFE_Q = 23;  // the LFE's units: 2^-LFE_Q of those of a value times its step (its steps exact in them)
+
 // the WAV channel c decimated by the prototype, the window ending at sample end, in the units
 // of an LFE value times its scale (lfe_scale()); the WAV's samples to the core's up (2: every other
-// sample, an LFE channel having nothing above the core's band to alias)
+// sample, an LFE channel having nothing above the core's band to alias). (|acc| < 2^59, the result
+// within 2^50)
 static S64 lfe_decim(const WavIn& w, int c, S64 end, int up) {
   S128 acc = 0;
   for (int m = 0; m < 512; m++) acc += (S128)LFE_FIR[m] * w.at(c, end - 512 * up + up * m);
-  return (S64)((acc * LFE_G) >> 60);
+  return (S64)((acc * LFE_G) >> (60 - LFE_Q));
 }
 // the LFE scale factor i's step (FFmpeg's: the 7-bit table's entry times the quantizer's 0.035,
-// times 16): an LFE value v is v times it
-static INLINE S64 lfe_scale(int i) { return ((S64)4697620 * SF7[i & 127] + (1 << 22)) >> 23; }
+// times 16, in 2^-LFE_Q, 0 or 2^22 to 2^46): an LFE value v is v times it. (Exactly: the encoder
+// quantizes by the step itself, and a quiet LFE's, of an LFE value or a few, is no integer)
+static INLINE S64 lfe_scale(int i) { return (S64)4697620 * SF7[i & 127]; }
+// and as FFmpeg's decoder has it, rounded to an integer (a decoded WAV's LFE is its values times it)
+static INLINE S64 lfe_scale_dec(int i) { return (((S64)4697620 * SF7[i & 127] + (1 << 22)) >> 23) << LFE_Q; }
 
 // floor(128 log2(a)), a > 0 (the bit allocations' staircase's energies: model_smp.inc): the top 31
 // bits' place, and the fraction by the thresholds 2^30 2^(k/128), k 1-127, rounded up (exactly)
@@ -989,13 +995,16 @@ struct LfeFit {
     for (int k = 0; k < NF; k++) p += (S128)w[k] * f[k];
     return (S64)(p >> 30);
   }
-  // (st: y's scale, 1 or more; the weight 2^40 / (st^2 + 1), the products' 2^-20: f around y,
-  // within 2^30, the terms within 2^100)
+  // (st: y's step, 0 (nothing to fit) or 2^22 up: f and y divided by it (Q20) weight each by 1 /
+  // st^2; f within 2^52, so within 2^50 in steps, the terms within 2^80)
   void add(const S64* f, S64 y, S64 st) {
-    const S128 wq = ((S128)1 << 40) / ((S128)st * st + 1);
+    if (st <= 0) return;
+    S64 fs[NF];
+    for (int i = 0; i < NF; i++) fs[i] = (S64)(shl128(f[i], 20) / st);
+    const S64 ys = (S64)(shl128(y, 20) / st);
     for (int i = 0; i < NF; i++) {
-      for (int j = 0; j <= i; j++) G[i][j] += (S128)f[i] * f[j] * wq >> 20;
-      c[i] += (S128)f[i] * y * wq >> 20;
+      for (int j = 0; j <= i; j++) G[i][j] += (S128)fs[i] * fs[j] >> 20;
+      c[i] += (S128)fs[i] * ys >> 20;
     }
   }
   // (G + r I) w = c + r e_K by LDL', r the mean diagonal / 2^23 (w as it was where that fails)
