@@ -368,7 +368,7 @@ struct Model : ModelX96<f_DEC, LV> {
       const S64 bnd = (pos + 6 + 31) & ~(S64)31, first = pos + n - 8 * (S64)((n + 7) / 8);
       if (bnd < pos + n) a0 = (int)((bnd - first) / 8);
     }
-    B::code_tail(p, n, kind, a0);
+    B::code_tail(p, n, kind, a0, (S64)pos);
     pos += n;
     return good();
   }

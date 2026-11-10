@@ -112,6 +112,7 @@ struct DtsCoro : CoIo<Coder<f_DEC> > {
           frame_comes(f);
           k.code_kind(CK_FRAME);
           if (!k.frame(f, (int)len)) return fail(E_INTERNAL, "internal error: a frame parsed couldn't be coded");
+          k.frame_bytes(fb, (int)len);
           st.packed++;
           continue;
         }
@@ -166,6 +167,7 @@ struct DtsCoro : CoIo<Coder<f_DEC> > {
         if (!k.frame(f, 0)) return damaged_data();
         const int n = core_write(f, back, MAX_FRAME);
         if (!n) return damaged_data();
+        k.frame_bytes(back, n);
         nframe++;
         frame_comes(f);
         write(back, (size_t)n);

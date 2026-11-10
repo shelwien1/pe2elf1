@@ -159,7 +159,33 @@ struct ModelHdr {
     memset(hist.tcb[kind][0], 0, Hist::TC_B);
     memcpy(hist.tcb[kind][0], q, (size_t)nb);
   }
-  void code_tail(pU8 p, int nbits, int kind, int a0 = -1) {
+  // The last 8 frames coded as records, as their bytes (frame_bytes(), as each is coded): an encoder
+  // that leaves the bits before the extension's sync word as an earlier frame had them at the same
+  // place (`ES 6.1 16bit.dts`'s: of a ring of 8 buffers, mostly the frame 8 before) makes them
+  // those of a frame before (code_tail())
+  U8 pfb[8][MAX_FRAME];
+  S32 pfn[8];
+  U32 pfk;
+  U8 tcand[8][32];
+  void frame_bytes(const U8* b, int n) {
+    const int i = (int)(pfk & 7);
+    memcpy(pfb[i], b, (size_t)n);
+    pfn[i] = n;
+    pfk++;
+  }
+  // the nbits bits of b at bit pos, as code_tail() has them (ending with c's last byte)
+  static void bits_at(const U8* b, S64 pos, int nbits, U8* c) {
+    const int nb = (nbits + 7) / 8, sh = 8 * nb - nbits;
+    memset(c, 0, (size_t)nb);
+    for (int j = 0; j < nbits; j++) {
+      const S64 at = pos + j;
+      const int k = sh + j;
+      c[k >> 3] |= (U8)(((b[at >> 3] >> (7 - (at & 7))) & 1) << (7 - (k & 7)));
+    }
+  }
+  // the nbits bits at p, the frame's from bit bitpos, of the kind (0 after the subframes, 1 before
+  // the extension's sync word, 2-4 XXCH's: hdr's places by it)
+  void code_tail(pU8 p, int nbits, int kind, int a0, S64 bitpos) {
     const int nb = (nbits + 7) / 8, zf = NHFRAME + (kind ? HX_GAPZ : HX_TAILZ), nf = NHFRAME + (kind ? HX_GAPNZ : HX_TAILNZ);
     // (the hdr fields' place: each kind its own; the bits after the subframes' and those before the
     // extension's, by their bits to the next 32-bit boundary: their fills' odds go by them)
@@ -180,10 +206,40 @@ struct ModelHdr {
       if (!ENC) memset(p, 0, (size_t)nb);
       return;
     }
+    const int cache = nb <= Hist::TC_B;
+    // (the bytes before the extension's sync word as a frame before had them at their place, the bits
+    // before those 0: frames 8, then 1 to 7 back, a flag each, at the zero flag's places from 48,
+    // where they aren't 0 or one before)
+    if (kind == 1 && nb <= 32) {
+      static const S8 BK[8] = {8, 1, 2, 3, 4, 5, 6, 7};
+      int nc = 0;
+      for (int t = 0; t < 8; t++) {
+        const int b = BK[t], i = (int)((pfk - b) & 7);
+        if ((U32)b > pfk || bitpos + nbits > (S64)pfn[i] * 8) continue;
+        U8* const c = tcand[nc];
+        bits_at(pfb[i], bitpos, nbits, c);
+        if (nbits & 7) c[0] = 0;  // (the bits before its bytes, the rest of the core's last byte: 0)
+        int skip = 1;
+        for (int j = 0; j < nb && skip; j++) skip = !c[j];
+        for (int u = 0; u < nc && !skip; u++) skip = !memcmp(tcand[u], c, (size_t)nb);
+        if (skip) continue;
+        nc++;
+        if (!hdr_hist(zf, 48 + b, 1, ENC && !memcmp(c, q, (size_t)nb))) continue;
+        if (!ENC) memcpy(q, c, (size_t)nb);
+        int k = 0;
+        while (k < nb && !q[k]) k++;
+        nz = nb - k;
+        memcpy(last, q + nb - nz, (size_t)nz);  // (the state the bytes' coding leaves)
+        lastn = nz;
+        if (cache) tail_cache_add(kind, nbits, q, nb);
+        if (!ENC)
+          for (int j = 0; j < nb; j++) p[j] = (U8)((q[j] << sh) | (j + 1 < nb && sh ? q[j + 1] >> (8 - sh) : 0));
+        return;
+      }
+    }
     // (a tail of 8 bytes or more the same as one of the last ones of its kind and size, the last
     // first: which, a flag for each, at the zero flag's places from 32; the auxiliary data's, its
     // count, a fill to its 32-bit boundary and the same bytes, makes a few, one by the fill's size)
-    const int cache = nb <= Hist::TC_B;
     for (int k = 0; cache && nb >= 8 && k < Hist::TC_K; k++) {
       if (hist.tcn[kind][k] != nbits) continue;
       U8* const cb = hist.tcb[kind][k];

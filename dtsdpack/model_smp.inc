@@ -655,28 +655,45 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // the first whose prediction leaves values that fit a quantizer's lattice, by the bit allocation
   // search, to a 64th of a step squared a value, first: a decoded WAV's values less the decoder's
   // prediction are its dequantized indexes.)
+  KeyIx pvsel[4096];  // (code_pvq()'s selection, and its candidates' heap)
+  int pvtop[4096];
   S64 code_pvq(const CoreRec& r, const CoreSub& s, int ch, int b, S64 v) {
     S64* const d = this->pvqd;
     pvq_dists(lpc[ch][b], d);
     for (int q = 0; q < 4096; q++) cand[q].k = d[q], cand[q].i = q;
     if (ss_rule()) {
-      const int K = pv_none * 4 > pv_n ? 4 : 16;  // (fewer where few fit: a 96/24 stream's core's)
-      int top[16], nk = 0;  // (the order's first K, the first first)
-      for (int q = 0; q < 4096; q++) {
-        int k = nk;
-        while (k > 0 && key_less(cand[q], cand[top[k - 1]])) k--;
-        if (k >= K) continue;
-        for (int z = imin(nk, K - 1); z > k; z--) top[z] = top[z - 1];
-        top[k] = q;
-        nk = imin(nk + 1, K);
-      }
+      const int K = pv_none * 4 > pv_n ? 4 : 1024;  // (fewer where few fit: a 96/24 stream's core's)
+      // (the order's first K: the K-th by selection, those up to it on a heap, taken in order)
+      int nk = 0, hn;
+      int* const top = pvtop;
+      memcpy(pvsel, cand, sizeof pvsel);
+      const KeyIx kk = cand[select_rank(pvsel, 4096, K - 1)];
+      for (int q = 0; q < 4096; q++)
+        if (!key_less(kk, cand[q])) top[nk++] = q;
+      auto sift = [&](int i, int n) {
+        for (;;) {
+          const int l = 2 * i + 1, rt = l + 1;
+          int m = i;
+          if (l < n && key_less(cand[top[l]], cand[top[m]])) m = l;
+          if (rt < n && key_less(cand[top[rt]], cand[top[m]])) m = rt;
+          if (m == i) return;
+          const int t = top[i];
+          top[i] = top[m], top[m] = t;
+          i = m;
+        }
+      };
+      for (int i = nk / 2 - 1; i >= 0; i--) sift(i, nk);
+      hn = nk;
       for (int k = 0; k < nk; k++) {
+        const int qk = top[0];  // (the next in the order)
+        top[0] = top[--hn];
+        sift(0, hn);
         S64 x[NSMP];
         S64 h[4] = {xh[ch][b][0], xh[ch][b][1], xh[ch][b][2], xh[ch][b][3]};
         const int n = s.nssc * 8;
         for (int j = 0; j < n; j++) {
           const S64 y = X[ch][b][j];
-          x[j] = y - adpcm_pred_x(top[k], h);
+          x[j] = y - adpcm_pred_x(qk, h);
           h[3] = h[2], h[2] = h[1], h[1] = h[0], h[0] = y;
         }
         int near;
@@ -688,7 +705,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         int conf;
         U64 d = ~0ull;
         if (abits_search(r, ch, x, n, g, a0, a1, e - 1, &conf, &d, (U64)n << 10)) {
-          cand[top[k]].k = -1;
+          cand[qk].k = -1;
           break;
         }
         pv_none += k == nk - 1;
