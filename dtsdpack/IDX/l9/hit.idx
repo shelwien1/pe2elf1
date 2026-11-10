@@ -11,16 +11,16 @@ Debug 1
 Const 0
 
 Index a
- a_nr: nr, 1!100000001110010
- a_nl: nl, 1!001001000110100
+ a_nr: nr, 1!001011011110011
+ a_nl: nl, 1!010010000111111
 
 Index b
- b_nr: nr, 1!111000001110111
- b_nl: nl, 1!100001101011100
- b_pm: pm, 1!00
+ b_nr: nr, 1!110110010111111
+ b_nl: nl, 1!110100111111101
+ b_pm: pm, 1!11
 
 Index c
- c_nr: nr, 1!000000000000001
+ c_nr: nr, 1!000000000000011
  c_hm: hm, 1!11
 
 Index d
@@ -28,35 +28,35 @@ Index d
  d_hm: hm, 1!10
 
 Index e
- e_nr: nr, 1!100000000000001
- e_ab: ab, 1!011001110110000000000000000
+ e_nr: nr, 1!000000100000010
+ e_ab: ab, 1!011000010100000000000000000
 
 Index h
- h_nl: nl, 1!000001000000010
- h_ab: ab, 1!010100111011101100000010000
+ h_nl: nl, 1!000100001001110
+ h_ab: ab, 1!011111011111100100011100001
 
 Index i
- i_nr: nr, 1!000100000101001
- i_nl: nl, 1!100000001000010
- i_hm: hm, 1!11
+ i_nr: nr, 1!000000000001000
+ i_nl: nl, 1!000000001001010
+ i_hm: hm, 1!01
 
 Index j
- j_nr: nr, 1!000000100110101
- j_ql: ql, 1!000111100010100100000
+ j_nr: nr, 1!000111100001111
+ j_ql: ql, 1!111111010000100000000
 
 Index k
- k_nl: nl, 1!000010000000000
- k_ql: ql, 1!011010000000001000000
- k_pm: pm, 1!01
+ k_nl: nl, 1!100011000000001
+ k_ql: ql, 1!011000000000001000000
+ k_pm: pm, 1!10
 
 Index l
- l_nr: nr, 1!000100100001010
- l_nl: nl, 1!000011100100101
- l_ab: ab, 1!010010100011111000000011100
+ l_nr: nr, 1!000000010110111
+ l_nl: nl, 1!000001000111111
+ l_ab: ab, 1!011111111010000000000010100
 
 Index s
- s_nr: nr, 1!100000000001101
- s_nl: nl, 1!000000000010000
+ s_nr: nr, 1!000000100010101
+ s_nl: nl, 1!000100110010100
 
 Index f
  f_nr: nr, 1!000000000000010
@@ -66,7 +66,7 @@ Index m
  m_nl: nl, 1!100000000000001
 
 Index w
- w_nr: nr, 1!101100000000010
+ w_nr: nr, 1!000000000100000
 
 Index t
  t_pm: pm, 1!11
@@ -79,31 +79,31 @@ Index g
  g_pm: pm, 1!11
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
-Number rA, 1, 0!10011011
-Number mwA, 1, 0!01110100
-Number rB, 1, 0!11111110
+Number rA, 1, 0!11100010
+Number mwA, 1, 0!11100110
+Number rB, 1, 0!01110110
 Number mwB, 1, 0!00000000
-Number rC, 1, 0!11111000
-Number mwC, 1, 0!00000000
+Number rC, 1, 0!11111001
+Number mwC, 1, 0!00000011
 Number rD, 1, 0!00000000
-Number mwD, 1, 0!00011000
-Number rE, 1, 0!11111101
+Number mwD, 1, 0!00011011
+Number rE, 1, 0!01111110
 Number mwE, 1, 0!00000000
-Number rH, 1, 0!11101111
-Number mwH, 1, 0!01010010
-Number rI, 1, 0!11010100
-Number mwI, 1, 0!00010011
-Number rJ, 1, 0!00100000
-Number mwJ, 1, 0!00001000
+Number rH, 1, 0!10001001
+Number mwH, 1, 0!01101010
+Number rI, 1, 0!11011100
+Number mwI, 1, 0!00110101
+Number rJ, 1, 0!10000110
+Number mwJ, 1, 0!00000001
 Number rK, 1, 0!00000000
-Number mwK, 1, 0!00001000
-Number rL, 1, 0!11111111
-Number mwL, 1, 0!00100010
+Number mwK, 1, 0!10000000
+Number rL, 1, 0!01111100
+Number mwL, 1, 0!00000011
 Number lr, 1, 0!01111
-Number mb, 1, 0!00100000
+Number mb, 1, 0!00100100
 Number rS1, 1, 0!01000
 Number rS2, 1, 0!01000
-Number qs, 1, 3!0000000
+Number qs, 1, 3!0000111
 Number qf, 1, 3!0011111
 Number bw, 1, 0!10000
 Number rT, 1, 0!10000000

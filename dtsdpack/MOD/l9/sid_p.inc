@@ -17,36 +17,35 @@ void D9_sid_make( const M_sid_v & D, tcx & X ) {
 
   a = 0;
   a = a*9 + D9_sid_a_fld[__min(8,__max(0,(fld)-(1-1)))];
-  a = (a<<6) + (((lv)&63)); // 111111
+  a = (a<<1) + (((lv)&1)); // 000001
 
   b = 0;
   b = b*9 + D9_sid_b_fld[__min(8,__max(0,(fld)-(1-1)))];
-  b = (b<<6) + (((lv)&63)); // 111111
+  b = (b<<1) + (((lv)&1)); // 000001
   b = (b<<6) + (((pq)&63)); // 111111
 
   c = 0;
   c = c*9 + D9_sid_c_fld[__min(8,__max(0,(fld)-(1-1)))];
-  c = c*18 + D9_sid_c_bd[__min(31,__max(0,(bd)-(1-1)))];
+  c = c*19 + D9_sid_c_bd[__min(31,__max(0,(bd)-(1-1)))];
   c = (c<<6) + (((lv)&63)); // 111111
 
   d = 0;
-  d = d*9 + D9_sid_d_fld[__min(8,__max(0,(fld)-(1-1)))];
-  d = d*7 + D9_sid_d_ac[__min(8,__max(0,(ac)-(1-1)))];
+  d = d*3 + (((fld)>2+(1-1))+((fld)>6+(1-1)));
+  d = d*8 + D9_sid_d_ac[__min(8,__max(0,(ac)-(1-1)))];
   d = (d<<1) + (((lv)&1)); // 000001
 
   e = 0;
-  e = e*9 + D9_sid_e_fld[__min(8,__max(0,(fld)-(1-1)))];
   e = e*3 + (((cc)>0+(1-1))+((cc)>1+(1-1)));
-  e = e*21 + D9_sid_e_bd[__min(31,__max(0,(bd)-(1-1)))];
+  e = e*24 + D9_sid_e_bd[__min(31,__max(0,(bd)-(1-1)))];
 
   h = 0;
-  h = h*9 + D9_sid_h_fld[__min(8,__max(0,(fld)-(1-1)))];
-  h = h*18 + D9_sid_h_ab[__min(27,__max(0,(ab)-(1-1)))];
+  h = h*2 + (((fld)>6+(1-1)));
+  h = h*13 + D9_sid_h_ab[__min(27,__max(0,(ab)-(1-1)))];
   h = (h<<6) + (((lv)&63)); // 111111
 
   i = 0;
   i = i*9 + D9_sid_i_fld[__min(8,__max(0,(fld)-(1-1)))];
-  i = i*6 + D9_sid_i_ec[__min(9,__max(0,(ec)-(1-1)))];
+  i = i*7 + D9_sid_i_ec[__min(9,__max(0,(ec)-(1-1)))];
   i = (i<<1) + (((lv)&1)); // 000001
 
   j = 0;
@@ -54,29 +53,29 @@ void D9_sid_make( const M_sid_v & D, tcx & X ) {
   j = j*2 + (((st)>0+(1-1)));
 
   k = 0;
-  k = k*9 + D9_sid_k_fld[__min(8,__max(0,(fld)-(1-1)))];
-  k = k*5 + D9_sid_k_bd[__min(31,__max(0,(bd)-(1-1)))];
+  k = k*2 + (((fld)>3+(1-1)));
+  k = k*12 + D9_sid_k_bd[__min(31,__max(0,(bd)-(1-1)))];
   k = k*5 + D9_sid_k_ac[__min(8,__max(0,(ac)-(1-1)))];
 
   l = 0;
   l = l*9 + D9_sid_l_fld[__min(8,__max(0,(fld)-(1-1)))];
-  l = (l<<2) + (((lv)&3)); // 000011
-  l = l*18 + D9_sid_l_ab[__min(27,__max(0,(ab)-(1-1)))];
-  l = l*7 + D9_sid_l_ac[__min(8,__max(0,(ac)-(1-1)))];
+  l = (l<<1) + ((((lv)>>1)&1)); // 000010
+  l = l*13 + D9_sid_l_ab[__min(27,__max(0,(ab)-(1-1)))];
+  l = l*9 + D9_sid_l_ac[__min(8,__max(0,(ac)-(1-1)))];
 
   s = 0;
   s = s*9 + D9_sid_s_fld[__min(8,__max(0,(fld)-(1-1)))];
   s = (s<<1) + (((lv)&1)); // 000001
 
   f = 0;
-  f = f*9 + D9_sid_f_fld[__min(8,__max(0,(fld)-(1-1)))];
+  f = f*2 + (((fld)>3+(1-1)));
   f = f*9 + D9_sid_f_ac[__min(8,__max(0,(ac)-(1-1)))];
 
   m = 0;
   m = m*9 + D9_sid_m_fld[__min(8,__max(0,(fld)-(1-1)))];
 
   w = 0;
-  w = w*2 + (((st)>0+(1-1)));
+  w = w*3 + (((st)>0+(1-1))+((st)>1+(1-1)));
 
   t = 0;
   t = t*9 + D9_sid_t_fld[__min(8,__max(0,(fld)-(1-1)))];
