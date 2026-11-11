@@ -1067,13 +1067,20 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // WAV's: of the first 1024 by the distance from the LPC, or 4 where few have fitted, the first
   // whose prediction leaves values that fit a quantizer's lattice, by the bit allocation search, to
   // a 64th of a step squared a value, first: a decoded WAV's values less the decoder's prediction
-  // are its dequantized indexes.)
+  // are its dequantized indexes. Others fit too, nearly, where their predictions are near the
+  // encoder's: where that fit isn't within a 1024th of a step squared a value (as the encoder's
+  // nearly always is), the rest of the 1024 on that fit's lattice, the nearest taken, the first of
+  // equals: `ES 6.1 16bit.dts`'s predictors 99.38% the audio's from 90.60%, its core 21.3% smaller,
+  // `open bitrate.dts`'s 16.2%, FATE's `dts_es.dts`'s 3.6%.)
   KeyIx pvsel[4096];  // (code_pvq()'s selection, and its candidates' heap)
   int pvtop[4096];
   S64 code_pvq(const CoreRec& r, const CoreSub& s, int ch, int b, S64 v) {
     S64* const d = this->pvqd;
     pvq_dists(lpc[ch][b], d);
     int fit = -1;
+    U64 fd = ~0ull;  // (the fit's distance; its lattice, and the error sum fd makes on it)
+    QErr fq;
+    S128 flim = 0;
     if (ss_rule()) {
       for (int q = 0; q < 4096; q++) cand[q].k = d[q], cand[q].i = q;
       const int K = pv_none * 4 > pv_n ? 4 : 1024;  // (fewer where few fit: a 96/24 stream's core's)
@@ -1110,17 +1117,33 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           x[j] = y - adpcm_pred_x(qk, h);
           h[3] = h[2], h[2] = h[1], h[1] = h[0], h[0] = y;
         }
+        if (fit >= 0) {  // (past the fit: on its lattice)
+          S128 er = 0;
+          int nz = 0;
+          for (int j = 0; j < n && er < flim; j++) er += fq.err(x[j], &nz);
+          if (er < flim) {
+            fit = qk, fd = norm_dist(er, fq.ss);
+            flim = (S128)((double)fd * (double)fq.ss * (double)fq.ss / 268435456.0 * (1 + 1e-9)) + 1;
+          }
+          continue;
+        }
         int near;
         const int e = 1 + scale_pred(x, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
         const U8 sv = ab_seen[1][b][imin(e, 128)];
         const S32 og = sv ? sv : hist.abits[ch][b];
         if (!og) break;
         const int g = og - 1, a0 = imax(1, g - 3), a1 = imin(26, g + 3);
-        int conf;
+        int conf, fi = -1;
         U64 d = ~0ull;
-        if (abits_search(r, ch, x, n, g, a0, a1, e - 1, &conf, &d, (U64)n << 10)) {
-          fit = qk;
-          break;
+        const int G = abits_search(r, ch, x, n, g, a0, a1, e - 1, &conf, &d, (U64)n << 10, &fi);
+        if (G) {
+          fit = qk, fd = d;
+          if (fd < (U64)n << 6) break;
+          S64 lo, hi;
+          quant_range(r, ch, G - 1, lo, hi);
+          fq.set(step_for(r, ch, G - 1, fi), lo, hi);
+          flim = (S128)((double)fd * (double)fq.ss * (double)fq.ss / 268435456.0 * (1 + 1e-9)) + 1;
+          continue;
         }
         pv_none += k == nk - 1;
       }
@@ -1264,24 +1287,25 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   bool hf_min_on() const { return hf_n < 2048 || hfr[0] * 8 > hfr[1] || !(n_hfvq & 63); }
 
   // The ABITS a decoded WAV says (the bit allocation search): its values v (n of them, the ADPCM
-  // prediction off) are what the decoder made of indexes at the step of the ABITS and a scale
-  // factor; so of ABITS a0..a1 (g the guess) and the scale factors p - 3 to p + 5, the pair whose
-  // lattice lies nearest them in its steps (a finer one fits as nearly but in more of its steps, a
-  // coarser one misses the values between its points), of pairs as near the coarser lattice, then
-  // the scale factor nearer p (where the values all lie on both, as a 3-level quantizer's do on the
-  // 7-level one's at the same scale factor: `ES 6.1 16bit.dts`'s search right 99.23% of the time
-  // from 97.90%, its core 2.1% smaller): 1 + its ABITS, where an index it makes isn't 0 (else 0: the
-  // values say nothing); *conf the log2 of the next pair's distance over its, 0-7 (a pair as near
-  // isn't counted), *dbest its distance (norm_dist()'s). And where none fits within a 64th of a step
-  // squared a value, a transient's: of the ABITS a0..a1, the one whose lattice fits the subsubframes
-  // before some one and those from it on, each part at a scale factor of its own (part_fit()), the
-  // nearest, where 4 times nearer than the pair at least (*dbest still the pair's: `ES 6.1
-  // 16bit.dts`'s search right 99.71%, its core 12.8% smaller still, FATE's `dts_es.dts`'s 9.2%,
-  // `open bitrate.dts`'s 10.0%). (Only the pairs under cut: 0 where none is, and no transients.)
+  // prediction off) are what the decoder made of indexes at the step of the ABITS and a scale factor;
+  // so of ABITS a0..a1 (g the guess) and the scale factors p - 3 to p + 5, the pair whose lattice
+  // lies nearest them in its steps (a finer one fits as nearly but in more of its steps, a coarser
+  // one misses the values between its points), of pairs as near the coarser lattice, then the scale
+  // factor nearer p (where the values all lie on both, as a 3-level quantizer's do on the 7-level
+  // one's at the same scale factor: `ES 6.1 16bit.dts`'s search right 99.23% of the time from 97.90%,
+  // its core 2.1% smaller): 1 + its ABITS, where an index it makes isn't 0 (else 0: the values say
+  // nothing); *conf the log2 of the next pair's distance over its, 0-7 (a pair as near isn't
+  // counted), *dbest its distance (norm_dist()'s), *ibest its scale factor. And where none fits
+  // within a 64th of a step squared a value, a transient's: of the ABITS a0..a1, the one whose
+  // lattice fits the subsubframes before some one and those from it on, each part at a scale factor
+  // of its own (part_fit()), the nearest, where 4 times nearer than the pair at least (*dbest still
+  // the pair's: `ES 6.1 16bit.dts`'s search right 99.71%, its core 12.8% smaller still, FATE's
+  // `dts_es.dts`'s 9.2%, `open bitrate.dts`'s 10.0%). (Only the pairs under cut: 0 where none is, and
+  // no transients.)
   // (The pairs by their distance at the 2 largest values, each one's whole distance, the largest
   // values first, while it could still be less than the second best's: as trying them all does.)
   int abits_search(const CoreRec& r, int ch, const S64* v, int n, int g, int a0, int a1, int p, int* conf, U64* dbest,
-                   U64 cut = ~0ull) {
+                   U64 cut = ~0ull, int* ibest = nullptr) {
     constexpr int NP = 27 * 9, NK = 2;
     const int nt = sf_entries(r.shuff[ch]), nk = imin(n, NK);
     auto mag = [](S64 x) { return x < 0 ? -x : x; };
@@ -1384,6 +1408,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const U64 ratio = d2 == ~0ull ? ~0ull : (d2 + eps) / (d1 + eps);
     *conf = imin(bit_len(ratio) - 1, 7);
     *dbest = d1;
+    if (ibest) *ibest = pr[best].i;
     return 1 + pr[best].a;
   }
   // the nearest fit of the values v (m of them) to ABITS a's lattice (its range lo..hi) at a scale

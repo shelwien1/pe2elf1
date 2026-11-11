@@ -137,13 +137,13 @@ allocations in):
 
 | Stream | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 40935 (2.17%) | the 96 kHz decode's 64-band analysis's lower half (99.77% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
+| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 40920 (2.17%) | the 96 kHz decode's 64-band analysis's lower half (99.77% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
 | `Master Audio 5.0 96khz.dts` | 1768548 | 4497 (0.25%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
 | `Master Audio 7.1.dts` | 1945604 | 6987 (0.36%) | a downmix of its 7.1 |
 | `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 4811 (0.17%) | its 3.1 |
-| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 5858 (0.11%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
-| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 2144 (0.43%) | the same (1.95%) |
-| `open bitrate.dts` (stereo, open rate) | 5242416 | 3399 (0.06%) | decoded (99.99% of the indexes, 99.96% of the scale factors, 99.82% of the bit allocations, 99.99% of the HF VQ groups, 97.86% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
+| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 4611 (0.09%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
+| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 2067 (0.41%) | the same (1.95%) |
+| `open bitrate.dts` (stereo, open rate) | 5242416 | 2850 (0.05%) | decoded (99.99% of the indexes, 99.96% of the scale factors, 99.82% of the bit allocations, 99.99% of the HF VQ groups, 99.82% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
 
 No stream at hand has XXCH in its core substream: FATE's XXCH samples (`xxch_71_24_48_2046`,
 `xbr_xxch_71_24_48_3840`, `x96_xxch_71_24_96_3840`, 7 frames each) have it in their extension
@@ -162,7 +162,7 @@ their decodes clip too (0.3-1.2% of the samples):
 | Stream | Core | dtsdpack |
 |---|---:|---:|
 | `core_51_24_48_768_0`, `_1` (5.1) | 7168 | 2074 (28.93%), 2098 (29.27%) |
-| `xch_61_24_48_768` (6.1 by XCH) | 7168 | 2092 (29.19%) |
+| `xch_61_24_48_768` (6.1 by XCH) | 7168 | 2091 (29.17%) |
 | `x96_51_24_96_1509` (X96) | 14084 | 3598 (25.55%) |
 | `x96_xch_61_24_96_3840` | 14084 | 2886 (20.49%) |
 | `xbr_51_24_48_3840`, `xbr_xch_61_24_48_3840` (XBR: its residuals in the decode) | 14084 | 2646 (18.79%), 3618 (25.69%) |
@@ -363,16 +363,22 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   less the decoder's prediction are its dequantized indexes, so where the scale factor search's
   rule is taken, the first of the order's first 1024 whose prediction leaves values that fit a
   quantizer's lattice (by the bit allocation search, to a 64th of a step squared a value) is put
-  first (its block, and it in its block): `open bitrate.dts`'s predictor is then the first 97.86% of the time, from 78% (96.68% by
-  the first 16, which miss 2.4% of its predictors and 8.4% of `ES 6.1 16bit.dts`'s: with 1024,
-  their cores 4.6% and 3.1% smaller; all 4096 find more that fit by chance). (They are tried in
-  turn until one fits, the order's next taken from a heap; where none has fitted in a quarter of
-  the tries, as in `96-24.dts`'s core, the first 4: one coded against the last one, below, counts
-  as a try none fitted.) A subband that doesn't predict has its values as they are on
-  a lattice, so PMODE's context there is how they fit the one the bit allocation search finds in
-  them (to a 64th of a step squared a value, to 16 64ths, worse): `open bitrate.dts`'s subbands
-  that fit to a 64th don't predict 465734 times in 465747, those that fit to 16 64ths do 92% of
-  the time (its PMODEs 1712 bytes to 467). The search is the one ABITS would make, kept for it.
+  first (its block, and it in its block): `open bitrate.dts`'s predictor was then the first 97.86%
+  of the time, from 78% (96.68% by the first 16, which miss 2.4% of its predictors and 8.4% of `ES
+  6.1 16bit.dts`'s: with 1024, their cores 4.6% and 3.1% smaller; all 4096 find more that fit by
+  chance). But others fit nearly, where their predictions lie near the encoder's: so where the one
+  that fits isn't within a 1024th of a step squared a value (as the encoder's nearly always is: of
+  the 7648 of `ES 6.1 16bit.dts`'s first fits within it, none was another's), the rest of the 1024
+  are tried on its lattice and the nearest taken, the first of equals (`open bitrate.dts`'s
+  predictor then the first 99.82% of the time, `ES 6.1 16bit.dts`'s 99.38% from 90.60%: their cores
+  16.2% and 21.3% smaller, FATE's `dts_es.dts` 3.6%). (They are tried in turn until one fits, the
+  order's next taken from a heap; where none has fitted in a quarter of the tries, as in
+  `96-24.dts`'s core, the first 4: one coded against the last one, below, counts as a try none
+  fitted.) A subband that doesn't predict has its values as they are on a lattice, so PMODE's
+  context there is how they fit the one the bit allocation search finds in them (to a 64th of a step
+  squared a value, to 16 64ths, worse): `open bitrate.dts`'s subbands that fit to a 64th don't
+  predict 465734 times in 465747, those that fit to 16 64ths do 92% of the time (its PMODEs 1712
+  bytes to 467). The search is the one ABITS would make, kept for it.
 - **The high-frequency VQ vectors**: a two-stage search, a group of 32 entries, then the entry of
   the group nearest the samples (by 16 / the scale factor); coded as the group's rank and the
   entry's (92% and 93% of `s.2.dts`'s first). The DTS-HD Master Audio encoders' group isn't the
@@ -737,7 +743,7 @@ files.
 
 ### The format
 
-"dtsdpack", the format's version (43), the level, the WAV's binding (the offset; each core channel's
+"dtsdpack", the format's version (44), the level, the WAV's binding (the offset; each core channel's
 WAV channel, the second of its mix and their gains, Q23; the LFE's channel; the WAV's samples to
 the core's, 1, 2 or 4 (decimated by 2, then 2); the WAV's format, size and the CRC-32 of its first
 64 KB), then the
