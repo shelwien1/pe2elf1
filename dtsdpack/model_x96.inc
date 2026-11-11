@@ -127,6 +127,202 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     }
     return nsmp9;
   }
+  // The core's values in channel ch's subband b over the subframe, where X96 codes it too and the
+  // core has little of the decode's (jx_low(): a 96/24 stream's top subbands, where its own
+  // decimation to 48 kHz left the core little and X96's step is many times the core's, 35-85 in
+  // `96-24.dts`'s subband 31), before the core's ABITS and scale factors say X96's lattice: the
+  // decode less X96's values, on the lattice of its last ABITS there (its 3 levels where it was a
+  // vector) at its last scale factor or within JC_W9 of it, the coarsest that leaves each value within
+  // an eighth of its step (into y, 2^-AQ_F); false where none does
+  static constexpr int JC_W9 = 3;
+  bool jx_core_values(const CoreRec& r, int ch, int b, S64* y) {
+    const int n = B::nsmp, i9 = hsc[ch][b] - 1;
+    if (hab[ch][b] < 2 || i9 < 0) return false;
+    const int a9 = hab[ch][b] - 1 >= 2 ? hab[ch][b] - 1 : 2;  // (as coded: the quantizer's ABITS + 1)
+    const S64* w = B::X[ch][b];
+    S64 lo, hi, best = -1, yy[NSMP];
+    x96_range(r, ch, a9 - 1, lo, hi);
+    for (int i = imax(0, i9 - JC_W9); i <= imin(SF6_N - 1, i9 + JC_W9); i++) {
+      const S64 s9 = (S64)LOSSY_QUANT[a9 - 1] * SF6[i], u = shl64(dequantize(1, s9), AQ_F);
+      if (s9 <= best || u <= 0) continue;
+      bool ok = true;
+      for (int j = 0; j < n && ok; j++) {
+        S128 dd;
+        S64 o;
+        yy[j] = w[j] - shl64(dequantize((S32)requant(w[j], s9, lo, hi, &dd, &o), s9), AQ_F);
+        ok = 8 * (yy[j] < 0 ? -yy[j] : yy[j]) <= u;
+      }
+      if (ok) best = s9, memcpy(y, yy, sizeof yy);
+    }
+    return best > 0;
+  }
+  // Of the K ADPCM predictors nearest by their distances d (the first of equals the lower), in turn,
+  // from a heap of all 4096 (the one that fits is mostly near the start), the first that fits(); -1
+  // none
+  template <class F>
+  int pv_first_fit(const S64* d, int K, F fits) {
+    int* const top = B::pvtop;
+    auto less = [&](int p, int q) { return d[p] < d[q] || (d[p] == d[q] && p < q); };
+    auto sift = [&](int i, int m) {
+      const int t = top[i];
+      for (;;) {
+        const int l = 2 * i + 1;
+        if (l >= m) break;
+        const int c = l + 1 < m && less(top[l + 1], top[l]) ? l + 1 : l;
+        if (!less(top[c], t)) break;
+        top[i] = top[c], i = c;
+      }
+      top[i] = t;
+    };
+    for (int q = 0; q < 4096; q++) top[q] = q;
+    for (int i = 4096 / 2 - 1; i >= 0; i--) sift(i, 4096);
+    for (int k = 0, hn = 4096; k < K; k++) {
+      const int qk = top[0];
+      top[0] = top[--hn];
+      sift(0, hn);
+      if (fits(qk)) return qk;
+    }
+    return -1;
+  }
+  // The first ADPCM predictor of the K nearest by d (the core's values' own LPC's distances) whose
+  // prediction, the decoder's from its last 4 samples and the values y (each to its nearest unit),
+  // leaves every value exactly on a lattice of the core's last ABITS there, at a scale factor within
+  // JC_WC of its last (the decoder's dequantized indexes: an encoder's ADPCM had them so); -1 none
+  static constexpr int JC_WC = 12;
+  int jx_core_fit(const CoreRec& r, int ch, int b, const S64* y, const S64* d, int K) {
+    const int n = B::nsmp, a = B::hist.abits[ch][b] - 1, si = B::hist.scale[ch][b] - 1;
+    if (a < 1 || si < 0) return -1;
+    S64 lo, hi, ss[2 * JC_WC + 1];
+    S32 unit[2 * JC_WC + 1], yi[NSMP];
+    int nl = 0;
+    quant_range(r, ch, a, lo, hi);
+    for (int i = imax(0, si - JC_WC); i <= imin(sf_entries(r.shuff[ch]) - 1, si + JC_WC); i++) {
+      const S64 st = step_for(r, ch, a, i);
+      if (st > 0) ss[nl] = st, unit[nl++] = dequantize(1, st);
+    }
+    if (!nl) return -1;
+    const bool tri = lo == -1 && hi == 1;  // (3 levels: every value not 0 is the unit, one lattice's)
+    for (int j = 0; j < n; j++) yi[j] = (S32)((y[j] + ((S64)1 << (AQ_F - 1))) >> AQ_F);
+    return pv_first_fit(d, K, [&](int qk) {
+      S32 h[4];
+      memcpy(h, B::yh[ch][b], sizeof h);
+      U32 alive = (1u << nl) - 1;  // (the lattices it may be on)
+      for (int j = 0; j < n && alive; j++) {
+        const S32 x = yi[j] - adpcm_pred(qk, h);
+        h[3] = h[2], h[2] = h[1], h[1] = h[0], h[0] = yi[j];
+        if (!x) continue;
+        if (tri) {
+          const S32 ax = x < 0 ? -x : x;
+          U32 m = 0;
+          for (int t = 0; t < nl; t++) m |= (U32)(unit[t] == ax) << t;
+          alive &= m;
+          continue;
+        }
+        for (int t = 0; t < nl; t++) {
+          S128 dd;
+          S64 o;
+          if (alive >> t & 1 && dequantize((S32)requant(shl64(x, AQ_F), ss[t], lo, hi, &dd, &o), ss[t]) != x)
+            alive &= ~(1u << t);
+        }
+      }
+      return alive != 0;
+    });
+  }
+  // Every vector X96's decoder makes of the code book's entries' first 16 values at each scale
+  // factor from 1 to 62 (FFmpeg's (e sc + 8) >> 4), in a hash table of their values (chained, made
+  // the first time it is needed), so that a vector's makers are found at once
+  struct VqMade {
+    static constexpr int N = 62 * 1024, NB = 1 << 17;
+    U32 hh[N];        // (each's hash)
+    S32 head[NB], next[N];
+    static U32 hash(const S32* z) {
+      U64 h = 1469598103934665603ull;
+      for (int j = 0; j < 16; j++) h = (h ^ (U32)z[j]) * 1099511628211ull;
+      return (U32)(h ^ h >> 32);
+    }
+    static void make(int m, S32* z) {  // (made m: scale factor 1 + m / 1024, entry m % 1024)
+      const S64 sc = SF6[1 + m / 1024];
+      const S8* q = HF_VQ[m % 1024];
+      for (int j = 0; j < 16; j++) z[j] = (S32)((q[j] * sc + 8) >> 4);
+    }
+    VqMade() {
+      for (int b = 0; b < NB; b++) head[b] = -1;
+      for (int m = N - 1; m >= 0; m--) {  // (each chain in order)
+        S32 z[16];
+        make(m, z);
+        hh[m] = hash(z);
+        next[m] = head[hh[m] & (NB - 1)], head[hh[m] & (NB - 1)] = m;
+      }
+    }
+    // whether the vector z (16 values) is one of an entry's at a scale factor in i0..i1
+    bool made(const S32* z, int i0, int i1) const {
+      const U32 h = hash(z);
+      for (int m = head[h & (NB - 1)]; m >= 0; m = next[m]) {
+        const int i = 1 + m / 1024;
+        if (hh[m] != h || i < i0 || i > i1) continue;
+        S32 y[16];
+        make(m, y);
+        if (!memcmp(y, z, sizeof y)) return true;
+      }
+      return false;
+    }
+  };
+  // X96's ADPCM predictor in channel ch's subband b, a decoded WAV's: the first of the K nearest by
+  // d (its LPC's) whose prediction, the decoder's from the decode's own last 4 values (its history,
+  // yh9, isn't the decoder's after a subband of FFmpeg's noise), leaves every one of the decode's
+  // values (to the nearest unit) exactly a vector of the code book's at a scale factor within XP_W of
+  // its last there (VqMade's), or on the lattice of its last ABITS, where a quantizer's, at those
+  // scale factors; -1 none
+  static constexpr int XP_W = 6;
+  int x96_pvq_fit(const CoreRec& r, int ch, int b, const S64* d, int K) {
+    static const VqMade vm;
+    const int n = nsmp9, i9 = hsc[ch][b] - 1, a9 = hab[ch][b] - 1;
+    if (i9 < 0 || n != 16) return -1;
+    const S64 half = (S64)1 << (AQ_F - 1);
+    S32 yi[NSMP], h0[4];
+    for (int j = 0; j < n; j++) yi[j] = (S32)((X9[ch][b][j] + half) >> AQ_F);
+    for (int k = 0; k < 4; k++) h0[k] = (S32)((xh9[ch][b][k] + half) >> AQ_F);
+    int ni = 0, si[2 * XP_W + 1];
+    for (int i = imax(1, i9 - XP_W); i <= imin(SF6_N - 2, i9 + XP_W); i++) si[ni++] = i;
+    S64 lo = 0, hi = 0, ss[2 * XP_W + 1];
+    int nl = 0;
+    if (a9 >= 2) {
+      x96_range(r, ch, a9 - 1, lo, hi);
+      for (int t = 0; t < ni; t++) ss[nl++] = (S64)LOSSY_QUANT[a9 - 1] * SF6[si[t]];
+    }
+    return pv_first_fit(d, K, [&](int qk) {
+      S32 x[NSMP], h[4] = {h0[0], h0[1], h0[2], h0[3]};
+      for (int j = 0; j < n; j++) {
+        x[j] = yi[j] - adpcm_pred(qk, h);
+        h[3] = h[2], h[2] = h[1], h[1] = h[0], h[0] = yi[j];
+      }
+      if (ni && vm.made(x, si[0], si[ni - 1])) return true;
+      for (int t = 0; t < nl; t++) {
+        int j = 0;
+        for (S128 dd; j < n; j++) {
+          S64 o;
+          if (dequantize((S32)requant(shl64(x[j], AQ_F), ss[t], lo, hi, &dd, &o), ss[t]) != x[j]) break;
+        }
+        if (j == n) return true;
+      }
+      return false;
+    });
+  }
+  // Channel ch's subband b's ADPCM predictor v where jx_core_values() said the core's values y: by
+  // their own LPC, the first of jx_core_fit()'s 1024 first (code_pvq2())
+  S64 code_pvq_core(const CoreRec& r, int ch, int b, const S64* y, S64 v) {
+    const int n = B::nsmp;
+    S64 x[4 + NSMP], al[4];
+    int g, g4;
+    for (int k = 0; k < 4; k++) x[3 - k] = shl64(B::yh[ch][b][k], AQ_F);
+    for (int j = 0; j < n; j++) x[4 + j] = y[j];
+    lpc4(x, 4 + n, al, &g, &g4);
+    S64* const d = B::pvqd;
+    pvq_dists(al, d);
+    return B::code_pvq2(al, d, jx_core_fit(r, ch, b, y, d, 1024), (int)v, ch, b, g, B::lrank[ch][b][VK_PVQ],
+                        B::lrank[ch][b][VK_PVE]);
+  }
+
   // how the encoder would gain by predicting channel ch's subband b (as ModelSmp's pmode_gain())
   int x96_pmode_gain(int ch, int b) {
     const int k = lpg4_9[ch][b];
@@ -150,7 +346,10 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
         if (bd) {
           S64* const d = this->pvqd;
           pvq_dists(lpc9[ch][b], d);
-          return this->code_pvq2(lpc9[ch][b], d, -1, (int)v, ch, b, lpg9[ch][b], lrank9[ch][b][VK_PVQ],
+          // (a decoded WAV's: the first by its LPC that fits, x96_pvq_fit(), first: `96-24.dts`'s X96
+          // predictors 1078 bytes to 483, its core 1.6% smaller)
+          const int fit = B::ss_rule() ? x96_pvq_fit(r, ch, b, d, 1024) : -1;
+          return this->code_pvq2(lpc9[ch][b], d, fit, (int)v, ch, b, lpg9[ch][b], lrank9[ch][b][VK_PVQ],
                                  lrank9[ch][b][VK_PVE]);
         }
         return side_index(SF_PVQ, ch, b, v, 12, hpv[ch][b], 8, 0);

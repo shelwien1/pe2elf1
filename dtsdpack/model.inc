@@ -182,9 +182,16 @@ struct Model : ModelX96<f_DEC, LV> {
       case F_PVQ: {
         account(CAT_SIDE);
         // (where X96 codes the subband too and the core has little of the decode's values, against the
-        // last one where it has been right more often than the search's first: `96-24.dts`'s core
-        // 2.0% smaller)
+        // core's own where a decoded WAV's say them, the decode less X96's (jx_core_values()): by
+        // their LPC, the predictor that leaves them on the core's lattice exactly first, `96-24.dts`'s
+        // subband 31's 99.4% the first where X96 has its lattice there, its core 10.2% smaller; else
+        // against the last one where it has been right more often than the search's first: 2.0%)
         const bool lw = bound[ch] && B::jx_low(b);
+        S64 yc[NSMP];
+        if (lw && B::ss_rule() && B::jx_core_values(r, ch, b, yc)) {
+          v = B::code_pvq_core(r, ch, b, yc, v);
+          break;
+        }
         int pa = -1;
         if (lw) {
           S64* const d = B::pvqd;
