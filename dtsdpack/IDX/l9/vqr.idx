@@ -16,48 +16,48 @@ Index a
 
 Index b
  b_kd: kd, 1!111
- b_mg: mg, 1!101101100111
+ b_mg: mg, 1!101101100101
  b_gn: gn, 1!111111000000000
 
 Index c
  c_kd: kd, 1!111
- c_bd: bd, 1!0010000000000001000000110001111
+ c_bd: bd, 1!0010000000000010000001100000111
  c_mg: mg, 1!111110010001
 
 Index d
- d_kd: kd, 1!000
+ d_kd: kd, 1!101
  d_lh: lh, 1!00
- d_mg: mg, 1!000000100000
+ d_mg: mg, 1!000000001000
 
 Index e
  e_kd: kd, 1!111
  e_cc: cc, 1!11
- e_bd: bd, 1!0000100001010110000001111101111
+ e_bd: bd, 1!0000000001101000000001111101111
 
 Index h
  h_kd: kd, 1!010
- h_gn: gn, 1!100111011010000
+ h_gn: gn, 1!100110010110000
  h_lh: lh, 1!11
 
 Index i
  i_kd: kd, 1!011
- i_mg: mg, 1!010010101011
+ i_mg: mg, 1!010010100000
  i_lh: lh, 1!11
  i_gn: gn, 1!101111000000000
 
 Index j
  j_kd: kd, 1!101
- j_bd: bd, 1!0010000011010001110110000010011
+ j_bd: bd, 1!1000000000000000000000000010001
  j_lh: lh, 1!00
 
 Index k
- k_kd: kd, 1!011
+ k_kd: kd, 1!111
  k_cc: cc, 1!11
- k_mg: mg, 1!101101101101
+ k_mg: mg, 1!101101101111
 
 Index l
  l_kd: kd, 1!000
- l_gn: gn, 1!000011010010000
+ l_gn: gn, 1!000011010110000
 
 Index s
  s_kd: kd, 1!111
@@ -84,26 +84,26 @@ Index g
  g_kd: kd, 1!111
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
-Number rA, 1, 0!00101010
+Number rA, 1, 0!00101011
 Number mwA, 1, 0!00101000
 Number rB, 1, 0!11111110
 Number mwB, 1, 0!00000000
 Number rC, 1, 0!10111011
 Number mwC, 1, 0!00000000
-Number rD, 1, 0!11010101
-Number mwD, 1, 0!10101111
-Number rE, 1, 0!10101011
+Number rD, 1, 0!11010111
+Number mwD, 1, 0!10101110
+Number rE, 1, 0!10101010
 Number mwE, 1, 0!00000000
 Number rH, 1, 0!11101000
 Number mwH, 1, 0!10000010
 Number rI, 1, 0!11011101
-Number mwI, 1, 0!00000010
-Number rJ, 1, 0!11101001
-Number mwJ, 1, 0!01010111
-Number rK, 1, 0!11111010
+Number mwI, 1, 0!00000000
+Number rJ, 1, 0!11001001
+Number mwJ, 1, 0!01110010
+Number rK, 1, 0!11111110
 Number mwK, 1, 0!00000010
-Number rL, 1, 0!11101110
-Number mwL, 1, 0!10011011
+Number rL, 1, 0!11001100
+Number mwL, 1, 0!10011111
 Number lr, 1, 0!00111
 Number mb, 1, 0!01101111
 Number rS1, 1, 0!01000

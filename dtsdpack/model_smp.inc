@@ -347,6 +347,41 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // (nr, nl), and in each row (nl)
   static constexpr U32 HIT_PRIOR = 16, HIT_LIMIT = 1u << 18;
   U32 hit_c[2][4][8][QB_N][QB_N][2], hit_r[2][4][8][QB_N][2];
+  // The encoder's arithmetic errs more in some subbands than in others, the same ones through a
+  // stream (`s.2.dts`'s encoder's: those next to the multiples of 3 kHz, 15 and 16 most, then 23,
+  // 24, 7 and 8, an index this near the boundary missing there 3 to 15 times as often as in
+  // subband 5's; no direction to it): the nearness those counts are by (nl, its distance against
+  // the level) is against the level times the subband's error's scale, which is learned as the
+  // stream goes, in quarter doublings (from 0): a step up where the subband's misses since its
+  // last step are more than those its cells expected by 1.25 times the root of those (once 2 or
+  // more were), down where fewer by as much (to HC_MAX either way); both halved as those expected
+  // pass 1024. The core's subbands', then X96's
+  static constexpr int HC_MAX = 32;
+  struct HitCal {
+    S32 s;   // (the scale: 2^(s/4))
+    U32 m;   // (the misses)
+    U64 e;   // (those expected: the probabilities coded, in CO_ONE)
+  };
+  HitCal hcal[NSUB + NSUB96];
+  // unit u times hc's scale
+  static S128 hc_unit(S128 u, int s) {
+    static const int QM[4] = {128, 152, 181, 215};  // (2^(k/4), in 128ths)
+    const int e = s >> 2;
+    return (e >= 0 ? u << e : u >> -e) * QM[s & 3] >> 7;
+  }
+  // (after a hit flag: hit, at probability pq of a miss)
+  static void hc_learn(HitCal& hc, int hit, U32 pq) {
+    hc.m += !hit, hc.e += pq;
+    if (hc.e < 2 * (U64)CO_ONE) return;
+    const S64 d = (S64)hc.m * CO_ONE - (S64)hc.e;  // ((d / CO_ONE)^2 > 1.25^2 e / CO_ONE)
+    if (16 * (U128)((S128)d * d) > 25 * (U128)hc.e * CO_ONE) {
+      if (d > 0) hc.s += hc.s < HC_MAX;
+      else hc.s -= hc.s > -HC_MAX;
+      hc.m = 0, hc.e = 0;
+    } else if (hc.e > 1024 * (U64)CO_ONE) {
+      hc.m >>= 1, hc.e >>= 1;
+    }
+  }
 
   void smp_start(WavIn* w, const Bind& b) {
     wav = w;
@@ -1947,7 +1982,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.pk = bnd;
     D.nr = bnd ? near_bucket(dist, (S128)ss << AQ_F, 17) : 0;
     // (the encoder's arithmetic errs by about its signal's level: the channel's loudest subband's)
-    D.nl = bnd ? near_bucket(dist, ((S128)(r.shuff[ch] == 6 ? SF7 : SF6)[imax(esmax[ch] - 1, 0)] << 38), 28) : 0;
+    const S128 lvu = (S128)(r.shuff[ch] == 6 ? SF7 : SF6)[imax(esmax[ch] - 1, 0)] << 38;
+    D.nl = bnd ? near_bucket(dist, lvu, 28) : 0;
     D.ql = bnd ? imin(bit_len((U64)(qp < 0 ? -qp : qp)), 21) : 0;
     D.hm = imin(__builtin_popcount(miss[ch][b]), 3);
     D.pm = pm;
@@ -1975,7 +2011,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       qe = requant(je_one(ch, b, j) - shl64(pred, AQ_F), ss, lo, hi, &d1, &o1);
       if (qe != qp && (U64)je_qn[b][1] * 4 > (U64)je_qn[b][0] * 3) jd = 1, alt = qe;
     }
-    v = code_index(D, v, bnd, qp, alt, lo, hi, &how, bnd && !ss_rule() ? near_bucket(dist, (S128)tlev[ch][j] << 22, 28) : -1,
+    v = code_index(D, v, bnd, qp, alt, lo, hi, &how, &hcal[b], dist, !ss_rule() ? (S128)tlev[ch][j] << 22 : lvu,
                    (pc >= 4 ? 3 : pc >= 2 ? 2 : pc) + 4 * jd);
     if (je) {
       je_qn[b][0]++, je_qn[b][1] += qe == v;
@@ -2013,7 +2049,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // (nt: how near the boundary against the channel's level at the sample, a lossless WAV's: the
   // encoder's arithmetic errs by about the level of all its signal there, its loudest subband's
   // the lesser guess; -1 none: against that, D.nl)
-  S64 code_index(const M_smp_v& D, S64 v, int pk, S64 qp, S64 alt, S64 lo, S64 hi, int* how, int nt = -1, int cb = 0) {
+  S64 code_index(const M_smp_v& D, S64 v, int pk, S64 qp, S64 alt, S64 lo, S64 hi, int* how, HitCal* hc = nullptr,
+                 S128 dist = 0, S128 unit = 0, int cb = 0) {
     *how = 2;
     if (pk) {
       const int kd = D.ab == 27 ? 2 : D.pm;
@@ -2030,12 +2067,17 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         // a subband sample's index is the audio's but where the encoder's arithmetic and this
         // analysis's differ, by how near the boundary it lies: by how often an index this near
         // wasn't (the cell's counts, from its row's where it has few), straight to the coder (its
-        // probabilities are finer than the families')
-        const int nl = nt >= 0 ? nt : D.nl;
+        // probabilities are finer than the families'; the nearness against the level, unit, times
+        // the subband's error's scale, hc's, where the channel's last 32 missed 3 times or fewer:
+        // the encoder's arithmetic's misses, not those of a WAV that isn't what it had)
+        const bool hk = hc && (cb & 3) < 3;
+        const int nl = hc ? near_bucket(dist, hc_unit(unit, hk ? hc->s : 0), 28) : D.nl;
         U32 *cell = hit_c[kd][D.hm][cb][D.nr][nl], *row = hit_r[kd][D.hm][cb][nl];
         const U64 pr = ((U64)(2 * row[0] + 1) << CO_PBITS) / (2 * (U64)row[1] + 2);
         const U64 pc = (((U64)cell[0] << CO_PBITS) + HIT_PRIOR * pr) / (cell[1] + HIT_PRIOR);
-        hit = c->code_bit((U32)(pc < 1 ? 1 : pc > CO_ONE - 1 ? CO_ONE - 1 : pc), ENC && v == qp);
+        const U32 pq = (U32)(pc < 1 ? 1 : pc > CO_ONE - 1 ? CO_ONE - 1 : pc);
+        hit = c->code_bit(pq, ENC && v == qp);
+        if (hk) hc_learn(*hc, hit, pq);
         U32* const ts[2] = {cell, row};
         for (int k = 0; k < 2; k++) {
           ts[k][0] += !hit;

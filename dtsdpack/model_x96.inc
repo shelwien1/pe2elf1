@@ -995,7 +995,8 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     D.hw = x96_coding(r, ch, a);
     D.pk = bd;
     D.nr = bd ? near_bucket(dist, (S128)ss << AQ_F, 17) : 0;
-    D.nl = bd ? near_bucket(dist, ((S128)SF6[imax(esmax9[ch] - 1, 0)] << 38), 28) : 0;
+    const S128 lvu = (S128)SF6[imax(esmax9[ch] - 1, 0)] << 38;
+    D.nl = bd ? near_bucket(dist, lvu, 28) : 0;
     D.ql = bd ? imin(bit_len((U64)(qp < 0 ? -qp : qp)), 21) : 0;
     D.hm = imin(__builtin_popcount(miss9[ch][b]), 3);
     D.pm = pm;
@@ -1005,7 +1006,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     D.sq = bd ? svar(qp) : 0;
     D.s1 = qs9[ch][b];
     int how;
-    v = code_index(D, v, bd, qp, alt, lo, hi, &how);
+    v = code_index(D, v, bd, qp, alt, lo, hi, &how, &B::hcal[NSUB + b], dist, lvu);
     miss9[ch][b] = (U8)(miss9[ch][b] << 1 | (bd && how != 0));
     n_smp9++;
     n_hit9 += bd && how == 0;
