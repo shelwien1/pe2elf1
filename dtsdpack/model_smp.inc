@@ -1102,14 +1102,18 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // wrong where sure (8 or more) no more than 2 times more often than the other: a decoded WAV's
   // vectors are nearly its own, and miss at near ties by the best's distance)
   U32 hvs[2];  // (the misses where each was sure: against the best, against mu)
-  int code_cand(int n, int nb, int v, int kd, int ch, int b, int gn, S128 mu = 0) { return code_cand(n, nb, v, kd, ch, b, gn, lrank[ch][b][kd], mu); }
-  int code_cand(int n, int nb, int v, int kd, int ch, int b, int gn, U8& lh, S128 mu = 0) {
+  // (mlu > 0: ml's unit)
+  int code_cand(int n, int nb, int v, int kd, int ch, int b, int gn, S128 mu = 0, S128 mlu = 0) {
+    return code_cand(n, nb, v, kd, ch, b, gn, lrank[ch][b][kd], mu, mlu);
+  }
+  int code_cand(int n, int nb, int v, int kd, int ch, int b, int gn, U8& lh, S128 mu = 0, S128 mlu = 0) {
     M_vqr_v D;
     D.kd = kd;
     D.cc = chan_class(ch);
     D.bd = b;
     const int mr = key_margin(cand, n), ml = mu > 0 ? key_margin_u(cand, n, mu) : 0;
     D.mg = mu > 0 && hvs[1] <= hvs[0] + 2 ? ml : mr;
+    D.ml = mlu > 0 ? key_margin_u(cand, n, mlu, 25, 14) : 15;
     D.gn = gn;
     D.lh = lh;
     B::sel(f_vqr, D);
@@ -1327,7 +1331,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     for (int g = 0; g < 32; g++) cand[g].k = mn ? md[g] : gm[g], cand[g].i = g;
     const int lk = cpl_leak(r, ch, b, 26, 15), gn = lk >= 0 ? lk : imin(si >> 3, 15);
-    const int g = code_cand(32, 5, (int)v >> 5, VK_HFG, ch, b, gn);
+    // (a lossless WAV's: the unit of the margins against the level, below)
+    const S128 mu = bound[ch] && !ss_rule() && !x96a ? (S128)tlvl[ch] * sc << 24 : 0;
+    const int g = code_cand(32, 5, (int)v >> 5, VK_HFG, ch, b, gn, 0, mu);
     if (tried) {
       hfr[0] += mn, hfr[1]++;
       if (hfr[1] >= 1u << 16) hfr[0] >>= 1, hfr[1] >>= 1;
@@ -1340,8 +1346,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // encoder took the nearest of subband 28's 97% of the time within 2^-19 of that, 85% within
     // 2^-20, 49% within 2^-24; by the nearest's distance, 63% within 1/256 of it, 99% by 2^4 times
     // it or more)
-    const S128 mu = bound[ch] && !ss_rule() && !x96a ? (S128)tlvl[ch] * sc << 24 : 0;
-    v = g * 32 + code_cand(32, 5, (int)v & 31, VK_HFV, ch, b, gn, mu);
+    v = g * 32 + code_cand(32, 5, (int)v & 31, VK_HFV, ch, b, gn, mu, mu);
     if (cpl_on(r, ch, b)) {  // (each m's group by the centroids)
       const int c = NSUB - 1 - b;
       for (int k = 0; k < CPL_K; k++) {
@@ -1629,7 +1634,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // arithmetic errs, for the RMS rule's nearness (code_scale()): the nearer of the distance times
   // the root of n against the channel's level in the subframe times the subband's error's scale
   // (hcal's, less their mean), from 2^-24, and against the RMS itself, from 2^-16, in doublings
-  // (0-7; -1 where there is no boundary)
+  // (0-15; -1 where there is no boundary)
   int scale_near_lev(int ch, int b, const S64* v, int n, const U32* tab, int nt, int p) const {
     S128 ms = 0;
     for (int i = 0; i < n; i++) ms += (S128)v[i] * v[i];
@@ -1643,7 +1648,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     sm = sm >= 0 ? (sm + NSUB / 2) / NSUB : -((-sm + NSUB / 2) / NSUB);
     const S64 dd = rr > bd ? rr - bd : bd - rr;
     const int a = near_bucket((S128)dd * isqrt128((U128)n << 8) >> 4, hc_unit((S128)lev, hcal[b].s - sm), 24);
-    return imin(imin(a, near_bucket((S128)dd, (S128)rr, 16)), SB_N - 1);
+    return imin(a, near_bucket((S128)dd, (S128)rr, 16));
   }
 
   // Scale factor j (0 the first, 1 the second, after a transient) of channel ch's subband b, v in
@@ -1673,15 +1678,20 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         // (a lossless WAV's top subband: its RMS with the bottom one's leak's noise in it, 2^-40 of
         // that one's power, as the encoder's scale factor goes: 81.6% of `s.2.dts`'s, from 79.2%)
         if (b == NSUB - 1 && cpl_on(r, ch, b)) {
+          if (!ss_rule() && !x96a) {  // (pl's: the RMS rule's on the values as they are)
+            int nr;
+            const int p0 = scale_pred(v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &nr);
+            if (p0 >= 0) nlev = scale_near_lev(ch, b, v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p0);
+          }
           S128 ms = 0, m0 = 0;
           for (int i = 0; i < n; i++) ms += (S128)v_[i] * v_[i];
           for (int i = 0; i < nsmp; i++) m0 += (S128)X[ch][0][i] * X[ch][0][i];
           p = scale_pred_ms(ms / n + (m0 / nsmp >> 40), r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
         } else {
           p = scale_pred(v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
-          // (a lossless WAV's, but in the VQ subbands, whose contexts want the RMS's nearness as it
-          // was: `s.2.dts`'s core 1.1% smaller, `3-1.dts`'s 0.1%)
-          if (!hfb && !ss_rule() && !x96a && p >= 0)
+          // (a lossless WAV's: pn's outside the VQ subbands, whose contexts want the RMS's nearness
+          // as it was: `s.2.dts`'s core 1.1% smaller, `3-1.dts`'s 0.1%; and pl's)
+          if (!ss_rule() && !x96a && p >= 0)
             nlev = scale_near_lev(ch, b, v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p);
         }
         pc = scale_ceil(v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]));
@@ -1755,7 +1765,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.ab = hfb ? 0 : vvar(s.abits[ch][b] + 1, 27);
     D.pm = s.pmode[ch][b];
     D.pk = p >= 0;
-    D.pn = nlev >= 0 && p == pr ? nlev : near;
+    D.pn = nlev >= 0 && p == pr && !hfb ? imin(nlev, SB_N - 1) : near;
+    D.pl = nlev >= 0 && p == pr ? imin(nlev, 14) : 15;
     D.lp = A && P ? dvar(A - P) : 9;
     D.hm = hm[ch];
     D.bd = b;
@@ -2173,6 +2184,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.pk = 1;
     D.pn = near;
     D.lp = lfe_lp;
+    D.pl = 15;
     D.hm = lfe_hm;
     D.bd = 0;
     D.dp = sf_dup(SF7, SF7_N, p);

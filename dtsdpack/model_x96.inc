@@ -908,6 +908,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
   S64 x96_scale0(const CoreRec& r, const X96Sub& s, int ch, int b, S64 v) {
     const int ba = s.abits[ch][b], k = ba >= 2 ? 0 : ba == 1 ? 1 : 2;
     M_scl_v D;
+    D.pl = 15;
     tcx X_;
     int p = -1, p0 = -1, p1 = -1, ps = -1, pq = -1, conf = 0, tried = 0, near = SB_N - 1;
     if (bd9[ch]) {
