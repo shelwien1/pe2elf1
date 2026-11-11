@@ -308,6 +308,78 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
       return false;
     });
   }
+  // Whether the core's values of channel ch's subband b, the decode less X96's (jx_core_values()),
+  // lie exactly on a lattice of the core's last ABITS there, at a scale factor within JC_WC of its
+  // last, as they are (a subband that doesn't predict: 1); -1 where they aren't known
+  int jx_core_plain(const CoreRec& r, int ch, int b) {
+    S64 y[NSMP];
+    if (!jx_core_values(r, ch, b, y)) return -1;
+    const int n = B::nsmp, a = B::hist.abits[ch][b] - 1, si = B::hist.scale[ch][b] - 1;
+    if (a < 1 || si < 0) return -1;
+    S64 lo, hi;
+    quant_range(r, ch, a, lo, hi);
+    S32 yi[NSMP];
+    bool any = false;
+    for (int j = 0; j < n; j++) yi[j] = (S32)((y[j] + ((S64)1 << (AQ_F - 1))) >> AQ_F), any |= yi[j] != 0;
+    if (!any) return 1;
+    for (int i = imax(0, si - JC_WC); i <= imin(sf_entries(r.shuff[ch]) - 1, si + JC_WC); i++)
+      if (jx_on_lattice(yi, n, step_for(r, ch, a, i), lo, hi)) return 1;
+    return 0;
+  }
+  // whether the values x (n) are each exactly an index's at step and scale st (in lo..hi)
+  static bool jx_on_lattice(const S32* x, int n, S64 st, S64 lo, S64 hi) {
+    if (st <= 0) return false;
+    for (int j = 0; j < n; j++) {
+      S128 dd;
+      S64 o;
+      if (dequantize((S32)requant(shl64(x[j], AQ_F), st, lo, hi, &dd, &o), st) != x[j]) return false;
+    }
+    return true;
+  }
+  // The core's scale factor of channel ch's subband b (its ABITS and predictor coded) where the
+  // core's values are known (jx_core_values()): the first whose lattice they lie on exactly, less
+  // the decoder's prediction; -1 none (or where they are all predicted, saying no scale factor)
+  int jx_core_scale(const CoreRec& r, const CoreSub& s, int ch, int b) {
+    S64 y[NSMP];
+    if (!jx_core_values(r, ch, b, y)) return -1;
+    const int n = B::nsmp, a = s.abits[ch][b], nt = sf_entries(r.shuff[ch]);
+    S64 lo, hi;
+    quant_range(r, ch, a, lo, hi);
+    S32 x[NSMP], h[4];
+    memcpy(h, B::yh[ch][b], sizeof h);
+    bool any = false;
+    for (int j = 0; j < n; j++) {
+      const S32 yi = (S32)((y[j] + ((S64)1 << (AQ_F - 1))) >> AQ_F);
+      x[j] = yi - (s.pmode[ch][b] ? adpcm_pred(s.pvq[ch][b], h) : 0);
+      h[3] = h[2], h[2] = h[1], h[1] = h[0], h[0] = yi;
+      any |= x[j] != 0;
+    }
+    if (!any) return -1;
+    for (int i = 0; i < nt; i++)
+      if (jx_on_lattice(x, n, step_for(r, ch, a, i), lo, hi)) return i;
+    return -1;
+  }
+  // Whether X96's decode of channel ch's subband b is, as it is, a vector of the code book's at a
+  // scale factor within XP_W of its last there (VqMade's) or on the lattice of its last ABITS at
+  // one (a subband that doesn't predict: 1); -1 where its last isn't known
+  int x96_plain(const CoreRec& r, int ch, int b) {
+    static const VqMade vm;
+    const int n = nsmp9, i9 = hsc[ch][b] - 1, a9 = hab[ch][b] - 1;
+    if (i9 < 0 || n != 16 || a9 < 0) return -1;
+    S32 yi[NSMP];
+    bool any = false;
+    for (int j = 0; j < n; j++) yi[j] = (S32)((X9[ch][b][j] + ((S64)1 << (AQ_F - 1))) >> AQ_F), any |= yi[j] != 0;
+    if (!any) return 1;
+    const int i0 = imax(1, i9 - XP_W), i1 = imin(SF6_N - 2, i9 + XP_W);
+    if (vm.made(yi, i0, i1)) return 1;
+    if (a9 >= 2) {
+      S64 lo, hi;
+      x96_range(r, ch, a9 - 1, lo, hi);
+      for (int i = i0; i <= i1; i++)
+        if (jx_on_lattice(yi, n, (S64)LOSSY_QUANT[a9 - 1] * SF6[i], lo, hi)) return 1;
+    }
+    return 0;
+  }
   // Channel ch's subband b's ADPCM predictor v where jx_core_values() said the core's values y: by
   // their own LPC, the first of jx_core_fit()'s 1024 first (code_pvq2())
   S64 code_pvq_core(const CoreRec& r, int ch, int b, const S64* y, S64 v) {
@@ -339,7 +411,11 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     const X96Sub& s = r.xs[sf];
     const int bd = bd9[ch], b0 = r.x96start;
     switch (fid) {
-      case F_PMODE:
+      case F_PMODE:  // (a decoded WAV's where the decode is, as it is, a vector or on a lattice X96's last ABITS
+                     // there makes, x96_plain(), as the core's that fit one: `96-24.dts`'s core 0.2% smaller)
+        if (bd && B::ss_rule() && hab[ch][b] >= 2 && x96_plain(r, ch, b) > 0)
+          return side_code(SF_PMSR, ch, b, v, 0, 1, 1, hpm[ch][b], b > b0 ? s.pmode[ch][b - 1] + 1 : 0, 0,
+                           imin(lpg4_9[ch][b], 27), x96_pmode_gain(ch, b));
         return side_code(SF_PMODE, ch, b, v, 0, 1, 1, hpm[ch][b], b > b0 ? s.pmode[ch][b - 1] + 1 : 0, bd ? ac9[ch][b] : 8,
                          bd ? imin(lpg4_9[ch][b], 27) : 0, bd ? x96_pmode_gain(ch, b) : 9);
       case F_PVQ:

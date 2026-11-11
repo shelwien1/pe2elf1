@@ -1484,7 +1484,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // first entry above 0.99 times the RMS (a 96/24 encoder's); the scale factor search (a decoded
   // WAV's; where it isn't sure, the better of the others'), its sureness then the context the RMS
   // rule's nearness is
-  S64 code_scale(const CoreRec& r, const CoreSub& s, int ch, int b, int j, S64 v) {
+  S64 code_scale(const CoreRec& r, const CoreSub& s, int ch, int b, int j, S64 v, int pex = -1) {
     const int hfb = b >= r.nvqsub[ch], tm = hfb ? 0 : s.tmode[ch][b];
     const int max = r.shuff[ch] == 6 ? 128 : 64;
     M_scl_v D;
@@ -1554,6 +1554,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     const int pp = p;
     if (pj >= 0 && jx_more(jx_jr[b], 4, 1)) p = pj, near = SB_N - 1;
+    if (pex >= 0 && !hfb && !tm) p = pex, near = SB_N - 1;  // (the core's values': jx_core_scale())
     const S32 A = hist.scale[ch][b], P = hist.pscale[ch][b];
     // (where X96 codes the subband too and the core has little of the decode's values, the last
     // one where it has been right more often, by a margin: `96-24.dts`'s core 0.3% smaller)

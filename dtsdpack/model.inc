@@ -169,6 +169,11 @@ struct Model : ModelX96<f_DEC, LV> {
             const U64 dd = B::ab_tdist < k.gd ? B::ab_tdist : k.gd;
             fit = !k.G ? 3 : dd < ((U64)n << 10) ? 0 : dd < ((U64)n << 14) ? 1 : 2;
           }
+          // (where X96 codes the subband too and the core has little of the decode's values: whether
+          // the core's own lie on a lattice exactly as they are, jx_core_plain(): `96-24.dts`'s core
+          // 0.3% smaller)
+          const int f0 = fit >= 0 && B::jx_low(b) ? B::jx_core_plain(r, ch, b) : -1;
+          if (f0 >= 0) fit = f0 ? 0 : 2;
         }
         if (fit >= 0)
           v = side_code(SF_PMSR, ch, b, v, 0, 1, 1, hist.pmode[ch][b], b ? s.pmode[ch][b - 1] + 1 : 0, fit,
@@ -355,10 +360,14 @@ struct Model : ModelX96<f_DEC, LV> {
           v = side_code(SF_TMODE, ch, b, v, lo, hi, 0, hist.tmode[ch][b], 0, 8, 1 + imin(s.abits[ch][b], 26), 9);
         break;
       }
-      case F_SCALES:
+      case F_SCALES: {  // (where X96 codes the subband too and the core has little of the decode's
+                        // values, a decoded WAV's, the scale factor of the core's own where they say it:
+                        // `96-24.dts`'s subband 31's 3355 times, all right, its core 0.2% smaller)
         account(CAT_SCALE);
-        v = code_scale(r, s, ch, b, cur_j, v);
+        const int pex = bound[ch] && B::jx_low(b) && B::ss_rule() && s.abits[ch][b] ? B::jx_core_scale(r, s, ch, b) : -1;
+        v = code_scale(r, s, ch, b, cur_j, v, pex);
         break;
+      }
       case F_JOIN_SHUFF:
         account(CAT_SIDE);
         v = side_code(SF_JSHUFF, ch, 0, v, lo, hi, 0, 0, 0, 8, 0, 9);
