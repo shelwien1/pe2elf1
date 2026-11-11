@@ -25,6 +25,13 @@ typedef unsigned __int128 U128;
 // x times 2^k (C++11 leaves the left shift of a negative value undefined)
 static INLINE S64 shl64(S64 x, int k) { return (S64)((U64)x << k); }
 static INLINE S128 shl128(S128 x, int k) { return (S128)((U128)x << k); }
+// the floor square root of t (IEEE's sqrt the start, the integer steps exact)
+static INLINE S64 isqrt128(U128 t) {
+  S64 q = (S64)sqrt((double)t);
+  while (q > 0 && (U128)((S128)q * q) > t) q--;
+  while ((U128)((S128)(q + 1) * (q + 1)) <= t) q++;
+  return q;
+}
 
 // How the core's channels and blocks line up with the WAV's: the analysis of block t (the core's
 // t-th subband sample since the stream's first frame) ends before sample 32 t + off of the WAV, and
@@ -805,6 +812,17 @@ static int key_margin(const KeyIx* a, int n) {
   int m = 0;
   while (m < 11 && x >= ((S128)1 << m)) m++;
   return m;
+}
+// the same against a unit u: floor(log2((d2 - d1) / u)) + 23, 0-11 (12 and 0 as key_margin()'s)
+static int key_margin_u(const KeyIx* a, int n, S128 u) {
+  int b = 0, s = -1;
+  for (int i = 1; i < n; i++)
+    if (key_less(a[i], a[b])) s = b, b = i;
+    else if (s < 0 || key_less(a[i], a[s])) s = i;
+  if (s < 0) return 0;
+  const S128 d1 = a[b].k, d2 = a[s].k;
+  if (d1 <= 0) return d2 > 0 ? 12 : 0;
+  return imin(near_bucket(d2 - d1, u, 23), 11);
 }
 
 // --- the LFE (the encoder's decimation, as found; in integers) --------------------------------------
