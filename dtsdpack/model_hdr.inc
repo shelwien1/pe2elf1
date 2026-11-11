@@ -111,6 +111,15 @@ struct ModelHdr {
     if (occ[fid] < UINT8_MAX) occ[fid]++;
     return hdr_hist(fnums.hdr[fid], o, hi, v);
   }
+  // the same, most likely pred (0 up): against it and the last frame's value there
+  S64 hdr_pred(int fid, S64 hi, S64 v, int pred) {
+    const int o = imin(occ[fid], HOCC - 1);
+    if (occ[fid] < UINT8_MAX) occ[fid]++;
+    const int fld = fnums.hdr[fid];
+    v = hdr_code(fld, hi == 1, v, pred + 1, hist.h1[fld][o], o, hi);
+    if (npend < PEND_MAX) pend[npend++] = Pend{(U8)fld, (U8)o, (S32)(v + 1)};
+    return v;
+  }
   // the frame's hdr values into the history, as it ends
   void hdr_commit(void) {
     for (int i = 0; i < npend; i++) {

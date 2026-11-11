@@ -353,6 +353,11 @@ struct BitIn {
   void frame_start() {}
   void subframe(const CoreRec&, int) {}
   void at(int, int, int) {}
+  bool x96_defer(CoreRec&) { return false; }
+  bool x96_books(CoreRec&) { return true; }
+  bool x96_jdefer() { return false; }
+  bool x96_jsel(const CoreRec&, X96Sub&) { return true; }
+  void pos_to(U64 p) { pos = p; }
   void subframe_end(const CoreRec&, int) {}
 };
 
@@ -419,6 +424,11 @@ struct BitOut {
   void frame_start() {}
   void subframe(const CoreRec&, int) {}
   void at(int, int, int) {}
+  bool x96_defer(CoreRec&) { return false; }
+  bool x96_books(CoreRec&) { return true; }
+  bool x96_jdefer() { return false; }
+  bool x96_jsel(const CoreRec&, X96Sub&) { return true; }
+  void pos_to(U64 p) { pos = p; }
   void subframe_end(const CoreRec&, int) {}
 };
 
@@ -626,18 +636,40 @@ struct Walk {
       WU(JOINX, 3, c.x96joinx[ch]);
       if (c.x96joinx[ch] > c.npchs) return fail("an X96 joint intensity channel out of range");
     }
-    for (int ch = 0; ch < c.npchs; ch++) {
-      WU(SHUFF, 3, c.x96shuff[ch]);
-      if (c.x96shuff[ch] >= 6) return fail("an X96 scale factor code book out of range");
+    // (the model may code the code books after the subframes, from the values: x96_defer(), the
+    // subframes then walked with each the first book, whose values are those of all the books, then
+    // x96_books(), and the subframes' bits counted with the books)
+    const bool dfr = io.x96_defer(c);
+    if (dfr) {
+      io.pos += (U64)c.npchs * 6;
+      for (int a = 0; a < 6 + 4 * c.x96hr; a++) io.pos += (U64)c.npchs * SEL_BITS[a];
+    } else {
+      for (int ch = 0; ch < c.npchs; ch++) {
+        WU(SHUFF, 3, c.x96shuff[ch]);
+        if (c.x96shuff[ch] >= 6) return fail("an X96 scale factor code book out of range");
+      }
+      for (int ch = 0; ch < c.npchs; ch++) WU(BHUFF, 3, c.x96bhuff[ch]);
+      for (int a = 0; a < 6 + 4 * c.x96hr; a++)
+        for (int ch = 0; ch < c.npchs; ch++) WU(SEL, SEL_BITS[a], c.x96sel[ch][a]);
     }
-    for (int ch = 0; ch < c.npchs; ch++) WU(BHUFF, 3, c.x96bhuff[ch]);
-    for (int a = 0; a < 6 + 4 * c.x96hr; a++)
-      for (int ch = 0; ch < c.npchs; ch++) WU(SEL, SEL_BITS[a], c.x96sel[ch][a]);
     if (c.cpf) WU(XAHCRC, 16, c.xahcrc);
     c.xpass = 2;
     c.nblk = 0;
+    const U64 p0 = io.pos;
     for (int sf = 0; sf < c.nsubfs; sf++)
       if (!x96_subframe(c, sf)) return false;
+    if (dfr) {
+      if (!io.x96_books(c)) return fail("an X96 code book out of range");
+      BitOut bo;  // (counts, writes nothing)
+      bo.init(nullptr, 0);
+      Walk<BitOut> wb(bo);
+      const int nb = c.nblk;
+      c.nblk = 0;
+      for (int sf = 0; sf < c.nsubfs; sf++)
+        if (!wb.x96_subframe(c, sf)) return fail(wb.why());
+      c.nblk = nb;
+      io.pos_to(p0 + bo.pos);
+    }
     return true;
   }
   // a value v of a field coded as its difference from the one before (prev) by the book hb (the
@@ -701,9 +733,16 @@ struct Walk {
         s.scale[ch][b] = si = (int)v;
       }
     }
+    // (the model may code the joint scale factors' code books after them, x96_jdefer(): the scale
+    // factors walked as any book's values, then the books, x96_jsel(), and their bits counted)
+    const bool jd = io.x96_jdefer();
     for (int ch = 0; ch < c.npchs; ch++)
       if (c.x96joinx[ch]) {
         io.at(ch, 0, 0);
+        if (jd) {
+          io.pos += 3;
+          continue;
+        }
         WU(JOIN_SHUFF, 3, s.jsel[ch]);
         if (s.jsel[ch] == 7) return fail("a joint scale code book out of range");
       }
@@ -712,10 +751,27 @@ struct Walk {
       const int src = c.x96joinx[ch] - 1;
       for (int b = c.x96nsubs[ch]; b < c.x96nsubs[src]; b++) {
         io.at(ch, b, 0);
-        if (s.jsel[ch] < 5)
+        if (jd) {
+          S64 v = s.jscale[ch][b];
+          if (!io.val(F_JOIN_SCALES, -64, 127, v)) return false;
+          s.jscale[ch][b] = (int)v;
+        } else if (s.jsel[ch] < 5) {
           WH(JOIN_SCALES, SB[s.jsel[ch]], s.jscale[ch][b]);
-        else
+        } else {
           WU(JOIN_SCALES, s.jsel[ch] + 1, s.jscale[ch][b]);
+        }
+      }
+    }
+    if (jd) {
+      if (!io.x96_jsel(c, s)) return fail("a joint scale code book out of range");
+      for (int ch = 0; ch < c.npchs; ch++) {
+        if (!c.x96joinx[ch]) continue;
+        const int src = c.x96joinx[ch] - 1, k = s.jsel[ch];
+        for (int b = c.x96nsubs[ch]; b < c.x96nsubs[src]; b++) {
+          const int v = s.jscale[ch][b];
+          if (k < 5 ? !SB[k].has(v) : v < 0 || v >= 1 << (k + 1)) return fail("a joint scale factor its code book hasn't");
+          io.pos += k < 5 ? SB[k].bits(v) : k + 1;
+        }
       }
     }
     if (c.cpf) WU(XSICRC, 16, s.sicrc);

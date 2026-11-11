@@ -451,6 +451,96 @@ struct Model : ModelX96<f_DEC, LV> {
   }
   // where the walk is
   void frame_start() { B::unit_reset(); }
+  // X96's code books after its subframes (every encoder's? `96-24.dts`'s each the one that codes the
+  // values in the fewest bits): the subframes coded with the first of each (its values are every
+  // book's), then each book against the cheapest for the values (x96_books())
+  U8 x96bk[NCH][2 + 10];
+  bool x96_defer(CoreRec& r) {
+    for (int ch = 0; ch < r.npchs; ch++) {
+      if (ENC) {
+        x96bk[ch][0] = (U8)r.x96shuff[ch], x96bk[ch][1] = (U8)r.x96bhuff[ch];
+        for (int a = 0; a < 10; a++) x96bk[ch][2 + a] = (U8)r.x96sel[ch][a];
+      }
+      r.x96shuff[ch] = r.x96bhuff[ch] = 0;
+      for (int a = 0; a < 10; a++) r.x96sel[ch][a] = 0;
+    }
+    return true;
+  }
+  // the same of the joint scale factors' books (each channel's, each subframe: `96-24.dts`'s the
+  // cheapest 1875 times of 1876), after the scale factors
+  bool x96_jdefer() { return true; }
+  // the walk's place set (X96's subframes counted again): the statistics' too, the bits counted
+  // with the walk's books taken off the category they went to
+  void pos_to(U64 p) {
+    if (ENC && c->stats) {
+      c->orig[last_cat] += (double)(pos - last_pos) - ((double)pos - (double)p);
+      last_pos = p;
+    }
+    pos = p;
+  }
+  bool x96_jsel(const CoreRec& r, X96Sub& s) {
+    for (int ch = 0; ch < r.npchs; ch++) {
+      if (!r.x96joinx[ch]) continue;
+      const int src = r.x96joinx[ch] - 1;
+      double jc[7] = {0};
+      for (int b = r.x96nsubs[ch]; b < r.x96nsubs[src]; b++) {
+        const int v = s.jscale[ch][b];
+        for (int k = 0; k < 5; k++) jc[k] += SB[k].has(v) ? SB[k].bits(v) : 1e9;
+        jc[5] += v >= 0 && v < 64 ? 6 : 1e9;
+        jc[6] += v >= 0 && v < 128 ? 7 : 1e9;
+      }
+      int m = 0;
+      for (int k = 1; k < 7; k++) m = jc[k] < jc[m] ? k : m;
+      B::cat(CAT_X96);
+      S64 v = ENC ? s.jsel[ch] : 0;
+      v = B::side_code(SF_JSHUFF, ch, 0, v, 0, 6, 0, m + 1, 0, 8, 0, 9);
+      s.jsel[ch] = (int)v;
+    }
+    return true;
+  }
+  bool x96_books(CoreRec& r) {
+    const int hr = r.x96hr, b0 = r.x96start, na = 6 + 4 * hr;
+    B::cat(CAT_HDR);
+    for (int ch = 0; ch < r.npchs; ch++) {
+      // (each book's bits for the channel's values, over the subframes; 1e9: one a value hasn't)
+      double sc[6] = {0}, bc[8] = {0}, qc[10][8];
+      memset(qc, 0, sizeof qc);
+      for (int sf = 0; sf < r.nsubfs; sf++) {
+        const X96Sub& s = r.xs[sf];
+        const int n = r.sub[sf].nssc * 8;
+        int si = 0, ab = 0;
+        for (int b = b0; b < r.x96nsubs[ch]; b++) {
+          const int v = s.scale[ch][b], d = v - si, a = s.abits[ch][b], e = a - ab;
+          for (int k = 0; k < 5; k++) sc[k] += SB[k].has(d) ? SB[k].bits(d) : 1e9;
+          sc[5] += 6;
+          for (int k = 0; k < 7; k++) bc[k] += QB[5 + 2 * hr][k].has(e) ? QB[5 + 2 * hr][k].bits(e) : 1e9;
+          bc[7] += 3 + hr;
+          si = v, ab = a;
+          const int q = a - 1;  // (the quantizer's ABITS)
+          if (q < 1 || q > na) continue;
+          for (int t = 0; t < QB_GROUP[q - 1]; t++)
+            for (int j = 0; j < n; j++) qc[q - 1][t] += QB[q - 1][t].has(s.q[ch][b][j]) ? QB[q - 1][t].bits(s.q[ch][b][j]) : 1e9;
+          qc[q - 1][QB_GROUP[q - 1]] += q <= 7 ? (double)BLOCK_BITS[q - 1] * n / 4 : (double)(q - 3) * n;
+        }
+      }
+      auto best = [](const double* c, int k) {
+        int m = 0;
+        for (int i = 1; i < k; i++) m = c[i] < c[m] ? i : m;
+        return m;
+      };
+      S64 v = ENC ? x96bk[ch][0] : 0;
+      v = B::hdr_pred(F_SHUFF, 7, v, best(sc, 6));
+      if (v >= 6) return false;
+      r.x96shuff[ch] = (int)v;
+      v = ENC ? x96bk[ch][1] : 0;
+      r.x96bhuff[ch] = (int)B::hdr_pred(F_BHUFF, 7, v, best(bc, 8));
+      for (int a = 0; a < na; a++) {
+        v = ENC ? x96bk[ch][2 + a] : 0;
+        r.x96sel[ch][a] = (int)B::hdr_pred(F_SEL, (1 << SEL_BITS[a]) - 1, v, best(qc[a], QB_GROUP[a] + 1));
+      }
+    }
+    return true;
+  }
   void subframe(const CoreRec& r, int sf) {
     cur_sf = sf;
     B::sst = 0;
