@@ -14,7 +14,7 @@ enum { BO_OFF = 0, BO_MAP = 4, BO_MAP2 = BO_MAP + NCH, BO_G1 = BO_MAP2 + NCH, BO
        DP_BIND = BO_CRC + 4 };  // (the binding's bytes)
 enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND, DP_HEAD = DP_AT_BIND + DP_BIND };  // the header's
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
-constexpr int DP_VERSION = 41;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
+constexpr int DP_VERSION = 42;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
                                // extension as records; 4: a WAV at twice the core's rate, X96 and XXCH; 5: the
                                // scale factor search; 6: the bit allocation search; 7: the bits after the
                                // subframes as the bytes they end in, the energy's quarter of its bucket, the
@@ -66,7 +66,8 @@ constexpr int DP_VERSION = 41;  // the format's (2: a core channel's binding a m
                                // subband through a fit of its filter; 40: where X96 codes the core's
                                // subbands too, their scale factors by its lattice; 41: there, more
                                // scale factors tried, around the last one where the gain is low;
-                               // X96's subbands without bits by FFmpeg's noise generator)
+                               // X96's subbands without bits by FFmpeg's noise generator; 42: X96's
+                               // bit allocation search, its VQ vectors' searches as the core's)
 
 static void put_le(U8* p, U64 v, int n) {
   for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));
@@ -123,6 +124,7 @@ struct Stats {
   U64 vq[VK_N], vq_hits[VK_N];  // (and the code books' indexes, those its searches found)
   U64 pv, pv_hits;              // (the ADPCM predictors, those found: their blocks' and entries' ranks 0)
   U64 hits9, smp9, sf_hits9, sf9;  // (and X96's samples and scale factors)
+  U64 ab9, ab_srch9, ab_hits9;     // (and its ABITS, those its bit allocation search said, those it said right)
   U64 ab, ab_srch, ab_hits;        // (and the ABITS, those the bit allocation search said, those it said right)
   U64 ab_st, ab_sthits;            // (those a staircase said, those it said right)
   U64 ab_tb, ab_tbhits;            // (those the allocation table said, those it said right)
@@ -166,6 +168,9 @@ struct Stats {
       if (smp9 || sf9)
         fprintf(stderr, "  X96: the audio's indexes: %.2f%% of the samples; the audio's scale factors: %.2f%%\n",
                 smp9 ? PERCENT * hits9 / smp9 : 0.0, sf9 ? PERCENT * sf_hits9 / sf9 : 0.0);
+      if (ab_srch9)
+        fprintf(stderr, "  X96's bit allocation search: %.2f%% of its ABITS, right in %.2f%% of them\n",
+                PERCENT * ab_srch9 / ab9, PERCENT * ab_hits9 / ab_srch9);
       if (pv || vq[VK_HFG])
         fprintf(stderr, "  the encoder's searches on the audio: %.2f%% of the ADPCM predictors; HF VQ: %.2f%% of the "
                         "groups, %.2f%% of the vectors in them\n",

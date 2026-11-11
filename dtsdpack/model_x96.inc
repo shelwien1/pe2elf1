@@ -50,6 +50,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
   // within the subframe at the next subband; how often the rule before was right, and the noise's
   // (where they differ), the noise's taken where it has been right more often, by a margin
   U32 lcg_, lcg_run;
+  U32 lcg_ab;  // (and as the ABITS guess it: x96_ab_search())
   U32 lcg_r[2];
   static S32 lcg_next(U32& st) {
     st = 1103515245u * st + 12345u;
@@ -59,6 +60,10 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
   // how often x96_scale()'s rules were the stream's, by the subband's kind (halved as they grow);
   // the search's tries (to 2048)
   U32 sfr9[3][3], ss9_n;
+  // how often the ABITS' first guess was right, and the bit allocation search's (halved as they
+  // grow); the search's tries (to 2048); the ABITS (-s: and those the search said, those right)
+  U32 ab9r[2], ab9_n;
+  U64 n_ab9, n_abs9, n_abhit9;
 
   // the step size times scale factor of channel ch's subband b (its ABITS 2 up: the quantizer's
   // ABITS + 1; no adjustment)
@@ -70,7 +75,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
   // the core's decoded samples below band 32; their LPC, autocorrelation, energy and how it goes
   void x96_subframe(const CoreRec& r, int sf) {
     const CoreSub& cs = r.sub[sf];
-    lcg_run = lcg_;
+    lcg_run = lcg_ab = lcg_;
     fb9 = r.nblk;
     B::sst = 0;
     nsmp9 = cs.nssc * 8;
@@ -180,9 +185,36 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
           if (e - k >= 1 && sn[-k]) sv = sn[-k], near_e = 1;
           else if (e + k <= 64 && sn[k]) sv = sn[k], near_e = 1;
         }
+        // (the bit allocation search's, x96_ab_search(), where it has been right more often than the
+        // first guess without it, by a margin: as sure; `96-24.dts`'s X96 ABITS 1388 bytes to 62, its
+        // core 3.2% smaller)
+        const S32 og = sv ? sv : hab[ch][b];
+        const bool srch = bd && x96_ab_on();
+        const int G = srch ? x96_ab_search(r, s, ch, b, (int)hi) : -1;
+        S32 Sn = sv;
+        int sc = 0;
+        if (G >= 0 && x96_ab_rule()) Sn = G + 1, sc = 13 + (G + 1 == og), n_abs9++;
         v = abits_code(ch, b, v, lo, hi, hab[ch][b], b > b0 ? s.abits[ch][b - 1] + 1 : 0, e, de, ls, s.pmode[ch][b], lbd, nb,
-                       mx, sv, near_e ? 14 : nn, 0, 4, 0);
-        if (sn) *sn = (U8)(checked(v, lo, hi) + 1);
+                       mx, Sn, near_e ? 14 : nn, sc, 4, 0);
+        v = checked(v, lo, hi);
+        if (sn) *sn = (U8)(v + 1);
+        if (srch) {
+          const int ro = og && v == og - 1, rs = G >= 0 ? v == G : ro;
+          ab9r[0] += ro, ab9r[1] += rs;
+          if (ab9r[0] + ab9r[1] >= 1u << 16) ab9r[0] >>= 1, ab9r[1] >>= 1;
+          ab9_n += ab9_n < 2048;
+        }
+        n_ab9++;
+        n_abhit9 += sc && v == G;
+        if (bd && !v) {  // (the generator's draws, where the values aren't all within half a unit of 0)
+          bool z = true;
+          for (int j = 0; j < nsmp9 && z; j++) z = B::jx_near(X9[ch][b][j]);
+          if (!z) {
+            U32 st = lcg_ab ^ 1;
+            for (int j = 0; j < nsmp9; j++) lcg_next(st);
+            lcg_ab = st ^ 1;
+          }
+        }
         return v;
       }
       case F_SCALES:
@@ -208,7 +240,19 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
           const int si = s.scale[ch][b] & 63, n = imin(16, nsmp9 - 16 * j);
           const S64 sc = SF6[si];
           const S64* x = &X9[ch][b][16 * j];
-          for (int g = 0; g < 32; g++) cand[g].k = hf_group_dist(g, x, n, sc), cand[g].i = g;
+          // (the groups by their nearest entries where the nearest of all lies within 1/64 of the
+          // values' energy, as the core's: a decoded WAV's values are the vector's, `96-24.dts`'s
+          // groups 95.0% the first from 86.4%, its core 1.4% smaller; else by their centroids)
+          S128 md[32], en = 0;
+          const S64* dot;
+          const double* dd;
+          const bool small = hf_dots(x, n, &dot, &dd);
+          for (int jj = 0; jj < n; jj++) en += (S128)x[jj] * 16 * ((S128)x[jj] * 16);
+          hf_group_mins(dot, small, n, sc, en, md);
+          S128 near = en + 1;
+          for (int g = 0; g < 32; g++) near = md[g] < near ? md[g] : near;
+          const bool mn = near * 64 < en;
+          for (int g = 0; g < 32; g++) cand[g].k = mn ? md[g] : hf_group_dist(g, x, n, sc), cand[g].i = g;
           const int g = code_cand(32, 5, (int)v >> 5, VK_HFG, ch, b, imin(si >> 3, 15), lrank9[ch][b][VK_HFG]);
           for (int i = 0; i < 32; i++) cand[i].k = hf_dist(g * 32 + i, x, n, sc), cand[i].i = i;
           return g * 32 + code_cand(32, 5, (int)v & 31, VK_HFV, ch, b, imin(si >> 3, 15), lrank9[ch][b][VK_HFV]);
@@ -263,9 +307,87 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     return lo;
   }
 
+  // X96's quantizer range of ABITS a (its bit allocation less 1) in channel ch
+  void x96_range(const CoreRec& r, int ch, int a, S64& lo, S64& hi) const {
+    const int how = x96_coding(r, ch, a);
+    if (how == 3) {
+      hi = (BLOCK_LEVELS[a - 1] - 1) / 2, lo = -hi;
+    } else if (how == 2) {
+      hi = (1LL << (a - 4)) - 1, lo = -(1LL << (a - 4));
+    } else {
+      const HuffBook& hb = QB[a - 1][r.x96sel[ch][a - 1]];
+      lo = hb.minlev, hi = hb.minlev + hb.nlev - 1;
+    }
+  }
+  // X96's bit allocation search: the ABITS (as coded: 0 none, 1 VQ, 2 up a quantizer's + 1) whose
+  // decode channel ch's subband b's values are, a decoded WAV's: FFmpeg's noise where
+  // x96_noise_scale() is sure of it, from the generator's state as the ABITS before say (lcg_ab:
+  // their subbands without bits drawing where their values aren't all within half a unit of 0; the
+  // state's 99.9% of `96-24.dts`'s); else the coarsest lattice of a quantizer (to vhi) at a scale
+  // factor p - 3 to p + 5 (the RMS rule's) they all lie on within half a unit, an index of it not 0
+  // and its step 1.5 units or more (a finer one fits nearly anything: 763 of `96-24.dts`'s 113529
+  // wrong, 5 with it); else VQ, where each 16 of them are the shape entry's at a scale factor within
+  // half a unit; -1 where none is, or they're all within half a unit of 0 (`96-24.dts`'s: of its
+  // 7694 ABITS that differ from the last ones, 94% right and 2 wrong)
+  int x96_ab_search(const CoreRec& r, const X96Sub& s, int ch, int b, int vhi) {
+    S64 x[NSMP];
+    const int n = x96_values(s, ch, b, x);
+    const S128 half2 = (S128)1 << (2 * AQ_F - 2);
+    bool zero = true;
+    for (int j = 0; j < n && zero; j++) zero = B::jx_near(x[j]);
+    if (zero) return -1;
+    if (r.x96shuff[ch] != 6 && !s.pmode[ch][b]) {
+      int sure = 0;
+      x96_noise_scale(lcg_ab, ch, b, &sure);
+      if (sure) return 0;
+    }
+    int near;
+    const int p = scale_pred(x, n, SF6, SF6_N, &near);
+    int best = -1;
+    S64 bss = 0;
+    for (int a = 1; a + 1 <= vhi && a <= 26; a++) {
+      S64 lo, hi;
+      x96_range(r, ch, a, lo, hi);
+      for (int i = imax(p - 3, 0); i <= imin(p + 5, SF6_N - 1); i++) {
+        const S64 ss = (S64)LOSSY_QUANT[a] * SF6[i];
+        if (ss <= bss || ss < (S64)3 << 21) continue;
+        QErr q;
+        q.set(ss, lo, hi);
+        int nz = 0, j = 0;
+        for (; j < n; j++)
+          if (q.err(x[j], &nz) >= half2) break;
+        if (j == n && nz) bss = ss, best = a + 1;
+      }
+    }
+    if (best >= 0) return best;
+    bool vq = vhi >= 1;
+    for (int pp = 0; pp < (n + 15) / 16 && vq; pp++) {
+      const S64* xv = x + 16 * pp;
+      const int m = imin(16, n - 16 * pp), qs = hf_shape(xv, m);
+      bool ok = false;
+      for (int i = 0; i < SF6_N && !ok; i++) {
+        ok = true;
+        for (int j = 0; j < m && ok; j++) {
+          const S64 e = xv[j] - shl64(clip23((HF_VQ[qs][j] * (S64)SF6[i] + 8) >> 4), AQ_F);
+          ok = (S128)e * e < half2;
+        }
+      }
+      vq = ok;
+    }
+    return vq ? 1 : -1;
+  }
+  // (as ModelSmp's ab_rule(): the search's rule, where it has been right more often than the first
+  // guess without it, by a margin (it is rarely wrong); tried in its first 2048 values, while its rule
+  // is taken, and in 1 of 64)
+  bool x96_ab_rule() const { return ab9r[1] > ab9r[0] + 16; }
+  bool x96_ab_on() const { return ab9_n < 2048 || x96_ab_rule() || !(n_ab9 & 63); }
+
   // The X96 scale factor search (ModelSmp's scale_search()'s): at X96's steps (no adjustment), its
   // quantizer's range; a VQ'd subband's vectors one each pair of subsubframes (16 samples), each the
-  // two-stage search's at the RMS's scale factor and 2 above, the nearer
+  // nearest of the two-stage search's at the RMS's scale factor and 2 above and the entry most nearly
+  // a multiple of the values at its best scale factor (as the core's), its scale factors to 12 above
+  // the RMS's, and where it isn't sure the nearest still (*conf 0: the RMS's is rarely a decoded VQ
+  // subband's; `96-24.dts`'s core 3.3% smaller)
   int x96_search(const CoreRec& r, const X96Sub& s, int ch, int b, const S64* v, int n, int p, int* conf) {
     const int ba = s.abits[ch][b], np = (n + 15) / 16;
     S64 lo = 0, hi = 0;
@@ -294,11 +416,16 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
           const S128 d = vq_err(x, m, q, sc);
           if (bd < 0 || d < bd) bd = d, vq[pp] = q;
         }
+        const int qs = hf_shape(x, m);
+        for (int i = imax(p - 3, 0); i <= imin(p + 12, SF6_N - 1); i++) {
+          const S128 d = vq_err(x, m, qs, SF6[i]);
+          if (d < bd) bd = d, vq[pp] = qs;
+        }
       }
     }
     S128 e1 = -1, e2 = -1;
     int best = -1;
-    for (int i = imax(p - 3, 0); i <= imin(p + 5, SF6_N - 1); i++) {
+    for (int i = imax(p - 3, 0); i <= imin(p + (ba >= 2 ? 5 : 12), SF6_N - 1); i++) {
       S128 e = 0;
       if (ba >= 2) {
         e = quant_err(v, n, (S64)LOSSY_QUANT[ba - 1] * SF6[i], lo, hi);
@@ -311,7 +438,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     if (best < 0 || e2 < 0) return -1;
     const S128 eps = (S128)n << (2 * AQ_F - 6);
     const S128 ratio = (e2 + eps) / (e1 + eps);
-    if (ratio < 4) return -1;
+    if (ratio < 4) return ba < 2 ? (*conf = 0, best) : -1;
     *conf = imin(bitlen128((U128)ratio) - 3, SB_N - 1);
     return best;
   }
@@ -325,7 +452,8 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
 
   // The entry whose noise, from the generator's state st (xor 1), lies nearest channel ch's subband
   // b's values in the subframe (*sure: where its distance is under a unit a value and a quarter of
-  // the next's)
+  // the next's); of entries the same (1 and 2, 3 and 4), the first, as the encoders take them
+  // (`96-24.dts`'s X96 scale factors 99.4% the audio's from 94.5%, its core 1.5% smaller)
   int x96_noise_scale(U32 st, int ch, int b, int* sure) const {
     S32 rv[NSMP];
     st ^= 1;
@@ -333,6 +461,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     int bi = -1;
     S128 be = 0, e2 = -1;
     for (int i = 0; i < SF6_N; i++) {
+      if (i > 0 && SF6[i] == SF6[i - 1]) continue;
       S128 e = 0;
       for (int j = 0; j < nsmp9; j++) {
         const S64 y = SF6[i] > 1 ? ((S64)rv[j] * (S32)SF6[i] + ((S64)1 << 30)) >> 31 : 0;  // (FFmpeg's mul31())
