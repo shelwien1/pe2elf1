@@ -46,6 +46,7 @@ struct Hist {
   // the extension ([1]) and XXCH's other bits ([2-4]: model_hdr.inc's code_tail())
   U8 tail[5][MAX_FRAME];
   S32 tailn[5];
+  S32 tailz;  // (1 + the last bits after the subframes' trailing 0 bits, 0 none)
   S32 tailsync;  // (the last aux tail's sync word, its place among those bytes: code_tail(); -1 none)
   // the last TC_K tails of each kind that weren't all 0 (as code_tail() has them, to TC_B bytes), the
   // last first: their bits (0 none) and bytes

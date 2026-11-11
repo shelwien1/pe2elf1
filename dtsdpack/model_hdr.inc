@@ -189,7 +189,25 @@ struct ModelHdr {
     const int nb = (nbits + 7) / 8, zf = NHFRAME + (kind ? HX_GAPZ : HX_TAILZ), nf = NHFRAME + (kind ? HX_GAPNZ : HX_TAILNZ);
     // (the hdr fields' place: each kind its own; the bits after the subframes' and those before the
     // extension's, by their bits to the next 32-bit boundary: their fills' odds go by them)
-    const int o = kind > 1 ? kind - 1 : (kind ? 4 : 0) + ((nbits & 31) >> 1);
+    // (and those after the subframes by whether the last ones ended in more than 31 0s: `open
+    // bitrate.dts`'s, 1s then 0s, the 1s by the last ones' 0s, its core 5.3% smaller)
+    const int o = kind > 1 ? kind - 1 : kind ? 4 + ((nbits & 31) >> 1) : ((nbits & 31) >> 1) + (hist.tailz - 1 > 31 ? 16 : 0);
+    struct TailZ {  // (the bits' trailing 0s into the history, as they end: z where known, else from q)
+      Hist& h;
+      const U8* q;
+      int nbits, nb, z;
+      bool on;
+      ~TailZ() {
+        if (!on) return;
+        if (z < 0) {
+          z = 0;
+          int j = nb - 1;
+          while (j >= 0 && !q[j]) z += 8, j--;
+          for (U8 c = j >= 0 ? q[j] : 1; !(c & 1); c >>= 1) z++;
+        }
+        h.tailz = 1 + (z < nbits ? z : nbits);
+      }
+    } tzs = {hist, tq, nbits, (nbits + 7) / 8, -1, !kind};
     const int sh = 8 * nb - nbits, k0 = BYTE_BITS - sh;  // (the first byte's bits)
     U8* const last = hist.tail[kind];
     S32& lastn = hist.tailn[kind];
@@ -204,6 +222,7 @@ struct ModelHdr {
     }
     if (hdr_hist(zf, o, 1, nz == 0)) {
       if (!ENC) memset(p, 0, (size_t)nb);
+      tzs.z = nbits;
       return;
     }
     const int cache = nb <= Hist::TC_B;

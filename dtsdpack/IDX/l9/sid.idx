@@ -21,7 +21,7 @@ Index b
 
 Index c
  c_fld: fld, 1!11111111
- c_bd: bd, 1!1110001010111110010111111101011
+ c_bd: bd, 1!1110001010011010010111110111011
  c_lv: lv, &111111
 
 Index d
@@ -32,11 +32,11 @@ Index d
 Index e
  e_fld: fld, 1!00000000
  e_cc: cc, 1!11
- e_bd: bd, 1!0011111110011111111111101110001
+ e_bd: bd, 1!0011111110011111111111101010001
 
 Index h
  h_fld: fld, 1!00010000
- h_ab: ab, 1!100110110000000001010111111
+ h_ab: ab, 1!000110110000000001011110110
  h_lv: lv, &111111
 
 Index i
@@ -57,7 +57,7 @@ Index k
 Index l
  l_fld: fld, 1!11111111
  l_lv: lv, &000011
- l_ab: ab, 1!111111101000110000001101010
+ l_ab: ab, 1!111111101000110000001101110
  l_ac: ac, 1!11101111
 
 Index s
@@ -69,7 +69,7 @@ Index f
  f_ac: ac, 1!11111110
 
 Index m
- m_fld: fld, 1!11111111
+ m_fld: fld, 1!01110000
 
 Index w
  w_st: st, 1!11
@@ -85,10 +85,10 @@ Index g
  g_fld: fld, 1!11111111
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
-Number rA, 1, 0!10110011
+Number rA, 1, 0!10111011
 Number mwA, 1, 0!10100111
 Number rB, 1, 0!11110100
-Number mwB, 1, 0!00011101
+Number mwB, 1, 0!00011111
 Number rC, 1, 0!11111100
 Number mwC, 1, 0!00000010
 Number rD, 1, 0!11111001
@@ -101,9 +101,9 @@ Number rI, 1, 0!11111101
 Number mwI, 1, 0!00000000
 Number rJ, 1, 0!00110011
 Number mwJ, 1, 0!00010110
-Number rK, 1, 0!11101001
+Number rK, 1, 0!11101101
 Number mwK, 1, 0!00000010
-Number rL, 1, 0!11101101
+Number rL, 1, 0!11111110
 Number mwL, 1, 0!00000000
 Number lr, 1, 0!01111
 Number mb, 1, 0!01100000
@@ -118,7 +118,7 @@ Number mt, 1, 0!000
 #  the mantissa mixer's rates: frozen (Index n)
 ! Number lrm, 1, 0!11111
 ! Number mbm, 1, 0!00011001
-Number rG, 1, 0!11011011
+Number rG, 1, 0!01011000
 Number mwG, 1, 0!00000000
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
