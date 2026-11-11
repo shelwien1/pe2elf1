@@ -16,38 +16,39 @@ void D9_vqr_make( const M_vqr_v & D, tcx & X ) {
   M_vqr_VARS(M_LOCAL)
 
   a = 0;
-  a = a*2 + (((kd)>1+(1-1)));
-  a = a*7 + D9_vqr_a_mg[__min(12,__max(0,(mg)-(1-1)))];
-  a = a*9 + D9_vqr_a_ml[__min(15,__max(0,(ml)-(1-1)))];
+  a = a*4 + D9_vqr_a_mg[__min(12,__max(0,(mg)-(1-1)))];
+  a = a*6 + D9_vqr_a_nc[__min(6,__max(0,(nc)-(1-1)))];
+  a = a*11 + D9_vqr_a_ml[__min(15,__max(0,(ml)-(1-1)))];
 
   b = 0;
   b = b*4 + D9_vqr_b_kd[__min(3,__max(0,(kd)-(1-1)))];
-  b = b*8 + D9_vqr_b_mg[__min(12,__max(0,(mg)-(1-1)))];
-  b = b*7 + D9_vqr_b_gn[__min(15,__max(0,(gn)-(1-1)))];
+  b = b*6 + D9_vqr_b_mg[__min(12,__max(0,(mg)-(1-1)))];
+  b = b*8 + D9_vqr_b_gn[__min(15,__max(0,(gn)-(1-1)))];
 
   c = 0;
   c = c*4 + D9_vqr_c_kd[__min(3,__max(0,(kd)-(1-1)))];
-  c = c*12 + D9_vqr_c_bd[__min(31,__max(0,(bd)-(1-1)))];
+  c = c*14 + D9_vqr_c_bd[__min(31,__max(0,(bd)-(1-1)))];
   c = c*8 + D9_vqr_c_mg[__min(12,__max(0,(mg)-(1-1)))];
 
   d = 0;
   d = d*2 + (((kd)>1+(1-1)));
-  d = d*5 + D9_vqr_d_mg[__min(12,__max(0,(mg)-(1-1)))];
+  d = d*9 + D9_vqr_d_mg[__min(12,__max(0,(mg)-(1-1)))];
 
   e = 0;
   e = e*3 + (((kd)>0+(1-1))+((kd)>2+(1-1)));
   e = e*3 + (((cc)>0+(1-1))+((cc)>1+(1-1)));
-  e = e*16 + D9_vqr_e_bd[__min(31,__max(0,(bd)-(1-1)))];
+  e = e*13 + D9_vqr_e_bd[__min(31,__max(0,(bd)-(1-1)))];
 
   h = 0;
+  h = h*3 + (((kd)>0+(1-1))+((kd)>1+(1-1)));
   h = h*8 + D9_vqr_h_gn[__min(15,__max(0,(gn)-(1-1)))];
-  h = h*3 + (((lh)>0+(1-1))+((lh)>1+(1-1)));
+  h = h*2 + (((lh)>1+(1-1)));
 
   i = 0;
   i = i*3 + (((kd)>1+(1-1))+((kd)>2+(1-1)));
   i = i*4 + D9_vqr_i_mg[__min(12,__max(0,(mg)-(1-1)))];
   i = i*3 + (((lh)>0+(1-1))+((lh)>1+(1-1)));
-  i = i*8 + D9_vqr_i_gn[__min(15,__max(0,(gn)-(1-1)))];
+  i = i*6 + D9_vqr_i_gn[__min(15,__max(0,(gn)-(1-1)))];
 
   j = 0;
   j = j*3 + (((kd)>0+(1-1))+((kd)>2+(1-1)));
@@ -56,11 +57,11 @@ void D9_vqr_make( const M_vqr_v & D, tcx & X ) {
 
   k = 0;
   k = k*4 + D9_vqr_k_kd[__min(3,__max(0,(kd)-(1-1)))];
-  k = k*3 + (((cc)>0+(1-1))+((cc)>1+(1-1)));
+  k = k*2 + (((cc)>0+(1-1)));
   k = k*10 + D9_vqr_k_mg[__min(12,__max(0,(mg)-(1-1)))];
 
   l = 0;
-  l = l*6 + D9_vqr_l_gn[__min(15,__max(0,(gn)-(1-1)))];
+  l = l*7 + D9_vqr_l_gn[__min(15,__max(0,(gn)-(1-1)))];
 
   s = 0;
   s = s*4 + D9_vqr_s_kd[__min(3,__max(0,(kd)-(1-1)))];
@@ -68,13 +69,14 @@ void D9_vqr_make( const M_vqr_v & D, tcx & X ) {
 
   f = 0;
   f = f*4 + D9_vqr_f_kd[__min(3,__max(0,(kd)-(1-1)))];
+  f = f*7 + D9_vqr_f_nc[__min(6,__max(0,(nc)-(1-1)))];
   f = f*16 + D9_vqr_f_ml[__min(15,__max(0,(ml)-(1-1)))];
 
   m = 0;
 
   w = 0;
-  w = w*5 + D9_vqr_w_mg[__min(12,__max(0,(mg)-(1-1)))];
-  w = w*9 + D9_vqr_w_ml[__min(15,__max(0,(ml)-(1-1)))];
+  w = w*6 + D9_vqr_w_mg[__min(12,__max(0,(mg)-(1-1)))];
+  w = w*11 + D9_vqr_w_ml[__min(15,__max(0,(ml)-(1-1)))];
 
   t = 0;
   t = t*4 + D9_vqr_t_kd[__min(3,__max(0,(kd)-(1-1)))];

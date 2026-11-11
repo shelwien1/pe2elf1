@@ -1114,6 +1114,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const int mr = key_margin(cand, n), ml = mu > 0 ? key_margin_u(cand, n, mu) : 0;
     D.mg = mu > 0 && hvs[1] <= hvs[0] + 2 ? ml : mr;
     D.ml = mlu > 0 ? key_margin_u(cand, n, mlu, 25, 14) : 15;
+    D.nc = 6;
+    if (mlu > 0 && kd == VK_HFV) {  // (how many are near ties with the nearest: where the encoder's
+                                    // arithmetic makes another its choice, which one)
+      S128 d1 = cand[0].k;
+      for (int i = 1; i < n; i++) d1 = cand[i].k < d1 ? cand[i].k : d1;
+      int c = -1;
+      for (int i = 0; i < n; i++) c += cand[i].k - d1 <= mlu >> 18;
+      D.nc = c <= 2 ? c : c <= 4 ? 3 : c <= 8 ? 4 : 5;
+    }
     D.gn = gn;
     D.lh = lh;
     B::sel(f_vqr, D);
@@ -1331,9 +1340,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     for (int g = 0; g < 32; g++) cand[g].k = mn ? md[g] : gm[g], cand[g].i = g;
     const int lk = cpl_leak(r, ch, b, 26, 15), gn = lk >= 0 ? lk : imin(si >> 3, 15);
-    // (a lossless WAV's: the unit of the margins against the level, below)
+    // (a lossless WAV's: the unit of the margins against the level, below; the groups' scores run
+    // 2^19 times the vectors' distances: `s.2.dts`'s groups' within 2^-4 of that unit were the
+    // first half the time, 98% from 2 times it)
     const S128 mu = bound[ch] && !ss_rule() && !x96a ? (S128)tlvl[ch] * sc << 24 : 0;
-    const int g = code_cand(32, 5, (int)v >> 5, VK_HFG, ch, b, gn, 0, mu);
+    const int g = code_cand(32, 5, (int)v >> 5, VK_HFG, ch, b, gn, 0, mu << 19);
     if (tried) {
       hfr[0] += mn, hfr[1]++;
       if (hfr[1] >= 1u << 16) hfr[0] >>= 1, hfr[1] >>= 1;

@@ -22,7 +22,7 @@ Index b
 
 Index c
  c_pk: pk, 1!0
- c_nr: nr, 1!000000001110011
+ c_nr: nr, 1!000000001010011
  c_hm: hm, 1!11
 
 Index d
@@ -33,8 +33,8 @@ Index d
 Index e
  e_pk: pk, 1!1
  e_ab: ab, 1!011011011100000111000000000
- e_m1: m1, 1!0101101011000000000000
- e_m2: m2, 1!1111000011110000000000
+ e_m1: m1, 1!0101101001000000000000
+ e_m2: m2, 1!1111000011111100000000
 
 Index h
  h_pk: pk, 1!0
@@ -69,8 +69,8 @@ Index s
 
 Index f
  f_pk: pk, 1!1
- f_nl: nl, 1!110011111000101
- f_nr: nr, 1!000001111101000
+ f_nl: nl, 1!110010111100101
+ f_nr: nr, 1!000001111100000
 
 Index m
  m_pk: pk, 1!1
@@ -89,26 +89,26 @@ Index n
 Index g
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
-Number rA, 1, 0!01100111
+Number rA, 1, 0!01101110
 Number mwA, 1, 0!11101111
 Number rB, 1, 0!10011100
 Number mwB, 1, 0!00000000
-Number rC, 1, 0!11010011
-Number mwC, 1, 0!11110110
-Number rD, 1, 0!01000000
+Number rC, 1, 0!11011001
+Number mwC, 1, 0!11110111
+Number rD, 1, 0!01100100
 Number mwD, 1, 0!00011000
-Number rE, 1, 0!11111010
+Number rE, 1, 0!11110001
 Number mwE, 1, 0!00000011
 Number rH, 1, 0!11111001
 Number mwH, 1, 0!00000000
-Number rI, 1, 0!11110100
-Number mwI, 1, 0!11001110
-Number rJ, 1, 0!11110001
+Number rI, 1, 0!11110101
+Number mwI, 1, 0!11001100
+Number rJ, 1, 0!11100101
 Number mwJ, 1, 0!00000100
-Number rK, 1, 0!10100011
+Number rK, 1, 0!10100001
 Number mwK, 1, 0!11111111
 Number rL, 1, 0!11110011
-Number mwL, 1, 0!01000001
+Number mwL, 1, 0!01000010
 Number lr, 1, 0!10100
 Number mb, 1, 0!00100000
 Number rS1, 1, 0!01000

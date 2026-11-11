@@ -136,7 +136,9 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      VQ: subband 0's or 1's power over their own, in doublings less 26, halved, model_smp.inc's
 //      cpl_leak()), lh the subband's last rank of the kind (0 none, 1 the best, 2 another), ml a
 //      lossless WAV's HF VQ group's or vector's margin against the channel's level times the scale
-//      factor, in doublings from 2^-25 (0-13, 14 the best exact, 15 none)
+//      factor, in doublings from 2^-25 (the groups' scores' from 2^-6; 0-13, 14 the best exact,
+//      15 none), nc a lossless WAV's HF VQ vector's candidates but the nearest within 2^-18 of
+//      ml's unit of it (0, 1, 2, 3-4, 5-8, more: 0-5; 6 none)
 // raw: c1, c2 the bytes before, code what the bytes are (0 between frames, 1 a frame kept as bytes,
 //      2 the bits after the subframes, 3 those before the XCH extension), at the byte's place
 //      (tc_qlog; the tail's and the gap's from their end), cl
@@ -147,7 +149,7 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 #define M_scl_VARS(X) X(kd) X(ab) X(pm) X(pk) X(pn) X(lp) X(hm) X(bd) X(dp) X(cc) X(nb) X(pl)
 #define M_hit_VARS(X) X(pm) X(nr) X(nl) X(ab) X(ql) X(hm)
 #define M_smp_VARS(X) X(ab) X(hw) X(pk) X(nr) X(nl) X(ql) X(hm) X(pm) X(bd) X(m1) X(m2) X(sq) X(s1)
-#define M_vqr_VARS(X) X(kd) X(cc) X(bd) X(mg) X(gn) X(lh) X(ml)
+#define M_vqr_VARS(X) X(kd) X(cc) X(bd) X(mg) X(gn) X(lh) X(ml) X(nc)
 #define M_raw_VARS(X) X(c1) X(c2) X(code) X(at) X(cl)
 
 // the variables as the model gives them to a family
