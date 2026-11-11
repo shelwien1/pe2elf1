@@ -12,10 +12,20 @@ constexpr int SB_N = 8;   // and a scale factor's RMS the midpoint between two t
 constexpr int SF7_N = 125, SF6_N = 63;  // the scale factor tables' entries (FFmpeg pads them with zeros)
 // the scale factors a channel's SHUFF has: their table's entries the RMS rule picks from
 static INLINE int sf_entries(int shuff) { return shuff == 6 ? SF7_N : SF6_N; }
-// whether scale factor i of table tab (nt entries) has the value of the one below (1), above (2),
-// both (3), or neither (0): the encoder's choice among such is not the RMS rule's
-static INLINE int sf_dup(const U32* tab, int nt, int i) {
-  return (i > 0 && tab[i - 1] == tab[i]) | (i + 1 < nt && tab[i + 1] == tab[i]) << 1;
+// where the run of scale factor i's value in table tab (nt entries) ends: 0 none (no other entry
+// has it); 1, 2 one entry below, above (a run of 2, i its last, its first); 3 both ways (i inside
+// the run); 4, 5 two below, above (a run of 3); 6, 7 three or more. The RMS rule takes a run's
+// first for an RMS below its value and its last from the value on, and so does the encoder; where
+// its arithmetic moves the RMS across the value, its scale factor is the run's other end (`s.2.dts`'s
+// HF VQ subbands', quiet, mostly there: 43% of the rule's misses)
+static INLINE int sf_run(const U32* tab, int nt, int i) {
+  int lo = i, hi = i;
+  while (lo > 0 && tab[lo - 1] == tab[i]) lo--;
+  while (hi + 1 < nt && tab[hi + 1] == tab[i]) hi++;
+  if (lo == hi) return 0;
+  if (lo < i && i < hi) return 3;
+  const int k = hi - lo < 3 ? hi - lo : 3;
+  return k == 1 ? (lo < i ? 1 : 2) : 2 * k + (lo < i ? 0 : 1);
 }
 
 static INLINE S32 clip23(S64 a) { return a < -(1 << 23) ? -(1 << 23) : a > (1 << 23) - 1 ? (1 << 23) - 1 : (S32)a; }

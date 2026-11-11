@@ -1085,12 +1085,37 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
 
   // --- the code books' indexes ----------------------------------------------------------------------
 
-  // A rank r in 0..2^nb - 1 (nb <= RANK_BITS), vqr's contexts selected: its bucket (0; 1; 2-3;
-  // 4-7; ...) in unary, then its bits below the bucket's top
-  int code_rank(int r, int nb) {
+  // A rank r in 0..2^nb - 1 (nb <= RANK_BITS), vqr's contexts selected (from D): its bucket (0; 1;
+  // 2-3; 4-7; ...) in unary, then its bits below the bucket's top. Past the first, whether it is
+  // past bucket t's top (r >= 2^t) goes by how far the next bucket's first candidate (of the n, c,
+  // by their keys) lies from the best against this one's (gr, the contexts selected again): where
+  // the encoder's arithmetic makes another its choice, the nearer ones are likelier, and how many
+  // lie near goes by where the keys jump (`s.2.dts`'s core 0.7% smaller)
+  int code_rank(int r, int nb, M_vqr_v& D, const KeyIx* c, int n) {
     const int bk = ENC ? bit_len((U64)r) : 0;
     int t = 0;
-    while (t < nb && f_vqr.bit(VN_BKT + t, ENC && bk > t)) t++;
+    S128 sk[64];  // (the keys, sorted, once past the first bucket)
+    const int ns = n < 64 ? n : 64;
+    while (t < nb) {
+      if (t == 1)
+        for (int i = 0; i < ns; i++) {
+          int j = i;
+          for (; j > 0 && sk[j - 1] > c[i].k; j--) sk[j] = sk[j - 1];
+          sk[j] = c[i].k;
+        }
+      if (t >= 1) {
+        D.gr = 7;
+        if ((1 << t) < ns) {  // (the gaps' ratio in doublings: 0 within 2, 6 by 64 or more)
+          const S128 a = sk[1 << t] - sk[0], g = sk[1 << (t - 1)] - sk[0];
+          D.gr = !g ? (a ? 6 : 0) : 0;
+          if (g)
+            while (D.gr < 6 && a >= g << (D.gr + 1)) D.gr++;
+        }
+        B::sel(f_vqr, D);
+      }
+      if (!f_vqr.bit(VN_BKT + t, ENC && bk > t)) break;
+      t++;
+    }
     if (t < 2) return t;
     int m = 1;
     for (int p = 0; p < t - 1; p++) m = 2 * m + f_vqr.bit(VN_BIT + 3 * t + imin(p, 2), ENC && ((r >> (t - 2 - p)) & 1));
@@ -1125,11 +1150,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     D.gn = gn;
     D.lh = lh;
+    D.gr = 7;
     B::sel(f_vqr, D);
     int at = 0;
     if (ENC)
       while (cand[at].i != v) at++;
-    const int r = code_rank(ENC ? rank_of(cand, n, at) : 0, nb);
+    const int r = code_rank(ENC ? rank_of(cand, n, at) : 0, nb, D, cand, n);
     if (!ENC) v = select_rank(cand, n, r);
     if (mu > 0 && r) {
       hvs[0] += mr >= 8, hvs[1] += ml >= 8;
@@ -1640,12 +1666,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     return q >> 64 ? ~0ull : (U64)q;
   }
 
-  // A lossless WAV's subband (not a VQ one): how near the RMS of its n values v lies to the boundary
+  // A lossless WAV's subband: how near the RMS of its n values v lies to the boundary
   // between tab's entry p (nt entries) and the one beside it on the RMS's side, as the encoder's
   // arithmetic errs, for the RMS rule's nearness (code_scale()): the nearer of the distance times
   // the root of n against the channel's level in the subframe times the subband's error's scale
   // (hcal's, less their mean), from 2^-24, and against the RMS itself, from 2^-16, in doublings
-  // (0-15; -1 where there is no boundary)
+  // (0-15; -1 where there is no boundary). Where p ends a run of entries with its value, the value
+  // is a boundary too, the one between the run's two ends (anal.inc's sf_run()): the nearer counts
+  // (`s.2.dts`'s core 0.6% smaller; pn's nearness, the relative one, stays the midpoint's: which side
+  // it lies on says which way a miss goes, to the run's other end or past the midpoint)
   int scale_near_lev(int ch, int b, const S64* v, int n, const U32* tab, int nt, int p) const {
     S128 ms = 0;
     for (int i = 0; i < n; i++) ms += (S128)v[i] * v[i];
@@ -1657,7 +1686,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     int sm = 0;
     for (int k = 0; k < NSUB; k++) sm += hcal[k].s;
     sm = sm >= 0 ? (sm + NSUB / 2) / NSUB : -((-sm + NSUB / 2) / NSUB);
-    const S64 dd = rr > bd ? rr - bd : bd - rr;
+    S64 dd = rr > bd ? rr - bd : bd - rr;
+    if (sf_run(tab, nt, p)) {
+      const S64 de = rr > e ? rr - e : e - rr;
+      if (de < dd) dd = de;
+    }
     const int a = near_bucket((S128)dd * isqrt128((U128)n << 8) >> 4, hc_unit((S128)lev, hcal[b].s - sm), 24);
     return imin(a, near_bucket((S128)dd, (S128)rr, 16));
   }
@@ -1771,7 +1804,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // one where it has been right more often, by a margin: `96-24.dts`'s core 0.3% smaller)
     const int lw = bound[ch] && jx_low(b), pa = p;
     if (lw && jx_more(jx_sr[b], 4, 1)) p = -1, near = SB_N - 1;
-    D.dp = p >= 0 ? sf_dup(r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p) : 0;
+    D.dp = p >= 0 ? sf_run(r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p) : 0;
     D.kd = hfb ? 2 : j;
     D.ab = hfb ? 0 : vvar(s.abits[ch][b] + 1, 27);
     D.pm = s.pmode[ch][b];
@@ -2198,7 +2231,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.pl = 15;
     D.hm = lfe_hm;
     D.bd = 0;
-    D.dp = sf_dup(SF7, SF7_N, p);
+    D.dp = sf_run(SF7, SF7_N, p);
     D.cc = 0;
     D.nb = 9;
     f_scl.make(D, X_);

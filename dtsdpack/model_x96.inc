@@ -946,7 +946,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     const int pr = p;
     if (pl >= 0 && B::jx_more(lcg_r, 4, 1)) p = pl, near = SB_N - 1;
     const S32 A = hsc[ch][b], P = hps[ch][b];
-    D.dp = p >= 0 ? sf_dup(SF6, SF6_N, p) : 0;
+    D.dp = p >= 0 ? sf_run(SF6, SF6_N, p) : 0;
     D.kd = ba >= 2 ? 0 : 2;
     D.ab = ba >= 2 ? vvar(ba, 27) : 0;
     D.pm = s.pmode[ch][b];
