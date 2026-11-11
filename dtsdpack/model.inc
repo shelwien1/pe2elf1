@@ -174,11 +174,27 @@ struct Model : ModelX96<f_DEC, LV> {
                         !bound[ch] ? 9 : (r.shuff[ch] == 6 ? SF7 : SF6)[es[ch][b] - 1] < 100 ? 0 : B::pmode_gain(ch, b));
         break;
       }
-      case F_PVQ:
+      case F_PVQ: {
         account(CAT_SIDE);
-        if (bound[ch]) v = B::code_pvq(r, s, ch, b, v);
-        else v = side_index(SF_PVQ, ch, b, v, 12, hist.pvq[ch][b], 8, 0);
+        // (where X96 codes the subband too and the core has little of the decode's values, against the
+        // last one where it has been right more often than the search's first: `96-24.dts`'s core
+        // 2.0% smaller)
+        const bool lw = bound[ch] && B::jx_low(b);
+        int pa = -1;
+        if (lw) {
+          S64* const d = B::pvqd;
+          pvq_dists(B::lpc[ch][b], d);
+          pa = B::pvq_first(B::lpc[ch][b], d);
+        }
+        if (bound[ch] && !(lw && B::jx_more(B::jx_pr[b], 0, 0))) {
+          v = B::code_pvq(r, s, ch, b, v);
+        } else {
+          if (bound[ch] && B::ss_rule()) B::pv_nofit();
+          v = side_index(SF_PVQ, ch, b, v, 12, hist.pvq[ch][b], 8, 0);
+        }
+        if (lw) B::jx_tally(B::jx_pr[b], v, pa, hist.pvq[ch][b] - 1);
         break;
+      }
       case F_ABITS: {  // (against the audio's energy, as the scale factor its RMS makes, and how it changed)
         account(CAT_ABITS);
         int e = bound[ch] ? es[ch][b] : 0;

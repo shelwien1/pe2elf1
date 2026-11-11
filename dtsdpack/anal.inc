@@ -580,6 +580,27 @@ static INLINE S128 hf_group_score(const S32 (*W)[16], const S64* E, int g, const
   }
   return d + shl128((S128)E[g] * sc * sc, 32);
 }
+// 16 times log2(x) (x > 0), its fraction by the 4 bits after the top one
+static INLINE int lg16(U64 x) {
+  const int e = ilog2(x);
+  return 16 * e + (int)((e >= 4 ? x >> (e - 4) : x << (4 - e)) & 15);
+}
+// X96's steps: each LOSSY_QUANT entry times each SF6 scale factor (x96_ss()'s, 2^-22), and their
+// lg16()
+struct JxSteps {
+  S64 v[32 * 64];
+  S16 lg[32 * 64];
+  JxSteps() {
+    for (int a = 0; a < 32; a++)
+      for (int i = 0; i < 64; i++) {
+        const int k = 64 * a + i;
+        v[k] = (S64)LOSSY_QUANT[a] * SF6[i];
+        lg[k] = (S16)(v[k] > 0 ? lg16((U64)v[k]) : -1);
+      }
+  }
+};
+static const JxSteps jx_steps;
+
 // entry q's distance (in 2^(AQ_F + 4) sc units)
 static INLINE S128 hf_dist(int q, const S64* x, int n, S64 sc) {
   S128 d = 0;

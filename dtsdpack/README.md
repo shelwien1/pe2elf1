@@ -97,11 +97,11 @@ Compressing the whole of `s.2.dts`'s core takes 29 seconds (1.7 MB of core a sec
 memory, decompressing it 30 seconds and 43 MB, on one thread of a 2.1 GHz Xeon. The rows were all
 in the tuning sets (below; the whole of `s.2.dts` since the HF VQ groups' scores were learned), and
 `s.2.dts` in what the HF VQ groups' scores and the ADPCM predictors' codewords were learned from.
-A 96 kHz stream's 64-band analysis costs more: `96-24.dts`'s core (1.9 MB) compresses and
-decompresses in 3.2 seconds. The decoded WAVs' searches cost too; every stream below goes at about
-500 KB of core a second or more both ways, the 7-frame samples (7 KB, 9-21 ms each way, a third of
-that the kernel mapping the pages they touch) at 330 KB a second or more: the searches run on
-every value of a stream's first 2048, which is all of theirs.
+A 96 kHz stream's 64-band analysis costs more: `96-24.dts`'s core (1.9 MB) compresses in 3.0 seconds
+and decompresses in 3.4. The decoded WAVs' searches cost too; every stream below goes at about 500
+KB of core a second or more both ways, the 7-frame samples (7 KB, 9-21 ms each way, a third of that
+the kernel mapping the pages they touch) at 330 KB a second or more: the searches run on every value
+of a stream's first 2048, which is all of theirs.
 
 FFmpeg's small DTS-HD MA samples (`xll_*`, 7 frames each) round-trip too:
 
@@ -137,7 +137,7 @@ allocations in):
 
 | Stream | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 79515 (4.21%) | the 96 kHz decode's 64-band analysis's lower half (95.98% of its indexes); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
+| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 56911 (3.01%) | the 96 kHz decode's 64-band analysis's lower half (99.40% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
 | `Master Audio 5.0 96khz.dts` | 1768548 | 4497 (0.25%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
 | `Master Audio 7.1.dts` | 1945604 | 6987 (0.36%) | a downmix of its 7.1 |
 | `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 4811 (0.17%) | its 3.1 |
@@ -360,7 +360,8 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   the first 16, which miss 2.4% of its predictors and 8.4% of `ES 6.1 16bit.dts`'s: with 1024,
   their cores 4.6% and 3.1% smaller; all 4096 find more that fit by chance). (They are tried in
   turn until one fits, the order's next taken from a heap; where none has fitted in a quarter of
-  the tries, as in `96-24.dts`'s core, the first 4.) A subband that doesn't predict has its values as they are on
+  the tries, as in `96-24.dts`'s core, the first 4: one coded against the last one, below, counts
+  as a try none fitted.) A subband that doesn't predict has its values as they are on
   a lattice, so PMODE's context there is how they fit the one the bit allocation search finds in
   them (to a 64th of a step squared a value, to 16 64ths, worse): `open bitrate.dts`'s subbands
   that fit to a 64th don't predict 465734 times in 465747, those that fit to 16 64ths do 92% of
@@ -534,29 +535,47 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
 
 A WAV at twice the core's rate (96 kHz for a 48 kHz core) is analysed by the 64-band filterbank
 instead: the same transform of 64 bands, by FFmpeg's 1024-tap X96 prototype, each block 64 of the
-WAV's samples. Its lower 32 bands are the core's subband samples, as a DTS 96/24 stream's and
-DTS-HD MA 96 kHz streams' cores are (99.3-99.8% of the indexes; the spec's encoder decimates the
-audio first, but these encoders didn't). The DTS-HD MA encoders' 64-band analysis is 1 - 1.4e-4
-times this one, though: at FFmpeg's prototype's gain `Master Audio 5.0 96khz.dts`'s bottom four
-subbands' values round to the encoder's index 98.34% of the time, and at that one's 99.65% (99.73%
-by the 32-band analysis in `s.2.dts`'s first 3 MB, whose gain is the encoder's to 5e-6), the fine steps' indexes
-the most: a lossless WAV without X96 is analysed so (its core 38.9% smaller, the 96 kHz `xll`
-sample's 1.8%; a decoded WAV's analysis keeps the decoder's gain). X96's subbands are what TS
-102 114's encoder makes of it:
-the upper 32 bands, and from X96's first subband up the lower ones less the core's decoded
-samples (the residuals). On them, X96's elements as the core's, with histories of their own:
-99.94% of `96-24.dts`'s indexes (99.97% before an index far past the WAV's end went without the audio, below). Its decoded WAV's joint subbands are their source's times the
-joint scale factor, so where the source has a level the scale factor is the projection of the one
-on the other (100% of those); a subband without bits is the decoder's noise, uniform to half the
-scale factor, so its scale factor is 2.1 times the peak (94%). Each kind of subband's rule, the
-RMS rule and the scale factor search (for X96's subbands with bits or VQ vectors: their vectors
-16 samples) are counted as the stream goes, and the one right more often is the prediction: a
-lossless WAV makes the RMS rule the better. The core's scale factors get the same choice, among the
-RMS rule, the search, and the first entry above 0.99 times the RMS (`96-24.dts`'s core's, 67% where
-the RMS rule's is 49%; the search's, 89%). The searches cost: each is tried in its first 2048
-values, then wherever its rule is the one taken (the bit allocation search's, while it is right at
-least three quarters as often as the first guess without it), and otherwise in one value in 64, so
-a lossless WAV's stream loses no time to them.
+WAV's samples. Its lower 32 bands are the core's subband samples, as a DTS 96/24 stream's and DTS-HD
+MA 96 kHz streams' cores are (99.3-99.8% of the indexes; the spec's encoder decimates the audio
+first, and `96-24.dts`'s top two subbands look so, below, but its others don't). The DTS-HD MA
+encoders' 64-band analysis is 1 - 1.4e-4 times this one, though: at FFmpeg's prototype's gain
+`Master Audio 5.0 96khz.dts`'s bottom four subbands' values round to the encoder's index 98.34% of
+the time, and at that one's 99.65% (99.73% by the 32-band analysis in `s.2.dts`'s first 3 MB, whose
+gain is the encoder's to 5e-6), the fine steps' indexes the most: a lossless WAV without X96 is
+analysed so (its core 38.9% smaller, the 96 kHz `xll` sample's 1.8%; a decoded WAV's analysis keeps
+the decoder's gain). X96's subbands are what TS 102 114's encoder makes of it: the upper 32 bands,
+and from X96's first subband up the lower ones less the core's decoded samples (the residuals). On
+them, X96's elements as the core's, with histories of their own: 99.94% of `96-24.dts`'s indexes
+(99.97% before an index far past the WAV's end went without the audio, below). Where X96 codes the
+core's subbands too (from its first subband up, `96-24.dts`'s 27-31), the decode's value is the
+core's plus X96's, each on its own lattice, and the index nearest it is the core's only 64-85% of
+the time there: X96's step is 0.3-0.7 of the core's in `96-24.dts`'s subbands 27-29, and 0.9-2.1 and
+35-85 times it in 30 and 31, where the core's values are 0.4 and 0.02 of the decode's (as if its
+encoder's decimation to 48 kHz had taken the rest, which X96 codes). So at the subframe's first
+sample, where the subband's values aren't all on the core's lattice (within half a unit), the model
+looks for X96's step: of those whose ratio to the core's step X96's has had in the subband before
+(to a 16th of an octave, or beside), the one that leaves each value's rest on its lattice after some
+core index (within 2 of the gain's, the core's values' regression on the decode's, or the nearest),
+with the least sum of X96's index magnitudes, the subframe decoded with them and their ADPCM
+predictions (the largest step of equals); where none fits, X96's HF VQ vector of each 16 samples
+that leaves the rest on the core's lattice, at the scale factors X96's vectors have had there, by
+the first sample's entry values first. The core's index that leaves the rest on the fit's lattice is
+then the audio's, where it has been the core's clearly more often than the nearest: `96-24.dts`'s
+indexes 99.40% the audio's, from 95.98% (its subbands 27-31 97.6%, 99.4%, 99.9%, 92.2% and 99.3%),
+its core 26% smaller, at about the same speed. Its scale factors and ADPCM predictors there are what
+the decode doesn't say, where the gain is under 0.6: they go against their last values where those
+have been right more often than the audio's prediction (by a margin), its core 2.3% smaller. Its
+decoded WAV's joint subbands are their source's times the joint scale factor, so where the source
+has a level the scale factor is the projection of the one on the other (100% of those); a subband
+without bits is the decoder's noise, uniform to half the scale factor, so its scale factor is 2.1
+times the peak (94%). Each kind of subband's rule, the RMS rule and the scale factor search (for
+X96's subbands with bits or VQ vectors: their vectors 16 samples) are counted as the stream goes,
+and the one right more often is the prediction: a lossless WAV makes the RMS rule the better. The
+core's scale factors get the same choice, among the RMS rule, the search, and the first entry above
+0.99 times the RMS (`96-24.dts`'s core's, 67% where the RMS rule's is 49%; the search's, 89%). The
+searches cost: each is tried in its first 2048 values, then wherever its rule is the one taken (the
+bit allocation search's, while it is right at least three quarters as often as the first guess
+without it), and otherwise in one value in 64, so a lossless WAV's stream loses no time to them.
 
 c finds how the core lines up with the WAV before it starts (`call.inc`'s `find_alignment()`, in
 doubles; the header keeps the result). The offset: from the core's first 4 MB, the 64 blocks with
@@ -679,7 +698,7 @@ files.
 
 ### The format
 
-"dtsdpack", the format's version (37), the level, the WAV's binding (the offset; each core channel's
+"dtsdpack", the format's version (38), the level, the WAV's binding (the offset; each core channel's
 WAV channel, the second of its mix and their gains, Q23; the LFE's channel; the WAV's samples to
 the core's, 1, 2 or 4 (decimated by 2, then 2); the WAV's format, size and the CRC-32 of its first
 64 KB), then the
@@ -697,15 +716,19 @@ the CRC-32 of the core stream, which `d` checks.
   parsed, as in FFmpeg; X96 and XXCH in the extension substream aren't in the core (dtssplit keeps
   the extension substream).
 - A decoded WAV can't say what X96's joint scale factors are where their source decodes to
-  silence: those are coded against a quarter of the sum of their last values and the subband
-  below's (each correlates 0.4 with them; against their last values alone, as before, 7% more
-  bytes), most of `96-24.dts`'s X96 bytes still.
+  silence: those are coded against 13/16 of their subband's running mean (each new one an eighth
+  of it) and 3/16 of the subband below's (the channels' noises' ratio drifts: `96-24.dts`'s core
+  0.9% smaller than by a quarter of the sum of the last one and the one below, which make 7% fewer
+  bytes than the last alone), and where the two have any power, 4/5 of that and 1/5 of the root of
+  their powers' ratio (0.5%; where the source's mean square is 1 to 2, of the decoder's units, that
+  root alone: 3.2 bits a scale from 4.9). Still most of `96-24.dts`'s X96 bytes.
 - The scale factor search can't see through the decoder's noise: X96's subbands without bits keep
   the peak rule (94%), and a clipped decode (as the full decodes of FATE's XXCH samples are) has
   values that aren't the decoder's reconstruction, where it isn't sure.
 - The bit allocation search fits one scale factor to the subframe: a subband with a transient (two
   of them; its TMODE comes after its ABITS) doesn't fit, and a DTS 96/24 stream's core subbands
-  hold X96's residuals too (83% of `96-24.dts`'s).
+  hold X96's residuals too (83% of `96-24.dts`'s: its indexes are fitted to both lattices, above,
+  but not its ABITS or scale factors, which come before them).
 - A stream cut from a longer one costs most at its ends. Its last frame holds the audio that went
   on past its WAV: 1.0-1.5 KB of each here, about what a frame costs without the audio (a decoded
   WAV's could be solved for, the decoder's synthesis being known, but the system is ill-conditioned

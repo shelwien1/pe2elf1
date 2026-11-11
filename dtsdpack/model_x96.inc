@@ -41,6 +41,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
   // the subband's last values (1 + them, 0 none): PMODE, predictor, ABITS, scale factor, its
   // prediction, VQ vector, joint scale factor (+ 129), energy
   S32 hpm[NCH][NB], hpv[NCH][NB], hab[NCH][NB], hsc[NCH][NB], hps[NCH][NB], hvq[NCH][NB], hjs[NCH][NB], hen[NCH][NB];
+  S32 jem[NCH][NB];  // and the joint scale factor's running mean (in 256ths; each new one 1/8 of it)
   U64 n_smp9, n_hit9, n_sf9, n_sfhit9;  // (-s: X96's samples and scale factors, those the audio predicted)
   // how often x96_scale()'s rules were the stream's, by the subband's kind (halved as they grow);
   // the search's tries (to 2048)
@@ -176,13 +177,15 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
         return side_code(SF_JSHUFF, ch, 0, v, lo, hi, 0, 0, 0, 8, 0, 9);
       case F_JOIN_SCALES: {  // (against the scale the audio's subband is of its source's, where the source has a level)
         const int src = r.x96joinx[ch] - 1;
-        int p = -1, conf = 8;
-        if (bd && src >= 0 && bd9[src]) p = x96_joint(r, ch, src, b, &conf);
+        int p = -1, conf = 8, pr = -1;
+        if (bd && src >= 0 && bd9[src]) p = x96_joint(r, ch, src, b, &conf, &pr);
         S32 A = p + 65, P = hjs[ch][b];  // (coded 128 up: index p is p - 64)
-        if (p < 0) {  // (else, the source too quiet to say, a quarter of the sum of the last one and the
-                      // subband below's, each 0 where none: each correlates 0.4 with it, `96-24.dts`'s)
-          const int u = (hjs[ch][b] ? hjs[ch][b] - 129 : 0) + (b > r.x96nsubs[ch] ? s.jscale[ch][b - 1] : 0);
-          A = 129 + ((u + 2) >> 2), P = 0;
+        if (p < 0) {  // (else, the source too quiet to say, 13/16 of the subband's running mean and 3/16
+                      // of the subband below's (0 where none): their noise's ratio drifts, `96-24.dts`'s
+                      // core 0.9% smaller than by a quarter of the last one and the one below; and where
+                      // the two have any power, 4/5 of that and 1/5 of their powers' ratio's, 0.5%)
+          const int u = 13 * jem[ch][b] + 768 * (b > r.x96nsubs[ch] ? s.jscale[ch][b - 1] : 0);
+          A = 129 + (pr < 0 ? (u + 2048) >> 12 : (13 * u + 13107 * (pr - 64) + 32768) >> 16), P = 0;
         }
         return side_code(SF_JSCALE, ch, b, v + 128, lo + 128, hi + 128, 0, A, P, conf, 0, 9) - 128;
       }
@@ -207,18 +210,33 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
 
   // The joint scale factor (its index, 0-128) of channel ch's subband b nearest the projection of
   // the audio's subband on its source's over the subframe (a decoded WAV's: the decoder's scale),
-  // where the source's mean square is 2 or more (in the decoder's units; -1 where not); *conf its
-  // log2 less 1 (to 7): how sure
-  int x96_joint(const CoreRec& r, int ch, int src, int b, int* conf) {
+  // where the source's mean square is 2 or more (in the decoder's units); *conf its log2 less 1 (to
+  // 7): how sure. Where it is 1 to 2 (or the projection isn't positive), the one nearest the root of
+  // their powers' ratio (by their logs: 3.2 bits a scale there from 4.9; conf 0), and where less,
+  // -1 (*pr that one, where either has power: else -1)
+  int x96_joint(const CoreRec& r, int ch, int src, int b, int* conf, int* pr) {
     const int fb = r.nblk;
-    S128 es = 0, ex = 0;
+    S128 es = 0, ex = 0, ec = 0;
     for (int j = 0; j < nsmp9; j++) {
       const S64 xs = xa[src][b][fb + j], xc = xa[ch][b][fb + j];
       es += (S128)xs * xs;
       ex += (S128)xc * xs;
+      ec += (S128)xc * xc;
     }
     const int lev = bitlen128((U128)(es / nsmp9)) - 1 - 2 * AQ_F;
-    if (lev < 1 || ex <= 0) return -1;
+    if (es > 0 && ec > 0) {
+      const S128 q = shl128(ec, 34) / es;  // (Q34, as the entries' squares)
+      int lo = 0, hi = 128;
+      while (lo < hi) {
+        const int m = (lo + hi + 1) >> 1;
+        if ((S128)JOINT_SCALE[m] * JOINT_SCALE[m] <= q) lo = m;
+        else hi = m - 1;
+      }
+      if (lo < 128 && q >= (S128)JOINT_SCALE[lo] * JOINT_SCALE[lo + 1]) lo++;
+      *pr = lo;
+    }
+    if (lev < 0) return -1;
+    if (lev < 1 || ex <= 0) return *pr >= 0 ? (*conf = 0, *pr) : -1;
     *conf = imin(lev - 1, 7);
     const S128 g = shl128(ex, 17) / es;  // (Q17)
     int lo = 0, hi = 128;  // (the last entry at most g)
@@ -409,6 +427,17 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
   // samples; its values as the last ones
   void x96_subframe_end(const CoreRec& r, int sf) {
     const X96Sub& s = r.xs[sf];
+    if (B::x96a) {  // (X96's steps against the core's where it codes the core's subbands too: jx_search())
+      B::jx_lo = r.x96start;
+      for (int ch = 0; ch < r.npchs; ch++)
+        for (int b = r.x96start; b < r.x96nsubs[ch] && b < NSUB; b++) {
+          const S64 cs = B::jx_cs[sf][ch][b];
+          if (cs <= 0) continue;
+          if (s.abits[ch][b] >= 2) B::jx_count(B::jx_h[b], B::jx_hn[b], lg16((U64)x96_ss(s, ch, b)) - lg16((U64)cs) + 128);
+          else if (s.abits[ch][b] == 1)
+            B::jx_count(B::jx_hv[b], B::jx_hvn[b], lg16((U64)SF6[s.scale[ch][b] & 63] << 22) - lg16((U64)cs) + 128);
+        }
+    }
     for (int ch = 0; ch < r.npchs; ch++)
       for (int b = 0; b < NB; b++) {
         const int in = b >= r.x96start && b < r.x96nsubs[ch], ba = in ? s.abits[ch][b] : 0;
@@ -434,7 +463,10 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
           hen[ch][b] = bd9[ch] ? eab9[ch][b] : 0;
         }
         const int src = r.x96joinx[ch] - 1;
-        if (src >= 0 && b >= r.x96nsubs[ch] && b < r.x96nsubs[src]) hjs[ch][b] = s.jscale[ch][b] + 129;
+        if (src >= 0 && b >= r.x96nsubs[ch] && b < r.x96nsubs[src]) {
+          hjs[ch][b] = s.jscale[ch][b] + 129;
+          jem[ch][b] += (256 * s.jscale[ch][b] - jem[ch][b]) >> 3;
+        }
         psc9[ch][b] = 0;
         if (bd9[ch] && in)
           for (int k = 0; k < 4; k++) xh9[ch][b][k] = X9[ch][b][nsmp9 - 1 - k];
