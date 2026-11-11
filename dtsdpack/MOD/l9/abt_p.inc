@@ -16,21 +16,20 @@ void D9_abt_make( const M_abt_v & D, tcx & X ) {
   M_abt_VARS(M_LOCAL)
 
   a = 0;
-  a = a*21 + D9_abt_a_bd[__min(31,__max(0,(bd)-(1-1)))];
+  a = a*20 + D9_abt_a_bd[__min(31,__max(0,(bd)-(1-1)))];
   a = (a<<6) + (((es)&63)); // 00111111
 
   b = 0;
-  b = b*13 + D9_abt_b_la[__min(27,__max(0,(la)-(1-1)))];
+  b = b*11 + D9_abt_b_la[__min(27,__max(0,(la)-(1-1)))];
   b = b*12 + D9_abt_b_lb[__min(27,__max(0,(lb)-(1-1)))];
 
   c = 0;
   c = c*20 + D9_abt_c_sn[__min(27,__max(0,(sn)-(1-1)))];
-  c = c*19 + D9_abt_c_la[__min(27,__max(0,(la)-(1-1)))];
+  c = c*15 + D9_abt_c_la[__min(27,__max(0,(la)-(1-1)))];
 
   d = 0;
   d = d*3 + (((sn)>1+(1-1))+((sn)>8+(1-1)));
   d = d*2 + (((sd)>1+(1-1)));
-  d = d*2 + (((de)>8+(1-1)));
   d = d*2 + (((sc)>0+(1-1)));
   d = d*9 + D9_abt_d_sm[__min(16,__max(0,(sm)-(1-1)))];
   d = d*3 + (((bg)>0+(1-1))+((bg)>3+(1-1)));
@@ -38,7 +37,7 @@ void D9_abt_make( const M_abt_v & D, tcx & X ) {
 
   e = 0;
   e = e*7 + D9_abt_e_bd[__min(31,__max(0,(bd)-(1-1)))];
-  e = e*15 + D9_abt_e_sn[__min(27,__max(0,(sn)-(1-1)))];
+  e = e*17 + D9_abt_e_sn[__min(27,__max(0,(sn)-(1-1)))];
 
   h = 0;
   h = h*13 + D9_abt_h_lb[__min(27,__max(0,(lb)-(1-1)))];
@@ -48,7 +47,7 @@ void D9_abt_make( const M_abt_v & D, tcx & X ) {
   i = 0;
   i = (i<<3) + ((((es)>>1)&7)); // 00001110
   i = i*4 + D9_abt_i_nb[__min(9,__max(0,(nb)-(1-1)))];
-  i = i*14 + D9_abt_i_la[__min(27,__max(0,(la)-(1-1)))];
+  i = i*17 + D9_abt_i_la[__min(27,__max(0,(la)-(1-1)))];
 
   j = 0;
 
@@ -57,7 +56,7 @@ void D9_abt_make( const M_abt_v & D, tcx & X ) {
   k = k*2 + (((nn)>14+(1-1)));
   k = k*6 + D9_abt_k_sc[__min(14,__max(0,(sc)-(1-1)))];
   k = k*7 + D9_abt_k_sm[__min(16,__max(0,(sm)-(1-1)))];
-  k = k*3 + (((bg)>0+(1-1))+((bg)>1+(1-1)));
+  k = k*4 + D9_abt_k_bg[__min(7,__max(0,(bg)-(1-1)))];
   k = k*2 + (((ag)>1+(1-1)));
 
   l = 0;
@@ -77,7 +76,7 @@ void D9_abt_make( const M_abt_v & D, tcx & X ) {
   f = (f<<2) + ((((es)>>5)&3)); // 01100000
 
   m = 0;
-  m = m*5 + D9_abt_m_nn[__min(15,__max(0,(nn)-(1-1)))];
+  m = m*4 + D9_abt_m_nn[__min(15,__max(0,(nn)-(1-1)))];
 
   w = 0;
   w = w*2 + (((st)>8+(1-1)));

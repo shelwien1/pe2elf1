@@ -10,21 +10,21 @@ Debug 1
 Const 0
 
 Index a
- a_bd: bd, 1!1111001110111101100011101111000
+ a_bd: bd, 1!1111001110111101100011101011000
  a_es: es, &00111111
 
 Index b
- b_la: la, 1!001000110011100001101110100
+ b_la: la, 1!001000110011100000110100100
  b_lb: lb, 1!100010110010000100101110100
 
 Index c
- c_sn: sn, 1!101101111111101001110111001
- c_la: la, 1!101111111111110111001010000
+ c_sn: sn, 1!111101111111100001110111001
+ c_la: la, 1!101111111111100001000000100
 
 Index d
  d_sn: sn, 1!010000001000000000000000000
  d_sd: sd, 1!01
- d_de: de, 1!000000001
+ d_de: de, 1!000000000
  d_sc: sc, 1!10000000000000
  d_sm: sm, 1!0011010010111100
  d_bg: bg, 1!1001000
@@ -32,17 +32,17 @@ Index d
 
 Index e
  e_bd: bd, 1!0011100000000000001100000100000
- e_sn: sn, 1!101111001000100010010110111
+ e_sn: sn, 1!101111001000100011011111011
 
 Index h
- h_lb: lb, 1!000000000111111110000111100
+ h_lb: lb, 1!000000000111111110001011100
  h_es: es, &00011111
  h_bd: bd, 1!0001001011101110000000000000100
 
 Index i
  i_es: es, &00001110
  i_nb: nb, 1!001100010
- i_la: la, 1!101110100100011110011100000
+ i_la: la, 1!101110100100011111111110000
 
 Index j
  j_es: es, &00000000
@@ -55,7 +55,7 @@ Index k
  k_sc: sc, 1!01110000000011
  k_eq: eq, 1!0000
  k_sm: sm, 1!0110100010110000
- k_bg: bg, 1!1100000
+ k_bg: bg, 1!1100010
  k_ag: ag, 1!0100
 
 Index l
@@ -76,7 +76,7 @@ Index f
  f_es: es, &01100000
 
 Index m
- m_nn: nn, 1!000011000010001
+ m_nn: nn, 1!000011000010000
 
 Index w
  w_st: st, 1!000000001
@@ -92,26 +92,26 @@ Index g
  g_bd: bd, 1!1111111111111111111111111111111
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
-Number rA, 1, 0!00011110
+Number rA, 1, 0!00011111
 Number mwA, 1, 0!11101010
 Number rB, 1, 0!11111110
 Number mwB, 1, 0!10011111
-Number rC, 1, 0!11001111
+Number rC, 1, 0!01101001
 Number mwC, 1, 0!00101101
 Number rD, 1, 0!11110111
 Number mwD, 1, 0!00000001
 Number rE, 1, 0!00000000
 Number mwE, 1, 0!10000110
-Number rH, 1, 0!11110111
+Number rH, 1, 0!11111110
 Number mwH, 1, 0!01011101
-Number rI, 1, 0!10111111
+Number rI, 1, 0!11111111
 Number mwI, 1, 0!10100000
 Number rJ, 1, 0!00000000
 Number mwJ, 1, 0!10000011
-Number rK, 1, 0!11001001
+Number rK, 1, 0!11011000
 Number mwK, 1, 0!00000110
 Number rL, 1, 0!11111101
-Number mwL, 1, 0!11011011
+Number mwL, 1, 0!11011000
 Number lr, 1, 0!10111
 Number mb, 1, 0!01000000
 Number rS1, 1, 0!01000
@@ -119,7 +119,7 @@ Number rS2, 1, 0!00110
 Number qs, 1, 3!1101111
 Number qf, 1, 3!0011000
 Number bw, 1, 0!01000
-Number rT, 1, 0!11111010
+Number rT, 1, 0!00011000
 Number mwT, 1, 0!00000000
 Number mt, 1, 0!100
 #  the mantissa mixer's rates: frozen (Index n)
