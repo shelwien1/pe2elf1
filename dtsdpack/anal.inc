@@ -1002,15 +1002,16 @@ static void wav_extend(WavIn& w) {
 // sees the next alone) against the LFE value times its scale (y), each weighted by 1 over its
 // scale squared (what the coder pays for is the error in steps), the older ones forgotten (by
 // 1/32 a frame), ridged toward no correction. Plain data: init(), then add() each sample,
-// refit() each frame.
-template <int NF>
+// refit() each frame. (K0: the tap the correction's identity is, ridged toward; -1 none, ridged
+// toward 0.)
+template <int NF, int K0 = LFE_K>
 struct LfeFit {
   S128 G[NF][NF], c[NF];  // the sums of f f' and f y
   S64 w[NF];              // the correction (Q30)
 
   void init() {
     memset((void*)this, 0, sizeof *this);
-    w[LFE_K] = (S64)1 << 30;
+    if (K0 >= 0) w[K0] = (S64)1 << 30;
   }
   S64 predict(const S64* f) const {
     S128 p = 0;
@@ -1053,7 +1054,7 @@ struct LfeFit {
     }
     for (int i = 0; i < NF; i++) {  // L z = b, then D, then L' w = z
       Sf b = sf_make(c[i], 0);
-      if (i == LFE_K) b = sf_add(b, r);
+      if (i == K0) b = sf_add(b, r);
       for (int k = 0; k < i; k++) b = sf_sub(b, sf_mul(L[i][k], z[k]));
       z[i] = b;
     }

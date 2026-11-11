@@ -137,11 +137,11 @@ allocations in):
 
 | Stream | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 56911 (3.01%) | the 96 kHz decode's 64-band analysis's lower half (99.40% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
+| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 55609 (2.95%) | the 96 kHz decode's 64-band analysis's lower half (99.54% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
 | `Master Audio 5.0 96khz.dts` | 1768548 | 4497 (0.25%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
 | `Master Audio 7.1.dts` | 1945604 | 6987 (0.36%) | a downmix of its 7.1 |
 | `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 4811 (0.17%) | its 3.1 |
-| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 7106 (0.14%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
+| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 6862 (0.13%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
 | FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 2419 (0.48%) | the same (1.95%) |
 | `open bitrate.dts` (stereo, open rate) | 5242416 | 3891 (0.07%) | decoded (99.99% of the indexes, 99.95% of the scale factors, 98.25% of the bit allocations, 99.98% of the HF VQ groups, 97.86% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
 
@@ -230,15 +230,15 @@ parse, its bytes are the bits after the subframes again.
 The encoder's input is the WAV. `anal.inc` computes what the encoder computed from it, in integers
 (64- and 128-bit), so that compression and decompression agree everywhere:
 
-- **The subband samples**: the encoder's 32-band analysis filterbank (FFmpeg's `dcaenc`'s
-  transform, with the core's prototype filter: FILTS 0 the non-perfect one), the window of block t
-  ending at sample 32 t + 512 of the WAV, in the decoder's units (its gain, 2). Quantized by the
-  core's own step sizes, scale factors and ADPCM predictions (round to nearest, halves away from
-  zero), they give 99.9% of the core's indexes. Where an index isn't the audio's, it is nearly always
-  the one on the other side of the rounding boundary, and the nearer the boundary, the likelier: the
-  encoder's arithmetic errs by about its signal's level. So whether an index is the audio's is coded
-  by how near the boundary the audio's value lies, in steps and in the channel's loudest subband's
-  RMS (log2, 16 buckets each), and by the subband's recent misses and its channel's (how many of its
+- **The subband samples**: the encoder's 32-band analysis filterbank (FFmpeg's `dcaenc`'s transform,
+  with the core's prototype filter: FILTS 0 the non-perfect one), the window of block t ending at
+  sample 32 t + 512 of the WAV, in the decoder's units (its gain, 2). Quantized by the core's own
+  step sizes, scale factors and ADPCM predictions (round to nearest, halves away from zero), they
+  give 99.9% of the core's indexes. Where an index isn't the audio's, it is nearly always the one on
+  the other side of the rounding boundary, and the nearer the boundary, the likelier: the encoder's
+  arithmetic errs by about its signal's level. So whether an index is the audio's is coded by how
+  near the boundary the audio's value lies, in steps and in the channel's loudest subband's RMS
+  (log2, 16 buckets each), and by the subband's recent misses and its channel's (how many of its
   last 32 missed: 0, 1, 2-3, more), from adaptive counts straight to the range coder (15-bit
   probabilities: the families' are 12). The channel's say 32 times sooner when the WAV has stopped
   being what the encoder had, as in the frames after a cut stream's start (its decoder's state not
@@ -249,15 +249,22 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   channel's level at the sample (the root of all its subband samples' squares) instead of its
   loudest subband's: the encoder's arithmetic errs by about all its signal there (held out, 3.6%
   fewer bits for the decisions of `s.2.dts`'s first 3 MB; its core 1.2% smaller). A decoded WAV's
-  misses are the lattice's, not the arithmetic's, and keep the loudest subband's. An index that is
-  neither, the audio's 4 or more, is coded by whether it lies within 4 of the audio's, then its
-  side (that one's, or the other) and its distance in unary; else as its magnitude, from the top
-  bit down, as any index is without the WAV (the core 2.1% smaller in all: the 7.1 DTS-HD MA
-  streams' and `3-1.dts`'s 11%, `96-24.dts`'s 2.6%, `s.2.dts`'s 0.5%). A miss beside a smaller
-  index costs less as its magnitude (`96-24.dts`'s, where X96's residuals are in the core's
-  values, 1.6 KB more otherwise). The misses beyond the rounding boundary are mostly where the
-  WAV ends: a piece cut from a longer stream has its last frame's analysis look past it at the
-  audio that came next (`s.2.dts`'s first 3 MB's last frame, 718 of its 734).
+  misses are the lattice's, not the arithmetic's, and keep the loudest subband's. Some decoded WAVs'
+  bottom subband isn't the core's values but a filter of them, as if the decode had been high-passed
+  (`96-24.dts`'s and `ES 6.1 16bit.dts`'s, whose indexes there were the audio's 94.5% and 99.7% of
+  the time): the decode less the core's value is fitted, by least squares (the LFE's fit, below:
+  every channel's together, refitted each 64 samples), on the core's last 16 values there, the
+  decode's present one and its last 8, and the decode less the fit's is the audio's value where its
+  index has been the core's more often than the decode's own (98.9% and 99.9% of those indexes, the
+  cores 2.3% and 3.4% smaller; a lossless WAV's gains nothing). An index that is neither, the
+  audio's 4 or more, is coded by whether it lies within 4 of the audio's, then its side (that one's,
+  or the other) and its distance in unary; else as its magnitude, from the top bit down, as any
+  index is without the WAV (the core 2.1% smaller in all: the 7.1 DTS-HD MA streams' and `3-1.dts`'s
+  11%, `96-24.dts`'s 2.6%, `s.2.dts`'s 0.5%). A miss beside a smaller index costs less as its
+  magnitude (`96-24.dts`'s, where X96's residuals are in the core's values, 1.6 KB more otherwise).
+  The misses beyond the rounding boundary are mostly where the WAV ends: a piece cut from a longer
+  stream has its last frame's analysis look past it at the audio that came next (`s.2.dts`'s first 3
+  MB's last frame, 718 of its 734).
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first
@@ -698,7 +705,7 @@ files.
 
 ### The format
 
-"dtsdpack", the format's version (38), the level, the WAV's binding (the offset; each core channel's
+"dtsdpack", the format's version (39), the level, the WAV's binding (the offset; each core channel's
 WAV channel, the second of its mix and their gains, Q23; the LFE's channel; the WAV's samples to
 the core's, 1, 2 or 4 (decimated by 2, then 2); the WAV's format, size and the CRC-32 of its first
 64 KB), then the

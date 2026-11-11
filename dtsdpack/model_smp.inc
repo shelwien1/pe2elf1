@@ -244,6 +244,16 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   S128 jx_yw[NSUB], jx_ww[NSUB];
   S64 jx_cs[NSF][NCH][NSUB];
   int jx_k[NCH][NSUB], jx_vq[NCH][NSUB][NSMP / 16], jx_vs[NCH][NSUB][NSMP / 16];
+  // Some decoded WAVs' bottom subband isn't the core's values there, but a filter of them (as if the
+  // decode had been high-passed: `96-24.dts`'s, `ES 6.1 16bit.dts`'s): the decode less the core's
+  // value, as the core's last 16 values, the decode's present one and its last 8 say it (least
+  // squares, LfeFit's: every channel's together, refitted each 64 samples; on `96-24.dts`'s, R^2
+  // 0.97); the decode less the fit's is the audio's value where its index has been the core's more
+  // often than the decode's own, by a margin (b0r: jx_tally()'s)
+  static constexpr int B0_N = 25;
+  LfeFit<B0_N, -1> b0fit;
+  S64 b0y[NCH][16], b0w[NCH][8];  // (2^-AQ_F; [0] the last)
+  U32 b0r[2], b0n;
   U64 n_smp, n_hit, n_sf, n_sfhit;  // (-s: the samples, those the audio predicted; the same of the scale factors)
   U64 n_vq[VK_N], n_vqhit[VK_N];    // (and the ranks, those 0)
   // how often a subband sample's index wasn't the audio's, of how many (code_index()), by pm, hm, cb
@@ -263,6 +273,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int i = 0; i < 64; i++) lfe_cn[i] = -1;
     lfe_lp = 9;
     jx_lo = NSUB;
+    b0fit.init();
   }
   // the LFE's decimated sample n (64x: its window ends at 64 n + the offset)
   S64 lfe_d(S64 n) {
@@ -1678,8 +1689,26 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       const S64 c = requant(u - shl64(pred, AQ_F), ss, lo, hi, &d, &o);
       if (jx_near(u - shl64(clip23((S64)dequantize((S32)c, ss) + pred), AQ_F))) fx = 1, qf = c;
     }
-    S64 q0 = 0;
+    S64 q0 = 0, qb = 0, f0[B0_N];
+    // (a decoded WAV's bottom subband: the fit's value; `96-24.dts`'s indexes there 99.9% the audio's
+    // from 94.5%, its core 2.3% smaller, `ES 6.1 16bit.dts`'s 3.4%)
+    const int b0 = (x96a || ss_rule()) && bnd && b == 0;
+    if (b0) {
+      for (int k = 0; k < 16; k++) f0[k] = b0y[ch][k];
+      f0[16] = xv;
+      for (int k = 0; k < 8; k++) f0[17 + k] = b0w[ch][k];
+      const S64 xc = xv - b0fit.predict(f0);
+      S128 d;
+      S64 o;
+      qb = requant(xc - shl64(pred, AQ_F), ss, lo, hi, &d, &o);
+      if (jx_more(b0r, 4, 1)) xv = xc;
+    }
     if (bnd) q0 = qp = requant(xv - shl64(pred, AQ_F), ss, lo, hi, &dist, &alt);
+    if (b0) {  // (the decode's own index, for the tally)
+      S128 d;
+      S64 o;
+      q0 = requant(X[ch][b][j] - shl64(pred, AQ_F), ss, lo, hi, &d, &o);
+    }
     if (fx && jx_more(jx_r[b], 4, 1)) {  // (the fit's index, as the audio's: on its lattice point)
       xv = shl64(clip23((S64)dequantize((S32)qf, ss) + pred), AQ_F);
       qp = requant(xv - shl64(pred, AQ_F), ss, lo, hi, &dist, &alt);
@@ -1718,6 +1747,14 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     push_y(ch, b, y);
     if (x96a) yc[ch][b][fb0 + j] = y;
     if (fx) jx_tally(jx_r[b], v, q0, qf);
+    if (b0) {  // (the fit, and the last values)
+      jx_tally(b0r, v, q0, qb);
+      b0fit.add(f0, X[ch][0][j] - shl64(y, AQ_F), ss >> 6 > (S64)1 << 22 ? ss >> 6 : (S64)1 << 22);
+      if (++b0n >= 64) b0fit.refit(), b0n = 0;
+      for (int k = 15; k > 0; k--) b0y[ch][k] = b0y[ch][k - 1];
+      for (int k = 7; k > 0; k--) b0w[ch][k] = b0w[ch][k - 1];
+      b0y[ch][0] = shl64(y, AQ_F), b0w[ch][0] = X[ch][0][j];
+    }
     if (x96a && bnd) {  // (the gain, forgetting as it grows)
       const S64 w = X[ch][b][j];
       jx_yw[b] += (S128)y * w, jx_ww[b] += (S128)w * (w >> AQ_F);
