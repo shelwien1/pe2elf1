@@ -1267,9 +1267,17 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // prediction off) are what the decoder made of indexes at the step of the ABITS and a scale
   // factor; so of ABITS a0..a1 (g the guess) and the scale factors p - 3 to p + 5, the pair whose
   // lattice lies nearest them in its steps (a finer one fits as nearly but in more of its steps, a
-  // coarser one misses the values between its points): 1 + its ABITS, where an index it makes isn't
-  // 0 (else 0: the values say nothing); *conf the log2 of the next pair's distance over its, 0-7,
-  // *dbest its distance (norm_dist()'s). (Only the pairs under cut: 0 where none is.)
+  // coarser one misses the values between its points), of pairs as near the coarser lattice, then
+  // the scale factor nearer p (where the values all lie on both, as a 3-level quantizer's do on the
+  // 7-level one's at the same scale factor: `ES 6.1 16bit.dts`'s search right 99.23% of the time
+  // from 97.90%, its core 2.1% smaller): 1 + its ABITS, where an index it makes isn't 0 (else 0: the
+  // values say nothing); *conf the log2 of the next pair's distance over its, 0-7 (a pair as near
+  // isn't counted), *dbest its distance (norm_dist()'s). And where none fits within a 64th of a step
+  // squared a value, a transient's: of the ABITS a0..a1, the one whose lattice fits the subsubframes
+  // before some one and those from it on, each part at a scale factor of its own (part_fit()), the
+  // nearest, where 4 times nearer than the pair at least (*dbest still the pair's: `ES 6.1
+  // 16bit.dts`'s search right 99.71%, its core 12.8% smaller still, FATE's `dts_es.dts`'s 9.2%,
+  // `open bitrate.dts`'s 10.0%). (Only the pairs under cut: 0 where none is, and no transients.)
   // (The pairs by their distance at the 2 largest values, each one's whole distance, the largest
   // values first, while it could still be less than the second best's: as trying them all does.)
   int abits_search(const CoreRec& r, int ch, const S64* v, int n, int g, int a0, int a1, int p, int* conf, U64* dbest,
@@ -1329,7 +1337,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int i = no / 2 - 1; i >= 0; i--) down(i);
     U64 d1 = ~0ull, d2 = cut;
     int best = -1, bnz = 0;
-    while (no > 0 && pr[ord[0]].d < d2) {
+    while (no > 0 && (pr[ord[0]].d < d2 || (best >= 0 && pr[ord[0]].d <= d1))) {
       const int at = ord[0];
       ord[0] = ord[--no];
       down(0);
@@ -1343,15 +1351,61 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       while (j < n && e <= lim) e += q.err(w[j++], &nz);
       if (e > lim) continue;
       const U64 d = norm_dist(e, q.ss);
-      if (d < d1) d2 = d1, d1 = d, best = at, bnz = nz;
-      else if (d < d2) d2 = d;
+      if (d < d1) {
+        d2 = d1, d1 = d, best = at, bnz = nz;
+      } else if (d == d1) {  // (of equals, the coarser lattice, then the scale factor nearer p's)
+        if (q.ss > qe[best].ss || (q.ss == qe[best].ss && abs(pr[at].i - p) < abs(pr[best].i - p))) best = at, bnz = nz;
+      } else if (d < d2) {
+        d2 = d;
+      }
     }
     if (best < 0 || !bnz) return 0;
     const U64 eps = 2 * (U64)n;  // (2^-15 steps squared a value)
+    if (cut == ~0ull && n >= 16 && d1 >= ((U64)n << 10)) {  // (a transient's: two scale factors)
+      const int ns = n / 8;
+      U64 bk = ~0ull;
+      int ba = -1;
+      for (int a = a0; a <= a1; a++) {
+        S64 lo, hi;
+        quant_range(r, ch, a, lo, hi);
+        for (int k = 1; k < ns; k++) {
+          const U64 dA = part_fit(r, ch, a, lo, hi, v, 8 * k), dB = part_fit(r, ch, a, lo, hi, v + 8 * k, n - 8 * k);
+          const U64 d = dA + dB < dA ? ~0ull : dA + dB;
+          if (d < bk) bk = d, ba = a;
+        }
+      }
+      if (ba >= 0 && bk != ~0ull && (d1 + eps) / (bk + eps) >= 4) {
+        const U64 ratio = (d1 + eps) / (bk + eps);
+        *conf = imin(bit_len(ratio) - 3, 7);
+        *dbest = d1;
+        return 1 + ba;
+      }
+    }
     const U64 ratio = d2 == ~0ull ? ~0ull : (d2 + eps) / (d1 + eps);
     *conf = imin(bit_len(ratio) - 1, 7);
     *dbest = d1;
     return 1 + pr[best].a;
+  }
+  // the nearest fit of the values v (m of them) to ABITS a's lattice (its range lo..hi) at a scale
+  // factor from 3 below their RMS rule's to 5 above: its distance (norm_dist()'s)
+  U64 part_fit(const CoreRec& r, int ch, int a, S64 lo, S64 hi, const S64* v, int m) const {
+    const U32* tab = r.shuff[ch] == 6 ? SF7 : SF6;
+    const int nt = sf_entries(r.shuff[ch]);
+    int near;
+    const int p = scale_pred(v, m, tab, nt, &near);
+    U64 bd = ~0ull;
+    for (int i = imax(p - 3, 0); i <= imin(p + 5, nt - 1); i++) {
+      const S64 ss = step_for(r, ch, a, i);
+      if (ss <= 0) continue;
+      QErr q;
+      q.set(ss, lo, hi);
+      S128 e = 0;
+      int nz = 0;
+      for (int k = 0; k < m; k++) e += q.err(v[k], &nz);
+      const U64 d = norm_dist(e, ss);
+      if (d < bd) bd = d;
+    }
+    return bd;
   }
   // The TMODE a decoded WAV says (the transient search), its ABITS known: where the subband's values
   // fit one scale factor's lattice (to a 64th of a step squared a value), none (0, *conf 7); else
@@ -1364,29 +1418,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (!a || ns < 2) return -1;
     S64 x[NSMP];
     const int n = scale_values(s, ch, b, 0, ns, x);
-    const U32* tab = r.shuff[ch] == 6 ? SF7 : SF6;
-    const int nt = sf_entries(r.shuff[ch]);
     S64 lo, hi;
     quant_range(r, ch, a, lo, hi);
-    auto part = [&](int j0, int j1) {  // (subsubframes j0..j1 - 1: their fit)
-      const S64* v = x + 8 * j0;
-      const int m = 8 * (j1 - j0);
-      int near;
-      const int p = scale_pred(v, m, tab, nt, &near);
-      U64 bd = ~0ull;
-      for (int i = imax(p - 3, 0); i <= imin(p + 5, nt - 1); i++) {
-        const S64 ss = step_for(r, ch, a, i);
-        if (ss <= 0) continue;
-        QErr q;
-        q.set(ss, lo, hi);
-        S128 e = 0;
-        int nz = 0;
-        for (int k = 0; k < m; k++) e += q.err(v[k], &nz);
-        const U64 d = norm_dist(e, ss);
-        if (d < bd) bd = d;
-      }
-      return bd;
-    };
+    auto part = [&](int j0, int j1) { return part_fit(r, ch, a, lo, hi, x + 8 * j0, 8 * (j1 - j0)); };  // (subsubframes j0..j1 - 1)
     const U64 d0 = abfit_a[ch][b] == a ? abfit_d[ch][b] : part(0, ns);
     if (d0 < ((U64)n << 10)) return *conf = 7, 0;
     U64 bk = ~0ull;

@@ -97,8 +97,8 @@ Compressing the whole of `s.2.dts`'s core takes 29 seconds (1.7 MB of core a sec
 memory, decompressing it 30 seconds and 43 MB, on one thread of a 2.1 GHz Xeon. The rows were all
 in the tuning sets (below; the whole of `s.2.dts` since the HF VQ groups' scores were learned), and
 `s.2.dts` in what the HF VQ groups' scores and the ADPCM predictors' codewords were learned from.
-A 96 kHz stream's 64-band analysis costs more: `96-24.dts`'s core (1.9 MB) compresses in 4.4 seconds
-and decompresses in 4.9. The decoded WAVs' searches cost too; every stream below goes at about 500
+A 96 kHz stream's 64-band analysis costs more: `96-24.dts`'s core (1.9 MB) compresses in 4.6 seconds
+and decompresses in 5.0. The decoded WAVs' searches cost too; every stream below goes at about 500
 KB of core a second or more both ways, the 7-frame samples (7 KB, 9-21 ms each way, a third of that
 the kernel mapping the pages they touch) at 330 KB a second or more: the searches run on every value
 of a stream's first 2048, which is all of theirs.
@@ -137,13 +137,13 @@ allocations in):
 
 | Stream | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 41369 (2.19%) | the 96 kHz decode's 64-band analysis's lower half (99.77% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
+| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 40935 (2.17%) | the 96 kHz decode's 64-band analysis's lower half (99.77% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
 | `Master Audio 5.0 96khz.dts` | 1768548 | 4497 (0.25%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
 | `Master Audio 7.1.dts` | 1945604 | 6987 (0.36%) | a downmix of its 7.1 |
 | `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 4811 (0.17%) | its 3.1 |
-| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 6862 (0.13%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
-| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 2419 (0.48%) | the same (1.95%) |
-| `open bitrate.dts` (stereo, open rate) | 5242416 | 3891 (0.07%) | decoded (99.99% of the indexes, 99.95% of the scale factors, 98.25% of the bit allocations, 99.98% of the HF VQ groups, 97.86% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
+| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 5858 (0.11%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
+| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 2144 (0.43%) | the same (1.95%) |
+| `open bitrate.dts` (stereo, open rate) | 5242416 | 3399 (0.06%) | decoded (99.99% of the indexes, 99.96% of the scale factors, 99.82% of the bit allocations, 99.99% of the HF VQ groups, 97.86% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
 
 No stream at hand has XXCH in its core substream: FATE's XXCH samples (`xxch_71_24_48_2046`,
 `xbr_xxch_71_24_48_3840`, `x96_xxch_71_24_96_3840`, 7 frames each) have it in their extension
@@ -527,18 +527,25 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   3 below the RMS rule's to 5 above, and takes the pair whose lattice the values lie nearest, in its
   steps (the indexes nearest them in the quantizer's range, dequantized as the decoder does: a finer
   lattice fits as nearly, but in more of its steps, and a coarser one misses the values between its
-  points), where an index it makes isn't 0. Its ABITS is then the first guess, and its margin over
-  the next pair, and whether it is the first guess without it, a context: `open bitrate.dts`'s ABITS
-  were that first guess's 81% of the time (in its first 400 frames), and are the search's 98.25%
-  (`ES 6.1 16bit.dts`'s 97.90%; `96-24.dts`'s core's 83.02%, its values having X96's residuals in
-  them). What the staircase or the table guesses is a context of the search's guess: where they
-  agree, the search is right 99.99% of the time (`ES 6.1 16bit.dts`'s), where not 80%, and its
-  misses are mostly what the staircase says, or the last ABITS where it says that (`open
-  bitrate.dts`'s core 1.1% smaller, `dts_es.dts`'s 0.6%; the staircase's as the second guess, in the
-  last ABITS's place, makes `dts_es.dts`'s 5% smaller but `ES 6.1 16bit.dts`'s 2.6% bigger).
-  The pairs go by their distance at the two largest values, and each one's whole distance is
-  summed, the largest values first, only while it could still come under the second best's: the same
-  pair as trying them all, at a fraction of the cost.
+  points), where an index it makes isn't 0; of pairs as near, the coarser lattice, then the scale
+  factor nearer the RMS rule's (a 3-level quantizer's values lie on the 7-level one's lattice at the
+  same scale factor too: `ES 6.1 16bit.dts`'s search right 99.23% of the time, from 97.90%, its core
+  2.1% smaller). And where no pair fits within a 64th of a step squared a value, a transient's (its
+  TMODE comes after its ABITS): the ABITS whose lattice fits the subsubframes before some one and
+  those from it on, each part at a scale factor of its own, where 4 times nearer at least (`ES 6.1
+  16bit.dts`'s search right 99.71%, its core 12.8% smaller still; FATE's `dts_es.dts`'s 9.2%, `open
+  bitrate.dts`'s 10.0%). Its ABITS is then the first guess, and its margin over the next pair, and
+  whether it is the first guess without it, a context: `open bitrate.dts`'s ABITS were that first
+  guess's 81% of the time (in its first 400 frames), and are the search's 99.82% (`ES 6.1
+  16bit.dts`'s 99.71%; `96-24.dts`'s core's 85.15%, its values having X96's residuals in them). What
+  the staircase or the table guesses is a context of the search's guess: where they agree, the
+  search is right 99.99% of the time (`ES 6.1 16bit.dts`'s), where not 80%, and its misses are
+  mostly what the staircase says, or the last ABITS where it says that (`open bitrate.dts`'s core
+  1.1% smaller, `dts_es.dts`'s 0.6%; the staircase's as the second guess, in the last ABITS's place,
+  makes `dts_es.dts`'s 5% smaller but `ES 6.1 16bit.dts`'s 2.6% bigger). The pairs go by their
+  distance at the two largest values, and each one's whole distance is summed, the largest values
+  first, only while it could still come under the second best's: the same pair as trying them all,
+  at a fraction of the cost.
 
 A WAV at twice the core's rate (96 kHz for a 48 kHz core) is analysed by the 64-band filterbank
 instead: the same transform of 64 bands, by FFmpeg's 1024-tap X96 prototype, each block 64 of the
@@ -730,7 +737,7 @@ files.
 
 ### The format
 
-"dtsdpack", the format's version (42), the level, the WAV's binding (the offset; each core channel's
+"dtsdpack", the format's version (43), the level, the WAV's binding (the offset; each core channel's
 WAV channel, the second of its mix and their gains, Q23; the LFE's channel; the WAV's samples to
 the core's, 1, 2 or 4 (decimated by 2, then 2); the WAV's format, size and the CRC-32 of its first
 64 KB), then the
@@ -758,10 +765,9 @@ the CRC-32 of the core stream, which `d` checks.
   the peak rule (94%) where the decoder isn't FFmpeg, whose noise the model draws too, and a
   clipped decode (as the full decodes of FATE's XXCH samples are) has values that aren't the
   decoder's reconstruction, where it isn't sure.
-- The bit allocation search fits one scale factor to the subframe: a subband with a transient (two
-  of them; its TMODE comes after its ABITS) doesn't fit, and a DTS 96/24 stream's core subbands
-  hold X96's residuals too (83% of `96-24.dts`'s: its indexes are fitted to both lattices, above,
-  and a subband's scale factor where it has one in the subframe, but not its ABITS).
+- The bit allocation search fits the core's lattice alone, and a DTS 96/24 stream's core subbands
+  hold X96's residuals too (85% of `96-24.dts`'s ABITS right: its indexes are fitted to both
+  lattices, above, and a subband's scale factor where it has one in the subframe, but not its ABITS).
 - A stream cut from a longer one costs most at its ends. Its last frame holds the audio that went
   on past its WAV: 1.0-1.5 KB of each here, about what a frame costs without the audio (a decoded
   WAV's could be solved for, the decoder's synthesis being known, but the system is ill-conditioned
