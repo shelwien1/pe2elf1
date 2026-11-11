@@ -175,9 +175,13 @@ struct Model : ModelX96<f_DEC, LV> {
           const int f0 = fit >= 0 && B::jx_low(b) ? B::jx_core_plain(r, ch, b) : -1;
           if (f0 >= 0) fit = f0 ? 0 : 2;
         }
+        // (and where the core has little of the decode's values, the gains of the fit's (je_gains()):
+        // `96-24.dts`'s core 0.5% smaller)
+        int g4 = B::lpg4[ch][b], pg = -1;
+        if (bound[ch] && B::jx_low(b) && B::ss_rule() && B::je_on(ch, b)) B::je_gains(ch, b, &g4, &pg);
         if (fit >= 0)
           v = side_code(SF_PMSR, ch, b, v, 0, 1, 1, hist.pmode[ch][b], b ? s.pmode[ch][b - 1] + 1 : 0, fit,
-                        imin(B::lpg4[ch][b], 27), B::pmode_gain(ch, b));
+                        imin(g4, 27), pg >= 0 ? pg : B::pmode_gain(ch, b));
         else  // (a quiet subband, its RMS rule's scale factor under 100, predicts as one that wouldn't gain)
           v = side_code(SF_PMODE, ch, b, v, 0, 1, 1, hist.pmode[ch][b], b ? s.pmode[ch][b - 1] + 1 : 0,
                         bound[ch] ? ac[ch][b] : 8, bound[ch] ? imin(B::lpg4[ch][b], 27) : 0,
@@ -196,19 +200,34 @@ struct Model : ModelX96<f_DEC, LV> {
           if (!B::jc_lat[ch][b]) B::pv_nofit();  // (X96's vectors': as where none fits, as they were)
           break;
         }
-        int pa = -1;
+        int pa = -1, pe = -1, ge = 0;
+        S64 ale[4];
         if (lw) {
           S64* const d = B::pvqd;
           pvq_dists(B::lpc[ch][b], d);
           pa = B::pvq_first(B::lpc[ch][b], d);
+          if (B::ss_rule() && B::je_on(ch, b)) {
+            S64 y[NSMP];
+            int g4;
+            B::je_lpc(ch, b, ale, &ge, &g4, y);
+            pvq_dists(ale, d);
+            pe = B::pvq_first(ale, d);
+          }
         }
-        if (bound[ch] && !(lw && B::jx_more(B::jx_pr[b], 0, 0))) {
+        // (else by the LPC of the core's values as the decode's fit has them, je_lpc(), where its
+        // first has been right more often than the decode's: `96-24.dts`'s subband 30's predictors
+        // 6.5 bits each from 11.1, its core 1.4% smaller; as a try none fitted)
+        if (pe >= 0 && B::jx_more(B::je_pr[b], 0, 0)) {
+          v = B::code_pvq2(ale, B::pvqd, -1, (int)v, ch, b, ge, B::lrank[ch][b][VK_PVQ], B::lrank[ch][b][VK_PVE]);
+          B::pv_nofit();
+        } else if (bound[ch] && !(lw && B::jx_more(B::jx_pr[b], 0, 0))) {
           v = B::code_pvq(r, s, ch, b, v);
         } else {
           if (bound[ch] && B::ss_rule()) B::pv_nofit();
           v = side_index(SF_PVQ, ch, b, v, 12, hist.pvq[ch][b], 8, 0);
         }
         if (lw) B::jx_tally(B::jx_pr[b], v, pa, hist.pvq[ch][b] - 1);
+        if (pe >= 0) B::jx_tally(B::je_pr[b], v, pa, pe);
         break;
       }
       case F_ABITS: {  // (against the audio's energy, as the scale factor its RMS makes, and how it changed)
@@ -567,6 +586,7 @@ struct Model : ModelX96<f_DEC, LV> {
     const CoreSub& s = r.sub[sf];
     B::level_commit(r, s, r.xpass ? 1 : 0);
     B::smp_fill(r, s);
+    B::je_learn(r);
     B::smp_subframe_end(r);
     for (int ch = r.ch0(); ch < r.ch1(); ch++)
       for (int b = 0; b < NSUB; b++) {

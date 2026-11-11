@@ -97,8 +97,8 @@ Compressing the whole of `s.2.dts`'s core takes 29 seconds (1.7 MB of core a sec
 memory, decompressing it 30 seconds and 43 MB, on one thread of a 2.1 GHz Xeon. The rows were all
 in the tuning sets (below; the whole of `s.2.dts` since the HF VQ groups' scores were learned), and
 `s.2.dts` in what the HF VQ groups' scores and the ADPCM predictors' codewords were learned from.
-A 96 kHz stream's 64-band analysis costs more: `96-24.dts`'s core (1.9 MB) compresses in 5.1 seconds
-and decompresses in 5.4. The decoded WAVs' searches cost too; every stream below goes at about 500
+A 96 kHz stream's 64-band analysis costs more: `96-24.dts`'s core (1.9 MB) compresses in 5.0 seconds
+and decompresses in 5.3. The decoded WAVs' searches cost too; every stream below goes at about 500
 KB of core a second or more both ways, the 7-frame samples (7 KB, 9-21 ms each way, a third of that
 the kernel mapping the pages they touch) at 330 KB a second or more: the searches run on every value
 of a stream's first 2048 (the bit allocation search's first 512), which is all of theirs.
@@ -137,7 +137,7 @@ allocations in):
 
 | Stream | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 31249 (1.65%) | the 96 kHz decode's 64-band analysis's lower half (99.79% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
+| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 29895 (1.58%) | the 96 kHz decode's 64-band analysis's lower half (99.79% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
 | `Master Audio 5.0 96khz.dts` | 1768548 | 4482 (0.25%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
 | `Master Audio 7.1.dts` | 1945604 | 6961 (0.36%) | a downmix of its 7.1 |
 | `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 4760 (0.17%) | its 3.1 |
@@ -616,7 +616,15 @@ core's last step of 0, up to 4 such, the nearer first (subband 31's: 1 mostly, X
 of the time): the predictor the first of its 1024 nearest that one of them fits, put first (its core
 3.6% smaller), the PMODE and the scale factor as above by any of them (0.4% and 0.6%). And where few
 of the predictors' first 4 fit (a 96/24 stream's core's), the search tries 32 of them, not 4 (1.0%
-smaller, 3% slower).
+smaller, 3% slower). Elsewhere there (`96-24.dts`'s subband 30: the core's input was the 96 kHz audio
+decimated, which left it 0.4 of the decode's values, and those shaped), the core's values are a
+least squares fit of its decoded ones on the decode's of the subband, 3 either side (the last
+subframe's last 3 before it), learned as the stream goes: within half a step of the core's 83.5% of
+the time, the decode 62.5%. By the fit's LPC the predictor's median rank is 7, by the decode's 1147
+(6.5 bits a predictor from 11.1; its core 1.4% smaller); the scale factor search goes in order from
+the fit's RMS rule's, as a 3-level quantizer's values fit a few scale factors (88.8% right from 75.7%;
+1.4%); PMODE by the fit's gains (0.5%); and an index against the fit's, where they differ and that
+has been the core's more than 3/4 of the time, as the second guess (1.1%).
 Its decoded WAV's joint subbands are their source's times the joint scale factor, so where the
 source has a level the scale factor is the projection of the one on the other (100% of those); a
 subband without bits is the decoder's noise, uniform to half the scale factor, so its scale factor
@@ -788,7 +796,7 @@ files.
 
 ### The format
 
-"dtsdpack", the format's version (50), the level, the WAV's binding (the offset; each core channel's
+"dtsdpack", the format's version (51), the level, the WAV's binding (the offset; each core channel's
 WAV channel, the second of its mix and their gains, Q23; the LFE's channel; the WAV's samples to
 the core's, 1, 2 or 4 (decimated by 2, then 2); the WAV's format, size and the CRC-32 of its first
 64 KB), then the

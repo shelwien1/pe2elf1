@@ -262,14 +262,91 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   static constexpr int B0_F = 12;
   static constexpr int B0_N = 25 + B0_F;
   LfeFit<B0_N, -1> b0fit;
+  // Where X96 codes the core's subbands too, the core's values against the decode's, by channel and
+  // subband from JE_B0 up: a least squares fit of the core's decoded values on the 64-band
+  // analysis's of the subband about each, 3 either side (je_feat()), the older forgotten. The
+  // core's input was the 96 kHz audio decimated, so near its top the core has little of the
+  // decode's values and those shaped: the fit's are within half a step of the core's 83.5% of the
+  // time in `96-24.dts`'s subband 30, the decode's 62.5%, and its predictors' median rank by their
+  // LPC is 7, by the decode's 1147. The subframes it has had (to 255); the last one's last 3
+  // values and the block after them (je_hx, je_ht: the values before the subframe); how often the
+  // decode's LPC's first was the predictor, and the fit's values' (je_pr)
+  static constexpr int JE_B0 = NSUB - 8, JE_W = 3, JE_N = 2 * JE_W + 1, JE_MIN = 4;
+  LfeFit<JE_N, -1> je_fit[NCH][NSUB - JE_B0];
+  U8 je_n[NCH][NSUB - JE_B0];
+  S64 je_hx[NCH][NSUB - JE_B0][JE_W], je_ht[NCH][NSUB - JE_B0];
+  U32 je_pr[NSUB][2], je_qn[NSUB][2];  // (and of the samples, how many, and how many the fit's index was: halved as they grow)
+  // subband b's features at block t of the frame, the subframe's blocks t0 to t1 - 1 (0 past them,
+  // and before them where the last subframe wasn't the one before)
+  void je_feat(int ch, int b, int t, int t0, int t1, S64* f) const {
+    const int k = b - JE_B0;
+    const bool hv = je_ht[ch][k] == tframe + t0;
+    for (int o = -JE_W; o <= JE_W; o++) {
+      const int u = t + o;
+      f[o + JE_W] = u >= t0 && u < t1 ? xa[ch][b][u] : u < t0 && u >= t0 - JE_W && hv ? je_hx[ch][k][JE_W + u - t0] : 0;
+    }
+  }
+  // whether the fit has had JE_MIN subframes of channel ch's subband b (where X96 is there)
+  bool je_on(int ch, int b) const { return x96a && b >= JE_B0 && je_n[ch][b - JE_B0] >= JE_MIN; }
+  // the fit's value of the subframe's sample j
+  S64 je_one(int ch, int b, int j) const {
+    S64 f[JE_N];
+    je_feat(ch, b, fb0 + j, fb0, fb0 + nsmp, f);
+    return je_fit[ch][b - JE_B0].predict(f);
+  }
+  // the LPC (lpc4()) of channel ch's subband b's last 4 decoded values and the fit's of the
+  // subframe's (into al, its gain in halvings *g and quarters *g4; the fit's values into y)
+  void je_lpc(int ch, int b, S64* al, int* g, int* g4, S64* y) const {
+    S64 x[4 + NSMP];
+    for (int k = 0; k < 4; k++) x[3 - k] = shl64(yh[ch][b][k], AQ_F);
+    for (int j = 0; j < nsmp; j++) x[4 + j] = y[j] = je_one(ch, b, j);
+    lpc4(x, 4 + nsmp, al, g, g4);
+  }
+  // the gains PMODE goes by (lpg4's, pmode_gain()'s) of the fit's values
+  void je_gains(int ch, int b, int* g4, int* pg) {
+    S64 y[NSMP], al[4], hd[4];
+    int g;
+    je_lpc(ch, b, al, &g, g4, y);
+    const int k = *g4;
+    if (k < 2 || k > 9) {
+      *pg = k < 2 ? 0 : 9;
+      return;
+    }
+    for (int i = 0; i < 4; i++) hd[i] = shl64(yh[ch][b][i], AQ_F);
+    S64* const d = this->pvqd;
+    pvq_dists(al, d);
+    *pg = clip(pvq_gain4(pvq_first(al, d), hd, y, nsmp) - 2, 1, 8);
+  }
+  // the subframe's core values decoded (yc): each X96-coded subband's fit again
+  void je_learn(const CoreRec& r) {
+    if (!x96a) return;
+    for (int ch = r.ch0(); ch < r.ch1(); ch++) {
+      if (!bound[ch]) continue;
+      for (int b = imax(jx_lo, JE_B0); b < r.nsubs[ch]; b++) {
+        const int k = b - JE_B0;
+        for (int j = 0; j < nsmp; j++) {
+          S64 f[JE_N];
+          je_feat(ch, b, fb0 + j, fb0, fb0 + nsmp, f);
+          je_fit[ch][k].add(f, shl64(yc[ch][b][fb0 + j], AQ_F), (S64)1 << 22);
+        }
+        je_fit[ch][k].refit();
+        je_n[ch][k] += je_n[ch][k] < 255;
+        if (nsmp >= JE_W) {
+          for (int i = 0; i < JE_W; i++) je_hx[ch][k][i] = xa[ch][b][fb0 + nsmp - JE_W + i];
+          je_ht[ch][k] = tframe + fb0 + nsmp;
+        }
+      }
+    }
+  }
   S64 b0y[NCH][16], b0w[NCH][8];  // (2^-AQ_F; [0] the last)
   U32 b0r[2], b0n;
   U64 n_smp, n_hit, n_sf, n_sfhit;  // (-s: the samples, those the audio predicted; the same of the scale factors)
   U64 n_vq[VK_N], n_vqhit[VK_N];    // (and the ranks, those 0)
   // how often a subband sample's index wasn't the audio's, of how many (code_index()), by pm, hm, cb
-  // and nearness: in each cell (nr, nl), and in each row (nl)
+  // (4 more where the fit of the core's values says another: code_q()) and nearness: in each cell
+  // (nr, nl), and in each row (nl)
   static constexpr U32 HIT_PRIOR = 16, HIT_LIMIT = 1u << 18;
-  U32 hit_c[2][4][4][QB_N][QB_N][2], hit_r[2][4][4][QB_N][2];
+  U32 hit_c[2][4][8][QB_N][QB_N][2], hit_r[2][4][8][QB_N][2];
 
   void smp_start(WavIn* w, const Bind& b) {
     wav = w;
@@ -284,6 +361,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     lfe_lp = 9;
     jx_lo = NSUB;
     b0fit.init();
+    for (int ch = 0; ch < NCH; ch++)
+      for (int k = 0; k < NSUB - JE_B0; k++) je_fit[ch][k].init(), je_n[ch][k] = 0, je_ht[ch][k] = -1;
+    memset(je_pr, 0, sizeof je_pr);
+    memset(je_qn, 0, sizeof je_qn);
   }
   // the LFE's decimated sample n (64x: its window ends at 64 n + the offset)
   S64 lfe_d(S64 n) {
@@ -1547,8 +1628,26 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       quant_range(r, ch, a, lo, hi);
       const bool lg = jx_low(b) && hist.scale[ch][b];
       const int c0 = lg ? hist.scale[ch][b] - 1 : p, no = lg ? 17 : 5;
-      for (int o = 0; o < no && pj < 0; o++) {
-        const int i = c0 + (o & 1 ? (o + 1) / 2 : -(o / 2));
+      // (those, in order from the RMS rule's of the core's values as the decode's fit has them, less
+      // the prediction (je_one()): where the core's quantizer has 3 levels, a few scale factors' steps
+      // fit the values, and the one nearest the last isn't the encoder's often; `96-24.dts`'s
+      // subband 30's 88.8% right from 75.7%, its core 1.4% smaller)
+      int ce = -1;
+      if (lg && ss_rule() && je_on(ch, b)) {
+        S64 ve[NSMP], h[4];
+        for (int k = 0; k < 4; k++) h[k] = shl64(yh[ch][b][k], AQ_F);
+        for (int i = 0; i < nsmp; i++) {
+          const S64 y = je_one(ch, b, i);
+          ve[i] = s.pmode[ch][b] ? y - adpcm_pred_x(s.pvq[ch][b], h) : y;
+          h[3] = h[2], h[2] = h[1], h[1] = h[0], h[0] = y;
+        }
+        int ne;
+        ce = scale_pred(ve, nsmp, r.shuff[ch] == 6 ? SF7 : SF6, nt, &ne);
+      }
+      const int cc = ce >= 0 ? ce : c0, nw = ce >= 0 ? 2 * (8 + (ce > c0 ? ce - c0 : c0 - ce)) + 1 : no;
+      for (int o = 0; o < nw && pj < 0; o++) {
+        const int i = cc + (o & 1 ? (o + 1) / 2 : -(o / 2));
+        if (ce >= 0 && (i < c0 - 8 || i > c0 + 8)) continue;
         const S64 st = i >= 0 && i < nt ? step_for(r, ch, a, i) : 0;
         if (st <= 0) continue;
         S64 ss[NSMP];
@@ -1854,8 +1953,25 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // encoder's), nearly all of a channel's indexes miss by a step or two for a while; its
     // subbands' own last 8 tell it 32 times later)
     const int pc = __builtin_popcount(chm[ch]);
+    // (where the core has little of the decode's values, the index of the fit's value (je_one()),
+    // where it isn't the audio's and has been the core's more than 3/4 of the time, the second guess,
+    // and the hit's cell by whether it is: `96-24.dts`'s subband 30's misses 0.6% where it is, 9.2%
+    // where not, and then that one 99.5% of the time; its core 1.1% smaller)
+    int jd = 0;
+    S64 qe = 0;
+    const bool je = bnd && x96a && ss_rule() && jx_low(b) && je_on(ch, b);
+    if (je) {
+      S128 d1;
+      S64 o1;
+      qe = requant(je_one(ch, b, j) - shl64(pred, AQ_F), ss, lo, hi, &d1, &o1);
+      if (qe != qp && (U64)je_qn[b][1] * 4 > (U64)je_qn[b][0] * 3) jd = 1, alt = qe;
+    }
     v = code_index(D, v, bnd, qp, alt, lo, hi, &how, bnd && !ss_rule() ? near_bucket(dist, (S128)tlev[ch][j] << 22, 28) : -1,
-                   pc >= 4 ? 3 : pc >= 2 ? 2 : pc);
+                   (pc >= 4 ? 3 : pc >= 2 ? 2 : pc) + 4 * jd);
+    if (je) {
+      je_qn[b][0]++, je_qn[b][1] += qe == v;
+      if (je_qn[b][0] >= 1u << 16) je_qn[b][0] >>= 1, je_qn[b][1] >>= 1;
+    }
     miss[ch][b] = (U8)(miss[ch][b] << 1 | (bnd && how != 0));
     if (bnd) chm[ch] = chm[ch] << 1 | (how != 0);
     n_smp++;
