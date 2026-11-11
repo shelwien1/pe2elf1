@@ -97,8 +97,8 @@ Compressing the whole of `s.2.dts`'s core takes 29 seconds (1.7 MB of core a sec
 memory, decompressing it 30 seconds and 43 MB, on one thread of a 2.1 GHz Xeon. The rows were all
 in the tuning sets (below; the whole of `s.2.dts` since the HF VQ groups' scores were learned), and
 `s.2.dts` in what the HF VQ groups' scores and the ADPCM predictors' codewords were learned from.
-A 96 kHz stream's 64-band analysis costs more: `96-24.dts`'s core (1.9 MB) compresses in 4.9 seconds
-and decompresses in 5.2. The decoded WAVs' searches cost too; every stream below goes at about 500
+A 96 kHz stream's 64-band analysis costs more: `96-24.dts`'s core (1.9 MB) compresses in 5.1 seconds
+and decompresses in 5.4. The decoded WAVs' searches cost too; every stream below goes at about 500
 KB of core a second or more both ways, the 7-frame samples (7 KB, 9-21 ms each way, a third of that
 the kernel mapping the pages they touch) at 330 KB a second or more: the searches run on every value
 of a stream's first 2048 (the bit allocation search's first 512), which is all of theirs.
@@ -137,7 +137,7 @@ allocations in):
 
 | Stream | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 33089 (1.75%) | the 96 kHz decode's 64-band analysis's lower half (99.77% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
+| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 31249 (1.65%) | the 96 kHz decode's 64-band analysis's lower half (99.79% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
 | `Master Audio 5.0 96khz.dts` | 1768548 | 4482 (0.25%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
 | `Master Audio 7.1.dts` | 1945604 | 6961 (0.36%) | a downmix of its 7.1 |
 | `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 4760 (0.17%) | its 3.1 |
@@ -376,8 +376,9 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   predictor then the first 99.82% of the time, `ES 6.1 16bit.dts`'s 99.38% from 90.60%: their cores
   16.2% and 21.3% smaller, FATE's `dts_es.dts` 3.6%). (They are tried in turn until one fits, the
   order's next taken from a heap; where none has fitted in a quarter of the tries, as in
-  `96-24.dts`'s core, the first 4: one coded against the last one, below, counts as a try none
-  fitted.) A subband that doesn't predict has its values as they are on a lattice, so PMODE's
+  `96-24.dts`'s core, the first 32, a try there counting as none fitted where none of its first 4
+  did: one coded against the last one, or by the values under X96's vectors, below, counts as a try
+  none fitted.) A subband that doesn't predict has its values as they are on a lattice, so PMODE's
   context there is how they fit the one the bit allocation search finds in them (to a 64th of a step
   squared a value, to 16 64ths, worse): `open bitrate.dts`'s subbands that fit to a 64th don't
   predict 465734 times in 465747, those that fit to 16 64ths do 92% of the time (its PMODEs 1712
@@ -609,6 +610,13 @@ where X96 has its lattice there, its core 10.2% smaller, 1% slower. Those values
 PMODE too (whether they lie on a lattice of the core's last ABITS as they are, as the context a
 decoded WAV's values give it; 0.3% smaller) and, its ABITS and predictor coded, its scale factor
 (the first whose lattice they lie on less the prediction: subband 31's 3355 times, all right; 0.2%).
+Where X96's last there was its vectors instead, they are the decode less a vector of the code book
+at a scale factor within 2 of X96's last (as FFmpeg makes them) that leaves each within 4 of the
+core's last step of 0, up to 4 such, the nearer first (subband 31's: 1 mostly, X96's own vector 88%
+of the time): the predictor the first of its 1024 nearest that one of them fits, put first (its core
+3.6% smaller), the PMODE and the scale factor as above by any of them (0.4% and 0.6%). And where few
+of the predictors' first 4 fit (a 96/24 stream's core's), the search tries 32 of them, not 4 (1.0%
+smaller, 3% slower).
 Its decoded WAV's joint subbands are their source's times the joint scale factor, so where the
 source has a level the scale factor is the projection of the one on the other (100% of those); a
 subband without bits is the decoder's noise, uniform to half the scale factor, so its scale factor
@@ -780,7 +788,7 @@ files.
 
 ### The format
 
-"dtsdpack", the format's version (49), the level, the WAV's binding (the offset; each core channel's
+"dtsdpack", the format's version (50), the level, the WAV's binding (the offset; each core channel's
 WAV channel, the second of its mix and their gains, Q23; the LFE's channel; the WAV's samples to
 the core's, 1, 2 or 4 (decimated by 2, then 2); the WAV's format, size and the CRC-32 of its first
 64 KB), then the

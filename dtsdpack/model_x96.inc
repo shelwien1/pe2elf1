@@ -308,22 +308,72 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
       return false;
     });
   }
-  // Whether the core's values of channel ch's subband b, the decode less X96's (jx_core_values()),
+  // Where X96 codes the subband by its vectors instead, the decode less a vector of the code book's
+  // at a scale factor within JV_W of X96's last there, as its decoder makes them (FFmpeg's), where
+  // every value left is within 4 of the core's last units of 0: those of each (into y, the nearest
+  // first; `96-24.dts`'s subband 31: 1 of them mostly, the vector X96's 88% of the time); how many,
+  // none where more than JV_N
+  static constexpr int JV_W = 2, JV_N = 4;
+  int jx_core_vqs(const CoreRec& r, int ch, int b, S64 (*y)[NSMP]) {
+    const int i9 = hsc[ch][b] - 1, ca = B::hist.abits[ch][b] - 1, cs = B::hist.scale[ch][b] - 1;
+    if (i9 < 0 || ca < 1 || cs < 0 || B::nsmp != 16) return 0;
+    const S64 u = dequantize(1, step_for(r, ch, ca, cs)), lim = 4 * u;
+    if (u <= 0) return 0;
+    S32 d[16];
+    for (int j = 0; j < 16; j++) d[j] = (S32)((B::X[ch][b][j] + ((S64)1 << (AQ_F - 1))) >> AQ_F);
+    int n = 0;
+    S64 ms[JV_N];
+    for (int i = imax(1, i9 - JV_W); i <= imin(SF6_N - 2, i9 + JV_W); i++)
+      for (int k = 0; k < 1024; k++) {
+        S64 m = 0, yy[16];
+        int j = 0;
+        for (; j < 16; j++) {
+          const S64 e = d[j] - ((HF_VQ[k][j] * (S64)SF6[i] + 8) >> 4), a = e < 0 ? -e : e;
+          if (a > lim) break;
+          m = a > m ? a : m, yy[j] = e;
+        }
+        if (j < 16) continue;
+        if (n == JV_N) return 0;
+        int at = n++;  // (in order of the largest value left)
+        while (at > 0 && ms[at - 1] > m) ms[at] = ms[at - 1], memcpy(y[at], y[at - 1], sizeof y[0]), at--;
+        ms[at] = m;
+        for (int jj = 0; jj < 16; jj++) y[at][jj] = shl64(yy[jj], AQ_F);
+      }
+    return n;
+  }
+  // the core's values of channel ch's subband b as they may be (jc: the subframe's, each subband's
+  // found once): jx_core_values()'s (jc_lat), else jx_core_vqs()'s; how many (into *y)
+  S64 jc_y[NCH][NSUB][JV_N][NSMP];
+  S8 jc_n[NCH][NSUB], jc_lat[NCH][NSUB];
+  U32 jc_sf[NCH][NSUB];
+  U32 jc_key;  // (the subframe's: jc_sf's where they are this one's)
+  int jx_core_cands(const CoreRec& r, int ch, int b, S64 (**y)[NSMP]) {
+    *y = jc_y[ch][b];
+    if (jc_sf[ch][b] == jc_key) return jc_n[ch][b];
+    jc_sf[ch][b] = jc_key;
+    jc_lat[ch][b] = jx_core_values(r, ch, b, jc_y[ch][b][0]);
+    jc_n[ch][b] = (S8)(jc_lat[ch][b] ? 1 : jx_core_vqs(r, ch, b, jc_y[ch][b]));
+    return jc_n[ch][b];
+  }
+  // Whether the core's values of channel ch's subband b, the decode less X96's (jx_core_cands()),
   // lie exactly on a lattice of the core's last ABITS there, at a scale factor within JC_WC of its
-  // last, as they are (a subband that doesn't predict: 1); -1 where they aren't known
+  // last, as they are (a subband that doesn't predict: 1; X96's vectors', any of theirs: `96-24.dts`'s
+  // core 0.4% smaller); -1 where they aren't known
   int jx_core_plain(const CoreRec& r, int ch, int b) {
-    S64 y[NSMP];
-    if (!jx_core_values(r, ch, b, y)) return -1;
+    S64(*ys)[NSMP];
+    const int nc = jx_core_cands(r, ch, b, &ys);
     const int n = B::nsmp, a = B::hist.abits[ch][b] - 1, si = B::hist.scale[ch][b] - 1;
-    if (a < 1 || si < 0) return -1;
+    if (!nc || a < 1 || si < 0) return -1;
     S64 lo, hi;
     quant_range(r, ch, a, lo, hi);
-    S32 yi[NSMP];
-    bool any = false;
-    for (int j = 0; j < n; j++) yi[j] = (S32)((y[j] + ((S64)1 << (AQ_F - 1))) >> AQ_F), any |= yi[j] != 0;
-    if (!any) return 1;
-    for (int i = imax(0, si - JC_WC); i <= imin(sf_entries(r.shuff[ch]) - 1, si + JC_WC); i++)
-      if (jx_on_lattice(yi, n, step_for(r, ch, a, i), lo, hi)) return 1;
+    for (int c = 0; c < nc; c++) {
+      S32 yi[NSMP];
+      bool any = false;
+      for (int j = 0; j < n; j++) yi[j] = (S32)((ys[c][j] + ((S64)1 << (AQ_F - 1))) >> AQ_F), any |= yi[j] != 0;
+      if (!any) return 1;
+      for (int i = imax(0, si - JC_WC); i <= imin(sf_entries(r.shuff[ch]) - 1, si + JC_WC); i++)
+        if (jx_on_lattice(yi, n, step_for(r, ch, a, i), lo, hi)) return 1;
+    }
     return 0;
   }
   // whether the values x (n) are each exactly an index's at step and scale st (in lo..hi)
@@ -337,26 +387,28 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     return true;
   }
   // The core's scale factor of channel ch's subband b (its ABITS and predictor coded) where the
-  // core's values are known (jx_core_values()): the first whose lattice they lie on exactly, less
-  // the decoder's prediction; -1 none (or where they are all predicted, saying no scale factor)
+  // core's values are known (jx_core_cands()): the first whose lattice they lie on exactly, less
+  // the decoder's prediction (X96's vectors': of the first of them one fits, `96-24.dts`'s core 0.6%
+  // smaller); -1 none (or where they are all predicted, saying no scale factor)
   int jx_core_scale(const CoreRec& r, const CoreSub& s, int ch, int b) {
-    S64 y[NSMP];
-    if (!jx_core_values(r, ch, b, y)) return -1;
-    const int n = B::nsmp, a = s.abits[ch][b], nt = sf_entries(r.shuff[ch]);
+    S64(*ys)[NSMP];
+    const int nc = jx_core_cands(r, ch, b, &ys), n = B::nsmp, a = s.abits[ch][b], nt = sf_entries(r.shuff[ch]);
     S64 lo, hi;
     quant_range(r, ch, a, lo, hi);
-    S32 x[NSMP], h[4];
-    memcpy(h, B::yh[ch][b], sizeof h);
-    bool any = false;
-    for (int j = 0; j < n; j++) {
-      const S32 yi = (S32)((y[j] + ((S64)1 << (AQ_F - 1))) >> AQ_F);
-      x[j] = yi - (s.pmode[ch][b] ? adpcm_pred(s.pvq[ch][b], h) : 0);
-      h[3] = h[2], h[2] = h[1], h[1] = h[0], h[0] = yi;
-      any |= x[j] != 0;
+    for (int c = 0; c < nc; c++) {  // (X96's vectors': the first whose values a scale factor's lattice fits)
+      S32 x[NSMP], h[4];
+      memcpy(h, B::yh[ch][b], sizeof h);
+      bool any = false;
+      for (int j = 0; j < n; j++) {
+        const S32 yi = (S32)((ys[c][j] + ((S64)1 << (AQ_F - 1))) >> AQ_F);
+        x[j] = yi - (s.pmode[ch][b] ? adpcm_pred(s.pvq[ch][b], h) : 0);
+        h[3] = h[2], h[2] = h[1], h[1] = h[0], h[0] = yi;
+        any |= x[j] != 0;
+      }
+      if (!any) continue;
+      for (int i = 0; i < nt; i++)
+        if (jx_on_lattice(x, n, step_for(r, ch, a, i), lo, hi)) return i;
     }
-    if (!any) return -1;
-    for (int i = 0; i < nt; i++)
-      if (jx_on_lattice(x, n, step_for(r, ch, a, i), lo, hi)) return i;
     return -1;
   }
   // Whether X96's decode of channel ch's subband b is, as it is, a vector of the code book's at a
@@ -380,19 +432,26 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     }
     return 0;
   }
-  // Channel ch's subband b's ADPCM predictor v where jx_core_values() said the core's values y: by
-  // their own LPC, the first of jx_core_fit()'s 1024 first (code_pvq2())
-  S64 code_pvq_core(const CoreRec& r, int ch, int b, const S64* y, S64 v) {
-    const int n = B::nsmp;
-    S64 x[4 + NSMP], al[4];
-    int g, g4;
-    for (int k = 0; k < 4; k++) x[3 - k] = shl64(B::yh[ch][b][k], AQ_F);
-    for (int j = 0; j < n; j++) x[4 + j] = y[j];
-    lpc4(x, 4 + n, al, &g, &g4);
-    S64* const d = B::pvqd;
-    pvq_dists(al, d);
-    return B::code_pvq2(al, d, jx_core_fit(r, ch, b, y, d, 1024), (int)v, ch, b, g, B::lrank[ch][b][VK_PVQ],
-                        B::lrank[ch][b][VK_PVE]);
+  // Channel ch's subband b's ADPCM predictor v where jx_core_cands() says the core's values: by
+  // their own LPC, the first of jx_core_fit()'s 1024 first (code_pvq2()); X96's vectors', the first
+  // values that one fits (`96-24.dts`'s core 3.6% smaller), or false where none does (*v as it was)
+  bool code_pvq_core(const CoreRec& r, int ch, int b, S64& v) {
+    S64(*ys)[NSMP];
+    const int nc = jx_core_cands(r, ch, b, &ys), n = B::nsmp;
+    for (int c = 0; c < nc; c++) {
+      S64 x[4 + NSMP], al[4];
+      int g, g4;
+      for (int k = 0; k < 4; k++) x[3 - k] = shl64(B::yh[ch][b][k], AQ_F);
+      for (int j = 0; j < n; j++) x[4 + j] = ys[c][j];
+      lpc4(x, 4 + n, al, &g, &g4);
+      S64* const d = B::pvqd;
+      pvq_dists(al, d);
+      const int fit = jx_core_fit(r, ch, b, ys[c], d, 1024);
+      if (fit < 0 && !jc_lat[ch][b]) continue;
+      v = B::code_pvq2(al, d, fit, (int)v, ch, b, g, B::lrank[ch][b][VK_PVQ], B::lrank[ch][b][VK_PVE]);
+      return true;
+    }
+    return false;
   }
 
   // how the encoder would gain by predicting channel ch's subband b (as ModelSmp's pmode_gain())

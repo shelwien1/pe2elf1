@@ -192,9 +192,8 @@ struct Model : ModelX96<f_DEC, LV> {
         // subband 31's 99.4% the first where X96 has its lattice there, its core 10.2% smaller; else
         // against the last one where it has been right more often than the search's first: 2.0%)
         const bool lw = bound[ch] && B::jx_low(b);
-        S64 yc[NSMP];
-        if (lw && B::ss_rule() && B::jx_core_values(r, ch, b, yc)) {
-          v = B::code_pvq_core(r, ch, b, yc, v);
+        if (lw && B::ss_rule() && B::code_pvq_core(r, ch, b, v)) {
+          if (!B::jc_lat[ch][b]) B::pv_nofit();  // (X96's vectors': as where none fits, as they were)
           break;
         }
         int pa = -1;
@@ -552,6 +551,7 @@ struct Model : ModelX96<f_DEC, LV> {
   }
   void subframe(const CoreRec& r, int sf) {
     cur_sf = sf;
+    B::jc_key++;
     B::sst = 0;
     if (r.xpass == 2) B::x96_subframe(r, sf);
     else B::smp_subframe(r, sf);

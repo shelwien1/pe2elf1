@@ -182,6 +182,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   U32 pv_n, pv_none;        // (code_pvq(): the predictors tried, those of which none fit)
   // (one where none is tried: X96 codes the subband too, where none would fit; a 96/24 stream's
   // other subbands fit seldom past the first 4, and trying more there takes long for little)
+  // (code_pvq()'s predictors tried where few fit: `96-24.dts`'s core 1.0% smaller than by 4, about
+  // 3% slower)
+  static constexpr int PV_KLOW = 32;
   void pv_nofit() {
     pv_none++;
     if (++pv_n >= 1u << 16) pv_n >>= 1, pv_none >>= 1;
@@ -1086,7 +1089,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     S128 flim = 0;
     if (ss_rule()) {
       for (int q = 0; q < 4096; q++) cand[q].k = d[q], cand[q].i = q;
-      const int K = pv_none * 4 > pv_n ? 4 : 1024;  // (fewer where few fit: a 96/24 stream's core's)
+      // (fewer, PV_KLOW, where few of the first 4 fit: a 96/24 stream's core's; there, whether few
+      // do goes by the first 4 however many are tried)
+      const int K = pv_none * 4 > pv_n ? PV_KLOW : 1024, kn = K < 1024 ? 4 : K;
       // (the order's first K: the K-th by selection, those up to it on a heap, taken in order)
       int nk = 0, hn;
       int* const top = pvtop;
@@ -1148,7 +1153,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           flim = (S128)((double)fd * (double)fq.ss * (double)fq.ss / 268435456.0 * (1 + 1e-9)) + 1;
           continue;
         }
-        pv_none += k == nk - 1;
+        pv_none += k == imin(nk, kn) - 1;
       }
       if (++pv_n >= 1u << 16) pv_n >>= 1, pv_none >>= 1;
     }
