@@ -42,6 +42,19 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
   // prediction, VQ vector, joint scale factor (+ 129), energy
   S32 hpm[NCH][NB], hpv[NCH][NB], hab[NCH][NB], hsc[NCH][NB], hps[NCH][NB], hvq[NCH][NB], hjs[NCH][NB], hen[NCH][NB];
   S32 jem[NCH][NB];  // and the joint scale factor's running mean (in 256ths; each new one 1/8 of it)
+  // A subband without bits is the decoder's noise: FFmpeg's, its generator's draws times the scale
+  // factor (FFmpeg's rand_x96(): a linear congruential generator from 1 at the decoder's start, each
+  // subframe's subbands without bits drawing their samples in turn, where the scale factor is above
+  // 1), so where that is the decoder, the scale factor is the entry whose draws lie nearest the
+  // audio's values (`96-24.dts`'s 99.7% of those). The generator's state xor 1 (its seed at 0), and
+  // within the subframe at the next subband; how often the rule before was right, and the noise's
+  // (where they differ), the noise's taken where it has been right more often, by a margin
+  U32 lcg_, lcg_run;
+  U32 lcg_r[2];
+  static S32 lcg_next(U32& st) {
+    st = 1103515245u * st + 12345u;
+    return (S32)(st & 0x7fffffff) - 0x40000000;
+  }
   U64 n_smp9, n_hit9, n_sf9, n_sfhit9;  // (-s: X96's samples and scale factors, those the audio predicted)
   // how often x96_scale()'s rules were the stream's, by the subband's kind (halved as they grow);
   // the search's tries (to 2048)
@@ -57,6 +70,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
   // the core's decoded samples below band 32; their LPC, autocorrelation, energy and how it goes
   void x96_subframe(const CoreRec& r, int sf) {
     const CoreSub& cs = r.sub[sf];
+    lcg_run = lcg_;
     fb9 = r.nblk;
     B::sst = 0;
     nsmp9 = cs.nssc * 8;
@@ -309,13 +323,47 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
   }
   bool x96_search_on(int k) const { return ss9_n < 2048 || x96_rule(k) || !(n_sf9 & 63); }
 
+  // The entry whose noise, from the generator's state st (xor 1), lies nearest channel ch's subband
+  // b's values in the subframe (*sure: where its distance is under a unit a value and a quarter of
+  // the next's)
+  int x96_noise_scale(U32 st, int ch, int b, int* sure) const {
+    S32 rv[NSMP];
+    st ^= 1;
+    for (int j = 0; j < nsmp9; j++) rv[j] = lcg_next(st);
+    int bi = -1;
+    S128 be = 0, e2 = -1;
+    for (int i = 0; i < SF6_N; i++) {
+      S128 e = 0;
+      for (int j = 0; j < nsmp9; j++) {
+        const S64 y = SF6[i] > 1 ? ((S64)rv[j] * (S32)SF6[i] + ((S64)1 << 30)) >> 31 : 0;  // (FFmpeg's mul31())
+        const S64 d = X9[ch][b][j] - shl64(y, AQ_F);
+        e += (S128)d * d;
+      }
+      if (bi < 0 || e < be) e2 = bi < 0 ? -1 : be, be = e, bi = i;
+      else if (e2 < 0 || e < e2) e2 = e;
+    }
+    *sure = be < (S128)nsmp9 << (2 * AQ_F) && (e2 < 0 || 4 * be < e2);
+    return bi;
+  }
   // Channel ch's subband b's scale factor v (0-63): against the one the audio makes, where the
   // channel is bound, else the last. By the subband's kind (k: its bits, its VQ, neither) the rules,
   // the one that has been right more often: the RMS rule (as the core's); the kind's own, a decoded
   // WAV's (where the subband has no bits, 2.1 times the peak: the decoder's noise is uniform to half
   // the scale factor; VQ'd, 1.4 times the RMS); the scale factor search (x96_search(): a decoded
-  // WAV's too, where the subband has bits or a VQ vector; where it isn't sure, the rule before's)
+  // WAV's too, where the subband has bits or a VQ vector; where it isn't sure, the rule before's);
+  // and where the subband has no bits, FFmpeg's noise (x96_noise_scale(), where it is sure), where
+  // that has been right more often than the rest, by a margin (`96-24.dts`'s core 3.7% smaller).
+  // Then the noise's draws, where the subband has no bits and the scale factor is above 1
   S64 x96_scale(const CoreRec& r, const X96Sub& s, int ch, int b, S64 v) {
+    v = x96_scale0(r, s, ch, b, v);
+    if (s.abits[ch][b] == 0 && (r.x96shuff[ch] == 6 ? SF7[v & 127] : SF6[v & 63]) > 1) {  // (the noise's draws)
+      U32 st = lcg_run ^ 1;
+      for (int j = 0; j < nsmp9; j++) lcg_next(st);
+      lcg_run = st ^ 1;
+    }
+    return v;
+  }
+  S64 x96_scale0(const CoreRec& r, const X96Sub& s, int ch, int b, S64 v) {
     const int ba = s.abits[ch][b], k = ba >= 2 ? 0 : ba == 1 ? 1 : 2;
     M_scl_v D;
     tcx X_;
@@ -347,6 +395,13 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
         }
       }
     }
+    int pl = -1, sure = 0;
+    if (bd9[ch] && k == 2 && r.x96shuff[ch] != 6) {
+      pl = x96_noise_scale(lcg_run, ch, b, &sure);
+      if (!sure) pl = -1;
+    }
+    const int pr = p;
+    if (pl >= 0 && B::jx_more(lcg_r, 4, 1)) p = pl, near = SB_N - 1;
     const S32 A = hsc[ch][b], P = hps[ch][b];
     D.dp = p >= 0 ? sf_dup(SF6, SF6_N, p) : 0;
     D.kd = ba >= 2 ? 0 : 2;
@@ -370,6 +425,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
       if (A && this->f_scl.bit(CN_SAME, ENC && v == A - 1)) v = A - 1;
       else v = checked((A ? A - 1 : 0) + this->f_scl.codes(X_, ENC ? v - (A ? A - 1 : 0) : 0, (u32)D.kd), 0, 63);
     }
+    if (pl >= 0) B::jx_tally(lcg_r, v, pr >= 0 ? pr : A - 1, pl);
     psc9[ch][b] = p + 1;
     n_sf9++;
     if (p0 >= 0) {
@@ -427,6 +483,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
   // samples; its values as the last ones
   void x96_subframe_end(const CoreRec& r, int sf) {
     const X96Sub& s = r.xs[sf];
+    lcg_ = lcg_run;
     if (B::x96a) {  // (X96's steps against the core's where it codes the core's subbands too: jx_search())
       B::jx_lo = r.x96start;
       for (int ch = 0; ch < r.npchs; ch++)

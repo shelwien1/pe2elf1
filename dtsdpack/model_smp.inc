@@ -1459,18 +1459,22 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         p = pb;
       }
     }
-    // (where X96 codes the subband too, a scale factor alone in its subframe: of the prediction, the
-    // one above it and the one below, the first whose step the fit finds (jx_try(); X96's vectors
-    // tried only where it had them the last time), where that has been right more often than the
-    // prediction, by a margin: `96-24.dts`'s scale factors 93.4% the audio's from 89.5%, its core
-    // 4.3% smaller, 20% slower)
+    // (where X96 codes the subband too, a scale factor alone in its subframe: of the prediction and
+    // the 2 either side of it, the first whose step the fit finds, by their distance from it (jx_try();
+    // X96's vectors tried only where it had them the last time), or where the core has little of the
+    // decode's values, which say little of the scale factor, of the last one and the 8 either side of
+    // it; where that has been right more often than the prediction, by a margin: `96-24.dts`'s scale
+    // factors 98.1% the audio's from 89.5%, its core 10.5% smaller (5.8% of that the last ones'), 26%
+    // slower)
     int pj = -1;
     if (bound[ch] && x96a && b >= jx_lo && !hfb && !tm && s.abits[ch][b] && p >= 0 && (jx_hn[b] | jx_hvn[b])) {
       const int a = s.abits[ch][b], nt = sf_entries(r.shuff[ch]);
       S64 lo, hi;
       quant_range(r, ch, a, lo, hi);
-      for (int o = 0; o < 3 && pj < 0; o++) {
-        const int i = p + (o == 1 ? 1 : o == 2 ? -1 : 0);
+      const bool lg = jx_low(b) && hist.scale[ch][b];
+      const int c0 = lg ? hist.scale[ch][b] - 1 : p, no = lg ? 17 : 5;
+      for (int o = 0; o < no && pj < 0; o++) {
+        const int i = c0 + (o & 1 ? (o + 1) / 2 : -(o / 2));
         const S64 st = i >= 0 && i < nt ? step_for(r, ch, a, i) : 0;
         if (st <= 0) continue;
         S64 ss[NSMP];
