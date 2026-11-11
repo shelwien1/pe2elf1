@@ -97,8 +97,8 @@ Compressing the whole of `s.2.dts`'s core takes 29 seconds (1.7 MB of core a sec
 memory, decompressing it 30 seconds and 43 MB, on one thread of a 2.1 GHz Xeon. The rows were all
 in the tuning sets (below; the whole of `s.2.dts` since the HF VQ groups' scores were learned), and
 `s.2.dts` in what the HF VQ groups' scores and the ADPCM predictors' codewords were learned from.
-A 96 kHz stream's 64-band analysis costs more: `96-24.dts`'s core (1.9 MB) compresses in 5.0 seconds
-and decompresses in 5.3. The decoded WAVs' searches cost too; every stream below goes at about 500
+A 96 kHz stream's 64-band analysis costs more: `96-24.dts`'s core (1.9 MB) compresses in 5.1 seconds
+and decompresses in 5.4. The decoded WAVs' searches cost too; every stream below goes at about 500
 KB of core a second or more both ways, the 7-frame samples (7 KB, 9-21 ms each way, a third of that
 the kernel mapping the pages they touch) at 330 KB a second or more: the searches run on every value
 of a stream's first 2048 (the bit allocation search's first 512), which is all of theirs.
@@ -107,12 +107,12 @@ FFmpeg's small DTS-HD MA samples (`xll_*`, 7 frames each) round-trip too:
 
 | Sample | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `xll_51_24_48_768` | 7168 | 553 (7.71%) | the WAV's 5.1 |
+| `xll_51_24_48_768` | 7168 | 530 (7.39%) | the WAV's 5.1 |
 | `xll_71_24_48_768_0` | 7168 | 449 (6.26%) | a downmix of its 7.1: every channel at -3 dB, each surround its side and rear surround |
-| `xll_71_24_48_768_1` | 7168 | 497 (6.93%) | the same, the rear surrounds' sign inverted |
+| `xll_71_24_48_768_1` | 7168 | 471 (6.57%) | the same, the rear surrounds' sign inverted |
 | `xll_xch_61_24_48_768` | 7168 | 937 (13.07%) | its 6.1's 5.1, the back centre in the surrounds at about -3 dB; and in the XCH extension, the back centre |
-| `xll_71_24_96_768` | 7168 | 391 (5.45%) | the 96 kHz WAV's 64-band analysis's lower half, a downmix as the 48 kHz one's |
-| `xll_51_16_192_768_1` | 7168 | 1712 (23.88%) | the 64-band analysis's lower half of the 192 kHz WAV decimated by 2, about |
+| `xll_71_24_96_768` | 7168 | 390 (5.44%) | the 96 kHz WAV's 64-band analysis's lower half, a downmix as the 48 kHz one's |
+| `xll_51_16_192_768_1` | 7168 | 1688 (23.55%) | the 64-band analysis's lower half of the 192 kHz WAV decimated by 2, about |
 | `xll_51_16_192_768_0` | 7168 | 1687 (23.54%) | the same (the same WAV, another core) |
 
 Before the downmixes were found, the 7.1 and 6.1 ones went to 36-38%: only 3 of their core's
@@ -137,9 +137,9 @@ allocations in):
 
 | Stream | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 29895 (1.58%) | the 96 kHz decode's 64-band analysis's lower half (99.79% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
-| `Master Audio 5.0 96khz.dts` | 1768548 | 4482 (0.25%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
-| `Master Audio 7.1.dts` | 1945604 | 6961 (0.36%) | a downmix of its 7.1 |
+| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 29632 (1.57%) | the 96 kHz decode's 64-band analysis's lower half (99.79% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
+| `Master Audio 5.0 96khz.dts` | 1768548 | 4445 (0.25%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
+| `Master Audio 7.1.dts` | 1945604 | 6960 (0.36%) | a downmix of its 7.1 |
 | `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 4760 (0.17%) | its 3.1 |
 | `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 4245 (0.08%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
 | FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 2008 (0.40%) | the same (1.95%) |
@@ -161,7 +161,7 @@ their decodes clip too (0.3-1.2% of the samples):
 
 | Stream | Core | dtsdpack |
 |---|---:|---:|
-| `core_51_24_48_768_0`, `_1` (5.1) | 7168 | 2068 (28.85%), 2094 (29.21%) |
+| `core_51_24_48_768_0`, `_1` (5.1) | 7168 | 2068 (28.85%), 2071 (28.89%) |
 | `xch_61_24_48_768` (6.1 by XCH) | 7168 | 2093 (29.20%) |
 | `x96_51_24_96_1509` (X96) | 14084 | 3550 (25.21%) |
 | `x96_xch_61_24_96_3840` | 14084 | 2884 (20.48%) |
@@ -217,7 +217,11 @@ end (`Master Audio 7.1.dts`'s sit 24 or 28 bytes from it: 3.8% smaller). Even so
 bits cost a bit or two, more where the fill's size changes. So a tail of 8 bytes or more the same as
 one of the last 32 of its kind and size that weren't all 0 (the auxiliary data's are a few, one by
 the fill's size) is that one, coded as which, the last first (`Master Audio 7.1.dts` 4.0% smaller,
-`Master Audio 5.0 96khz.dts` 2.0%). `ES 6.1 16bit.dts`'s encoder leaves the bits before the XCH sync
+`Master Audio 5.0 96khz.dts` 2.0%). Where the fill's size changes, the tail is offered as each of
+the last 2 with one of its first 4 runs of 0s longer or shorter by their sizes' difference, a flag
+each (a field of their own; after a stream's first 4 tries, only while that has been the tail in an
+eighth of them): the 7-frame `xll` samples up to 5.2% smaller, `Master Audio 5.0 96khz.dts` 0.8%,
+FATE's `core_51_24_48_768_1` 1.1%. `ES 6.1 16bit.dts`'s encoder leaves the bits before the XCH sync
 word as an earlier frame had them at the same place: those words are what its frame buffers held (of
 a ring of 8: 850 of its 2600 frames' are what one of the 8 frames before has there, 568 of them the
 frame 8 before; another 316 a copy of the XCH data started a few bytes early), and the bits before
@@ -650,7 +654,11 @@ predictor is the first of the 1024 nearest its LPC whose prediction, the decoder
 own last 4 values (the model's history of the decoder's isn't it after a subband of FFmpeg's noise),
 leaves each of the decode's values exactly a vector of the code book at a scale factor within 6 of
 X96's last there, or on the lattice of its last ABITS at one, put first (`96-24.dts`'s X96
-predictors 1078 bytes to 483, its core 1.6% smaller). Where the decode is, as it is, such a vector
+predictors 1078 bytes to 483, its core 1.6% smaller). Where several fit (X96's values a few small
+ones), the first 32 that do go first, in turn; and where none does and its last scale factor was
+within 6 of 0, those whose prediction leaves a vector at scale factor 0 (each of the entry's values
+over 16, rounded), which the table leaves out: X96's predictors 487 bytes to 233, its core 0.9%
+smaller, 1.3% slower. Where the decode is, as it is, such a vector
 or on such a lattice, X96's PMODE goes as the core's whose values fit one (0.2%). X96's code books
 (each channel's for its scale factors, its bit allocations and its quantization indexes, in its
 header; and each subframe's for its joint scale factors) are, in every one of `96-24.dts`'s frames
@@ -796,7 +804,7 @@ files.
 
 ### The format
 
-"dtsdpack", the format's version (51), the level, the WAV's binding (the offset; each core channel's
+"dtsdpack", the format's version (52), the level, the WAV's binding (the offset; each core channel's
 WAV channel, the second of its mix and their gains, Q23; the LFE's channel; the WAV's samples to
 the core's, 1, 2 or 4 (decimated by 2, then 2); the WAV's format, size and the CRC-32 of its first
 64 KB), then the

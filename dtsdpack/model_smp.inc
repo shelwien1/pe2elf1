@@ -1107,7 +1107,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // block's rank (by the codewords, or by each one's nearest entry: pv_nearest()) and its rank in
   // the block (by d); fit, where >= 0, first in both (a decoded WAV's: code_pvq()); gn vqr's, the
   // subband's last ranks of the two lb, le. The rule's tallies kept.
-  int code_pvq2(const S64* alpha, const S64* d, int fit, int v, int ch, int b, int gn, U8& lb, U8& le) {
+  int code_pvq2(const S64* alpha, const S64* d, int fit, int v, int ch, int b, int gn, U8& lb, U8& le, const int* more = nullptr,
+                int nmore = 0) {
     const bool nr = pv_nearest();
     int g0 = 0, q0 = 0;  // (the two stages' first, the nearest of all)
     S64 bd = -1;
@@ -1121,11 +1122,19 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (bd < 0 || x < bd) bd = x, g0 = k;
       cand[k].k = nr ? m : x, cand[k].i = k;
     }
-    if (fit >= 0) cand[fit >> 6].k = -1;
+    // (more: other fits after it, each first after those before it)
+    const int nf = fit >= 0 ? 1 + nmore : 0;
+    for (int i = 0; i < nf; i++) {
+      const int q = i ? more[i - 1] : fit;
+      if (cand[q >> 6].k > -(S64)(nf - i)) cand[q >> 6].k = -(S64)(nf - i);
+    }
     const S64 h0 = n_vqhit[VK_PVQ] + n_vqhit[VK_PVE];
     const int g = code_cand(64, 6, ENC ? v >> 6 : 0, VK_PVQ, ch, b, gn, lb);
     for (int i = 0; i < 64; i++) cand[i].k = d[g * 64 + i], cand[i].i = i;
-    if (fit >= 0 && fit >> 6 == g) cand[fit & 63].k = -1;
+    for (int i = 0; i < nf; i++) {
+      const int q = i ? more[i - 1] : fit;
+      if (q >> 6 == g && cand[q & 63].k > -(S64)(nf - i)) cand[q & 63].k = -(S64)(nf - i);
+    }
     v = g * 64 + code_cand(64, 6, ENC ? v & 63 : 0, VK_PVE, ch, b, gn, le);
     n_pv++;
     n_pvhit += (S64)(n_vqhit[VK_PVQ] + n_vqhit[VK_PVE]) == h0 + 2;

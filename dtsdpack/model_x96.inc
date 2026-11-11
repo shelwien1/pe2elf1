@@ -184,6 +184,36 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     }
     return -1;
   }
+  // the same, up to nmax of them (into out, in turn), looking at most `after` past the first: how many
+  template <class F>
+  int pv_fits(const S64* d, int K, F fits, int* out, int nmax, int after) {
+    int* const top = B::pvtop;
+    auto less = [&](int p, int q) { return d[p] < d[q] || (d[p] == d[q] && p < q); };
+    auto sift = [&](int i, int m) {
+      const int t = top[i];
+      for (;;) {
+        const int l = 2 * i + 1;
+        if (l >= m) break;
+        const int c = l + 1 < m && less(top[l + 1], top[l]) ? l + 1 : l;
+        if (!less(top[c], t)) break;
+        top[i] = top[c], i = c;
+      }
+      top[i] = t;
+    };
+    for (int q = 0; q < 4096; q++) top[q] = q;
+    for (int i = 4096 / 2 - 1; i >= 0; i--) sift(i, 4096);
+    int n = 0, stop = K;
+    for (int k = 0, hn = 4096; k < stop; k++) {
+      const int qk = top[0];
+      top[0] = top[--hn];
+      sift(0, hn);
+      if (!fits(qk)) continue;
+      out[n++] = qk;
+      if (n == nmax) break;
+      if (n == 1) stop = imin(K, k + 1 + after);
+    }
+    return n;
+  }
   // The first ADPCM predictor of the K nearest by d (the core's values' own LPC's distances) whose
   // prediction, the decoder's from its last 4 samples and the values y (each to its nearest unit),
   // leaves every value exactly on a lattice of the core's last ABITS there, at a scale factor within
@@ -267,17 +297,18 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
       return false;
     }
   };
-  // X96's ADPCM predictor in channel ch's subband b, a decoded WAV's: the first of the K nearest by
-  // d (its LPC's) whose prediction, the decoder's from the decode's own last 4 values (its history,
+  // X96's ADPCM predictor in channel ch's subband b, a decoded WAV's: those of the K nearest by d
+  // (its LPC's) whose prediction, the decoder's from the decode's own last 4 values (its history,
   // yh9, isn't the decoder's after a subband of FFmpeg's noise), leaves every one of the decode's
   // values (to the nearest unit) exactly a vector of the code book's at a scale factor within XP_W of
   // its last there (VqMade's), or on the lattice of its last ABITS, where a quantizer's, at those
-  // scale factors; -1 none
+  // scale factors: to XF_N of them, in turn, into fl; how many
   static constexpr int XP_W = 6;
-  int x96_pvq_fit(const CoreRec& r, int ch, int b, const S64* d, int K) {
+  static constexpr int XF_N = 32, XF_AFTER = 1024;
+  int x96_pvq_fit(const CoreRec& r, int ch, int b, const S64* d, int K, int* fl) {
     static const VqMade vm;
     const int n = nsmp9, i9 = hsc[ch][b] - 1, a9 = hab[ch][b] - 1;
-    if (i9 < 0 || n != 16) return -1;
+    if (i9 < 0 || n != 16) return 0;
     const S64 half = (S64)1 << (AQ_F - 1);
     S32 yi[NSMP], h0[4];
     for (int j = 0; j < n; j++) yi[j] = (S32)((X9[ch][b][j] + half) >> AQ_F);
@@ -290,7 +321,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
       x96_range(r, ch, a9 - 1, lo, hi);
       for (int t = 0; t < ni; t++) ss[nl++] = (S64)LOSSY_QUANT[a9 - 1] * SF6[si[t]];
     }
-    return pv_first_fit(d, K, [&](int qk) {
+    const int f = pv_fits(d, K, [&](int qk) {
       S32 x[NSMP], h[4] = {h0[0], h0[1], h0[2], h0[3]};
       for (int j = 0; j < n; j++) {
         x[j] = yi[j] - adpcm_pred(qk, h);
@@ -306,8 +337,47 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
         if (j == n) return true;
       }
       return false;
-    });
+    }, fl, XF_N, XF_AFTER);
+    // (else, where the last scale factor was within XP_W of 0, those whose prediction leaves the
+    // values a vector at scale factor 0, whose vectors are a few small ones (FFmpeg's: each value of
+    // the entry, times 1, over 16, rounded), which VqMade leaves out: `96-24.dts`'s 169 predictors
+    // at 0 all such, 69 the first of them; its core 0.1% smaller)
+    if (f || i9 > XP_W) return f;
+    static const VqZero vz;
+    return pv_fits(d, K, [&](int qk) {
+      S32 x[NSMP], h[4] = {h0[0], h0[1], h0[2], h0[3]};
+      for (int j = 0; j < n; j++) {
+        x[j] = yi[j] - adpcm_pred(qk, h);
+        h[3] = h[2], h[2] = h[1], h[1] = h[0], h[0] = yi[j];
+      }
+      return vz.made(x);
+    }, fl, XF_N, XF_AFTER);
   }
+  // the vectors of the code book at scale factor 0, a hash of each (VqMade's, of its distinct ones)
+  struct VqZero {
+    static constexpr int NB = 1 << 12;
+    S32 v[1024][16], head[NB], next[1024];
+    U32 hh[1024];
+    int n;
+    VqZero() : n(0) {
+      for (int b = 0; b < NB; b++) head[b] = -1;
+      for (int k = 0; k < 1024; k++) {
+        S32 z[16];
+        for (int j = 0; j < 16; j++) z[j] = (S32)((HF_VQ[k][j] * (S64)SF6[0] + 8) >> 4);
+        if (made(z)) continue;
+        memcpy(v[n], z, sizeof z);
+        hh[n] = VqMade::hash(z);
+        next[n] = head[hh[n] & (NB - 1)], head[hh[n] & (NB - 1)] = n;
+        n++;
+      }
+    }
+    bool made(const S32* z) const {
+      const U32 h = VqMade::hash(z);
+      for (int m = head[h & (NB - 1)]; m >= 0; m = next[m])
+        if (hh[m] == h && !memcmp(v[m], z, sizeof v[m])) return true;
+      return false;
+    }
+  };
   // Where X96 codes the subband by its vectors instead, the decode less a vector of the code book's
   // at a scale factor within JV_W of X96's last there, as its decoder makes them (FFmpeg's), where
   // every value left is within 4 of the core's last units of 0: those of each (into y, the nearest
@@ -483,9 +553,13 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
           pvq_dists(lpc9[ch][b], d);
           // (a decoded WAV's: the first by its LPC that fits, x96_pvq_fit(), first: `96-24.dts`'s X96
           // predictors 1078 bytes to 483, its core 1.6% smaller)
-          const int fit = B::ss_rule() ? x96_pvq_fit(r, ch, b, d, 1024) : -1;
-          return this->code_pvq2(lpc9[ch][b], d, fit, (int)v, ch, b, lpg9[ch][b], lrank9[ch][b][VK_PVQ],
-                                 lrank9[ch][b][VK_PVE]);
+          // (where several fit, as where X96's values are a few small ones, the first XF_N of them
+          // first, in turn: `96-24.dts`'s X96 predictors 487 bytes to 233 with the fit at scale
+          // factor 0, subband 43's 374 to 157; its core 0.8% smaller, 1.3% slower)
+          int fl[XF_N];
+          const int nf = B::ss_rule() ? x96_pvq_fit(r, ch, b, d, 1024, fl) : 0;
+          return this->code_pvq2(lpc9[ch][b], d, nf ? fl[0] : -1, (int)v, ch, b, lpg9[ch][b], lrank9[ch][b][VK_PVQ],
+                                 lrank9[ch][b][VK_PVE], fl + 1, nf > 1 ? nf - 1 : 0);
         }
         return side_index(SF_PVQ, ch, b, v, 12, hpv[ch][b], 8, 0);
       case F_ABITS: {  // (0 none, 1 VQ, else the quantizer's ABITS + 1: against the audio's energy, as ModelSmp's)

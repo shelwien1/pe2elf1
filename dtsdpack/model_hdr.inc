@@ -182,6 +182,42 @@ struct ModelHdr {
     pfn[i] = n;
     pfk++;
   }
+  // bit i of a tail as code_tail() has them (nbits, ending with its last byte's last bit)
+  static INLINE int tail_bit(const U8* q, int nbits, int i) {
+    const int k = 8 * ((nbits + 7) / 8) - nbits + i;
+    return (q[k >> 3] >> (7 - (k & 7))) & 1;
+  }
+  // a tail of n bits from the one at c (nc bits): its r-th run of 0s (from its first bit) longer by
+  // n - nc (shorter where that is negative, to 1 at least), into out (as code_tail() has them);
+  // false where it has no such run, or it would take more bytes than the cache keeps
+  static bool tail_resized(const U8* c, int nc, int r, int n, U8* out) {
+    const int dn = n - nc, nbo = (n + 7) / 8;
+    if (n <= 0 || nbo > Hist::TC_B) return false;
+    int at = -1, len = 0;
+    for (int i = 0, k = 0; i < nc;) {
+      if (tail_bit(c, nc, i)) {
+        i++;
+        continue;
+      }
+      int j = i;
+      while (j < nc && !tail_bit(c, nc, j)) j++;
+      if (k++ == r) {
+        at = i, len = j - i;
+        break;
+      }
+      i = j;
+    }
+    if (at < 0 || len + dn < 1) return false;
+    memset(out, 0, (size_t)nbo);
+    const int so = 8 * nbo - n;
+    for (int i = 0; i < nc; i++) {
+      if (i >= at && i < at + len) continue;
+      const int k = so + (i < at ? i : i + dn);
+      out[k >> 3] |= (U8)(tail_bit(c, nc, i) << (7 - (k & 7)));
+    }
+    return true;
+  }
+  U8 trs[Hist::TC_B];  // (code_tail()'s: a cached tail resized)
   // the nbits bits of b at bit pos, as code_tail() has them (ending with c's last byte)
   static void bits_at(const U8* b, S64 pos, int nbits, U8* c) {
     const int nb = (nbits + 7) / 8, sh = 8 * nb - nbits;
@@ -285,6 +321,33 @@ struct ModelHdr {
         for (int j = 0; j < nb; j++) p[j] = (U8)((q[j] << sh) | (j + 1 < nb && sh ? q[j + 1] >> (8 - sh) : 0));
       return;
     }
+    // (the bits after the subframes, one of the last 2 tails but for one of its first 4 runs of 0s,
+    // longer or shorter by their sizes' difference: a mark, 0s as many as the subframes leave and
+    // the same word at the frame's end, as the 7-frame `xll` samples have them; a flag each where
+    // it makes one, a field of their own)
+    bool tried = false;  // (on a stream's first 4 such tails, then while it has made an eighth of them)
+    for (int k = 0; !kind && cache && nb >= 8 && k < 2 && (hist.trn < 4 || 8 * hist.trh >= hist.trn); k++) {
+      const int nc = hist.tcn[kind][k];
+      if (nc == nbits || nc < 64) continue;
+      for (int rr = 0; rr < 4; rr++) {
+        if (!tail_resized(hist.tcb[kind][k], nc, rr, nbits, trs)) continue;
+        tried = true;
+        if (!hdr_hist(fnums.tailrs, 8 * k + rr, 1, ENC && !memcmp(trs, q, (size_t)nb))) continue;
+        if (!ENC) memcpy(q, trs, (size_t)nb);
+        hist.trn++, hist.trh++;
+        tail_cache_add(kind, nbits, q, nb);
+        int i = 0;
+        while (i < nb && !q[i]) i++;
+        nz = nb - i;
+        memcpy(last, q + nb - nz, (size_t)nz);  // (the state the bytes' coding leaves)
+        lastn = nz;
+        hist.tailsync = a0 >= nb - nz ? a0 - (nb - nz) : -1;
+        if (!ENC)
+          for (int j = 0; j < nb; j++) p[j] = (U8)((q[j] << sh) | (j + 1 < nb && sh ? q[j + 1] >> (8 - sh) : 0));
+        return;
+      }
+    }
+    hist.trn += tried;
     nz = (int)checked(hdr_hist(nf, o, 0xFFFF, nz), 1, nb);
     int tz = 0;  // (and how many of those end it as 0s: a 32-bit word of them, the fill's)
     if (ENC)
