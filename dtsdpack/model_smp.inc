@@ -250,11 +250,14 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   int jx_k[NCH][NSUB], jx_vq[NCH][NSUB][NSMP / 16], jx_vs[NCH][NSUB][NSMP / 16];
   // Some decoded WAVs' bottom subband isn't the core's values there, but a filter of them (as if the
   // decode had been high-passed: `96-24.dts`'s, `ES 6.1 16bit.dts`'s): the decode less the core's
-  // value, as the core's last 16 values, the decode's present one and its last 8 say it (least
-  // squares, LfeFit's: every channel's together, refitted each 64 samples; on `96-24.dts`'s, R^2
-  // 0.97); the decode less the fit's is the audio's value where its index has been the core's more
-  // often than the decode's own, by a margin (b0r: jx_tally()'s)
-  static constexpr int B0_N = 25;
+  // value, as the core's last 16 values, the decode's present one, its last 8 and its next 12 in the
+  // subframe (0 past it) say it (least squares, LfeFit's: every channel's together, refitted each 64
+  // samples; on `96-24.dts`'s, R^2 0.97; the next ones `ES 6.1 16bit.dts`'s core 2.1% smaller,
+  // `96-24.dts`'s 0.3%, 4 of them 0.1%, 16 as 12); the decode less the fit's is the audio's value
+  // where its index has been the core's more often than the decode's own, by a margin (b0r:
+  // jx_tally()'s)
+  static constexpr int B0_F = 12;
+  static constexpr int B0_N = 25 + B0_F;
   LfeFit<B0_N, -1> b0fit;
   S64 b0y[NCH][16], b0w[NCH][8];  // (2^-AQ_F; [0] the last)
   U32 b0r[2], b0n;
@@ -1281,9 +1284,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   int sf_base() const { return sfr[1] > sfr[0] + 64 + sfr[0] / 8 ? 1 : 0; }
   bool ss_rule() const { return sfr[2] > sfr[sf_base()] + 64 + sfr[sf_base()] / 8; }
   bool search_on() const { return ss_n < 2048 || ss_rule() || !(n_sf & 63); }
-  // the same of the bit allocation search, of the ABITS
+  // the same of the bit allocation search, of the ABITS: in its first 512 (the 7-frame samples' the
+  // same, 4-8% faster), and while it has been right clearly more often than the first guess without
+  // it (a lossless WAV's search, which rarely finds one, as often: then it ran on, for nothing, its
+  // streams the same and 7.6% faster)
   bool ab_rule() const { return abr[1] > abr[0] + 32 + abr[0] / 32; }
-  bool ab_search_on() const { return ab_n < 2048 || abr[1] * 4 > abr[0] * 3 || !(n_ab & 63); }
+  bool ab_search_on() const { return ab_n < 512 || abr[1] > abr[0] + 32 + abr[0] / 64 || !(n_ab & 63); }
   bool hf_min_on() const { return hf_n < 2048 || hfr[0] * 8 > hfr[1] || !(n_hfvq & 63); }
 
   // The ABITS a decoded WAV says (the bit allocation search): its values v (n of them, the ADPCM
@@ -1385,7 +1391,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     if (best < 0 || !bnz) return 0;
     const U64 eps = 2 * (U64)n;  // (2^-15 steps squared a value)
-    if (cut == ~0ull && n >= 16 && d1 >= ((U64)n << 10)) {  // (a transient's: two scale factors)
+    if (cut == ~0ull && n >= 16 && d1 >= ((U64)n << 10) && ab_rule()) {  // (a transient's: two scale factors, where
+                                                                             // the search's rule is taken: a lossless
+                                                                             // WAV's fit none)
       const int ns = n / 8;
       U64 bk = ~0ull;
       int ba = -1;
@@ -1399,6 +1407,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         }
       }
       if (ba >= 0 && bk != ~0ull && (d1 + eps) / (bk + eps) >= 4) {
+        ab_tdist = bk;
         const U64 ratio = (d1 + eps) / (bk + eps);
         *conf = imin(bit_len(ratio) - 3, 7);
         *dbest = d1;
@@ -1411,6 +1420,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (ibest) *ibest = pr[best].i;
     return 1 + pr[best].a;
   }
+  U64 ab_tdist;  // (the transient's fit's distance, where abits_search() took one; the caller sets it to ~0)
   // the nearest fit of the values v (m of them) to ABITS a's lattice (its range lo..hi) at a scale
   // factor from 3 below their RMS rule's to 5 above: its distance (norm_dist()'s)
   U64 part_fit(const CoreRec& r, int ch, int a, S64 lo, S64 hi, const S64* v, int m) const {
@@ -1800,6 +1810,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       for (int k = 0; k < 16; k++) f0[k] = b0y[ch][k];
       f0[16] = xv;
       for (int k = 0; k < 8; k++) f0[17 + k] = b0w[ch][k];
+      for (int k = 0; k < B0_F; k++) f0[25 + k] = j + 1 + k < s.nssc * 8 ? X[ch][0][j + 1 + k] : 0;
       const S64 xc = xv - b0fit.predict(f0);
       S128 d;
       S64 o;

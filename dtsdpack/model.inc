@@ -150,8 +150,11 @@ struct Model : ModelX96<f_DEC, LV> {
     switch (fid) {
       case F_PMODE: {  // (against the gain of the predictor the encoder would choose: ec, ab; where the scale
                        // factor search's rule is taken, against how the values fit the lattice the bit
-                       // allocation search finds in them as they are, the context ac: to a 64th of a step
-                       // squared a value 0, to 16 64ths 1, worse 2, none found 3)
+                       // allocation search finds in them as they are, or a transient's two, the nearer, the
+                       // context ac: to a 64th of a step squared a value 0, to 16 64ths 1, worse 2, none
+                       // found 3; a transient's values that fit two lattices don't predict, as those that
+                       // fit one: `ES 6.1 16bit.dts`'s core 4.5% smaller, `open bitrate.dts`'s 9.3%, FATE's
+                       // `dts_es.dts`'s 2.1%)
         account(CAT_SIDE);
         B::abc[ch][b].g = -1;
         int fit = -1;
@@ -161,8 +164,10 @@ struct Model : ModelX96<f_DEC, LV> {
           if (og) {
             auto& k = B::abc[ch][b];
             k.g = og - 1, k.a0 = imax(1, k.g - 4), k.a1 = imin(26, k.g + 4), k.p = e - 1, k.gc = 0, k.gd = ~0ull;
+            B::ab_tdist = ~0ull;
             k.G = B::abits_search(r, ch, B::X[ch][b], n, k.g, k.a0, k.a1, k.p, &k.gc, &k.gd);
-            fit = !k.G ? 3 : k.gd < ((U64)n << 10) ? 0 : k.gd < ((U64)n << 14) ? 1 : 2;
+            const U64 dd = B::ab_tdist < k.gd ? B::ab_tdist : k.gd;
+            fit = !k.G ? 3 : dd < ((U64)n << 10) ? 0 : dd < ((U64)n << 14) ? 1 : 2;
           }
         }
         if (fit >= 0)

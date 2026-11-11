@@ -239,7 +239,12 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
         if (bd && 16 * j < nsmp9) {
           const int si = s.scale[ch][b] & 63, n = imin(16, nsmp9 - 16 * j);
           const S64 sc = SF6[si];
-          const S64* x = &X9[ch][b][16 * j];
+          // (a predicting subband's values less the open loop's prediction, as the scale factor
+          // search's: the decoder adds it to the vector's; `96-24.dts`'s groups 98.2% the first from
+          // 95.0%, its core 1.4% smaller)
+          S64 xp[NSMP];
+          if (s.pmode[ch][b]) x96_values(s, ch, b, xp);
+          const S64* x = s.pmode[ch][b] ? &xp[16 * j] : &X9[ch][b][16 * j];
           // (the groups by their nearest entries where the nearest of all lies within 1/64 of the
           // values' energy, as the core's: a decoded WAV's values are the vector's, `96-24.dts`'s
           // groups 95.0% the first from 86.4%, its core 1.4% smaller; else by their centroids)

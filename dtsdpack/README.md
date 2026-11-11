@@ -97,11 +97,11 @@ Compressing the whole of `s.2.dts`'s core takes 29 seconds (1.7 MB of core a sec
 memory, decompressing it 30 seconds and 43 MB, on one thread of a 2.1 GHz Xeon. The rows were all
 in the tuning sets (below; the whole of `s.2.dts` since the HF VQ groups' scores were learned), and
 `s.2.dts` in what the HF VQ groups' scores and the ADPCM predictors' codewords were learned from.
-A 96 kHz stream's 64-band analysis costs more: `96-24.dts`'s core (1.9 MB) compresses in 4.6 seconds
-and decompresses in 5.0. The decoded WAVs' searches cost too; every stream below goes at about 500
+A 96 kHz stream's 64-band analysis costs more: `96-24.dts`'s core (1.9 MB) compresses in 4.8 seconds
+and decompresses in 5.1. The decoded WAVs' searches cost too; every stream below goes at about 500
 KB of core a second or more both ways, the 7-frame samples (7 KB, 9-21 ms each way, a third of that
 the kernel mapping the pages they touch) at 330 KB a second or more: the searches run on every value
-of a stream's first 2048, which is all of theirs.
+of a stream's first 2048 (the bit allocation search's first 512), which is all of theirs.
 
 FFmpeg's small DTS-HD MA samples (`xll_*`, 7 frames each) round-trip too:
 
@@ -137,13 +137,13 @@ allocations in):
 
 | Stream | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 40920 (2.17%) | the 96 kHz decode's 64-band analysis's lower half (99.77% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
+| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 40059 (2.12%) | the 96 kHz decode's 64-band analysis's lower half (99.77% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
 | `Master Audio 5.0 96khz.dts` | 1768548 | 4497 (0.25%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
 | `Master Audio 7.1.dts` | 1945604 | 6987 (0.36%) | a downmix of its 7.1 |
 | `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 4811 (0.17%) | its 3.1 |
-| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 4611 (0.09%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
-| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 2067 (0.41%) | the same (1.95%) |
-| `open bitrate.dts` (stereo, open rate) | 5242416 | 2850 (0.05%) | decoded (99.99% of the indexes, 99.96% of the scale factors, 99.82% of the bit allocations, 99.99% of the HF VQ groups, 99.82% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
+| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 4309 (0.08%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
+| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 2019 (0.40%) | the same (1.95%) |
+| `open bitrate.dts` (stereo, open rate) | 5242416 | 2587 (0.05%) | decoded (99.99% of the indexes, 99.96% of the scale factors, 99.82% of the bit allocations, 99.99% of the HF VQ groups, 99.82% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
 
 No stream at hand has XXCH in its core substream: FATE's XXCH samples (`xxch_71_24_48_2046`,
 `xbr_xxch_71_24_48_3840`, `x96_xxch_71_24_96_3840`, 7 frames each) have it in their extension
@@ -163,7 +163,7 @@ their decodes clip too (0.3-1.2% of the samples):
 |---|---:|---:|
 | `core_51_24_48_768_0`, `_1` (5.1) | 7168 | 2074 (28.93%), 2098 (29.27%) |
 | `xch_61_24_48_768` (6.1 by XCH) | 7168 | 2091 (29.17%) |
-| `x96_51_24_96_1509` (X96) | 14084 | 3598 (25.55%) |
+| `x96_51_24_96_1509` (X96) | 14084 | 3596 (25.53%) |
 | `x96_xch_61_24_96_3840` | 14084 | 2886 (20.49%) |
 | `xbr_51_24_48_3840`, `xbr_xch_61_24_48_3840` (XBR: its residuals in the decode) | 14084 | 2646 (18.79%), 3618 (25.69%) |
 | `xll_x96_51_24_96_1509` (DTS-HD MA, X96) | 14084 | 1958 (13.90%) |
@@ -254,9 +254,10 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   (`96-24.dts`'s and `ES 6.1 16bit.dts`'s, whose indexes there were the audio's 94.5% and 99.7% of
   the time): the decode less the core's value is fitted, by least squares (the LFE's fit, below:
   every channel's together, refitted each 64 samples), on the core's last 16 values there, the
-  decode's present one and its last 8, and the decode less the fit's is the audio's value where its
-  index has been the core's more often than the decode's own (98.9% and 99.9% of those indexes, the
-  cores 2.3% and 3.4% smaller; a lossless WAV's gains nothing). An index that is neither, the
+  decode's present one, its last 8 and its next 12 in the subframe (0 past it: `ES 6.1 16bit.dts`'s
+  core 2.1% smaller, `96-24.dts`'s 0.3%), and the decode less the fit's is the audio's value where
+  its index has been the core's more often than the decode's own (98.9% and 99.9% of those indexes,
+  the cores 2.3% and 3.4% smaller; a lossless WAV's gains nothing). An index that is neither, the
   audio's 4 or more, is coded by whether it lies within 4 of the audio's, then its side (that one's,
   or the other) and its distance in unary; else as its magnitude, from the top bit down, as any
   index is without the WAV (the core 2.1% smaller in all: the 7.1 DTS-HD MA streams' and `3-1.dts`'s
@@ -378,7 +379,10 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   context there is how they fit the one the bit allocation search finds in them (to a 64th of a step
   squared a value, to 16 64ths, worse): `open bitrate.dts`'s subbands that fit to a 64th don't
   predict 465734 times in 465747, those that fit to 16 64ths do 92% of the time (its PMODEs 1712
-  bytes to 467). The search is the one ABITS would make, kept for it.
+  bytes to 467). A transient's values fit two lattices, before it and from it on (the bit allocation
+  search's, below), and no one: where the search takes such a fit, its distance is the context's
+  (`ES 6.1 16bit.dts`'s core 4.5% smaller, `open bitrate.dts`'s 9.3%, FATE's `dts_es.dts`'s 2.1%).
+  The search is the one ABITS would make, kept for it.
 - **The high-frequency VQ vectors**: a two-stage search, a group of 32 entries, then the entry of
   the group nearest the samples (by 16 / the scale factor); coded as the group's rank and the
   entry's (92% and 93% of `s.2.dts`'s first). The DTS-HD Master Audio encoders' group isn't the
@@ -604,23 +608,25 @@ whose draws lie nearest the values, taken where that has been right more often, 
 the first, as the encoders take them (X96's scale factors 99.4% the audio's, from 94.5%; 1.5%
 smaller). X96's VQ vectors are searched as the core's: the groups by their nearest entries where the
 nearest lies within 1/64 of the values' energy (`96-24.dts`'s groups 95.0% the first, from 86.4%;
-its core 1.4% smaller), and in the scale factor search the entry most nearly a multiple of the
-values too, to 12 entries above the RMS's, the nearest kept where it isn't sure (its core 3.3%
-smaller). And X96's ABITS go against its own bit allocation search's, a decoded WAV's: FFmpeg's
-noise where its draws fit (the generator's state as the ABITS before say), else the coarsest lattice
-of a quantizer that all the values lie on (within half a unit; its step 1.5 units or more, as a
-finer one fits nearly anything), else VQ vectors, each 16 values the shape entry's at some scale
-factor; taken where it has been right more often than the first guess without it, by a margin
-(`96-24.dts`'s: 54% of X96's ABITS, right in 99.99% of them; X96's ABITS 1388 bytes to 62, its core
-3.2% smaller). Each kind of subband's rule, the RMS rule and the scale factor search (for X96's
-subbands with bits or VQ vectors: their vectors 16 samples) are counted as the stream goes, and the
-one right more often is the prediction: a lossless WAV makes the RMS rule the better. The core's
-scale factors get the same choice, among the RMS rule, the search, and the first entry above 0.99
-times the RMS (`96-24.dts`'s core's, 67% where the RMS rule's is 49%; the search's, 89%). The
-searches cost: each is tried in its first 2048 values, then wherever its rule is the one taken (the
-core's bit allocation search's, while it is right at least three quarters as often as the first
-guess without it), and otherwise in one value in 64, so a lossless WAV's stream loses no time to
-them.
+its core 1.4% smaller), a predicting subband's values less the open loop's prediction, which the
+decoder adds to the vector's (98.2%, from 95.0%; 1.4% smaller), and in the scale factor search the
+entry most nearly a multiple of the values too, to 12 entries above the RMS's, the nearest kept
+where it isn't sure (its core 3.3% smaller). And X96's ABITS go against its own bit allocation
+search's, a decoded WAV's: FFmpeg's noise where its draws fit (the generator's state as the ABITS
+before say), else the coarsest lattice of a quantizer that all the values lie on (within half a
+unit; its step 1.5 units or more, as a finer one fits nearly anything), else VQ vectors, each 16
+values the shape entry's at some scale factor; taken where it has been right more often than the
+first guess without it, by a margin (`96-24.dts`'s: 54% of X96's ABITS, right in 99.99% of them;
+X96's ABITS 1388 bytes to 62, its core 3.2% smaller). Each kind of subband's rule, the RMS rule and
+the scale factor search (for X96's subbands with bits or VQ vectors: their vectors 16 samples) are
+counted as the stream goes, and the one right more often is the prediction: a lossless WAV makes the
+RMS rule the better. The core's scale factors get the same choice, among the RMS rule, the search,
+and the first entry above 0.99 times the RMS (`96-24.dts`'s core's, 67% where the RMS rule's is 49%;
+the search's, 89%). The searches cost: each is tried in its first 2048 values, then wherever its
+rule is the one taken (the core's bit allocation search's in its first 512 values, then while it has
+been right clearly more often than the first guess without it: a lossless WAV's, which rarely finds
+one, kept it on as often, for nothing), and otherwise in one value in 64, so a lossless WAV's stream
+loses no time to them.
 
 c finds how the core lines up with the WAV before it starts (`call.inc`'s `find_alignment()`, in
 doubles; the header keeps the result). The offset: from the core's first 4 MB, the 64 blocks with
@@ -743,7 +749,7 @@ files.
 
 ### The format
 
-"dtsdpack", the format's version (44), the level, the WAV's binding (the offset; each core channel's
+"dtsdpack", the format's version (45), the level, the WAV's binding (the offset; each core channel's
 WAV channel, the second of its mix and their gains, Q23; the LFE's channel; the WAV's samples to
 the core's, 1, 2 or 4 (decimated by 2, then 2); the WAV's format, size and the CRC-32 of its first
 64 KB), then the
