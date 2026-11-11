@@ -239,6 +239,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // same of the ADPCM predictor, its search's first (jx_pr): the second taken where it has been
   // right more often, by a margin (jx_more())
   U32 jx_r[NSUB][2], jx_sr[NSUB][2], jx_pr[NSUB][2];
+  // the same of the scale factor the fit's lattice says (jx_jr, against the prediction), and whether
+  // X96 coded the subband by its vectors the last time
+  U32 jx_jr[NSUB][2];
+  U8 jx_wv[NCH][NSUB];
   int jx_lo;
   U32 jx_h[NSUB][256], jx_hn[NSUB], jx_hv[NSUB][256], jx_hvn[NSUB];
   S128 jx_yw[NSUB], jx_ww[NSUB];
@@ -1455,6 +1459,28 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         p = pb;
       }
     }
+    // (where X96 codes the subband too, a scale factor alone in its subframe: of the prediction, the
+    // one above it and the one below, the first whose step the fit finds (jx_try(); X96's vectors
+    // tried only where it had them the last time), where that has been right more often than the
+    // prediction, by a margin: `96-24.dts`'s scale factors 93.4% the audio's from 89.5%, its core
+    // 4.3% smaller, 20% slower)
+    int pj = -1;
+    if (bound[ch] && x96a && b >= jx_lo && !hfb && !tm && s.abits[ch][b] && p >= 0 && (jx_hn[b] | jx_hvn[b])) {
+      const int a = s.abits[ch][b], nt = sf_entries(r.shuff[ch]);
+      S64 lo, hi;
+      quant_range(r, ch, a, lo, hi);
+      for (int o = 0; o < 3 && pj < 0; o++) {
+        const int i = p + (o == 1 ? 1 : o == 2 ? -1 : 0);
+        const S64 st = i >= 0 && i < nt ? step_for(r, ch, a, i) : 0;
+        if (st <= 0) continue;
+        S64 ss[NSMP];
+        for (int k = 0; k < nsmp; k++) ss[k] = st;
+        int k9, vq[NSMP / 16], vs[NSMP / 16];
+        if (jx_try(s, ch, b, ss, lo, hi, &k9, vq, vs, !jx_wv[ch][b])) pj = i;
+      }
+    }
+    const int pp = p;
+    if (pj >= 0 && jx_more(jx_jr[b], 4, 1)) p = pj, near = SB_N - 1;
     const S32 A = hist.scale[ch][b], P = hist.pscale[ch][b];
     // (where X96 codes the subband too and the core has little of the decode's values, the last
     // one where it has been right more often, by a margin: `96-24.dts`'s core 0.3% smaller)
@@ -1484,6 +1510,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       else v = checked((A ? A - 1 : 0) + f_scl.codes(X_, ENC ? v - (A ? A - 1 : 0) : 0, (u32)D.kd), 0, max - 1);
     }
     if (lw) jx_tally(jx_sr[b], v, pa, A - 1);
+    if (pj >= 0) jx_tally(jx_jr[b], v, pp, pj);
     if (!j) pscale[ch][b] = p + 1;
     if (!j && cpl_on(r, ch, b)) {  // (each m's RMS rule)
       const int c = NSUB - 1 - b;
@@ -1544,8 +1571,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   }
   // The core's index at a sample whose decode's value is w, at its step ss and ADPCM prediction
   // pred, that leaves the rest of w on X96's lattice of step s9 (within half a unit): of the indexes
-  // within 2 of the gain al's (2^-12) and the nearest w's, the one leaving X96 the least index (*rr
-  // its magnitude), then the nearest the gain's (*ok whether any did)
+  // within 2 of the gain al's (2^-12) and the nearest w's, the one leaving X96 the least index, then
+  // the nearest the gain's (*rr: 64 times that index's magnitude plus its distance from the gain's;
+  // *ok whether any did)
   static S64 jx_fit(S64 w, S32 pred, S64 ss, S64 lo, S64 hi, S64 s9, S64 al, S64* rr, int* ok) {
     S128 d;
     S64 o, cb = 0, sb = -1;
@@ -1557,7 +1585,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       const S64 r = requant(res, s9, -4095, 4095, &d, &o);
       if (!jx_near(res - shl64(dequantize((S32)r, s9), AQ_F))) continue;
       const S64 sc = (r < 0 ? -r : r) * 64 + (c < ca ? ca - c : c - ca);
-      if (sb < 0 || sc < sb) sb = sc, cb = c, *rr = r < 0 ? -r : r;
+      if (sb < 0 || sc < sb) sb = sc, cb = c, *rr = sc;
     }
     *ok = sb >= 0;
     return cb;
@@ -1565,14 +1593,24 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // Channel ch's subband b's fit (jx_k, jx_vq) in the subframe, where its values aren't all on the
   // core's lattice (the subframe decoded with the indexes each one makes, its ADPCM predictions
   // from them): X96's step, of those whose ratio to the core's (to 1/16 octave or beside) has been
-  // X96's in the subband, that leaves each sample's rest on its lattice with the least sum of X96's
-  // index magnitudes (the largest step of equals); else X96's vectors (jx_search_vq())
+  // X96's in the subband, that leaves each sample's rest on its lattice with the least sum of
+  // jx_fit()'s scores (the largest step of equals); else X96's vectors (jx_search_vq()). (The
+  // scores' indexes' distances count: X96's step plus the core's makes the same values, the core's
+  // index off by X96's (`96-24.dts`'s subband 30, a quarter of its subframes' steps, its core 5.6%
+  // bigger by the X96 indexes alone).)
   void jx_search(const CoreRec& r, const CoreSub& s, int ch, int b, S64 lo, S64 hi) {
+    S64 ss[NSMP];
+    for (int j = 0; j < nsmp; j++) ss[j] = step_scale(r, s, ch, b, j >> 3);
+    jx_try(s, ch, b, ss, lo, hi, &jx_k[ch][b], jx_vq[ch][b], jx_vs[ch][b]);
+  }
+  // (the fit at the core's steps ss, into *k9, vq and vs: 0 none, 1 all on the core's lattice, 2
+  // X96's step, 3 its vectors, unless novq)
+  int jx_try(const CoreSub& s, int ch, int b, const S64* ss, S64 lo, S64 hi, int* k9, int* vq, int* vs, bool novq = false) {
     const int pm = s.pmode[ch][b], n = nsmp;
     const S64* w = X[ch][b];
-    S64 ss[NSMP];
-    for (int j = 0; j < n; j++) ss[j] = step_scale(r, s, ch, b, j >> 3);
-    if (ss[0] <= 0) return;
+    *k9 = 0;
+    for (int q = 0; q < NSMP / 16; q++) vq[q] = 0;
+    if (ss[0] <= 0) return 0;
     S32 h[4];
     memcpy(h, yh[ch][b], sizeof h);
     bool plain = true;
@@ -1585,7 +1623,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       plain = jx_near(w[j] - shl64(y, AQ_F));
       h[3] = h[2], h[2] = h[1], h[1] = h[0], h[0] = y;
     }
-    if (plain) return;  // (X96 adds nothing there)
+    if (plain) return 1;  // (X96 adds nothing there)
     const int l0 = lg16((U64)ss[0]);
     const S64 al = jx_gain(b);
     S64 best = -1, bs9 = 0;
@@ -1606,22 +1644,23 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         const S32 y = clip23((S64)dequantize((S32)c, ss[j]) + pred);
         h[3] = h[2], h[2] = h[1], h[1] = h[0], h[0] = y;
       }
-      if (j == n && (best < 0 || tot < best || s9 > bs9)) best = tot, bs9 = s9, jx_k[ch][b] = k + 1;
+      if (j == n && (best < 0 || tot < best || s9 > bs9)) best = tot, bs9 = s9, *k9 = k + 1;
     }
-    if (!jx_k[ch][b] && jx_hvn[b]) jx_search_vq(s, ch, b, lo, hi, ss, l0);
+    if (*k9) return 2;
+    return !novq && jx_hvn[b] && jx_search_vq(s, ch, b, lo, hi, ss, l0, vq, vs) ? 3 : 0;
   }
   // X96's vector of each 16 samples (an entry of its code book at a scale factor whose ratio to the
   // core's step has been X96's in the subband, or beside) whose values leave each sample's rest on
-  // the core's lattice: the first such, by the first sample's entry values first; none after one
-  // none fits
-  void jx_search_vq(const CoreSub& s, int ch, int b, S64 lo, S64 hi, const S64* ss, int l0) {
+  // the core's lattice: the first such, by the first sample's entry values first (into vq and vs;
+  // whether each has one, none after one none fits)
+  bool jx_search_vq(const CoreSub& s, int ch, int b, S64 lo, S64 hi, const S64* ss, int l0, int* vq, int* vs) {
     const int pm = s.pmode[ch][b], n = nsmp;
     const S64* w = X[ch][b];
     S32 h[4];
     memcpy(h, yh[ch][b], sizeof h);
     for (int q = 0; q < n / 16; q++) {
       const int j0 = 16 * q;
-      for (int si = 0; si < 64 && !jx_vq[ch][b][q]; si++) {
+      for (int si = 0; si < 64 && !vq[q]; si++) {
         if (!jx_seen(jx_hv[b], lg16((U64)SF6[si] << 22) - l0 + 128)) continue;
         const S32 p0 = pm ? adpcm_pred(s.pvq[ch][b], h) : 0;
         U8 pass[256];
@@ -1632,7 +1671,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           const S64 c = requant(u - shl64(p0, AQ_F), ss[j0], lo, hi, &d, &o);
           pass[e8] = jx_near(u - shl64(clip23((S64)dequantize((S32)c, ss[j0]) + p0), AQ_F));
         }
-        for (int k = 0; k < 1024 && !jx_vq[ch][b][q]; k++) {
+        for (int k = 0; k < 1024 && !vq[q]; k++) {
           if (!pass[HF_VQ[k][0] + 128]) continue;
           S32 g[4];
           memcpy(g, h, sizeof g);
@@ -1647,11 +1686,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
             if (!jx_near(u - shl64(y, AQ_F))) break;
             g[3] = g[2], g[2] = g[1], g[1] = g[0], g[0] = y;
           }
-          if (j == j0 + 16) jx_vq[ch][b][q] = k + 1, jx_vs[ch][b][q] = si, memcpy(h, g, sizeof h);
+          if (j == j0 + 16) vq[q] = k + 1, vs[q] = si, memcpy(h, g, sizeof h);
         }
       }
-      if (!jx_vq[ch][b][q]) return;
+      if (!vq[q]) return false;
     }
+    return n >= 16;
   }
 
   // Sample j of channel ch's subband b (its index v in lo..hi): whether it is the index the audio's

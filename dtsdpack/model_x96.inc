@@ -431,6 +431,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
       B::jx_lo = r.x96start;
       for (int ch = 0; ch < r.npchs; ch++)
         for (int b = r.x96start; b < r.x96nsubs[ch] && b < NSUB; b++) {
+          B::jx_wv[ch][b] = s.abits[ch][b] == 1;
           const S64 cs = B::jx_cs[sf][ch][b];
           if (cs <= 0) continue;
           if (s.abits[ch][b] >= 2) B::jx_count(B::jx_h[b], B::jx_hn[b], lg16((U64)x96_ss(s, ch, b)) - lg16((U64)cs) + 128);
