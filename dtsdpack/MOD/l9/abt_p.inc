@@ -16,11 +16,11 @@ void D9_abt_make( const M_abt_v & D, tcx & X ) {
   M_abt_VARS(M_LOCAL)
 
   a = 0;
-  a = a*20 + D9_abt_a_bd[__min(31,__max(0,(bd)-(1-1)))];
+  a = a*19 + D9_abt_a_bd[__min(31,__max(0,(bd)-(1-1)))];
   a = (a<<7) + (((es)&127)); // 01111111
 
   b = 0;
-  b = b*10 + D9_abt_b_la[__min(27,__max(0,(la)-(1-1)))];
+  b = b*11 + D9_abt_b_la[__min(27,__max(0,(la)-(1-1)))];
   b = b*14 + D9_abt_b_lb[__min(27,__max(0,(lb)-(1-1)))];
 
   c = 0;
@@ -42,34 +42,34 @@ void D9_abt_make( const M_abt_v & D, tcx & X ) {
   h = 0;
   h = h*13 + D9_abt_h_lb[__min(27,__max(0,(lb)-(1-1)))];
   h = (h<<5) + (((es)&31)); // 00011111
-  h = h*8 + D9_abt_h_bd[__min(31,__max(0,(bd)-(1-1)))];
+  h = h*5 + D9_abt_h_bd[__min(31,__max(0,(bd)-(1-1)))];
 
   i = 0;
   i = (i<<3) + ((((es)>>1)&7)); // 00001110
-  i = i*4 + D9_abt_i_nb[__min(9,__max(0,(nb)-(1-1)))];
+  i = i*8 + D9_abt_i_nb[__min(9,__max(0,(nb)-(1-1)))];
   i = i*16 + D9_abt_i_la[__min(27,__max(0,(la)-(1-1)))];
 
   j = 0;
 
   k = 0;
-  k = k*13 + D9_abt_k_sn[__min(27,__max(0,(sn)-(1-1)))];
+  k = k*14 + D9_abt_k_sn[__min(27,__max(0,(sn)-(1-1)))];
   k = k*2 + (((nn)>14+(1-1)));
-  k = k*8 + D9_abt_k_sc[__min(14,__max(0,(sc)-(1-1)))];
-  k = k*8 + D9_abt_k_sm[__min(16,__max(0,(sm)-(1-1)))];
+  k = k*6 + D9_abt_k_sc[__min(14,__max(0,(sc)-(1-1)))];
+  k = k*9 + D9_abt_k_sm[__min(16,__max(0,(sm)-(1-1)))];
   k = k*4 + D9_abt_k_bg[__min(7,__max(0,(bg)-(1-1)))];
   k = k*2 + (((ag)>1+(1-1)));
 
   l = 0;
   l = l*5 + D9_abt_l_bd[__min(31,__max(0,(bd)-(1-1)))];
   l = l*2 + (((cc)>0+(1-1)));
-  l = l*6 + D9_abt_l_la[__min(27,__max(0,(la)-(1-1)))];
+  l = l*7 + D9_abt_l_la[__min(27,__max(0,(la)-(1-1)))];
 
   s = 0;
   s = s*11 + D9_abt_s_sn[__min(27,__max(0,(sn)-(1-1)))];
   s = s*2 + (((sd)>0+(1-1)));
   s = s*11 + D9_abt_s_sc[__min(14,__max(0,(sc)-(1-1)))];
   s = s*8 + D9_abt_s_sm[__min(16,__max(0,(sm)-(1-1)))];
-  s = s*5 + D9_abt_s_bg[__min(7,__max(0,(bg)-(1-1)))];
+  s = s*4 + D9_abt_s_bg[__min(7,__max(0,(bg)-(1-1)))];
 
   f = 0;
   f = (f<<2) + ((((es)>>5)&3)); // 01100000

@@ -15,35 +15,35 @@ Index a
  a_lv: lv, &000011
 
 Index b
- b_fld: fld, 1!00100000
+ b_fld: fld, 1!00010000
  b_lv: lv, &000001
  b_pq: pq, &111111
 
 Index c
  c_fld: fld, 1!00100000
- c_bd: bd, 1!1111111011000110000111111111111
+ c_bd: bd, 1!1111011011010101000111111110111
  c_lv: lv, &000111
 
 Index d
- d_fld: fld, 1!00010000
- d_ac: ac, 1!11010110
+ d_fld: fld, 1!00110000
+ d_ac: ac, 1!11010010
  d_lv: lv, &000011
 
 Index e
  e_fld: fld, 1!00001000
  e_cc: cc, 1!11
- e_bd: bd, 1!1110111100101011100000000001001
+ e_bd: bd, 1!1111010010000011100000000001001
 
 Index h
  h_fld: fld, 1!00010000
- h_ab: ab, 1!000110110001000000010001100
- h_lv: lv, &000101
- h_tr: tr, 1!10010
+ h_ab: ab, 1!000110000000000000000001000
+ h_lv: lv, &000100
+ h_tr: tr, 1!11010
 
 Index i
- i_fld: fld, 1!00010000
+ i_fld: fld, 1!00000001
  i_ec: ec, 1!011111001
- i_lv: lv, &000101
+ i_lv: lv, &000110
  i_tr: tr, 1!11010
 
 Index j
@@ -53,18 +53,18 @@ Index j
 
 Index k
  k_fld: fld, 1!00000010
- k_bd: bd, 1!1100000100000100000100000010001
- k_ac: ac, 1!11101100
+ k_bd: bd, 1!1110000000000000000000000010001
+ k_ac: ac, 1!11100100
 
 Index l
  l_fld: fld, 1!11111111
  l_lv: lv, &000111
- l_ab: ab, 1!010110110000000010011100000
- l_ac: ac, 1!11111111
+ l_ab: ab, 1!011000010000010000001101000
+ l_ac: ac, 1!11111011
 
 Index s
  s_fld: fld, 1!00100010
- s_lv: lv, &000110
+ s_lv: lv, &000111
 
 Index f
  f_fld: fld, 1!00010010
@@ -87,26 +87,26 @@ Index g
  g_fld: fld, 1!11111111
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
-Number rA, 1, 0!11001111
+Number rA, 1, 0!11000111
 Number mwA, 1, 0!11100011
-Number rB, 1, 0!11111111
-Number mwB, 1, 0!00010010
-Number rC, 1, 0!11111010
-Number mwC, 1, 0!00000000
-Number rD, 1, 0!11111110
-Number mwD, 1, 0!01011010
+Number rB, 1, 0!11111101
+Number mwB, 1, 0!11111110
+Number rC, 1, 0!01000001
+Number mwC, 1, 0!00001001
+Number rD, 1, 0!11111111
+Number mwD, 1, 0!01000001
 Number rE, 1, 0!11111101
-Number mwE, 1, 0!00000000
-Number rH, 1, 0!00000000
-Number mwH, 1, 0!00111000
+Number mwE, 1, 0!00010000
+Number rH, 1, 0!00000010
+Number mwH, 1, 0!00111111
 Number rI, 1, 0!11111111
 Number mwI, 1, 0!00000001
-Number rJ, 1, 0!00100111
+Number rJ, 1, 0!00100101
 Number mwJ, 1, 0!00010011
-Number rK, 1, 0!11111001
+Number rK, 1, 0!11111100
 Number mwK, 1, 0!00000000
-Number rL, 1, 0!11111010
-Number mwL, 1, 0!00000100
+Number rL, 1, 0!11111110
+Number mwL, 1, 0!00000001
 Number lr, 1, 0!01111
 Number mb, 1, 0!01001111
 Number rS1, 1, 0!01000
@@ -121,7 +121,7 @@ Number mt, 1, 0!000
 ! Number lrm, 1, 0!11111
 ! Number mbm, 1, 0!00011001
 Number rG, 1, 0!01011000
-Number mwG, 1, 0!00101100
+Number mwG, 1, 0!00100000
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
 #  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.

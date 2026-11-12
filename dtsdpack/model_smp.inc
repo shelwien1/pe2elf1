@@ -143,6 +143,19 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     fwrite(alpha, 8, 4, f);
   }
 #endif
+#ifdef DTSD_LFEDUMP
+  // (./mk.sh lfedump: a lossless WAV's LFE value, appended to $DTSD_LFEDUMP: the value as a 32-bit
+  // integer and 32 bits of 0, its step and the prototype's decimations by 32 around it (lfe_f3's)
+  // as 64-bit ones; tools/lfefilter.py reads them)
+  static void lfe_dump(const S64* f, S64 st, int v) {
+    static FILE* fp = getenv("DTSD_LFEDUMP") ? fopen(getenv("DTSD_LFEDUMP"), "ab") : nullptr;
+    if (!fp) return;
+    const S32 h[2] = {v, 0};
+    fwrite(h, 4, 2, fp);
+    fwrite(&st, 8, 1, fp);
+    fwrite(f, 8, LFE_N2, fp);
+  }
+#endif
 #ifdef DTSD_HFDUMP
   // (./mk.sh hfdump: a lossless WAV's vector of 16 samples, appended to $DTSD_HFDUMP: its index and
   // scale factor as 32-bit integers, its samples as 64-bit ones; tools/hfgroups.py reads them)
@@ -221,18 +234,30 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   int lfe_on;              // the subframe's LFE samples are coded against the audio's
   int lfe_n;               // how many
   S64 lfe_f[4 * NSSF][LFE_NF];  // each one's decimated samples around it (the last values after them: code_lfe()'s)
+  S64 lfe_f3[4 * NSSF][LFE_N2];  // and the prototype's decimations by 32 around it (lfit3's, LFE_W2's)
   S64 lfe_past[LFE_NP];    // the last LFE values (times their steps; [0] the last)
   S64 lfe_p[4 * NSSF];     // and its prediction (the value times its step)
   int lfe_scl;             // their scale factor (the walk has it after them: coded with the first)
   S64 lfe_st;              // its step
   int lfe_hm, lfe_lp;      // whether the last was the prediction (as hm), the last less its prediction (as lp)
-  S64 lfe_cn[64], lfe_cv[64];  // the decimated samples by place (n mod 64: n, the value)
+  S64 lfe_cn[128], lfe_cv[128];  // the decimations by 32 by place (m mod 128: m, the value)
   S32 lq1, lq2;            // the last two LFE indexes (as q1, q2, qs, miss)
   S8 lqs;
   U8 lmiss;
   LfeFit<LFE_NT> lfit;      // the correction without the last values
   LfeFit<LFE_NF> lfit2;     // and with them
-  U32 lfh[2];               // how often each one's prediction was the value (halved as they grow)
+  // the first by the decimations by 32 (those halfway between too, where the LFE's rate aliases
+  // the filter's band), forgetting 1/2048 a subframe, not 1/32, refitted every 16th subframe
+  // (lfe_nsf): the encoders' filter doesn't change, so over a long stream that one learns it far
+  // better, over a short one the first, learning faster, is often the better (`s.2.dts`'s LFE
+  // values 99.3% the prediction from 96.7%, its core 2.6% smaller); and the DTS-HD MA encoders'
+  // filter as fitted to `s.2.dts`'s values, LFE_W2 (lfe_fixed()), the fourth, the better of all
+  // where it is their filter, from a stream's start (`s.2.dts`'s LFE 3184 bytes to 223, its core
+  // 3.0% smaller in all; FFmpeg's master_audio_7.1_24bit.dts's LFE 262 to 44, its core 5.9%, its
+  // filter the same; `Master Audio 7.1.dts`'s, no linear filter of its WAV's, 0.4% bigger)
+  LfeFit<LFE_N2, LFE_K2, 7> lfit3;
+  U32 lfe_nsf;
+  U32 lfh[4];               // how often each one's prediction was the value (halved as they grow)
   // X96's, where the frame has it and the WAV is at twice the core's rate: each bound channel's
   // 64-band analysis by block of the frame, and the core's decoded samples (X96's residuals are the
   // one less the other: model_x96.inc)
@@ -404,11 +429,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     tnext = 0;
     lfit.init();
     lfit2.init();
+    lfit3.init();
     memcpy(hgw, HF_GW, sizeof hgw);
     memcpy(hge, HF_GE, sizeof hge);
     for (int g = 0; g < 32; g++) hg_dist(g);
     hg_n = 0;
-    for (int i = 0; i < 64; i++) lfe_cn[i] = -1;
+    for (int i = 0; i < 128; i++) lfe_cn[i] = -1;
+    lfe_nsf = 0;
     lfe_lp = 9;
     jx_lo = NSUB;
     b0fit.init();
@@ -418,9 +445,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     memset(je_qn, 0, sizeof je_qn);
   }
   // the LFE's decimated sample n (64x: its window ends at 64 n + the offset)
-  S64 lfe_d(S64 n) {
-    const int i = (int)(n & 63);
-    if (lfe_cn[i] != n) lfe_cn[i] = n, lfe_cv[i] = lfe_decim(*wav, bind.lfe, 64 * bind.up * n + bind.off, bind.up);
+  S64 lfe_d(S64 n) { return lfe_d2(2 * n); }
+  // the prototype's decimation by 32 whose window ends at 32 m + the offset (m even: the LFE's own)
+  S64 lfe_d2(S64 m) {
+    const int i = (int)(m & 127);
+    if (lfe_cn[i] != m) lfe_cn[i] = m, lfe_cv[i] = lfe_decim(*wav, bind.lfe, 32 * bind.up * m + bind.off, bind.up);
     return lfe_cv[i];
   }
   // a core frame not coded as records (kept as bytes): its blocks go by
@@ -458,8 +487,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (r.lff == 2 && !r.xpass && bind.lfe >= 0 && bind.lfe < wav->nch) {
       lfe_on = 1;
       lfe_n = 2 * r.lff * s.nssc;
-      lo = imin(lo, 64 * up * (n0 - LFE_K) + bind.off - 512 * up);
-      hi = imax(hi, 64 * up * (n0 + lfe_n - 1 + LFE_K) + bind.off);
+      lo = imin(lo, 64 * up * (n0 - LFE_K) + bind.off - 544 * up);
+      hi = imax(hi, 64 * up * (n0 + lfe_n - 1 + LFE_K) + bind.off + 32 * up);
     }
     wav->need(lo, hi);
     // (past the WAV's end, its continuation: from where the subbands' analysis first reaches past
@@ -480,8 +509,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int k = 0; k < LFE_NP; k++) past[k] = lfe_past[k];
     for (int i = 0; lfe_on && i < lfe_n; i++) {
       for (int k = 0; k < LFE_NT; k++) lfe_f[i][k] = lfe_d(n0 + i + k - LFE_K);
+      for (int k = 0; k < LFE_N2; k++) lfe_f3[i][k] = lfe_d2(2 * (n0 + i) + k - LFE_K2);
       for (int k = 0; k < LFE_NP; k++) lfe_f[i][LFE_NT + k] = past[k];
-      lfe_p[i] = lfe_pred(lfe_f[i]);
+      lfe_p[i] = lfe_pred(i);
       for (int k = LFE_NP - 1; k > 0; k--) past[k] = past[k - 1];
       past[0] = lfe_p[i];
     }
@@ -572,7 +602,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // the subframe done: the audio's last subband samples, as the next one's history; the LFE's
   // correction fit again
   void smp_subframe_end(const CoreRec& r) {
-    if (lfe_on) lfit.refit(), lfit2.refit();
+    if (lfe_on) {
+      lfit.refit(), lfit2.refit();
+      if (!(++lfe_nsf & 15)) lfit3.refit();
+    }
     for (int ch = r.ch0(); ch < r.ch1(); ch++) {
       if (!bound[ch]) continue;
       for (int b = 0; b < NSUB; b++)
@@ -2447,15 +2480,32 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   }
   // the LFE's prediction from its features f: the fit's that has predicted the values more often
   // (with the last values the better against a decoded WAV, and for some lossless ones)
-  S64 lfe_pred(const S64* f) const { return lfh[1] > lfh[0] ? lfit2.predict(f) : lfit.predict(f); }
+  // (the fixed one's on a tie: so from the stream's start)
+  int lfe_best() const {
+    int k = 3;
+    for (int j = 0; j < 3; j++)
+      if (lfh[j] > lfh[k]) k = j;
+    return k;
+  }
+  // the DTS-HD MA encoders' filter's (LFE_W2)
+  S64 lfe_fixed(int i) const {
+    S128 p = 0;
+    for (int k = 0; k < LFE_N2; k++) p += (S128)LFE_W2[k] * lfe_f3[i][k];
+    return (S64)(p >> 30);
+  }
+  S64 lfe_pred(int i) const {
+    const int k = lfe_best();
+    return k == 3 ? lfe_fixed(i) : k == 2 ? lfit3.predict(lfe_f3[i]) : k == 1 ? lfit2.predict(lfe_f[i]) : lfit.predict(lfe_f[i]);
+  }
   // LFE sample i of the subframe (its value v): against its prediction at the scale factor's step
   S64 code_lfe(int i, S64 v) {
     S64 alt;
     S128 dist;
     int how;
     for (int k = 0; k < LFE_NP; k++) lfe_f[i][LFE_NT + k] = lfe_past[k];  // (the values decoded)
-    const S64 p1 = lfit.predict(lfe_f[i]), p2 = lfit2.predict(lfe_f[i]);
-    lfe_p[i] = lfh[1] > lfh[0] ? p2 : p1;
+    const S64 p1 = lfit.predict(lfe_f[i]), p2 = lfit2.predict(lfe_f[i]), p3 = lfit3.predict(lfe_f3[i]), p4 = lfe_fixed(i);
+    const int lb = lfe_best();
+    lfe_p[i] = lb == 3 ? p4 : lb == 2 ? p3 : lb == 1 ? p2 : p1;
     const S64 qp = requant(lfe_p[i], lfe_st << 6, -128, 127, &dist, &alt);
     M_smp_v D;
     D.ab = 27;
@@ -2480,11 +2530,17 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     n_hit += how == 0;
     lfit.add(lfe_f[i], v * lfe_st, lfe_st);
     lfit2.add(lfe_f[i], v * lfe_st, lfe_st);
+    lfit3.add(lfe_f3[i], v * lfe_st, lfe_st);
+#ifdef DTSD_LFEDUMP
+    if (ENC && !ss_rule()) lfe_dump(lfe_f3[i], lfe_st, (int)v);
+#endif
     {  // (whether each prediction's index was the value)
       S128 dd;
       S64 al;
       lfh[0] += requant(p1, lfe_st << 6, -128, 127, &dd, &al) == v, lfh[1] += requant(p2, lfe_st << 6, -128, 127, &dd, &al) == v;
-      if (lfh[0] + lfh[1] >= 1u << 12) lfh[0] >>= 1, lfh[1] >>= 1;
+      lfh[2] += requant(p3, lfe_st << 6, -128, 127, &dd, &al) == v, lfh[3] += requant(p4, lfe_st << 6, -128, 127, &dd, &al) == v;
+      if (lfh[0] + lfh[1] + lfh[2] + lfh[3] >= 4u << 11)
+        for (int k = 0; k < 4; k++) lfh[k] >>= 1;
     }
     for (int k = LFE_NP - 1; k > 0; k--) lfe_past[k] = lfe_past[k - 1];
     lfe_past[0] = v * lfe_st;

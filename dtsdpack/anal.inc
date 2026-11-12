@@ -912,6 +912,8 @@ static int key_margin_u(const KeyIx* a, int n, S128 u, int k = 23, int top = 12)
 constexpr S64 LFE_G = 290844593;  // the prototype's decimation to the units of v times its scale (Q30; found)
 constexpr int LFE_K = 6, LFE_NT = 2 * LFE_K + 1;  // the correction's taps: the decimated samples K before to K after
 constexpr int LFE_NP = 7, LFE_NF = LFE_NT + LFE_NP;  // and the last LFE values (a decoded WAV's LFE is their interpolation)
+constexpr int LFE_K2 = 2 * LFE_K + 1, LFE_N2 = 2 * LFE_K2 + 1;  // the decimations by 32 (twice the LFE's rate) around a value: 13 before to 13 after
+#include "lfefilter.inc"  // (LFE_W2: the DTS-HD MA encoders' filter as a correction of those, Q30; tools/lfefilter.py)
 
 constexpr int LFE_Q = 23;  // the LFE's units: 2^-LFE_Q of those of a value times its step (its steps exact in them)
 
@@ -1097,10 +1099,10 @@ static void wav_extend(WavIn& w) {
 // interpolation of the values, 8 of them in each of its samples, so with the last ones the fit
 // sees the next alone) against the LFE value times its scale (y), each weighted by 1 over its
 // scale squared (what the coder pays for is the error in steps), the older ones forgotten (by
-// 1/32 a frame), ridged toward no correction. Plain data: init(), then add() each sample,
-// refit() each frame. (K0: the tap the correction's identity is, ridged toward; -1 none, ridged
+// 2^-FS a subframe), ridged toward no correction. Plain data: init(), then add() each sample,
+// refit() each subframe. (K0: the tap the correction's identity is, ridged toward; -1 none, ridged
 // toward 0.)
-template <int NF, int K0 = LFE_K>
+template <int NF, int K0 = LFE_K, int FS = 5>
 struct LfeFit {
   S128 G[NF][NF], c[NF];  // the sums of f f' and f y
   S64 w[NF];              // the correction (Q30)
@@ -1130,8 +1132,8 @@ struct LfeFit {
   void refit() {
     S128 tr = 0;
     for (int i = 0; i < NF; i++) {
-      for (int j = 0; j <= i; j++) G[i][j] -= G[i][j] >> 5;
-      c[i] -= c[i] >> 5;
+      for (int j = 0; j <= i; j++) G[i][j] -= G[i][j] >> FS;
+      c[i] -= c[i] >> FS;
       tr += G[i][i];
     }
     if (tr <= 0) return;
