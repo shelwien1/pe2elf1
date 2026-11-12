@@ -1218,6 +1218,17 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.gr = 7;
     if (ord)
       for (int i = 0; i < n; i++) cand[i].k = ord[cand[i].i];
+    if (ord && mlu > 0) {  // (and ml in the order's terms: the second's boundary key against the unit,
+                           // the groups' 2^-22 of it, the vectors' 2^-5, as their W, in 512ths of the
+                           // vectors' units, run to the power 1.5: `s.2.dts`'s core 0.5% smaller; 0
+                           // where the rest tie with the first)
+      S128 k2 = -1;
+      for (int i = 0; i < n; i++)
+        if (cand[i].k >= 0 && (k2 < 0 || cand[i].k < k2)) k2 = cand[i].k;
+      S128 u = mlu >> (kd == VK_HFG ? 22 : 5);
+      if (u < 1) u = 1;
+      D.ml = k2 < 0 ? 0 : imin(near_bucket(k2, u, 25), 13);
+    }
     B::sel(f_vqr, D);
     int at = 0;
     if (ENC)
@@ -1485,7 +1496,16 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // (a lossless WAV's: the unit of the margins against the level, below; the groups' scores run
     // 2^19 times the vectors' distances: `s.2.dts`'s groups' within 2^-4 of that unit were the
     // first half the time, 98% from 2 times it)
-    const S128 mu = bound[ch] && !ss_rule() && !x96a ? (S128)tlvl[ch] * sc << 24 : 0;
+    S128 mu = bound[ch] && !ss_rule() && !x96a ? (S128)tlvl[ch] * sc << 24 : 0;
+    // (the top subband's with its leak's noise in too: the root of its square and that of 2^46 times
+    // the noise's RMS times the scale factor, 2^-2 of the RMS's unit, where it is the encoder's
+    // values' noise more than the level's is: `s.2.dts`'s core 0.2% smaller)
+    if (mu > 0 && b == NSUB - 1 && cpl_on(r, ch, b)) {
+      S128 m0 = 0;
+      for (int j = 0; j < nsmp; j++) m0 += (S128)X[ch][0][j] * X[ch][0][j];
+      const double sl = sqrt((double)(m0 / nsmp >> 40)) * (double)sc * 70368744177664.0;  // (2^46)
+      mu = (S128)sqrt((double)mu * (double)mu + sl * sl);
+    }
     // (the boundary order, hf_bound_grp(): the learned scores' W to the power 1.5, as they have
     // been learned, rather than the boundary's 1: `s.2.dts`'s core 0.3% smaller; the centroids' to
     // the power 1)
