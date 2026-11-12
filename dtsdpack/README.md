@@ -9,7 +9,7 @@ to code is where the encoder chose otherwise. Decompression, with the same WAV, 
 stream byte for byte.
 
 The core of `s.2.dts` (4 minutes 25 seconds of 5.1 at 1509 kbps; 50008260 bytes) compresses to
-95360 bytes (0.19%); without its audio, dtsdpack's model gets 71.76% and `xz -9e` 88.21%.
+95361 bytes (0.19%); without its audio, dtsdpack's model gets 71.76% and `xz -9e` 88.21%.
 
 The core substream's extensions are coded too: XCH (6.1's back centre) and XXCH (7.1's other
 channels) as more channels, X96 (DTS 96/24's 24-48 kHz band and the core's residuals) as subbands
@@ -52,7 +52,7 @@ WAV is the one `c` had: its format, its size and the CRC of its first 64 KB are 
 
 ```
 $ dtsdpack c -s s2.dtsc s2_full.wav s2.dtsd
-s2.dtsc: 50008260 -> 95360 bytes (0.19%, -9); 24855 frames, 24855 packed; 0 bytes between frames; 5 channels and the LFE against the WAV (offset 512, correlation 1.0000)
+s2.dtsc: 50008260 -> 95361 bytes (0.19%, -9); 24855 frames, 24855 packed; 0 bytes between frames; 5 channels and the LFE against the WAV (offset 512, correlation 1.0000)
   bytes                             input     packed
   bytes kept as bytes                   0          4    0.00%
   headers, container              1059444        151    0.01%
@@ -88,10 +88,10 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 95360 (0.19%) | 71.76% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 95361 (0.19%) | 71.76% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 4165 (0.33%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 5980 (0.56%) | | |
-| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 3494 (0.15%) | | |
+| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 3366 (0.14%) | | |
 
 Compressing the whole of `s.2.dts`'s core takes 29 seconds (1.7 MB of core a second) and 50 MB of
 memory, decompressing it 30 seconds and 43 MB, on one thread of a 2.1 GHz Xeon. The rows were all
@@ -110,7 +110,7 @@ FFmpeg's small DTS-HD MA samples (`xll_*`, 7 frames each) round-trip too:
 | `xll_51_24_48_768` | 7168 | 499 (6.96%) | the WAV's 5.1 |
 | `xll_71_24_48_768_0` | 7168 | 438 (6.11%) | a downmix of its 7.1: every channel at -3 dB, each surround its side and rear surround |
 | `xll_71_24_48_768_1` | 7168 | 458 (6.39%) | the same, the rear surrounds' sign inverted |
-| `xll_xch_61_24_48_768` | 7168 | 909 (12.68%) | its 6.1's 5.1, the back centre in the surrounds at about -3 dB; and in the XCH extension, the back centre |
+| `xll_xch_61_24_48_768` | 7168 | 908 (12.67%) | its 6.1's 5.1, the back centre in the surrounds at about -3 dB; and in the XCH extension, the back centre |
 | `xll_71_24_96_768` | 7168 | 380 (5.30%) | the 96 kHz WAV's 64-band analysis's lower half, a downmix as the 48 kHz one's |
 | `xll_51_16_192_768_1` | 7168 | 1654 (23.07%) | the 64-band analysis's lower half of the 192 kHz WAV decimated by 2, about |
 | `xll_51_16_192_768_0` | 7168 | 1652 (23.05%) | the same (the same WAV, another core) |
@@ -137,13 +137,13 @@ allocations in):
 
 | Stream | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 29483 (1.56%) | the 96 kHz decode's 64-band analysis's lower half (99.79% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
+| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 29384 (1.56%) | the 96 kHz decode's 64-band analysis's lower half (99.79% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
 | `Master Audio 5.0 96khz.dts` | 1768548 | 4289 (0.24%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
 | `Master Audio 7.1.dts` | 1945604 | 6633 (0.34%) | a downmix of its 7.1 |
-| `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 4532 (0.16%) | its 3.1 |
-| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 3978 (0.08%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
-| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 1851 (0.37%) | the same (1.95%) |
-| `open bitrate.dts` (stereo, open rate) | 5242416 | 2297 (0.04%) | decoded (99.99% of the indexes, 99.96% of the scale factors, 99.82% of the bit allocations, 99.99% of the HF VQ groups, 99.82% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
+| `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 4395 (0.16%) | its 3.1 |
+| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 2957 (0.06%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
+| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 1853 (0.37%) | the same (1.95%) |
+| `open bitrate.dts` (stereo, open rate) | 5242416 | 1330 (0.03%) | decoded (99.99% of the indexes, 99.96% of the scale factors, 99.82% of the bit allocations, 99.99% of the HF VQ groups, 99.82% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
 
 No stream at hand has XXCH in its core substream: FATE's XXCH samples (`xxch_71_24_48_2046`,
 `xbr_xxch_71_24_48_3840`, `x96_xxch_71_24_96_3840`, 7 frames each) have it in their extension
@@ -164,8 +164,8 @@ their decodes clip too (0.3-1.2% of the samples):
 | `core_51_24_48_768_0`, `_1` (5.1) | 7168 | 2047 (28.56%), 2068 (28.85%) |
 | `xch_61_24_48_768` (6.1 by XCH) | 7168 | 2084 (29.07%) |
 | `x96_51_24_96_1509` (X96) | 14084 | 3521 (25.00%) |
-| `x96_xch_61_24_96_3840` | 14084 | 2845 (20.20%) |
-| `xbr_51_24_48_3840`, `xbr_xch_61_24_48_3840` (XBR: its residuals in the decode) | 14084 | 2603 (18.48%), 3580 (25.42%) |
+| `x96_xch_61_24_96_3840` | 14084 | 2846 (20.21%) |
+| `xbr_51_24_48_3840`, `xbr_xch_61_24_48_3840` (XBR: its residuals in the decode) | 14084 | 2603 (18.48%), 3579 (25.41%) |
 | `xll_x96_51_24_96_1509` (DTS-HD MA, X96) | 14084 | 1872 (13.29%) |
 
 ## How it works
@@ -230,6 +230,27 @@ last 8 frames' bytes at their place, the bits before them 0 (8 back, then 1 to 7
 kept as they are coded), a flag each where they aren't 0 or one already offered (its core 11.5%
 smaller; the other streams' no different). Where the extension doesn't parse, its bytes are the bits
 after the subframes again.
+
+Those buffers make the rest of those bits too (format 65). The encoders write a frame over the one 8
+frames before, and only its own bits: the core's, 0s to the next 16-bit boundary where an extension
+follows, the extension's from its sync word; then, after the last of them, the words to the frame's
+end as 0s. So the bits before the sync word are 0s to that boundary, then what the frame 8 before
+had there (`ES 6.1 16bit.dts`'s in 2592 frames of its 2600, `96-24.dts`'s, before X96's, in 930 of
+938: but for the first 8 frames, all of them). The bits after the subframes are what it had there up
+to the next 32-bit boundary, then 0s; or, where the last frame's subframes ran past that boundary,
+all 0s (every frame's of `open bitrate.dts`, `3-1.dts` and `master_audio_7.1_24bit.dts` but their
+first 8: `open bitrate.dts`'s 1s are the end of the frame 8 before's DSYNC). And where the
+subframes end at a 4-byte boundary, the sync word comes a whole word later (`ES 6.1 16bit.dts`'s in
+99 frames of 99; FATE's `dts_es.dts`'s in none of 7). So the bits before the sync word are offered
+as each frame before's with the bits to the 16-bit boundary 0, then with those of the core's last
+byte; XGAP goes by whether the subframes end at a 4-byte boundary (there, as the last one there, at
+first a word; else none); and where there is a frame 8 before and no auxiliary data, the zero flag
+of the bits after the subframes goes by which of those the rule makes them (all 0s; the frame 8
+before's, which are 0s; or not), and where it makes them the frame 8 before's, a flag says whether
+they are (a field of its own). `open bitrate.dts`'s bits after the subframes go from 971 bytes to
+10, its core 42% smaller; `ES 6.1 16bit.dts`'s before the sync word and XGAP from 1064 to 46, its
+core 26%; `3-1.dts`'s after the subframes 149 to 12 (3.0%), `master_audio_7.1_24bit.dts`'s 140 to 11
+(3.7%); `96-24.dts`'s before X96's sync word 106 to 6 (0.3%); FATE's `dts_es.dts` is 2 bytes bigger.
 
 ### The audio
 
@@ -932,7 +953,7 @@ files.
 
 ### The format
 
-"dtsdpack", the format's version (64), the level, the WAV's binding (the offset; each core channel's
+"dtsdpack", the format's version (65), the level, the WAV's binding (the offset; each core channel's
 WAV channel, the second of its mix and their gains, Q23; the LFE's channel; the WAV's samples to
 the core's, 1, 2 or 4 (decimated by 2, then 2); the WAV's format, size and the CRC-32 of its first
 64 KB), then the

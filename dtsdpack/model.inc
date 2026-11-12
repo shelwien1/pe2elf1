@@ -130,6 +130,15 @@ struct Model : ModelX96<f_DEC, LV> {
       v = (hdr_field(fid, m, (v - e) & m) + e) & m;
       return good();
     }
+    if (fid == F_XGAP) {  // (where the subframes end at a 4-byte boundary, the last one's there, at
+                          // first a whole word: an encoder's fill before the extension may be 1 to 32
+                          // bits, `ES 6.1 16bit.dts`'s in 99 frames of 99; else none)
+      account(CAT_HDR);
+      const int at = !(pos & 31);
+      v = hi > lo ? checked(B::hdr_pred(fid, hi, v, at ? (hist.xgap0 ? hist.xgap0 - 1 : 1) : 0), lo, hi) : lo;
+      if (at) hist.xgap0 = (S32)imin((int)v, 1 << 20) + 1;
+      return good();
+    }
     if (r.xpass == 2 && field_kind[fid] != FK_H) {  // (X96's subbands: model_x96.inc)
       account(CAT_X96);
       v = checked(B::x96_code(r, cur_sf, fid, ch, b, cur_j, v, lo, hi), lo, hi);

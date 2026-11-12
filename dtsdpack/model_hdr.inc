@@ -175,7 +175,8 @@ struct ModelHdr {
   U8 pfb[8][MAX_FRAME];
   S32 pfn[8];
   U32 pfk;
-  U8 tcand[8][32];
+  U8 tcand[16][32];
+  U8 tst[32];  // (code_tail()'s: the bits after the subframes as the frame 8 before leaves them)
   void frame_bytes(const U8* b, int n) {
     const int i = (int)(pfk & 7);
     memcpy(pfb[i], b, (size_t)n);
@@ -186,6 +187,11 @@ struct ModelHdr {
   static INLINE int tail_bit(const U8* q, int nbits, int i) {
     const int k = 8 * ((nbits + 7) / 8) - nbits + i;
     return (q[k >> 3] >> (7 - (k & 7))) & 1;
+  }
+  // the same's bits from i0 to i1 (less) made 0
+  static void tail_zero(U8* q, int nbits, int i0, int i1) {
+    const int s = 8 * ((nbits + 7) / 8) - nbits;
+    for (int i = i0; i < i1; i++) q[(s + i) >> 3] &= (U8) ~(1 << (7 - ((s + i) & 7)));
   }
   // a tail of n bits from the one at c (nc bits): its r-th run of 0s (from its first bit) longer by
   // n - nc (shorter where that is negative, to 1 at least), into out (as code_tail() has them);
@@ -232,11 +238,41 @@ struct ModelHdr {
   // the extension's sync word, 2-4 XXCH's: hdr's places by it)
   void code_tail(pU8 p, int nbits, int kind, int a0, S64 bitpos) {
     const int nb = (nbits + 7) / 8, zf = NHFRAME + (kind ? HX_GAPZ : HX_TAILZ), nf = NHFRAME + (kind ? HX_GAPNZ : HX_TAILNZ);
+    // (the bits after the subframes as the encoders' ring of 8 frame buffers leaves them, where there
+    // is a frame 8 before: its bits at their place to the next 32-bit boundary, then 0s (the words to
+    // the frame's end written as 0); all 0s where the last frame's subframes ran past that boundary.
+    // So every tail of `open bitrate.dts`, `3-1.dts` and `master_audio_7.1_24bit.dts` but their
+    // first 8 frames'. rs: 0 the last frame's ran past it, 1 the frame 8 before's bits there are 0s,
+    // 2 they aren't (tst); -1 no frame 8 before, or auxiliary data)
+    const S64 ptp = hist.tailpos;
+    if (!kind) hist.tailpos = bitpos + 1;
+    int rs = -1;
+    if (!kind && a0 < 0 && pfk >= 8 && nbits > 0 && nbits <= 8 * (int)sizeof tst) {
+      const int i8 = (int)((pfk - 8) & 7);
+      const S64 wb = (bitpos + 31) & ~(S64)31, we = wb < bitpos + nbits ? wb : bitpos + nbits;
+      if (we <= (S64)pfn[i8] * 8) {
+        const int n8 = (nbits + 7) / 8;
+        if (ptp > wb + 1) {
+          rs = 0;
+          memset(tst, 0, (size_t)n8);
+        } else {
+          bits_at(pfb[i8], bitpos, nbits, tst);
+          tail_zero(tst, nbits, (int)(we - bitpos), nbits);
+          int any = 0;
+          for (int j = 0; j < n8; j++) any |= tst[j];
+          rs = any ? 2 : 1;
+        }
+      }
+    }
     // (the hdr fields' place: each kind its own; the bits after the subframes' and those before the
     // extension's, by their bits to the next 32-bit boundary: their fills' odds go by them)
-    // (and those after the subframes by whether the last ones ended in more than 31 0s: `open
-    // bitrate.dts`'s, 1s then 0s, the 1s by the last ones' 0s, its core 5.3% smaller)
-    const int o = kind > 1 ? kind - 1 : kind ? 4 + ((nbits & 31) >> 1) : ((nbits & 31) >> 1) + (hist.tailz - 1 > 31 ? 16 : 0);
+    // (and those after the subframes by rs, from 64; without it, by whether the last ones ended in
+    // more than 31 0s: `open bitrate.dts`'s, 1s then 0s, the 1s by the last ones' 0s, its core 5.3%
+    // smaller)
+    const int o = kind > 1 ? kind - 1
+                  : kind  ? 4 + ((nbits & 31) >> 1)
+                  : rs >= 0 ? 64 + ((nbits & 31) >> 1) + 16 * rs
+                            : ((nbits & 31) >> 1) + (hist.tailz - 1 > 31 ? 16 : 0);
     struct TailZ {  // (the bits' trailing 0s into the history, as they end: z where known, else from q)
       Hist& h;
       const U8* q;
@@ -271,24 +307,42 @@ struct ModelHdr {
       return;
     }
     const int cache = nb <= Hist::TC_B;
+    // (the bits after the subframes as rs says, a flag, a field of its own)
+    if (rs == 2 && hdr_hist(fnums.tailst, 0, 1, ENC && !memcmp(tst, q, (size_t)nb))) {
+      if (!ENC) memcpy(q, tst, (size_t)nb);
+      int k = 0;
+      while (k < nb && !q[k]) k++;
+      nz = nb - k;
+      for (int j = 0; j < nz; j++) last[j] = q[k + j];  // (the state the bytes' coding leaves)
+      lastn = nz;
+      if (cache) tail_cache_add(kind, nbits, q, nb);
+      hist.tailsync = a0 >= nb - nz ? a0 - (nb - nz) : -1;
+      if (!ENC)
+        for (int j = 0; j < nb; j++) p[j] = (U8)((q[j] << sh) | (j + 1 < nb && sh ? q[j + 1] >> (8 - sh) : 0));
+      return;
+    }
     // (the bytes before the extension's sync word as a frame before had them at their place, the bits
-    // before those 0: frames 8, then 1 to 7 back, a flag each, at the zero flag's places from 48,
-    // where they aren't 0 or one before)
+    // before those 0: those to the next 16-bit boundary (`ES 6.1 16bit.dts`'s and `96-24.dts`'s, from
+    // the frame 8 before, but for their first 8 frames'), or those of the core's last byte; frames 8,
+    // then 1 to 7 back, a flag each, at the zero flag's places from 64 and from 48, where they aren't
+    // 0 or one before)
     if (kind == 1 && nb <= 32) {
       static const S8 BK[8] = {8, 1, 2, 3, 4, 5, 6, 7};
+      const int z16 = (int)(((bitpos + 15) & ~(S64)15) - bitpos);
       int nc = 0;
-      for (int t = 0; t < 8; t++) {
-        const int b = BK[t], i = (int)((pfk - b) & 7);
+      for (int t = 0; t < 16; t++) {
+        const int b = BK[t >> 1], i = (int)((pfk - b) & 7);
         if ((U32)b > pfk || bitpos + nbits > (S64)pfn[i] * 8) continue;
         U8* const c = tcand[nc];
         bits_at(pfb[i], bitpos, nbits, c);
-        if (nbits & 7) c[0] = 0;  // (the bits before its bytes, the rest of the core's last byte: 0)
+        if (!(t & 1)) tail_zero(c, nbits, 0, z16 < nbits ? z16 : nbits);
+        else if (nbits & 7) c[0] = 0;  // (the bits before its bytes, the rest of the core's last byte: 0)
         int skip = 1;
         for (int j = 0; j < nb && skip; j++) skip = !c[j];
         for (int u = 0; u < nc && !skip; u++) skip = !memcmp(tcand[u], c, (size_t)nb);
         if (skip) continue;
         nc++;
-        if (!hdr_hist(zf, 48 + b, 1, ENC && !memcmp(c, q, (size_t)nb))) continue;
+        if (!hdr_hist(zf, (t & 1 ? 48 : 64) + b, 1, ENC && !memcmp(c, q, (size_t)nb))) continue;
         if (!ENC) memcpy(q, c, (size_t)nb);
         int k = 0;
         while (k < nb && !q[k]) k++;

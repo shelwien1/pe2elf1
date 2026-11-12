@@ -19,6 +19,7 @@ static_assert(F_LFEscaleIndex + 1 == NHFRAME && F_XCH == NHFRAME && F_XXDCOEF + 
 struct FieldNums {
   S16 hdr[F_N];
   S16 tailrs;  // (code_tail()'s flags: whether a cached tail resized is the tail)
+  S16 tailst;  // (and whether the bits after the subframes are the frame 8 before's, then 0s)
 };
 static FieldNums field_nums(void) {
   FieldNums t;
@@ -28,6 +29,7 @@ static FieldNums field_nums(void) {
     t.hdr[fid] = field_kind[fid] == FK_H ? (S16)h++ : (S16)-1;
   }
   t.tailrs = (S16)h++;
+  t.tailst = (S16)h++;
   if (h > NHF) fatal("internal error: %d header fields", h);
   return t;
 }
@@ -49,6 +51,8 @@ struct Hist {
   U8 tail[5][MAX_FRAME];
   S32 tailn[5];
   S32 tailz;  // (1 + the last bits after the subframes' trailing 0 bits, 0 none)
+  S64 tailpos;  // (1 + the bit the last bits after the subframes began at, 0 none)
+  S32 xgap0;    // (1 + the last XGAP where the subframes ended at a 4-byte boundary, 0 none)
   S32 tailsync;  // (the last aux tail's sync word, its place among those bytes: code_tail(); -1 none)
   S32 trn, trh;  // (code_tail(): the tails a cached one's run of 0s resized was tried on, and made)
   // the last TC_K tails of each kind that weren't all 0 (as code_tail() has them, to TC_B bytes), the
