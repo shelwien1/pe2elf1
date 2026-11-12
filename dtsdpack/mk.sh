@@ -26,10 +26,12 @@
 #                             -DDTSD_PVQDUMP), whence tools/pvqblocks.py learns pvqblocks.inc:
 #                             tools/pvqblocks.py pvqblocks.inc DIR/*.pv
 #      ./mk.sh lfedump DIR STREAM WAV...
-#                             the LFE values code_lfe() codes (a lossless WAV's), with the
-#                             prototype's decimations around each, DIR/s<N>.lf per stream (dtsdpack
-#                             built with -DDTSD_LFEDUMP), whence tools/lfefilter.py fits
-#                             lfefilter.inc: tools/lfefilter.py lfefilter.inc DIR/*.lf
+#                             the LFE values code_lfe() codes, with the prototype's decimations
+#                             around each, DIR/s<N>.lf per stream (dtsdpack built with
+#                             -DDTSD_LFEDUMP), whence tools/lfefilter.py fits lfefilter.inc (of
+#                             lossless WAVs' streams): tools/lfefilter.py lfefilter.inc DIR/*.lf;
+#                             and lfefilterd.inc (of FFmpeg's decodes'): tools/lfefilter.py -d
+#                             lfefilterd.inc DIR/*.lf
 #
 #  Each level has its own IDX sources, IDX/l<L>/<family>.idx and the template of the level's
 #  families IDX/l<L>/family.inc (format: IDX/IDX-FORMAT.md), which IDX/idx2inc.pl turns into

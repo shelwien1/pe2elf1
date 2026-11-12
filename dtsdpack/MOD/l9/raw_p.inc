@@ -37,7 +37,7 @@ void D9_raw_make( const M_raw_v & D, tcx & X ) {
 
   h = 0;
   h = h*4 + D9_raw_h_code[__min(3,__max(0,(code)-(1-1)))];
-  h = h*22 + D9_raw_h_cl[__min(256,__max(0,(cl)-(1-1)))];
+  h = h*19 + D9_raw_h_cl[__min(256,__max(0,(cl)-(1-1)))];
   h = (h<<7) + (((((c1)>>2)&63)<<1) + ((c1)&1)); // 11111101
 
   i = 0;

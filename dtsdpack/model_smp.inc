@@ -144,7 +144,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   }
 #endif
 #ifdef DTSD_LFEDUMP
-  // (./mk.sh lfedump: a lossless WAV's LFE value, appended to $DTSD_LFEDUMP: the value as a 32-bit
+  // (./mk.sh lfedump: an LFE value, appended to $DTSD_LFEDUMP: the value as a 32-bit
   // integer and 32 bits of 0, its step and the prototype's decimations by 32 around it (lfe_f3's)
   // as 64-bit ones; tools/lfefilter.py reads them)
   static void lfe_dump(const S64* f, S64 st, int v) {
@@ -254,10 +254,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // filter as fitted to `s.2.dts`'s values, LFE_W2 (lfe_fixed()), the fourth, the better of all
   // where it is their filter, from a stream's start (`s.2.dts`'s LFE 3184 bytes to 223, its core
   // 3.0% smaller in all; FFmpeg's master_audio_7.1_24bit.dts's LFE 262 to 44, its core 5.9%, its
-  // filter the same; `Master Audio 7.1.dts`'s, no linear filter of its WAV's, 0.4% bigger)
+  // filter the same; `Master Audio 7.1.dts`'s, no linear filter of its WAV's, 0.4% bigger); and the
+  // fifth the same of FFmpeg's decodes, LFE_W2D (its LFE interpolation undone), the better from a
+  // decoded WAV's first values, which the fits haven't learned yet
   LfeFit<LFE_N2, LFE_K2, 7> lfit3;
   U32 lfe_nsf;
-  U32 lfh[4];               // how often each one's prediction was the value (halved as they grow)
+  U32 lfh[5];               // how often each one's prediction was the value (halved as they grow)
   // X96's, where the frame has it and the WAV is at twice the core's rate: each bound channel's
   // 64-band analysis by block of the frame, and the core's decoded samples (X96's residuals are the
   // one less the other: model_x96.inc)
@@ -2485,17 +2487,19 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     int k = 3;
     for (int j = 0; j < 3; j++)
       if (lfh[j] > lfh[k]) k = j;
+    if (lfh[4] > lfh[k]) k = 4;
     return k;
   }
-  // the DTS-HD MA encoders' filter's (LFE_W2)
-  S64 lfe_fixed(int i) const {
+  // the DTS-HD MA encoders' filter's (LFE_W2, in 2^-30), FFmpeg's decodes' (LFE_W2D, in 2^-24: d)
+  S64 lfe_fixed(int i, bool d = false) const {
+    const S32* const w = d ? LFE_W2D : LFE_W2;
     S128 p = 0;
-    for (int k = 0; k < LFE_N2; k++) p += (S128)LFE_W2[k] * lfe_f3[i][k];
-    return (S64)(p >> 30);
+    for (int k = 0; k < LFE_N2; k++) p += (S128)w[k] * lfe_f3[i][k];
+    return (S64)(p >> (d ? 24 : 30));
   }
   S64 lfe_pred(int i) const {
     const int k = lfe_best();
-    return k == 3 ? lfe_fixed(i) : k == 2 ? lfit3.predict(lfe_f3[i]) : k == 1 ? lfit2.predict(lfe_f[i]) : lfit.predict(lfe_f[i]);
+    return k >= 3 ? lfe_fixed(i, k == 4) : k == 2 ? lfit3.predict(lfe_f3[i]) : k == 1 ? lfit2.predict(lfe_f[i]) : lfit.predict(lfe_f[i]);
   }
   // LFE sample i of the subframe (its value v): against its prediction at the scale factor's step
   S64 code_lfe(int i, S64 v) {
@@ -2503,9 +2507,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     S128 dist;
     int how;
     for (int k = 0; k < LFE_NP; k++) lfe_f[i][LFE_NT + k] = lfe_past[k];  // (the values decoded)
-    const S64 p1 = lfit.predict(lfe_f[i]), p2 = lfit2.predict(lfe_f[i]), p3 = lfit3.predict(lfe_f3[i]), p4 = lfe_fixed(i);
+    const S64 p1 = lfit.predict(lfe_f[i]), p2 = lfit2.predict(lfe_f[i]), p3 = lfit3.predict(lfe_f3[i]), p4 = lfe_fixed(i),
+              p5 = lfe_fixed(i, true);
     const int lb = lfe_best();
-    lfe_p[i] = lb == 3 ? p4 : lb == 2 ? p3 : lb == 1 ? p2 : p1;
+    lfe_p[i] = lb == 4 ? p5 : lb == 3 ? p4 : lb == 2 ? p3 : lb == 1 ? p2 : p1;
     const S64 qp = requant(lfe_p[i], lfe_st << 6, -128, 127, &dist, &alt);
     M_smp_v D;
     D.ab = 27;
@@ -2532,15 +2537,16 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     lfit2.add(lfe_f[i], v * lfe_st, lfe_st);
     lfit3.add(lfe_f3[i], v * lfe_st, lfe_st);
 #ifdef DTSD_LFEDUMP
-    if (ENC && !ss_rule()) lfe_dump(lfe_f3[i], lfe_st, (int)v);
+    if (ENC) lfe_dump(lfe_f3[i], lfe_st, (int)v);
 #endif
     {  // (whether each prediction's index was the value)
       S128 dd;
       S64 al;
       lfh[0] += requant(p1, lfe_st << 6, -128, 127, &dd, &al) == v, lfh[1] += requant(p2, lfe_st << 6, -128, 127, &dd, &al) == v;
       lfh[2] += requant(p3, lfe_st << 6, -128, 127, &dd, &al) == v, lfh[3] += requant(p4, lfe_st << 6, -128, 127, &dd, &al) == v;
-      if (lfh[0] + lfh[1] + lfh[2] + lfh[3] >= 4u << 11)
-        for (int k = 0; k < 4; k++) lfh[k] >>= 1;
+      lfh[4] += requant(p5, lfe_st << 6, -128, 127, &dd, &al) == v;
+      if (lfh[0] + lfh[1] + lfh[2] + lfh[3] >= 4u << 11)  // (by the first four's sum, as before the fifth)
+        for (int k = 0; k < 5; k++) lfh[k] >>= 1;
     }
     for (int k = LFE_NP - 1; k > 0; k--) lfe_past[k] = lfe_past[k - 1];
     lfe_past[0] = v * lfe_st;

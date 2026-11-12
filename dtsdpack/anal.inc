@@ -913,7 +913,8 @@ constexpr S64 LFE_G = 290844593;  // the prototype's decimation to the units of 
 constexpr int LFE_K = 6, LFE_NT = 2 * LFE_K + 1;  // the correction's taps: the decimated samples K before to K after
 constexpr int LFE_NP = 7, LFE_NF = LFE_NT + LFE_NP;  // and the last LFE values (a decoded WAV's LFE is their interpolation)
 constexpr int LFE_K2 = 2 * LFE_K + 1, LFE_N2 = 2 * LFE_K2 + 1;  // the decimations by 32 (twice the LFE's rate) around a value: 13 before to 13 after
-#include "lfefilter.inc"  // (LFE_W2: the DTS-HD MA encoders' filter as a correction of those, Q30; tools/lfefilter.py)
+#include "lfefilter.inc"   // (LFE_W2: the DTS-HD MA encoders' filter as a correction of those, Q30; tools/lfefilter.py)
+#include "lfefilterd.inc"  // (LFE_W2D: FFmpeg's decodes' the same, its LFE interpolation undone; tools/lfefilter.py -d)
 
 constexpr int LFE_Q = 23;  // the LFE's units: 2^-LFE_Q of those of a value times its step (its steps exact in them)
 
