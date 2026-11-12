@@ -3813,7 +3813,7 @@ static void code_seektable(AC& ac, MBlock& b, const FrameStats& fs, const Stream
     }
 }
 
-static void code_derived(AC& ac, FlacLayout& L, FrameStats& fs) {
+static bool code_derived(AC& ac, FlacLayout& L, FrameStats& fs) {
     ac.cat = C_META;
     BM fl[8][4];
     bm_init(&fl[0][0], 32);
@@ -3879,6 +3879,10 @@ static void code_derived(AC& ac, FlacLayout& L, FrameStats& fs) {
     }
     for (size_t i = 1; i < L.blocks.n; i++)
         if (L.blocks[i].type == 3 && L.blocks[i].structured) code_seektable(ac, L.blocks[i], fs, L.sp);
+    // 16-bit check of the PCM (detects a .wav that does not belong to this .meta)
+    u32 chk = (fs.md5sum[0] << 8) | fs.md5sum[1];
+    u32 got = (u32)ac.raw(chk, 16);
+    return got == chk;
 }
 
 // encoder hint from the VORBIS_COMMENT vendor string: 0 unknown, -1 ffmpeg, libFLAC version*100
@@ -4235,7 +4239,10 @@ static bool decompress_core(const u8* meta, size_t meta_n, WavReader& wav, Sink&
         }
     }
     fs.md5.final(fs.md5sum);
-    code_derived(ac, L, fs);
+    if (!code_derived(ac, L, fs)) {
+        fprintf(stderr, "flacdump: the .wav does not match the .meta\n");
+        return false;
+    }
     u64 endpos = pos;
     write_header(out, L);
     out.pos = endpos;

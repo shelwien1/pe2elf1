@@ -119,7 +119,8 @@ from unknown encoders simply produce a larger `.meta`.
 
 `'F' 0xD1` followed by a single arithmetic-coded stream: container layout and
 metadata blocks, then one segment per frame/junk run, then the fields that
-depend on the restored audio (STREAMINFO sizes/MD5, seek tables). The format is
+depend on the restored audio (STREAMINFO sizes/MD5, seek tables) and a 16-bit
+check of the PCM, so `d` refuses a `.wav` that does not belong to the `.meta`. The format is
 defined by the model code; there is no compatibility guarantee between
 different versions of the tool.
 
