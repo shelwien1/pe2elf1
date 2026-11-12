@@ -1468,32 +1468,75 @@ static double det_cos(double x) {
 }
 static inline float det_cosf(float x) { return (float)det_cos((double)x); }
 
+// glibc (>= 2.28) cosf for 0 <= y < 120, emulated with plain double arithmetic
+static float glibc_cosf(float y) {
+    static const double T[2][13] = {
+        {1.0, -1.0, -1.0, 1.0, 0x1.45F306DC9C883p+23, 0x1.921FB54442D18p0, 0x1p0, -0x1.ffffffd0c621cp-2,
+         0x1.55553e1068f19p-5, -0x1.6c087e89a359dp-10, 0x1.99343027bf8c3p-16, -0x1.555545995a603p-3,
+         0x1.1107605230bc4p-7},
+        {1.0, -1.0, -1.0, 1.0, 0x1.45F306DC9C883p+23, 0x1.921FB54442D18p0, -0x1p0, 0x1.ffffffd0c621cp-2,
+         -0x1.55553e1068f19p-5, 0x1.6c087e89a359dp-10, -0x1.99343027bf8c3p-16, -0x1.555545995a603p-3,
+         0x1.1107605230bc4p-7}};
+    static const double S3 = -0x1.994eb3774cf24p-13;
+    u32 yi;
+    memcpy(&yi, &y, 4);
+    u32 top = (yi >> 20) & 0x7ff;
+    const float pio4 = 0x1.921FB6p-1f;
+    u32 pi4i;
+    memcpy(&pi4i, &pio4, 4);
+    double x = y;
+    int n;
+    const double* p = T[0];
+    if (top < ((pi4i >> 20) & 0x7ff)) {
+        if (top < 0x398) return 1.0f;  // abstop12(0x1p-12f)
+        n = 1;
+    } else {
+        double r = x * p[4];
+        n = ((s32)r + 0x800000) >> 24;
+        x = x - n * p[5];
+        double sg = p[n & 3];
+        if (n & 2) p = T[1];
+        x = x * sg;
+        n ^= 1;
+    }
+    double x2 = x * x;
+    if ((n & 1) == 0) {
+        double x3 = x * x2;
+        double s1 = p[12] + x2 * S3;
+        double x7 = x3 * x2;
+        double sv = x + x3 * p[11];
+        return (float)(sv + x7 * s1);
+    }
+    double x4 = x2 * x2;
+    double c2 = p[9] + x2 * p[10];
+    double c1 = p[6] + x2 * p[7];
+    double x6 = x4 * x2;
+    double c = c1 + x4 * p[8];
+    return (float)(c + x6 * c2);
+}
+
 static const double k_pi = 3.14159265358979323846;
 
 // window variants: v14 = libFLAC >= 1.3 (cosf), v12 = libFLAC <= 1.2 (cos)
 // 0.5 - 0.5*cos(pi*i/N): libFLAC <= 1.3.3 uses double cos, >= 1.3.4 cosf
-static inline float hann_tap(int i, int N, bool v12) {
-    if (v12) return (float)(0.5 - 0.5 * det_cos(k_pi * i / N));
+static inline float hann_tap(int i, int N, int v12) {
+    if (v12 == 1) return (float)(0.5 - 0.5 * det_cos(k_pi * i / N));
+    if (v12 == 2) return 0.5f - 0.5f * glibc_cosf((float)(k_pi * i / N));
     return 0.5f - 0.5f * det_cosf((float)(k_pi * i / N));
 }
 
-static void win_tukey(float* w, int L, float p, bool v12) {
+static void win_tukey(float* w, int L, float p, int v12) {
     for (int n = 0; n < L; n++) w[n] = 1.0f;
     if (p <= 0.0f) return;
     int Np = (int)(p / 2.0f * (float)L) - 1;
     if (Np > 0) {
         for (int n = 0; n <= Np; n++) {
-            if (v12) {
-                w[n] = (float)(0.5 - 0.5 * det_cos(k_pi * n / Np));
-                w[L - Np - 1 + n] = (float)(0.5 - 0.5 * det_cos(k_pi * (n + Np) / Np));
-            } else {
-                w[n] = 0.5f - 0.5f * det_cosf((float)(k_pi * n / Np));
-                w[L - Np - 1 + n] = 0.5f - 0.5f * det_cosf((float)(k_pi * (n + Np) / Np));
-            }
+            w[n] = hann_tap(n, Np, v12);
+            w[L - Np - 1 + n] = hann_tap(n + Np, Np, v12);
         }
     }
 }
-static void win_partial_tukey(float* w, int L, float p, float start, float end, bool v12) {
+static void win_partial_tukey(float* w, int L, float p, float start, float end, int v12) {
     int start_n = (int)(start * (float)L);
     int end_n = (int)(end * (float)L);
     int N = end_n - start_n;
@@ -1505,7 +1548,7 @@ static void win_partial_tukey(float* w, int L, float p, float start, float end, 
     for (i = Np; n < end_n && n < L; n++, i--) w[n] = hann_tap(i, Np, v12);
     for (; n < L; n++) w[n] = 0.0f;
 }
-static void win_punchout_tukey(float* w, int L, float p, float start, float end, bool v12) {
+static void win_punchout_tukey(float* w, int L, float p, float start, float end, int v12) {
     int start_n = (int)(start * (float)L);
     int end_n = (int)(end * (float)L);
     int Ns = (int)(p / 2.0f * (float)start_n);
@@ -1535,8 +1578,30 @@ enum {
     W_PO3C_0,
     W_PO3C_1,
     W_PO3C_2,
+    W_T50G,  // glibc cosf variants (libFLAC >= 1.3.4 on Linux)
+    W_T25G,
+    W_T16G,
+    W_PT2G_0,
+    W_PT2G_1,
+    W_PO3G_0,
+    W_PO3G_1,
+    W_PO3G_2,
     NWIN
 };
+// windows that differ only numerically map to the same base window
+static int base_win(int w) {
+    switch (w) {
+        case W_T50_12: case W_T50G: return W_T50;
+        case W_T25G: return W_T25;
+        case W_T16G: return W_T16;
+        case W_PT2C_0: case W_PT2G_0: return W_PT2_0;
+        case W_PT2C_1: case W_PT2G_1: return W_PT2_1;
+        case W_PO3C_0: case W_PO3G_0: return W_PO3_0;
+        case W_PO3C_1: case W_PO3G_1: return W_PO3_1;
+        case W_PO3C_2: case W_PO3G_2: return W_PO3_2;
+        default: return w;
+    }
+}
 
 struct WinCache {
     int bs;
@@ -1548,17 +1613,21 @@ struct WinCache {
     void ensure(int L) {
         if (L == bs) return;
         bs = L;
-        win_tukey(w[W_T50], L, 0.5f, false);
-        win_tukey(w[W_T50_12], L, 0.5f, true);
-        win_tukey(w[W_T25], L, 0.5f / 2, false);
-        win_tukey(w[W_T16], L, 0.5f / 3, false);
+        win_tukey(w[W_T50], L, 0.5f, 0);
+        win_tukey(w[W_T50_12], L, 0.5f, 1);
+        win_tukey(w[W_T25], L, 0.5f / 2, 0);
+        win_tukey(w[W_T16], L, 0.5f / 3, 0);
+        win_tukey(w[W_T50G], L, 0.5f, 2);
+        win_tukey(w[W_T25G], L, 0.5f / 2, 2);
+        win_tukey(w[W_T16G], L, 0.5f / 3, 2);
         {
             float overlap = 0.1f;
             float ou = 1.0f / (1.0f - overlap) - 1.0f;
             int parts = 2;
             for (int m = 0; m < parts; m++) {
-                win_partial_tukey(w[W_PT2_0 + m], L, 0.2f, m / (parts + ou), (m + 1 + ou) / (parts + ou), false);
-                win_partial_tukey(w[W_PT2C_0 + m], L, 0.2f, m / (parts + ou), (m + 1 + ou) / (parts + ou), true);
+                win_partial_tukey(w[W_PT2_0 + m], L, 0.2f, m / (parts + ou), (m + 1 + ou) / (parts + ou), 0);
+                win_partial_tukey(w[W_PT2C_0 + m], L, 0.2f, m / (parts + ou), (m + 1 + ou) / (parts + ou), 1);
+                win_partial_tukey(w[W_PT2G_0 + m], L, 0.2f, m / (parts + ou), (m + 1 + ou) / (parts + ou), 2);
             }
         }
         {
@@ -1566,18 +1635,29 @@ struct WinCache {
             float ou = 1.0f / (1.0f - overlap) - 1.0f;
             int parts = 3;
             for (int m = 0; m < parts; m++) {
-                win_punchout_tukey(w[W_PO3_0 + m], L, 0.2f, m / (parts + ou), (m + 1 + ou) / (parts + ou), false);
-                win_punchout_tukey(w[W_PO3C_0 + m], L, 0.2f, m / (parts + ou), (m + 1 + ou) / (parts + ou), true);
+                win_punchout_tukey(w[W_PO3_0 + m], L, 0.2f, m / (parts + ou), (m + 1 + ou) / (parts + ou), 0);
+                win_punchout_tukey(w[W_PO3C_0 + m], L, 0.2f, m / (parts + ou), (m + 1 + ou) / (parts + ou), 1);
+                win_punchout_tukey(w[W_PO3G_0 + m], L, 0.2f, m / (parts + ou), (m + 1 + ou) / (parts + ou), 2);
             }
         }
     }
 };
 
 // autocorrelation variants
-enum { AC_DBL = 0, AC_FASC, AC_FNEW8, AC_FNEW12, AC_FNEW16, AC_X87, AC_FFMA, NAC };
+enum { AC_DBL = 0, AC_FASC, AC_FNEW8, AC_FNEW12, AC_FNEW16, AC_X87, AC_FFMA, AC_DDESC, NAC };
 
 static void autoc_compute(const float* d, int n, int lags, int mode, double* out) {
-    if (mode == AC_DBL) {
+    if (mode == AC_DDESC) {
+        // libFLAC 1.4 SSE2 / NEON intrinsics: samples processed from the end
+        double ac[33];
+        for (int c = 0; c < lags; c++) ac[c] = 0.0;
+        for (int i = n - 1; i >= 0; i--) {
+            double di = d[i];
+            int m = Min(lags, n - i);
+            for (int c = 0; c < m; c++) ac[c] += di * (double)d[i + c];
+        }
+        for (int c = 0; c < lags; c++) out[c] = ac[c];
+    } else if (mode == AC_DBL) {
         double ac[33];
         for (int c = 0; c < lags; c++) ac[c] = 0.0;
         for (int i = 0; i < n; i++) {
@@ -1895,7 +1975,7 @@ struct CandDef {
     u8 fma;  // Levinson compiled with fma contraction
 };
 
-enum { MAXCAND = 96 };
+enum { MAXCAND = 192 };
 
 struct LpcPredictor {
     WinCache wc;
@@ -2001,6 +2081,37 @@ struct LpcPredictor {
         for (int k = 0; k < 3; k++) add(0, W_PO3C_0 + k, 0, 0, 0, AC_FFMA, 1);
         for (int k = 0; k < 3; k++) add(0, W_PO3_0 + k, 0, 0, 0, AC_X87);
         for (int k = 0; k < 2; k++) add(0, W_PT2_0 + k, 0, 0, 0, AC_X87);
+        // libFLAC >= 1.3.4 linked against glibc (its cosf is not correctly rounded)
+        for (int ac2 = 0; ac2 < 2; ac2++) {
+            int am = ac2 ? AC_DDESC : AC_DBL;
+            add(0, W_T50G, 0, 0, 0, am);
+            add(0, W_T25G, 0, 0, 0, am);
+            add(1, W_T25G, 2, 0, 0, am);
+            add(1, W_T25G, 2, 2, 0, am);
+            add(0, W_T16G, 0, 0, 0, am);
+            add(1, W_T16G, 2, 0, 0, am);
+            add(1, W_T16G, 2, 2, 0, am);
+            for (int c = 0; c < 6; c++) add(c & 1 ? 2 : 1, W_T16G, 3, c, 0, am);
+            for (int c = 1; c < 6; c += 2) add(2, W_T16G, 3, c, 1, am);
+            for (int k = 0; k < 2; k++) add(0, W_PT2G_0 + k, 0, 0, 0, am);
+            for (int k = 0; k < 3; k++) add(0, W_PO3G_0 + k, 0, 0, 0, am);
+        }
+        add(0, W_T50G, 0, 0, 0, AC_FNEW12);  // 1.3.4 Linux
+        add(0, W_T50G, 0, 0, 0, AC_FNEW16);
+        for (int k = 0; k < 2; k++) add(0, W_PT2G_0 + k, 0, 0, 0, AC_FNEW16);
+        for (int k = 0; k < 3; k++) add(0, W_PO3G_0 + k, 0, 0, 0, AC_FNEW16);
+        // libFLAC 1.4 on CPUs without FMA (SSE2) and on arm64 (NEON): descending sums
+        for (int fm = 0; fm < 2; fm++) {
+            add(0, W_T50, 0, 0, 0, AC_DDESC, fm);
+            add(0, W_T25, 0, 0, 0, AC_DDESC, fm);
+            add(1, W_T25, 2, 0, 0, AC_DDESC, fm);
+            add(1, W_T25, 2, 2, 0, AC_DDESC, fm);
+            add(0, W_T16, 0, 0, 0, AC_DDESC, fm);
+            add(1, W_T16, 2, 0, 0, AC_DDESC, fm);
+            add(1, W_T16, 2, 2, 0, AC_DDESC, fm);
+            for (int c = 0; c < 6; c++) add(c & 1 ? 2 : 1, W_T16, 3, c, 0, AC_DDESC, fm);
+            for (int c = 1; c < 6; c += 2) add(2, W_T16, 3, c, 1, AC_DDESC, fm);
+        }
     }
     void begin(const s64* x_, int n_) {
         x = x_;
@@ -2747,7 +2858,7 @@ static int sim_windows(LpcPredictor& P, int* ids) {
         for (int j = 0; j < P.ncand; j++) {
             const CandDef& b = P.cand[j];
             if (j == i || b.kind != a.kind || b.b != a.b || b.c != a.c) continue;
-            bool samewin = b.win == a.win || ((a.win == W_T50 || a.win == W_T50_12) && (b.win == W_T50 || b.win == W_T50_12));
+            bool samewin = base_win(b.win) == base_win(a.win);
             if (!samewin) continue;
             if (P.hits[j] > P.hits[i] || (P.hits[j] == P.hits[i] && j < i)) dominated = true;
         }
