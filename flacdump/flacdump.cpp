@@ -11,7 +11,7 @@
 // (by re-running parts of the libFLAC / ffmpeg analysis), so usually only
 // the deviations from the predictions cost space.
 //
-// Build: g++ -std=c++20 -O2 -fno-exceptions -fno-rtti -o flacdump flacdump.cpp
+// Build: g++ -std=c++20 -O2 -fno-exceptions -fno-rtti -ffp-contract=off -o flacdump flacdump.cpp
 // No STL is used; only the C runtime (stdio, stdlib, string, math).
 
 #include <stdio.h>
@@ -19,6 +19,15 @@
 #include <string.h>
 #include <stdint.h>
 #include <math.h>
+
+// The encoder-decision predictors replay floating point computations; both
+// directions must get bit-identical results, so no contraction / x87 math.
+#if defined(__clang__)
+#pragma clang fp contract(off)
+#endif
+#if (defined(__i386__) || defined(_M_IX86)) && !defined(__SSE2_MATH__) && !defined(_M_IX86_FP)
+#error "build with SSE2 floating point math (e.g. -msse2 -mfpmath=sse)"
+#endif
 
 typedef uint8_t u8;
 typedef int8_t s8;
@@ -2363,39 +2372,6 @@ static bool model_residual(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, con
         else
             po = ac.tree(M.po_t[pL], 4, po);
     }
-    if (!ac.dec && g_verbose >= 4 && po != pL)
-        fprintf(stderr, "pomiss: actual %d pL %d pF %d lo %d hi %d order %d type %d bs %d k0 %d mode %d votes %u/%u\n", po, pL, pF, lo, hi, s.order, s.type, bs, k0, st.k0mode, st.k0vote[0], st.k0vote[1]);
-    if (!ac.dec && g_verbose >= 4) {
-        // test: exact bit counting
-        u64 bb = ~0ull; int bp = hi;
-        for (int q = hi; q >= lo; q--) {
-            if (((u32)bs >> q) <= (u32)s.order && q > 0) continue;
-            u64 bits = 6; u32 off = 0;
-            for (int i = 0; i < (1 << q); i++) {
-                u32 ps = rs.psamples(q, i);
-                int k = (q == 0 && rs.k0 >= 0) ? rs.k0 : rs.est_lf(q, i, lim, st.rice_new);
-                u64 b = 4 + (u64)(k + 1) * ps;
-                for (u32 j = 0; j < ps; j++) { s64 v = res[off + j]; u64 u = ((u64)v << 1) ^ (u64)(v >> 63); b += u >> k; }
-                off += ps; bits += b;
-            }
-            if (bits < bb) { bb = bits; bp = q; }
-        }
-        st.dbg[4 + (bp == po)]++;
-        st.dbg[6 + (pL == po)]++;
-    }
-    if (!ac.dec && g_verbose >= 5 && po != pL) {
-        for (int q = 0; q <= hi; q++) {
-            u64 b = rs.bits_lf(q, q, lim, st.rice_new);
-            fprintf(stderr, "   po %d bits %llu ks:", q, (unsigned long long)b);
-            for (int i = 0; i < (1 << q) && i < 8; i++) fprintf(stderr, " %d", rs.est_lf(q, i, lim, st.rice_new));
-            fprintf(stderr, " sums:");
-            for (int i = 0; i < (1 << q) && i < 4; i++) fprintf(stderr, " %llu", (unsigned long long)rs.asum[rs.off[q] + i]);
-            fprintf(stderr, "\n");
-        }
-        fprintf(stderr, "   actual params:");
-        for (int i = 0; i < (1 << s.porder) && i < 8; i++) fprintf(stderr, " %d", s.param[i]);
-        fprintf(stderr, "\n");
-    }
     s.porder = po;
     if (po > rs.maxpo) {
         if (!ac.dec) die("internal: porder");
@@ -2418,7 +2394,6 @@ static bool model_residual(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, con
         int ctx = (kn == ko) + 2 * (kn == kf) + 4 * (i == 0);
         int kvote = kn != ko;
         int use0 = po == 0 && k0 >= 0;
-        if (use0 && g_verbose >= 4 && !ac.dec) fprintf(stderr, "po0: k %d k0 %d kn %d ko %d type %d order %d\n", k, k0, kn, ko, s.type, s.order);
         if (use0 && k0 != (st.rice_new ? kn : ko)) {
             if (k == k0) st.k0vote[1]++;
             else if (k == (st.rice_new ? kn : ko)) st.k0vote[0]++;
@@ -2699,10 +2674,6 @@ static bool model_lpc(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s6
         hit = ac.bit(M.lpc_sim[ok][cs.psim], hit);
         cs.psim = hit;
         st.dbg[hit]++;
-        if (!hit && !ac.dec && g_verbose >= 4) {
-            int ge = lpc_exh_guess(cx, st, id, st.lpc_maxseen, x, bs, ebps);
-            fprintf(stderr, "s0miss: sim order %d wid %d, actual order %d prec %d, exhguess %d ok=%d ebps=%d mp=%d\n", sim.order, id, s.order, s.prec, ge, ok, ebps, st.maxprec);
-        }
         if (hit) {
             if (!ok) return false;
             s.order = sim.order;
@@ -3004,32 +2975,6 @@ static int sim_stereo(Ctx& cx, FrameState& st, s32** pcm, int n) {
     return map[best];
 }
 
-// cheap estimate of the best stereo decorrelation (libFLAC-like fixed predictor cost)
-static double fixed_cost(const s32* a, const s32* b, int mode, int n) {
-    // mode: 0 = a, 1 = b, 2 = mid, 3 = side
-    if (n <= 4) return 0;
-    u64 e[5] = {0, 0, 0, 0, 0};
-    s64 h1 = 0, h2 = 0, h3 = 0, h4 = 0;
-    for (int i = 0; i < n; i++) {
-        s64 v = mode == 0 ? a[i] : mode == 1 ? b[i] : mode == 2 ? (((s64)a[i] + b[i]) >> 1) : ((s64)a[i] - b[i]);
-        if (i >= 4) {
-            s64 r0 = v, r1 = v - h1, r2 = v - 2 * h1 + h2, r3 = v - 3 * h1 + 3 * h2 - h3,
-                r4 = v - 4 * h1 + 6 * h2 - 4 * h3 + h4;
-            e[0] += (u64)(r0 < 0 ? -r0 : r0);
-            e[1] += (u64)(r1 < 0 ? -r1 : r1);
-            e[2] += (u64)(r2 < 0 ? -r2 : r2);
-            e[3] += (u64)(r3 < 0 ? -r3 : r3);
-            e[4] += (u64)(r4 < 0 ? -r4 : r4);
-        }
-        h4 = h3;
-        h3 = h2;
-        h2 = h1;
-        h1 = v;
-    }
-    u64 m = e[0];
-    for (int k = 1; k < 5; k++) m = Min(m, e[k]);
-    return (double)(n - 4) * det_log2((double)m / (n - 4) + 1.0);
-}
 // ffmpeg estimate_stereo_mode
 static int ff_stereo_guess(s32** pcm, int n, int maxk) {
     const s32* L = pcm[0];
@@ -3053,16 +2998,6 @@ static int ff_stereo_guess(s32** pcm, int n, int maxk) {
     for (int i = 1; i < 4; i++)
         if (score[i] < score[best]) best = i;
     return best;
-}
-
-static int stereo_guess(s32** pcm, int n) {
-    double c[4];
-    for (int k = 0; k < 4; k++) c[k] = fixed_cost(pcm[0], pcm[1], k, n);
-    double t[4] = {c[0] + c[1], c[0] + c[3], c[1] + c[3], c[2] + c[3]};
-    int b = 0;
-    for (int k = 1; k < 4; k++)
-        if (t[k] < t[b]) b = k;
-    return b;
 }
 
 // Model one FRAME segment (enc: f/pcm filled; dec: fills f, reads pcm via src)
@@ -4155,8 +4090,8 @@ static int do_compress(const char* inname, const char* prefix, const Options& op
         fprintf(stderr, "frames: %llu modelled, %llu raw, %llu junk bytes; %llu samples\n", (unsigned long long)nframes,
                 (unsigned long long)nraw, (unsigned long long)njunk, (unsigned long long)total_samples);
         print_stats(ac, meta.n);
-        fprintf(stderr, "stage0 %u/%u stage1 %u/%u exscore %u/%u  po exact %u/%u est %u/%u\n", st.dbg[1], st.dbg[0], st.dbg[3], st.dbg[2],
-                st.exscore[0], st.exscore[1], st.dbg[5], st.dbg[4], st.dbg[7], st.dbg[6]);
+        fprintf(stderr, "lpc model: stage0 %u/%u, stage1 %u/%u (hit/miss)\n", st.dbg[1], st.dbg[0], st.dbg[3],
+                st.dbg[2]);
         fprintf(stderr, "stereo sim: %u hit, %u miss; rice_new=%d fix_le=%d exh=%d maxo=%d\n", st.simstat[1], st.simstat[0],
                 st.rice_new, st.fix_le, st.lpc_exh, st.lpc_maxo);
         LpcPredictor& P = *cx.lp;
