@@ -18,7 +18,7 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
 
   // A value v of sid's field fld (in lo..hi; a flag where bit1) of channel ch's subband b: against
   // its last value A and the place before's, P (1 + them, 0 none); ac, ab, ec as famvars.inc says
-  S64 side_code(int fld, int ch, int b, S64 v, S64 lo, S64 hi, int bit1, S32 A, S32 P, int ac, int ab, int ec) {
+  S64 side_code(int fld, int ch, int b, S64 v, S64 lo, S64 hi, int bit1, S32 A, S32 P, int ac, int ab, int ec, int tr = 0) {
     M_sid_v D;
     tcx X;
     D.fld = fld;
@@ -30,6 +30,7 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
     D.ac = ac;
     D.ab = ab;
     D.ec = ec;
+    D.tr = tr;
     f_sid.make(D, X);
     f_sid.select(X);
     v = code_val(f_sid, X, bit1, v, A, P, A ? A - 1 : P ? P - 1 : 0, (u32)fld, lo, hi);
@@ -49,6 +50,7 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
     D.ac = ac;
     D.ab = ab;
     D.ec = 9;
+    D.tr = 0;
     B::sel(f_sid, D);
     if (A && f_sid.bit(SN_SAME, ENC && v == A - 1)) return sst = 1, A - 1;
     int x = 1;

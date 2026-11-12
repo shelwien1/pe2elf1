@@ -78,7 +78,8 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      the ABITS said makes it, model.inc), ab the subband's ABITS where coded before (1 + it; 0
 //      none; PMODE: the gain of the subband's LPC, in quarters of halvings, to 27), ec how its
 //      energy changes over the subframe's subsubframes (0-8, 9 none; PMODE: model_smp.inc's
-//      pmode_gain())
+//      pmode_gain()), tr (PMODE, TMODE) how its energy rises against where the encoders seen take a
+//      transient, and make no prediction (model_smp.inc's pm_rise(): 0-5; 0 for the other fields)
 // abt: bd, cc, la the last ABITS (1 + it, 0 none), lb the subband below's in the subframe (1 + it,
 //      0 none), es the audio's energy in the subband as a scale factor index (the RMS rule's; 1 +
 //      it, 0 none), de its change from the last (0-8, 9 none), ls the last scale factor less the
@@ -148,7 +149,7 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      (tc_qlog; the tail's and the gap's from their end), cl
 //      the byte at the place in the last field of the kind (0 none, else 1 + it)
 #define M_hdr_VARS(X) X(fld) X(lv) X(l2) X(pos) X(st) X(nch)
-#define M_sid_VARS(X) X(fld) X(cc) X(bd) X(lv) X(pq) X(st) X(ac) X(ab) X(ec)
+#define M_sid_VARS(X) X(fld) X(cc) X(bd) X(lv) X(pq) X(st) X(ac) X(ab) X(ec) X(tr)
 #define M_abt_VARS(X) X(bd) X(cc) X(la) X(lb) X(es) X(de) X(ls) X(pm) X(st) X(nb) X(mx) X(sn) X(sd) X(nn) X(sc) X(eq) X(sm) X(bg) X(ag)
 #define M_scl_VARS(X) X(kd) X(ab) X(pm) X(pk) X(pn) X(lp) X(hm) X(bd) X(dp) X(cc) X(nb) X(pl)
 #define M_hit_VARS(X) X(pm) X(nr) X(nl) X(ab) X(ql) X(hm)

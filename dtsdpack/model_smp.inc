@@ -68,6 +68,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   } abl[2];
   S32 fe_s[NCH][NSUB];  // the subframe's subbands' fine energies (FE_NONE: none)
   S32 fe_w[NCH][NSUB], fe_a[NCH][NSUB];  // (a transient's: its values', those from it on; else FE_NONE)
+  S8 pm_g[NCH][NSUB];  // (PMODE's gain context, pmode_gain()'s, where a lossless WAV's: -1 none)
   U8 ab_ev[NCH][NSUB];  // what its ABITS said (1 the values', 2 those from the transient on; 0 neither, 3 both)
   // the core's subframe's bit budget as its ABITS come (ab_budget()): the subbands coded, the bits
   // their ABITS' samples take
@@ -98,6 +99,20 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   S32 hgw[32][16];
   S64 hge[32];
   U32 hg_n;
+  // (the distances between their W to the power 1.5, d sqrt(d), as hf_bound_grp() computes them:
+  // group g's with each other's, again where g's W moves)
+  double hgd[32][32];
+  void hg_dist(int g) {
+    for (int f = 0; f < 32; f++) {
+      double s2 = 0;
+      for (int j = 0; j < 16; j++) {
+        const double e = (double)hgw[g][j] - (double)hgw[f][j];
+        s2 += e * e;
+      }
+      const double d = sqrt(s2);
+      hgd[g][f] = hgd[f][g] = d * sqrt(d);
+    }
+  }
   void hg_learn(const S64* x, S64 sc, int t, int f) {
     const int sh = 9 + imin(bit_len((U64)(hg_n >> 10)), 5);
     hg_n += hg_n < (1u << 30);
@@ -112,6 +127,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         n1 += (S64)hgw[g][j] * hgw[g][j];
       }
       hge[g] += (k ? 1 : -1) * ((S64)1 << (25 - sh)) - (n1 - n0);
+      hg_dist(g);
     }
     S64 m = hge[0];
     for (int g = 1; g < 32; g++) m = hge[g] < m ? hge[g] : m;
@@ -392,6 +408,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     lfit2.init();
     memcpy(hgw, HF_GW, sizeof hgw);
     memcpy(hge, HF_GE, sizeof hge);
+    for (int g = 0; g < 32; g++) hg_dist(g);
     hg_n = 0;
     for (int i = 0; i < 64; i++) lfe_cn[i] = -1;
     lfe_lp = 9;
@@ -789,7 +806,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // where the rise is a threshold or more: 3.9 doublings where those values' ABITS by the table is 9
   // or less, an eighth of one less for each ABITS more, to 3 (`s.2.dts`: 99.9% of its transients
   // from 4 doublings up, from 3 to 4 more the louder; the table at its last level, or 3.6 doublings);
-  // the fine energy the ABITS are guessed by (fe the subframe's; *fa those values', FE_NONE none)
+  // the fine energy the ABITS are guessed by (fe the subframe's; *fa those values', FE_NONE none).
+  // From 3 doublings, a subband that doesn't predict where its gain says it would has a transient,
+  // whatever the threshold (the encoders make no prediction where they take one: `s.2.dts`'s core
+  // 0.03% smaller)
   S32 ab_transient(const CoreSub& s, int ch, int b, const S64* x, int n, int p, S32 fe, S32* fa_) const {
     *fa_ = FE_NONE;
     if (s.pmode[ch][b] || b >= 20 || s.nssc < 2 || fe == FE_NONE) return fe;
@@ -803,6 +823,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     if (!tk || tr < 3 * 128) return fe;
     const S32 fa = *fa_ = fine_energy(x + 8 * tk, n - 8 * tk);
+    if (pm_g[ch][b] >= 4) return fa;  // (no prediction where the gain says one, 2^(6/4): a transient)
     const AbPar& t = abp[p][b];
     int th = 464;
     if (t.set) {
@@ -1034,6 +1055,44 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (m[0] + m[1] >= 1024) m[0] >>= 1, m[1] >>= 1;
   }
 
+  // How subband b's energy rises against where the encoders seen take a transient, for its PMODE
+  // (they make no prediction where they take one: none of `s.2.dts`'s 9353) and TMODE (a sid
+  // context, tr: model.inc): 0 by less than 20 eighths of a
+  // doubling from a subsubframe to the next (the largest rise; or one subsubframe), else by the
+  // rise in eighths less the threshold they take one from at ABITS a (ab_transient()'s: 3.9
+  // doublings at 9 or less, an eighth less for each one more, to 3), floored: 1 -4 or less, 2 -3
+  // or -2, 3 -1, 4 0, 5 more
+  struct Rise8 {  // (2^(r/8), r 0 to 48)
+    double t[49];
+    Rise8() {
+      static const double R8[8] = {1.0, 1.0905077326652577, 1.189207115002721, 1.2968395546510096,
+                                   1.4142135623730951, 1.5422108254079407, 1.681792830507429, 1.8340080864093424};
+      for (int r = 0; r <= 48; r++) t[r] = ldexp(R8[r & 7], r >> 3);
+    }
+  };
+  int pm_rise(const CoreSub& s, int ch, int b, int a) const {
+    static const Rise8 rise8;
+    int r8 = -1;
+    for (int k = 1; k < s.nssc; k++) {
+      S128 e0 = 1, e1 = 1;
+      for (int j = 0; j < 8; j++) {
+        const S64 x0 = X[ch][b][8 * (k - 1) + j], x1 = X[ch][b][8 * k + j];
+        e0 += (S128)x0 * x0, e1 += (S128)x1 * x1;
+      }
+      const double q = (double)e1 / (double)e0;  // (2^(r/8) at most, r to 48: the largest)
+      if (q < 1) continue;
+      int lo = 0, hi = 48;
+      while (lo < hi) {
+        const int m = (lo + hi + 1) >> 1;
+        if (q >= rise8.t[m]) lo = m;
+        else hi = m - 1;
+      }
+      r8 = imax(r8, lo);
+    }
+    if (r8 < 20) return 0;
+    const int x = imax(a, 9) - 9, d = x >= 8 ? r8 - 24 : r8 + x - 32;
+    return d <= -4 ? 1 : d <= -2 ? 2 : d == -1 ? 3 : d == 0 ? 4 : 5;
+  }
   // A lossless WAV's transient (TMODE) as encoders make it: where a subsubframe's energy is 8 times
   // the one before's at least, the largest such rise's (*tg, 1 to nssc - 1, else 0); how likely, the
   // class returned: 0 no such rise; 1 the subband predicts, 2 it is 20 or above (the encoders seen
@@ -1130,10 +1189,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   U32 hrs[2];  // (code_hfvq(): which ranked the encoder's group higher, the values as they are or scaled into its scale factor's region)
   U32 hpw[2];  // (code_hfvq(): where a group wasn't the first, the vectors' order that ranked the encoder's higher, the values as they are or moved)
   // (mlu > 0: ml's unit)
-  int code_cand(int n, int nb, int v, int kd, int ch, int b, int gn, S128 mu = 0, S128 mlu = 0) {
-    return code_cand(n, nb, v, kd, ch, b, gn, lrank[ch][b][kd], mu, mlu);
+  // (ord: where given, the ranks' order instead of the keys', which the margins go by: each
+  // candidate's, by its index)
+  int code_cand(int n, int nb, int v, int kd, int ch, int b, int gn, S128 mu = 0, S128 mlu = 0, const S128* ord = nullptr) {
+    return code_cand(n, nb, v, kd, ch, b, gn, lrank[ch][b][kd], mu, mlu, ord);
   }
-  int code_cand(int n, int nb, int v, int kd, int ch, int b, int gn, U8& lh, S128 mu = 0, S128 mlu = 0) {
+  int code_cand(int n, int nb, int v, int kd, int ch, int b, int gn, U8& lh, S128 mu = 0, S128 mlu = 0, const S128* ord = nullptr) {
     M_vqr_v D;
     D.kd = kd;
     D.cc = chan_class(ch);
@@ -1155,6 +1216,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.gn = gn;
     D.lh = lh;
     D.gr = 7;
+    if (ord)
+      for (int i = 0; i < n; i++) cand[i].k = ord[cand[i].i];
     B::sel(f_vqr, D);
     int at = 0;
     if (ENC)
@@ -1423,10 +1486,20 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // 2^19 times the vectors' distances: `s.2.dts`'s groups' within 2^-4 of that unit were the
     // first half the time, 98% from 2 times it)
     const S128 mu = bound[ch] && !ss_rule() && !x96a ? (S128)tlvl[ch] * sc << 24 : 0;
-    const int g = code_cand(32, 5, (int)v >> 5, VK_HFG, ch, b, gn, 0, mu << 19);
-    if (resc && !mn) {  // (which ranked the encoder's group higher)
+    // (the boundary order, hf_bound_grp(): the learned scores' W to the power 1.5, as they have
+    // been learned, rather than the boundary's 1: `s.2.dts`'s core 0.3% smaller; the centroids' to
+    // the power 1)
+    S128 og[32];
+    if (!mn) {
+      if (nsmp == 16) hf_bound_grp_d(gm, hgd, og);
+      else hf_bound_grp(gm, &HF_GC[0][0], 32, nsmp, false, og);
+    }
+    const int g = code_cand(32, 5, (int)v >> 5, VK_HFG, ch, b, gn, 0, mu << 19, mn ? nullptr : og);
+    if (resc && !mn) {  // (which ranked the encoder's group higher, in the boundary orders)
       int rc = 0, ro = 0;
-      for (int k = 0; k < 32; k++) rc += gm[k] < gm[g], ro += go[k] < go[g];
+      S128 oo[32];
+      hf_bound_grp_d(go, hgd, oo);
+      for (int k = 0; k < 32; k++) rc += og[k] < og[g], ro += oo[k] < oo[g];
       const int rs = ur ? rc : ro, rp = ur ? ro : rc;
       if (rs != rp) hrs[rs < rp]++;
       if (hrs[0] + hrs[1] >= 1u << 16) hrs[0] >>= 1, hrs[1] >>= 1;
@@ -1458,19 +1531,25 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       }
     }
     const bool up = pushed && hpw[1] > hpw[0] + 16 + hpw[0] / 32;
-    KeyIx oc[32], cc[32];  // (the other order's keys; the order's, as code_cand() may reorder cand)
+    KeyIx oc[32], cc[32];  // (the other order's boundary keys; the order's, as code_cand() may reorder cand)
+    S128 kv[32], ko[32], ov[32], oo[32];
     for (int i = 0; i < 32; i++) {
       const S128 k0 = hf_dist(g * 32 + i, x, nsmp, sc), k1 = pushed ? hf_dist(g * 32 + i, xs, nsmp, sc) : k0;
-      cand[i].k = cc[i].k = up ? k1 : k0, cand[i].i = cc[i].i = i;
-      oc[i].k = up ? k0 : k1, oc[i].i = i;
+      cand[i].k = kv[i] = up ? k1 : k0, cand[i].i = i;
+      ko[i] = up ? k0 : k1;
+    }
+    hf_bound_vec(kv, g, nsmp, ov);
+    if (pushed) {
+      hf_bound_vec(ko, g, nsmp, oo);
+      for (int i = 0; i < 32; i++) cc[i].k = ov[i], cc[i].i = i, oc[i].k = oo[i], oc[i].i = i;
     }
     // (a lossless WAV's vectors: how far the nearest beats the next against the channel's level in
     // the subframe times the scale factor, as the encoder's arithmetic errs by its level: `s.2.dts`'s
     // encoder took the nearest of subband 28's 97% of the time within 2^-19 of that, 85% within
     // 2^-20, 49% within 2^-24; by the nearest's distance, 63% within 1/256 of it, 99% by 2^4 times
     // it or more)
-    v = g * 32 + code_cand(32, 5, (int)v & 31, VK_HFV, ch, b, gn, mu, mu);
-    if (pushed) {  // (which order ranked the encoder's vector higher)
+    v = g * 32 + code_cand(32, 5, (int)v & 31, VK_HFV, ch, b, gn, mu, mu, ov);
+    if (pushed) {  // (which order ranked the encoder's vector higher, in the boundary orders)
       const int at = (int)v & 31, rc = rank_of(cc, 32, at), ro = rank_of(oc, 32, at);
       const int rp = up ? rc : ro, r0 = up ? ro : rc;
       if (rp != r0) hpw[rp < r0]++;
@@ -1767,7 +1846,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // is a boundary too, the one between the run's two ends (anal.inc's sf_run()): the nearer counts
   // (`s.2.dts`'s core 0.6% smaller; pn's nearness, the relative one, stays the midpoint's: which side
   // it lies on says which way a miss goes, to the run's other end or past the midpoint)
-  // (add: a power the RMS's square has in it too)
+  // (add: a power the RMS's square has in it too, the top subband's leak's noise: the nearness then
+  // against the root of the level's unit squared and 2^48 times it, the noise's as the level's is,
+  // `s.2.dts`'s core 0.13% smaller)
   int scale_near_lev(int ch, int b, const S64* v, int n, const U32* tab, int nt, int p, S128 add = 0) const {
     S128 ms = 0;
     for (int i = 0; i < n; i++) ms += (S128)v[i] * v[i];
@@ -1784,7 +1865,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       const S64 de = rr > e ? rr - e : e - rr;
       if (de < dd) dd = de;
     }
-    const int a = near_bucket((S128)dd * isqrt128((U128)n << 8) >> 4, hc_unit((S128)lev, hcal[b].s - sm), 24);
+    const S128 ul = hc_unit((S128)lev, hcal[b].s - sm);
+    const S128 u = add > 0 ? (S128)isqrt128((U128)(ul * ul + shl128(add, 48))) : ul;
+    const int a = near_bucket((S128)dd * isqrt128((U128)n << 8) >> 4, u, 24);
     return imin(a, near_bucket((S128)dd, (S128)rr, 16));
   }
 

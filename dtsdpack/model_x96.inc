@@ -665,10 +665,14 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
           S128 near = en + 1;
           for (int g = 0; g < 32; g++) near = md[g] < near ? md[g] : near;
           const bool mn = near * 64 < en;
-          for (int g = 0; g < 32; g++) cand[g].k = mn ? md[g] : hf_group_dist(g, x, n, sc), cand[g].i = g;
-          const int g = code_cand(32, 5, (int)v >> 5, VK_HFG, ch, b, imin(si >> 3, 15), lrank9[ch][b][VK_HFG]);
-          for (int i = 0; i < 32; i++) cand[i].k = hf_dist(g * 32 + i, x, n, sc), cand[i].i = i;
-          return g * 32 + code_cand(32, 5, (int)v & 31, VK_HFV, ch, b, imin(si >> 3, 15), lrank9[ch][b][VK_HFV]);
+          S128 kg[32], og[32];  // (the ranks in the boundary orders, as the core's)
+          for (int g = 0; g < 32; g++) cand[g].k = kg[g] = mn ? md[g] : hf_group_dist(g, x, n, sc), cand[g].i = g;
+          if (!mn) hf_bound_grp(kg, &HF_GC[0][0], 32, n, false, og);
+          const int g = code_cand(32, 5, (int)v >> 5, VK_HFG, ch, b, imin(si >> 3, 15), lrank9[ch][b][VK_HFG], 0, 0, mn ? nullptr : og);
+          S128 kv[32], ov[32];
+          for (int i = 0; i < 32; i++) cand[i].k = kv[i] = hf_dist(g * 32 + i, x, n, sc), cand[i].i = i;
+          hf_bound_vec(kv, g, n, ov);
+          return g * 32 + code_cand(32, 5, (int)v & 31, VK_HFV, ch, b, imin(si >> 3, 15), lrank9[ch][b][VK_HFV], 0, 0, ov);
         }
         return side_index(SF_HFVQ, ch, b, v, 10, hvq[ch][b], 8, 0);
       case F_q:

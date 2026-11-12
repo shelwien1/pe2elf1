@@ -628,6 +628,73 @@ static INLINE S128 hf_dist(int q, const S64* x, int n, S64 sc) {
   return d;
 }
 
+// The encoder's values are a little off the WAV's (its arithmetic; a lossless WAV's top subband's
+// leak), so where its search's first isn't its choice, its choice is the one whose boundary with
+// the first lies nearest the values, rather than the one nearest them: the others in the order of
+// their key's excess over the first's over the distance between their entries (the boundary's
+// distance from the values; the first's -1, and an equal entry's, as the encoder takes the lowest
+// index of equals; the groups' as well, hf_bound_grp(): `s.2.dts`'s core 2.3% smaller, its top
+// subband's HF VQ 31.5 KB to 29.5, 3 MB of its middle 1.7%). Group g's entries, by their distances
+// k (hf_dist()'s, over their first n values), into o.
+struct HfPairs {  // (each group's entries' distances from each other over their first 16 values)
+  double d[32][32][32];
+  HfPairs() {
+    for (int g = 0; g < 32; g++)
+      for (int i = 0; i < 32; i++)
+        for (int f = 0; f < 32; f++) {
+          double s2 = 0;
+          for (int j = 0; j < 16; j++) {
+            const double e = (double)HF_VQ[g * 32 + i][j] - (double)HF_VQ[g * 32 + f][j];
+            s2 += e * e;
+          }
+          d[g][i][f] = sqrt(s2);
+        }
+  }
+};
+static const HfPairs hf_pairs;
+static void hf_bound_vec(const S128* k, int g, int n, S128* o) {
+  int f = 0;
+  for (int i = 1; i < 32; i++) f = k[i] < k[f] ? i : f;
+  for (int i = 0; i < 32; i++) {
+    double d;
+    if (n == 16) d = hf_pairs.d[g][i][f];
+    else {
+      double s2 = 0;
+      for (int j = 0; j < n; j++) {
+        const double e = (double)HF_VQ[g * 32 + i][j] - (double)HF_VQ[g * 32 + f][j];
+        s2 += e * e;
+      }
+      d = sqrt(s2);
+    }
+    o[i] = i == f || d == 0 ? -1 : (S128)((double)(k[i] - k[f]) / d);  // (within 2^99)
+  }
+}
+// The same of the groups by their scores k, the distance between their W (32 of n values, each
+// group's at W + w g) to the power p (1, or 1.5: d sqrt(d), IEEE's sqrt exact everywhere)
+template <class T>
+static void hf_bound_grp(const S128* k, const T* W, int w, int n, bool p15, S128* o) {
+  int f = 0;
+  for (int g = 1; g < 32; g++) f = k[g] < k[f] ? g : f;
+  for (int g = 0; g < 32; g++) {
+    double s2 = 0;
+    for (int j = 0; j < n; j++) {
+      const double e = (double)W[g * w + j] - (double)W[f * w + j];
+      s2 += e * e;
+    }
+    const double d = sqrt(s2);
+    o[g] = g == f ? -1 : s2 == 0 ? (k[g] == k[f] ? -1 : (S128)1 << 120) : (S128)((double)(k[g] - k[f]) / (p15 ? d * sqrt(d) : d));  // (within 2^118)
+  }
+}
+// (the same by the distances' powers D, each group's with each other's)
+static void hf_bound_grp_d(const S128* k, const double (*D)[32], S128* o) {
+  int f = 0;
+  for (int g = 1; g < 32; g++) f = k[g] < k[f] ? g : f;
+  for (int g = 0; g < 32; g++) {
+    const double d = D[g][f];
+    o[g] = g == f ? -1 : d == 0 ? (k[g] == k[f] ? -1 : (S128)1 << 120) : (S128)((double)(k[g] - k[f]) / d);
+  }
+}
+
 // the entry most nearly a multiple of the samples x (n of them, at most 32): the one whose
 // projection leaves the least, (x e)^2 / (e e) the most (the first of equals); its scale is free
 struct HfEnergies {
