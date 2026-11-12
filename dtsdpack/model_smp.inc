@@ -1797,24 +1797,28 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         np++;
       }
     }
-    int ord[NP], no = 0;  // (those under cut, by that distance, the first of equals first: a heap)
+    struct Key {
+      U64 d;
+      int k;
+    } ord[NP];  // (those under cut, by that distance, the first of equals first: a heap)
+    int no = 0;
     for (int k = 0; k < np; k++)
-      if (pr[k].d < cut) ord[no++] = k;
+      if (pr[k].d < cut) ord[no].d = pr[k].d, ord[no++].k = k;
     if (!no) return 0;
-    auto before = [&](int a, int b) { return pr[a].d < pr[b].d || (pr[a].d == pr[b].d && a < b); };
+    auto before = [](const Key& a, const Key& b) { return a.d < b.d || (a.d == b.d && a.k < b.k); };
     auto down = [&](int i) {
       for (int c; (c = 2 * i + 1) < no; i = c) {
         if (c + 1 < no && before(ord[c + 1], ord[c])) c++;
         if (!before(ord[c], ord[i])) break;
-        const int t = ord[c];
+        const Key t = ord[c];
         ord[c] = ord[i], ord[i] = t;
       }
     };
     for (int i = no / 2 - 1; i >= 0; i--) down(i);
     U64 d1 = ~0ull, d2 = cut;
     int best = -1, bnz = 0;
-    while (no > 0 && (pr[ord[0]].d < d2 || (best >= 0 && pr[ord[0]].d <= d1))) {
-      const int at = ord[0];
+    while (no > 0 && (ord[0].d < d2 || (best >= 0 && ord[0].d <= d1))) {
+      const int at = ord[0].k;
       ord[0] = ord[--no];
       down(0);
       const QErr& q = qe[at];
@@ -1822,7 +1826,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       int nz = pr[at].nz, j = nk;
       if (d2 != ~0ull) {  // (a distance past lim is past d2's: in doubles, made larger)
         const double l = (double)d2 * (double)q.ss * (double)q.ss / 268435456.0 * (1 + 1e-9);
-        if (l < 1e36) lim = (S128)l + 1;
+        if (l < 1e36) lim = (l < 9e18 ? (S128)(S64)l : (S128)l) + 1;  // (in 64 bits where it fits: the same)
       }
       while (j < n && e <= lim) e += q.err(w[j++], &nz);
       if (e > lim) continue;
@@ -1846,8 +1850,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       for (int a = a0; a <= a1; a++) {
         S64 lo, hi;
         quant_range(r, ch, a, lo, hi);
-        for (int k = 1; k < ns; k++) {
-          const U64 dA = part_fit(r, ch, a, lo, hi, v, 8 * k), dB = part_fit(r, ch, a, lo, hi, v + 8 * k, n - 8 * k);
+        for (int k = 1; k < ns; k++) {  // (the parts' fits under the best's, as all would find)
+          const U64 dA = part_fit(r, ch, a, lo, hi, v, 8 * k, bk);
+          if (dA >= bk) continue;
+          const U64 dB = part_fit(r, ch, a, lo, hi, v + 8 * k, n - 8 * k, bk - dA);
           const U64 d = dA + dB < dA ? ~0ull : dA + dB;
           if (d < bk) bk = d, ba = a;
         }
@@ -1869,24 +1875,33 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   U64 ab_tdist;  // (the transient's fit's distance, where abits_search() took one; the caller sets it to ~0)
   // the nearest fit of the values v (m of them) to ABITS a's lattice (its range lo..hi) at a scale
   // factor from 3 below their RMS rule's to 5 above: its distance (norm_dist()'s)
-  U64 part_fit(const CoreRec& r, int ch, int a, S64 lo, S64 hi, const S64* v, int m) const {
+  U64 part_fit(const CoreRec& r, int ch, int a, S64 lo, S64 hi, const S64* v, int m, U64 lim = ~0ull) const {
     const U32* tab = r.shuff[ch] == 6 ? SF7 : SF6;
     const int nt = sf_entries(r.shuff[ch]);
     int near;
     const int p = scale_pred(v, m, tab, nt, &near);
     U64 bd = ~0ull;
-    for (int i = imax(p - 3, 0); i <= imin(p + 5, nt - 1); i++) {
+    // (from p out, each one's distance only while it could be under the nearest's and lim: those
+    // under lim as trying them all finds; ~0 where none is)
+    const int i0 = imax(p - 3, 0), i1 = imin(p + 5, nt - 1);
+    for (int ki = 0; ki <= 2 * 5; ki++) {
+      const int i = ki & 1 ? p + (ki + 1) / 2 : p - ki / 2;
+      if (i < i0 || i > i1) continue;
       const S64 ss = step_for(r, ch, a, i);
       if (ss <= 0) continue;
       QErr q;
       q.set(ss, lo, hi);
-      S128 e = 0;
-      int nz = 0;
-      for (int k = 0; k < m; k++) e += q.err(v[k], &nz);
+      const U64 dl = bd < lim ? bd : lim;
+      S128 e = 0, el = ~(U128)0 >> 1;
+      const double l = (double)dl * (double)ss * (double)ss / 268435456.0 * (1 + 1e-9);  // (a distance past el is
+      if (l < 1e36) el = (l < 9e18 ? (S128)(S64)l : (S128)l) + 1;                        // past dl's)
+      int nz = 0, k = 0;
+      while (k < m && e <= el) e += q.err(v[k++], &nz);
+      if (e > el) continue;
       const U64 d = norm_dist(e, ss);
       if (d < bd) bd = d;
     }
-    return bd;
+    return bd < lim ? bd : ~0ull;
   }
   // The TMODE a decoded WAV says (the transient search), its ABITS known: where the subband's values
   // fit one scale factor's lattice (to a 64th of a step squared a value), none (0, *conf 7); else
@@ -1920,6 +1935,18 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   static U64 norm_dist(S128 e, S64 ss) {
     const U128 num = (U128)e << 28, den = (U128)((S128)ss * ss);
     if (!(num >> 64) && !(den >> 64)) return (U64)num / (U64)den;  // (the same, in 64 bits)
+    if (!(num >> 120) && den) {  // (the same, from an estimate in doubles within 1 of it where under 10^15: then
+                                 // q den is under num + den, under 2^127)
+      auto dbl = [](U128 x) { return (double)(U64)(x >> 64) * 18446744073709551616.0 + (double)(U64)x; };
+      const double qd = dbl(num) / dbl(den);
+      if (qd < 1e15) {
+        U64 q = (U64)qd;
+        const U128 p = (U128)q * den;
+        if (p > num) q--;
+        else if (num - p >= den) q++;
+        return q;
+      }
+    }
     const U128 q = num / den;
     return q >> 64 ? ~0ull : (U64)q;
   }
@@ -2171,6 +2198,62 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     *ok = sb >= 0;
     return cb;
   }
+  // (jx_fit()'s candidates at a sample, but for X96's step: the core's indexes it tries, the rests
+  // they leave and the decoder's samples they make)
+  struct JxCand {
+    S64 res;
+    double x, cb, lim;  // (jx_pick()'s test's parts: res in the decoder's units, its bound but for the
+                        // step's part, the steps under which the test holds)
+    S32 c, dc, y;       // (the index, its distance from the gain's, the decoder's sample)
+  };
+  static INLINE int jx_cands(S64 w, S32 pred, S64 ss, S64 lo, S64 hi, S64 al, JxCand* cd) {
+    S128 d;
+    S64 o;
+    const S64 ca = requant(((w >> 4) * al >> 8) - shl64(pred, AQ_F), ss, lo, hi, &d, &o);
+    int n = 0;
+    for (int k = 0; k <= 5; k++) {
+      const S64 c = k < 5 ? ca + k - 2 : requant(w - shl64(pred, AQ_F), ss, lo, hi, &d, &o);
+      if (c < lo || c > hi || (k == 5 && c >= ca - 2 && c <= ca + 2)) continue;
+      const S32 y = clip23((S64)dequantize((S32)c, ss) + pred);
+      JxCand& e = cd[n++];
+      e.res = w - shl64(y, AQ_F), e.c = (S32)c, e.dc = (S32)(c < ca ? ca - c : c - ca), e.y = y;
+      e.x = (double)e.res * (1.0 / 65536);
+      const double ax = e.x < 0 ? -e.x : e.x;
+      e.cb = 1.0 + 1e-6 + 4e-7 * ax, e.lim = 4194304.0 - ax;
+    }
+    return n;
+  }
+  // of the candidates cd (n of them), the one jx_fit() takes at X96's step k: its place in cd (-1
+  // none), *rr its score. (A test in doubles first, whether the rest x can lie on X96's lattice of
+  // step t, in the decoder's units: where it does, x lies within 1 + |q| t 2^-22 of q t, its index
+  // q's point, by dequantize()'s rounding and shift, and |q| t is at most |x| + t / 2: so where it
+  // lies 1 + (|x| + t) 4e-7 + 1e-6 away or more, it doesn't. Only at a step of 3 or more can x lie
+  // that far; past 4095, and where clip23() could decide, the exact test's.)
+  static INLINE int jx_pick(const JxCand* cd, int n, int k, S64* rr) {
+    const S64 s9 = jx_steps.v[k];
+    const double it = jx_steps.it[k], t = jx_steps.t[k], tb = jx_steps.tb[k];
+    const bool f = t >= 3;
+    S64 sb = -1;
+    int ib = -1;
+    for (int i = 0; i < n; i++) {
+      const JxCand& e = cd[i];
+      if (f && t < e.lim) {
+        const double q = floor(e.x * it + 0.5);
+        if (q >= -4095 && q <= 4095) {
+          const double d = e.x - q * t;
+          if ((d < 0 ? -d : d) >= e.cb + tb) continue;
+        }
+      }
+      S128 d;
+      S64 o;
+      const S64 r = requant(cd[i].res, s9, -4095, 4095, &d, &o);
+      if (!jx_near(cd[i].res - shl64(dequantize((S32)r, s9), AQ_F))) continue;
+      const S64 sc = (r < 0 ? -r : r) * 64 + cd[i].dc;
+      if (sb < 0 || sc < sb) sb = sc, ib = i;
+    }
+    *rr = sb;
+    return ib;
+  }
   // Channel ch's subband b's fit (jx_k, jx_vq) in the subframe, where its values aren't all on the
   // core's lattice (the subframe decoded with the indexes each one makes, its ADPCM predictions
   // from them): X96's step, of those whose ratio to the core's (to 1/16 octave or beside) has been
@@ -2208,24 +2291,40 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const int l0 = lg16((U64)ss[0]);
     const S64 al = jx_gain(b);
     S64 best = -1, bs9 = 0;
-    for (int k = 0; k < 32 * 64 && jx_hn[b]; k++) {
-      const S64 s9 = jx_steps.v[k];
-      if (s9 <= 0 || !jx_seen(jx_h[b], jx_steps.lg[k] - l0 + 128)) continue;
-      memcpy(h, yh[ch][b], sizeof h);
-      S64 tot = 0;
-      int j = 0;
-      for (; j < n; j++) {
-        const S32 pred = pm ? adpcm_pred(s.pvq[ch][b], h) : 0;
-        S64 rr = 0;
-        int ok;
-        const S64 c = jx_fit(w[j], pred, ss[j], lo, hi, s9, al, &rr, &ok);
-        if (!ok) break;
-        tot += rr;
-        if (best >= 0 && tot > best) break;
-        const S32 y = clip23((S64)dequantize((S32)c, ss[j]) + pred);
-        h[3] = h[2], h[2] = h[1], h[1] = h[0], h[0] = y;
+    // (each sample's candidates made once: where there's no ADPCM prediction, they are the same at
+    // every step; else where the samples before were decoded the same, as the first one's always
+    // are)
+    JxCand cd[NSMP][6];
+    S32 ck[NSMP][4];
+    int nc[NSMP];
+    for (int j = 0; j < n; j++) nc[j] = -1;
+    // (the steps by their lg16(), ascending: those a seen bin or one beside it holds; the same
+    // fit as all of them in order would make, the scores' sums only growing)
+    for (int i = 1; i <= 254 && jx_hn[b]; i++) {
+      if (!(jx_h[b][i - 1] | jx_h[b][i] | jx_h[b][i + 1])) continue;
+      const int l = i + l0 - 128 - jx_steps.lg0;
+      if (l < 0 || l >= jx_steps.nl) continue;
+      for (int z = jx_steps.at[l]; z < jx_steps.at[l + 1]; z++) {
+        const int k = jx_steps.by[z];
+        const S64 s9 = jx_steps.v[k];
+        memcpy(h, yh[ch][b], sizeof h);
+        S64 tot = 0;
+        int j = 0;
+        for (; j < n; j++) {
+          if (nc[j] < 0 || (pm && memcmp(ck[j], h, sizeof h))) {
+            nc[j] = jx_cands(w[j], pm ? adpcm_pred(s.pvq[ch][b], h) : 0, ss[j], lo, hi, al, cd[j]);
+            memcpy(ck[j], h, sizeof h);
+          }
+          S64 rr;
+          const int ib = jx_pick(cd[j], nc[j], k, &rr);
+          if (ib < 0) break;
+          tot += rr;
+          if (best >= 0 && tot > best) break;
+          const S32 y = cd[j][ib].y;
+          h[3] = h[2], h[2] = h[1], h[1] = h[0], h[0] = y;
+        }
+        if (j == n && (best < 0 || tot < best || s9 > bs9)) best = tot, bs9 = s9, *k9 = k + 1;
       }
-      if (j == n && (best < 0 || tot < best || s9 > bs9)) best = tot, bs9 = s9, *k9 = k + 1;
     }
     if (*k9) return 2;
     return !novq && jx_hvn[b] && jx_search_vq(s, ch, b, lo, hi, ss, l0, vq, vs) ? 3 : 0;
@@ -2244,31 +2343,35 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       for (int si = 0; si < 64 && !vq[q]; si++) {
         if (!jx_seen(jx_hv[b], lg16((U64)SF6[si] << 22) - l0 + 128)) continue;
         const S32 p0 = pm ? adpcm_pred(s.pvq[ch][b], h) : 0;
-        U8 pass[256];
-        for (int e8 = 0; e8 < 256; e8++) {
+        // (the entries whose first value leaves the first sample's rest on the lattice, in order)
+        U64 mk[16] = {0};
+        for (int e = 0; e < hf_first.nv; e++) {
+          const int e8 = hf_first.v[e];
           const S64 u = w[j0] - shl64(clip23(((S64)(e8 - 128) * SF6[si] + 8) >> 4), AQ_F);
           S128 d;
           S64 o;
           const S64 c = requant(u - shl64(p0, AQ_F), ss[j0], lo, hi, &d, &o);
-          pass[e8] = jx_near(u - shl64(clip23((S64)dequantize((S32)c, ss[j0]) + p0), AQ_F));
+          if (jx_near(u - shl64(clip23((S64)dequantize((S32)c, ss[j0]) + p0), AQ_F)))
+            for (int x = 0; x < 16; x++) mk[x] |= hf_first.m[e][x];
         }
-        for (int k = 0; k < 1024 && !vq[q]; k++) {
-          if (!pass[HF_VQ[k][0] + 128]) continue;
-          S32 g[4];
-          memcpy(g, h, sizeof g);
-          int j = j0;
-          for (; j < j0 + 16; j++) {
-            const S32 pred = pm ? adpcm_pred(s.pvq[ch][b], g) : 0;
-            const S64 u = w[j] - shl64(clip23(((S64)HF_VQ[k][j - j0] * SF6[si] + 8) >> 4), AQ_F);
-            S128 d;
-            S64 o;
-            const S64 c = requant(u - shl64(pred, AQ_F), ss[j], lo, hi, &d, &o);
-            const S32 y = clip23((S64)dequantize((S32)c, ss[j]) + pred);
-            if (!jx_near(u - shl64(y, AQ_F))) break;
-            g[3] = g[2], g[2] = g[1], g[1] = g[0], g[0] = y;
+        for (int x = 0; x < 16 && !vq[q]; x++)
+          for (U64 bits = mk[x]; bits && !vq[q]; bits &= bits - 1) {
+            const int k = 64 * x + __builtin_ctzll(bits);
+            S32 g[4];
+            memcpy(g, h, sizeof g);
+            int j = j0;
+            for (; j < j0 + 16; j++) {
+              const S32 pred = pm ? adpcm_pred(s.pvq[ch][b], g) : 0;
+              const S64 u = w[j] - shl64(clip23(((S64)HF_VQ[k][j - j0] * SF6[si] + 8) >> 4), AQ_F);
+              S128 d;
+              S64 o;
+              const S64 c = requant(u - shl64(pred, AQ_F), ss[j], lo, hi, &d, &o);
+              const S32 y = clip23((S64)dequantize((S32)c, ss[j]) + pred);
+              if (!jx_near(u - shl64(y, AQ_F))) break;
+              g[3] = g[2], g[2] = g[1], g[1] = g[0], g[0] = y;
+            }
+            if (j == j0 + 16) vq[q] = k + 1, vs[q] = si, memcpy(h, g, sizeof h);
           }
-          if (j == j0 + 16) vq[q] = k + 1, vs[q] = si, memcpy(h, g, sizeof h);
-        }
       }
       if (!vq[q]) return false;
     }

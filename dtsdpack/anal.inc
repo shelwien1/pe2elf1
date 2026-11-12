@@ -276,12 +276,16 @@ static INLINE S64 requant(S64 v, S64 ss, S64 lo, S64 hi, S128* dist, S64* alt) {
 }
 // how near a distance d lies to 0, against a unit u (both in the same units): floor(log2(d / u)) +
 // k, in 0..QB_N - 1
+static INLINE int bitlen128(U128 x) {
+  const U64 h = (U64)(x >> 64), l = (U64)x;
+  return h ? 128 - __builtin_clzll(h) : l ? 64 - __builtin_clzll(l) : 0;
+}
 static INLINE int near_bucket(S128 d, S128 u, int k) {
   if (u <= 0) return QB_N - 1;
-  int e = 0;  // (floor(log2(d / u)), from -k up)
   if (d <= 0) return 0;
-  while (e > -k && d < u) d <<= 1, e--;
-  while (e < QB_N - 1 - k && d >= 2 * u) u <<= 1, e++;
+  // (floor(log2(d / u)): the bit lengths' difference e, or e - 1 where d < u 2^e)
+  int e = bitlen128((U128)d) - bitlen128((U128)u);
+  if (e >= 0 ? d < shl128(u, e) : shl128(d, -e) < u) e--;
   return clip(e + k, 0, QB_N - 1);
 }
 
@@ -386,9 +390,13 @@ struct QErr {
   // value v's squared distance; *nz set where its index isn't 0
   INLINE S128 err(S64 v, int* nz) const {
     const S64 u = v * 64, a = u < 0 ? -u : u, t = 2 * a + ss;  // (the index: floor(t / 2ss))
-    S64 q = (S64)((double)a * inv + 0.5);
-    while (q > 0 && 2 * q * ss > t) q--;
-    while (2 * (q + 1) * ss <= t) q++;
+    S64 q = (S64)((double)a * inv + 0.5), r = t - 2 * q * ss;  // (the estimate's rest: in 0..2ss where exact)
+    if (r < 0) q--, r += 2 * ss;  // (it is within 1 of it but where the values are past 2^50)
+    else if (r >= 2 * ss) q++, r -= 2 * ss;
+    if (r < 0 || r >= 2 * ss) {
+      while (q > 0 && 2 * q * ss > t) q--;
+      while (2 * (q + 1) * ss <= t) q++;
+    }
     if (u < 0) q = -q;
     q = q < lo ? lo : q > hi ? hi : q;
     *nz |= q != 0;
@@ -608,17 +616,59 @@ static INLINE int lg16(U64 x) {
 // lg16()
 struct JxSteps {
   S64 v[32 * 64];
+  double it[32 * 64], t[32 * 64], tb[32 * 64];  // (2^22 / v, v / 2^22 and 4e-7 of that: jx_pick()'s test)
   S16 lg[32 * 64];
+  // (the steps by their lg16(), each value's in ascending k: by[at[l - lg0]] to by[at[l - lg0 + 1]];
+  // jx_try() goes through only those of the lg16() values a subband has seen)
+  static constexpr int NL = 1024;
+  int lg0, nl;
+  S16 by[32 * 64];
+  int at[NL + 1];
   JxSteps() {
     for (int a = 0; a < 32; a++)
       for (int i = 0; i < 64; i++) {
         const int k = 64 * a + i;
         v[k] = (S64)LOSSY_QUANT[a] * SF6[i];
         lg[k] = (S16)(v[k] > 0 ? lg16((U64)v[k]) : -1);
+        it[k] = v[k] > 0 ? 4194304.0 / (double)v[k] : 0, t[k] = (double)v[k] / 4194304.0, tb[k] = 4e-7 * t[k];
       }
+    int mn = 1 << 30, mx = -1;
+    for (int k = 0; k < 32 * 64; k++)
+      if (v[k] > 0) mn = lg[k] < mn ? lg[k] : mn, mx = lg[k] > mx ? lg[k] : mx;
+    lg0 = mn, nl = mx - mn + 1;
+    for (int l = 0; l <= nl; l++) at[l] = 0;
+    for (int k = 0; k < 32 * 64; k++)
+      if (v[k] > 0) at[lg[k] - lg0 + 1]++;
+    for (int l = 0; l < nl; l++) at[l + 1] += at[l];
+    int pos[NL];
+    for (int l = 0; l < nl; l++) pos[l] = at[l];
+    for (int k = 0; k < 32 * 64; k++)
+      if (v[k] > 0) by[pos[lg[k] - lg0]++] = (S16)k;
   }
 };
 static const JxSteps jx_steps;
+// The HF VQ code book's entries by their first value: v[e] the e-th distinct one (in 1/16 of a
+// scale factor, 128 added), bit k of m[e] set where entry k's is that (jx_search_vq()'s)
+struct HfFirst {
+  int nv;
+  U8 v[256];
+  U64 m[256][16];
+  HfFirst() {
+    int at[256];
+    for (int e = 0; e < 256; e++) at[e] = -1;
+    nv = 0;
+    for (int k = 0; k < 1024; k++) {
+      const int e = HF_VQ[k][0] + 128;
+      if (at[e] < 0) {
+        at[e] = nv, v[nv] = (U8)e;
+        for (int x = 0; x < 16; x++) m[nv][x] = 0;
+        nv++;
+      }
+      m[at[e]][k >> 6] |= 1ull << (k & 63);
+    }
+  }
+};
+static const HfFirst hf_first;
 
 // entry q's distance (in 2^(AQ_F + 4) sc units)
 static INLINE S128 hf_dist(int q, const S64* x, int n, S64 sc) {
@@ -960,10 +1010,6 @@ struct Sf {
   S64 m;
   int e;
 };
-static INLINE int bitlen128(U128 a) {
-  const U64 hi = (U64)(a >> 64), lo = (U64)a;
-  return hi ? 128 - __builtin_clzll(hi) : lo ? 64 - __builtin_clzll(lo) : 0;
-}
 static INLINE S32 fine_log2(U128 a) {
   const int L = bitlen128(a) - 1;
   const U32 m = (U32)(L >= 30 ? a >> (L - 30) : a << (30 - L));
