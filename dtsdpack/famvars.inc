@@ -138,8 +138,8 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      cpl_leak()), lh the subband's last rank of the kind (0 none, 1 the best, 2 another), ml a
 //      lossless WAV's HF VQ group's or vector's margin against the channel's level times the scale
 //      factor, in doublings from 2^-25 (the groups' scores' from 2^-6; 0-13, 14 the best exact,
-//      15 none), nc a lossless WAV's HF VQ vector's candidates but the nearest within 2^-18 of
-//      ml's unit of it (0, 1, 2, 3-4, 5-8, more: 0-5; 6 none), gr past a miss's first bucket t (the
+//      15 none), nc a lossless WAV's HF VQ group's or vector's candidates but the nearest within
+//      2^-18 of ml's unit of it (0, 1, 2, 3-4, 5-8, more: 0-5; 6 none), gr past a miss's first bucket t (the
 //      rank 2^t or more?), how far the next bucket's first candidate (2^t) lies from the best against
 //      this one's (2^(t-1)), in doublings (0 within 2 times, 6 by 64 or more; 7 none: the first
 //      bucket, the bits below a bucket's top, no candidate 2^t)

@@ -23,13 +23,13 @@ void D9_scl_make( const M_scl_v & D, tcx & X ) {
   b = b*3 + (((kd)>1+(1-1))+((kd)>2+(1-1)));
   b = b*2 + (((pk)>0+(1-1)));
   b = b*5 + D9_scl_b_pn[__min(7,__max(0,(pn)-(1-1)))];
-  b = b*6 + D9_scl_b_dp[__min(7,__max(0,(dp)-(1-1)))];
-  b = b*10 + D9_scl_b_pl[__min(15,__max(0,(pl)-(1-1)))];
+  b = b*7 + D9_scl_b_dp[__min(7,__max(0,(dp)-(1-1)))];
+  b = b*9 + D9_scl_b_pl[__min(15,__max(0,(pl)-(1-1)))];
 
   c = 0;
   c = c*3 + (((kd)>0+(1-1))+((kd)>2+(1-1)));
   c = c*2 + (((pk)>0+(1-1)));
-  c = c*18 + D9_scl_c_ab[__min(27,__max(0,(ab)-(1-1)))];
+  c = c*17 + D9_scl_c_ab[__min(27,__max(0,(ab)-(1-1)))];
 
   d = 0;
   d = d*2 + (((kd)>2+(1-1)));
@@ -39,7 +39,7 @@ void D9_scl_make( const M_scl_v & D, tcx & X ) {
   e = 0;
   e = e*3 + (((kd)>0+(1-1))+((kd)>1+(1-1)));
   e = e*2 + (((pk)>0+(1-1)));
-  e = e*2 + (((hm)>1+(1-1)));
+  e = e*3 + (((hm)>0+(1-1))+((hm)>1+(1-1)));
 
   h = 0;
   h = h*2 + (((kd)>2+(1-1)));
@@ -76,7 +76,7 @@ void D9_scl_make( const M_scl_v & D, tcx & X ) {
   s = s*3 + (((kd)>0+(1-1))+((kd)>1+(1-1)));
   s = s*2 + (((pk)>0+(1-1)));
   s = s*4 + D9_scl_s_pn[__min(7,__max(0,(pn)-(1-1)))];
-  s = s*6 + D9_scl_s_dp[__min(7,__max(0,(dp)-(1-1)))];
+  s = s*4 + D9_scl_s_dp[__min(7,__max(0,(dp)-(1-1)))];
   s = s*3 + (((cc)>0+(1-1))+((cc)>1+(1-1)));
 
   f = 0;
@@ -90,7 +90,7 @@ void D9_scl_make( const M_scl_v & D, tcx & X ) {
   m = m*3 + (((dp)>0+(1-1))+((dp)>5+(1-1)));
 
   w = 0;
-  w = w*3 + (((pn)>2+(1-1))+((pn)>6+(1-1)));
+  w = w*4 + D9_scl_w_pn[__min(7,__max(0,(pn)-(1-1)))];
   w = w*6 + D9_scl_w_pl[__min(15,__max(0,(pl)-(1-1)))];
 
   t = 0;

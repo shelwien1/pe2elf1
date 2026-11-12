@@ -18,29 +18,29 @@ Index b
  b_kd: kd, 1!011
  b_pk: pk, 1!1
  b_pn: pn, 1!1101010
- b_dp: dp, 1!1010111
- b_pl: pl, 1!111000011011101
+ b_dp: dp, 1!1110111
+ b_pl: pl, 1!111000011011001
 
 Index c
  c_kd: kd, 1!101
  c_pk: pk, 1!1
- c_ab: ab, 1!010010011111110111011011100
+ c_ab: ab, 1!000011011111110101011110100
 
 Index d
  d_kd: kd, 1!001
  d_pk: pk, 1!1
- d_lp: lp, 1!100011000
+ d_lp: lp, 1!001001100
 
 Index e
  e_kd: kd, 1!110
  e_pk: pk, 1!1
- e_hm: hm, 1!01
+ e_hm: hm, 1!11
 
 Index h
  h_kd: kd, 1!001
  h_pk: pk, 1!1
  h_pn: pn, 1!1101111
- h_ab: ab, 1!101001101010000101000000000
+ h_ab: ab, 1!101101001010000101000000000
 
 Index i
  i_kd: kd, 1!011
@@ -51,7 +51,7 @@ Index i
 Index j
  j_kd: kd, 1!001
  j_pk: pk, 1!1
- j_bd: bd, 1!0000000010000001100000101010111
+ j_bd: bd, 1!0000000010000010100000101010111
  j_cc: cc, 1!10
  j_nb: nb, 1!100111001
 
@@ -71,7 +71,7 @@ Index s
  s_kd: kd, 1!110
  s_pk: pk, 1!1
  s_pn: pn, 1!1000101
- s_dp: dp, 1!1100111
+ s_dp: dp, 1!1101000
  s_cc: cc, 1!11
 
 Index f
@@ -85,7 +85,7 @@ Index m
  m_dp: dp, 1!1000010
 
 Index w
- w_pn: pn, 1!0010001
+ w_pn: pn, 1!1100001
  w_pl: pl, 1!100100010000101
 
 Index t
@@ -102,13 +102,13 @@ Index g
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
 Number rA, 1, 0!00000000
 Number mwA, 1, 0!01111110
-Number rB, 1, 0!11111111
+Number rB, 1, 0!11110111
 Number mwB, 1, 0!00001000
 Number rC, 1, 0!10000010
-Number mwC, 1, 0!01101001
-Number rD, 1, 0!01111001
+Number mwC, 1, 0!01101000
+Number rD, 1, 0!01110010
 Number mwD, 1, 0!11011010
-Number rE, 1, 0!10100010
+Number rE, 1, 0!10101011
 Number mwE, 1, 0!11111110
 Number rH, 1, 0!11111101
 Number mwH, 1, 0!00000011
@@ -117,15 +117,15 @@ Number mwI, 1, 0!00000010
 Number rJ, 1, 0!11111111
 Number mwJ, 1, 0!00000100
 Number rK, 1, 0!11010011
-Number mwK, 1, 0!10001010
-Number rL, 1, 0!10100011
-Number mwL, 1, 0!11111100
+Number mwK, 1, 0!10001011
+Number rL, 1, 0!10100000
+Number mwL, 1, 0!11110100
 Number lr, 1, 0!01111
 Number mb, 1, 0!01111000
 Number rS1, 1, 0!10000
 Number rS2, 1, 0!01000
 Number qs, 1, 3!1011011
-Number qf, 1, 3!0010101
+Number qf, 1, 3!0010001
 Number bw, 1, 0!01000
 Number rT, 1, 0!00100000
 Number mwT, 1, 0!00100000

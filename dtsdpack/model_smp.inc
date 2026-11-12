@@ -1127,6 +1127,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // wrong where sure (8 or more) no more than 2 times more often than the other: a decoded WAV's
   // vectors are nearly its own, and miss at near ties by the best's distance)
   U32 hvs[2];  // (the misses where each was sure: against the best, against mu)
+  U32 hrs[2];  // (code_hfvq(): which ranked the encoder's group higher, the values as they are or scaled into its scale factor's region)
+  U32 hpw[2];  // (code_hfvq(): where a group wasn't the first, the vectors' order that ranked the encoder's higher, the values as they are or moved)
   // (mlu > 0: ml's unit)
   int code_cand(int n, int nb, int v, int kd, int ch, int b, int gn, S128 mu = 0, S128 mlu = 0) {
     return code_cand(n, nb, v, kd, ch, b, gn, lrank[ch][b][kd], mu, mlu);
@@ -1140,8 +1142,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.mg = mu > 0 && hvs[1] <= hvs[0] + 2 ? ml : mr;
     D.ml = mlu > 0 ? key_margin_u(cand, n, mlu, 25, 14) : 15;
     D.nc = 6;
-    if (mlu > 0 && kd == VK_HFV) {  // (how many are near ties with the nearest: where the encoder's
-                                    // arithmetic makes another its choice, which one)
+    if (mlu > 0 && (kd == VK_HFV || kd == VK_HFG)) {  // (how many are near ties with the nearest: where
+                                                      // the encoder's arithmetic makes another its choice,
+                                                      // which one; the groups' too, in their unit's terms:
+                                                      // `s.2.dts`'s core 0.06% smaller)
       S128 d1 = cand[0].k;
       for (int i = 1; i < n; i++) d1 = cand[i].k < d1 ? cand[i].k : d1;
       int c = -1;
@@ -1348,9 +1352,58 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const S64 sc = r.shuff[ch] == 6 ? SF7[si] : SF6[si & 63];
     const S64* x = X[ch][b];
     const int tried = hf_min_on();
-    S128 gm[32], md[32], en = 0;
+    // (a lossless WAV's, where the RMS rule's region of the encoder's scale factor (code_scale()'s
+    // rule: the top subband's with the leak's noise in it) doesn't hold the values' RMS: the
+    // encoder's values were louder or quieter than these, so the groups and the vectors go by these
+    // scaled a quarter into the region, where that has ranked the encoder's group higher clearly
+    // more often than the values as they are: `s.2.dts`'s top subband's group the first 64.3% of
+    // the time there from 62.7%, its vector the nearest 59.8% from 58.3%, its core 0.5% smaller)
+    S64 xr[NSMP];
+    bool resc = false;
+    if (bound[ch] && !ss_rule() && !x96a && nsmp == 16) {
+      const U32* tab = r.shuff[ch] == 6 ? SF7 : SF6;
+      const int nt = sf_entries(r.shuff[ch]);
+      if (si < nt) {
+        S128 ms = 0, nz = 0;
+        for (int j = 0; j < nsmp; j++) ms += (S128)x[j] * x[j];
+        ms /= nsmp;
+        if (b == NSUB - 1 && cpl_on(r, ch, b)) {
+          S128 m0 = 0;
+          for (int j = 0; j < nsmp; j++) m0 += (S128)X[ch][0][j] * X[ch][0][j];
+          nz = m0 / nsmp >> 40;
+        }
+        const U32 V = tab[si];  // (the region: a run's first's below its value, its last's from it on)
+        int r0 = si, r1 = si;
+        while (r0 > 0 && tab[r0 - 1] == V) r0--;
+        while (r1 + 1 < nt && tab[r1 + 1] == V) r1++;
+        const S64 vv = (S64)V << AQ_F;
+        const S64 lo = si != r0 ? vv : r0 > 0 ? ((S64)tab[r0 - 1] + V) << (AQ_F - 1) : 0;
+        const S64 hi = si != r1 ? vv : r1 + 1 < nt ? ((S64)V + tab[r1 + 1]) << (AQ_F - 1) : -1;
+        const S64 rr = isqrt128((U128)(ms + nz));
+        if (ms > 0 && hi > lo && (rr < lo || rr >= hi)) {
+          const S64 t = rr < lo ? lo + (hi - lo) / 4 : hi - (hi - lo) / 4;
+          const double t2 = (double)t * (double)t - (double)nz;
+          if (t2 > 0) {
+            const double a = sqrt(t2 / (double)ms);
+            resc = true;
+            for (int j = 0; j < nsmp && resc; j++) {
+              const double y = (double)x[j] * a;
+              if (y > 1e12 || y < -1e12) resc = false;  // (within 2^40: hf_dist()'s)
+              else xr[j] = (S64)llround(y);
+            }
+          }
+        }
+      }
+    }
+    const bool ur = resc && hrs[1] > hrs[0] + 64 + hrs[0] / 32;
+    S128 gm[32], go[32], md[32], en = 0;  // (the scores of the values taken, and of the others)
     int f0 = 0;
-    for (int g = 0; g < 32; g++) gm[g] = hf_group_score(hgw, hge, g, x, nsmp, sc), f0 = gm[g] < gm[f0] ? g : f0;
+    for (int g = 0; g < 32; g++) {
+      const S128 k0 = hf_group_score(hgw, hge, g, x, nsmp, sc), k1 = resc ? hf_group_score(hgw, hge, g, xr, nsmp, sc) : k0;
+      gm[g] = ur ? k1 : k0, go[g] = ur ? k0 : k1;
+      f0 = gm[g] < gm[f0] ? g : f0;
+    }
+    if (ur) x = xr;
     int mn = 0;
     if (tried) {
       const S64* dot;
@@ -1371,19 +1424,58 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // first half the time, 98% from 2 times it)
     const S128 mu = bound[ch] && !ss_rule() && !x96a ? (S128)tlvl[ch] * sc << 24 : 0;
     const int g = code_cand(32, 5, (int)v >> 5, VK_HFG, ch, b, gn, 0, mu << 19);
+    if (resc && !mn) {  // (which ranked the encoder's group higher)
+      int rc = 0, ro = 0;
+      for (int k = 0; k < 32; k++) rc += gm[k] < gm[g], ro += go[k] < go[g];
+      const int rs = ur ? rc : ro, rp = ur ? ro : rc;
+      if (rs != rp) hrs[rs < rp]++;
+      if (hrs[0] + hrs[1] >= 1u << 16) hrs[0] >>= 1, hrs[1] >>= 1;
+    }
     if (tried) {
       hfr[0] += mn, hfr[1]++;
       if (hfr[1] >= 1u << 16) hfr[0] >>= 1, hfr[1] >>= 1;
       hf_n += hf_n < 2048;
     }
     n_hfvq++;
-    for (int i = 0; i < 32; i++) cand[i].k = hf_dist(g * 32 + i, x, nsmp, sc), cand[i].i = i;
+    // (a lossless WAV's, where the group isn't the scores' first: the encoder's values lay past the
+    // scores' boundary between the two, so the vectors go by the values moved onto it along the
+    // scores' gradient where that has ranked the encoder's vector higher clearly more often than the
+    // values as they are: `s.2.dts`'s top subband's vector the nearest 63.1% of the time there from
+    // 62.2%, its core 0.1% smaller; FFmpeg's `master_audio_7.1_24bit.dts`'s and `3-1.dts`'s less)
+    S64 xs[NSMP];
+    bool pushed = false;
+    if (!mn && nsmp == 16 && g != f0) {
+      double g2 = 0, gx[16];
+      for (int j = 0; j < 16; j++) gx[j] = 2.0 * (double)(hgw[f0][j] - hgw[g][j]) * (double)sc * 65536.0, g2 += gx[j] * gx[j];
+      if (g2 > 0) {
+        const double lam = (double)(gm[g] - gm[f0]) / g2 / 8192.0;  // (hf_group_score()'s units: x 8192)
+        pushed = true;
+        for (int j = 0; j < 16 && pushed; j++) {
+          const double d = lam * gx[j];
+          if (d > 1e12 || d < -1e12) pushed = false;  // (the values within 2^40: hf_dist()'s)
+          else xs[j] = x[j] - (S64)llround(d);
+        }
+      }
+    }
+    const bool up = pushed && hpw[1] > hpw[0] + 16 + hpw[0] / 32;
+    KeyIx oc[32], cc[32];  // (the other order's keys; the order's, as code_cand() may reorder cand)
+    for (int i = 0; i < 32; i++) {
+      const S128 k0 = hf_dist(g * 32 + i, x, nsmp, sc), k1 = pushed ? hf_dist(g * 32 + i, xs, nsmp, sc) : k0;
+      cand[i].k = cc[i].k = up ? k1 : k0, cand[i].i = cc[i].i = i;
+      oc[i].k = up ? k0 : k1, oc[i].i = i;
+    }
     // (a lossless WAV's vectors: how far the nearest beats the next against the channel's level in
     // the subframe times the scale factor, as the encoder's arithmetic errs by its level: `s.2.dts`'s
     // encoder took the nearest of subband 28's 97% of the time within 2^-19 of that, 85% within
     // 2^-20, 49% within 2^-24; by the nearest's distance, 63% within 1/256 of it, 99% by 2^4 times
     // it or more)
     v = g * 32 + code_cand(32, 5, (int)v & 31, VK_HFV, ch, b, gn, mu, mu);
+    if (pushed) {  // (which order ranked the encoder's vector higher)
+      const int at = (int)v & 31, rc = rank_of(cc, 32, at), ro = rank_of(oc, 32, at);
+      const int rp = up ? rc : ro, r0 = up ? ro : rc;
+      if (rp != r0) hpw[rp < r0]++;
+      if (hpw[0] + hpw[1] >= 1u << 16) hpw[0] >>= 1, hpw[1] >>= 1;
+    }
     if (cpl_on(r, ch, b)) {  // (each m's group by the centroids)
       const int c = NSUB - 1 - b;
       for (int k = 0; k < CPL_K; k++) {
@@ -1675,10 +1767,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // is a boundary too, the one between the run's two ends (anal.inc's sf_run()): the nearer counts
   // (`s.2.dts`'s core 0.6% smaller; pn's nearness, the relative one, stays the midpoint's: which side
   // it lies on says which way a miss goes, to the run's other end or past the midpoint)
-  int scale_near_lev(int ch, int b, const S64* v, int n, const U32* tab, int nt, int p) const {
+  // (add: a power the RMS's square has in it too)
+  int scale_near_lev(int ch, int b, const S64* v, int n, const U32* tab, int nt, int p, S128 add = 0) const {
     S128 ms = 0;
     for (int i = 0; i < n; i++) ms += (S128)v[i] * v[i];
-    const S64 rr = isqrt128((U128)(ms / n)), lev = tlvl[ch], e = (S64)tab[p] << AQ_F;
+    const S64 rr = isqrt128((U128)(ms / n + add)), lev = tlvl[ch], e = (S64)tab[p] << AQ_F;
     S64 bd = -1;
     if (rr > e && p + 1 < nt) bd = ((S64)tab[p] + tab[p + 1]) << (AQ_F - 1);
     else if (rr <= e && p > 0) bd = ((S64)tab[p - 1] + tab[p]) << (AQ_F - 1);
@@ -1720,17 +1813,16 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       }
       if (n) {
         // (a lossless WAV's top subband: its RMS with the bottom one's leak's noise in it, 2^-40 of
-        // that one's power, as the encoder's scale factor goes: 81.6% of `s.2.dts`'s, from 79.2%)
+        // that one's power, as the encoder's scale factor goes: 81.6% of `s.2.dts`'s, from 79.2%; and
+        // pl's, the nearness as that rule's: `s.2.dts`'s core 0.02% smaller than on the values as
+        // they are)
         if (b == NSUB - 1 && cpl_on(r, ch, b)) {
-          if (!ss_rule() && !x96a) {  // (pl's: the RMS rule's on the values as they are)
-            int nr;
-            const int p0 = scale_pred(v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &nr);
-            if (p0 >= 0) nlev = scale_near_lev(ch, b, v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p0);
-          }
           S128 ms = 0, m0 = 0;
           for (int i = 0; i < n; i++) ms += (S128)v_[i] * v_[i];
           for (int i = 0; i < nsmp; i++) m0 += (S128)X[ch][0][i] * X[ch][0][i];
           p = scale_pred_ms(ms / n + (m0 / nsmp >> 40), r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
+          if (!ss_rule() && !x96a && p >= 0)
+            nlev = scale_near_lev(ch, b, v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p, m0 / nsmp >> 40);
         } else {
           p = scale_pred(v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
           // (a lossless WAV's: pn's outside the VQ subbands, whose contexts want the RMS's nearness
