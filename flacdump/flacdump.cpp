@@ -408,6 +408,7 @@ static s64* g_sig[MAXCH];  // subframe signals (full, with wasted bits)
 static s64* g_x;           // shifted subframe signal workspace
 static s64* g_res;         // residual workspace
 static s64* g_res2;
+static s64* g_simx;
 static s32* g_pcm[MAXCH];  // PCM of current frame
 static u8* g_parambuf;
 
@@ -419,6 +420,8 @@ static void alloc_work() {
     g_x = (s64*)xmalloc(sizeof(s64) * MAXBS);
     g_res = (s64*)xmalloc(sizeof(s64) * MAXBS);
     g_res2 = (s64*)xmalloc(sizeof(s64) * MAXBS);
+
+    g_simx = (s64*)xmalloc(sizeof(s64) * MAXBS);
     g_parambuf = (u8*)xcalloc((size_t)MAXCH * MAXPART * 2);
 }
 
@@ -521,6 +524,49 @@ static void lpc_restore(s64* x, int n, const s32* c, int order, int shift, const
         for (int j = 0; j < order; j++) s += (u64)((s64)c[j] * h[-1 - j]);
         x[i] = (s64)((u64)r[i - order] + (u64)((s64)s >> shift));
     }
+}
+
+// fast LPC residual for 32-bit-safe signals (analysis only)
+template <int O> static void lpc_res_t(const s32* x, int n, const s32* c, int shift, s64* r) {
+    for (int i = O; i < n; i++) {
+        s64 s = 0;
+        const s32* h = x + i;
+        for (int j = 0; j < O; j++) s += (s64)c[j] * h[-1 - j];
+        r[i - O] = (s64)x[i] - (s >> shift);
+    }
+}
+typedef void (*LpcResFn)(const s32*, int, const s32*, int, s64*);
+static LpcResFn g_lpcres[33];
+template <int O> struct LpcResInit {
+    static void run() {
+        g_lpcres[O] = lpc_res_t<O>;
+        LpcResInit<O - 1>::run();
+    }
+};
+template <> struct LpcResInit<0> {
+    static void run() {}
+};
+static s32* g_x32;
+// residual using a 32-bit copy of x when possible (x32 = nullptr: generic)
+static void lpc_residual_fast(const s64* x, const s32* x32, int n, const s32* c, int order, int shift, s64* r) {
+    if (x32 && order <= 32)
+        g_lpcres[order](x32, n, c, shift, r);
+    else
+        lpc_residual(x, n, c, order, shift, r);
+}
+// 32-bit copy if all samples fit (and products cannot overflow 64-bit sums)
+static const s32* to32(const s64* x, int n) {
+    for (int i = 0; i < n; i++) {
+        s64 v = x[i];
+        if (v < -(1ll << 31) || v >= (1ll << 31)) return nullptr;
+        g_x32[i] = (s32)v;
+    }
+    return g_x32;
+}
+
+static void init_fast() {
+    g_x32 = (s32*)xmalloc(sizeof(s32) * MAXBS);
+    LpcResInit<32>::run();
 }
 
 // subframe signal of channel ch from PCM
@@ -1215,7 +1261,7 @@ struct ResStats {
         asum = (u64*)xmalloc(sizeof(u64) * 2 * MAXPART + 64);
         zsum = (u64*)xmalloc(sizeof(u64) * 2 * MAXPART + 64);
     }
-    void compute(const s64* r, int bs_, int order_) {
+    void compute(const s64* r, int bs_, int order_, bool withz = true) {
         bs = bs_;
         order = order_;
         maxpo = 0;
@@ -1234,10 +1280,17 @@ struct ResStats {
         for (int i = 0; i < np; i++) {
             u32 n = psz - (i == 0 ? order : 0);
             u64 a = 0, z = 0;
-            for (u32 j = 0; j < n; j++) {
-                s64 v = p[j];
-                a += (u64)(v < 0 ? -v : v);
-                z += ((u64)v << 1) ^ (u64)(v >> 63);
+            if (withz) {
+                for (u32 j = 0; j < n; j++) {
+                    s64 v = p[j];
+                    a += (u64)(v < 0 ? -v : v);
+                    z += ((u64)v << 1) ^ (u64)(v >> 63);
+                }
+            } else {
+                for (u32 j = 0; j < n; j++) {
+                    s64 v = p[j];
+                    a += (u64)(v < 0 ? -v : v);
+                }
             }
             p += n;
             A[i] = a;
@@ -1250,7 +1303,7 @@ struct ResStats {
             u64* z1 = zsum + off[po + 1];
             for (int i = 0; i < (1 << po); i++) {
                 a2[i] = a1[2 * i] + a1[2 * i + 1];
-                z2[i] = z1[2 * i] + z1[2 * i + 1];
+                if (withz) z2[i] = z1[2 * i] + z1[2 * i + 1];
             }
         }
     }
@@ -1817,7 +1870,8 @@ struct LpcPredictor {
     int ncand;
     int mru[MAXCAND];  // candidate ids in rank order
     u32 hits[MAXCAND];
-    u32 nsub;  // LPC subframes seen
+    u32 nsub;   // LPC subframes seen
+    u32 nmiss;  // LPC subframes without exact candidate
     float* wd;
     // per-subframe memo of autocorrelations
     struct Memo {
@@ -1852,6 +1906,7 @@ struct LpcPredictor {
         ffwbuf = (double*)xcalloc(sizeof(double) * (MAXBS + 80));
         ncand = 0;
         nsub = 0;
+        nmiss = 0;
         add(0, W_T50, 0, 0, 0, AC_DBL);         // libFLAC 1.4 -0..-5
         add(3, 0, 0, 0, 0, 0);                  // ffmpeg flacenc
         add(0, W_T50_12, 0, 0, 0, AC_FASC);     // libFLAC 1.2/1.3.0-1.3.3
@@ -2021,7 +2076,7 @@ struct LpcPredictor {
 // The meta model
 
 struct ChState {
-    int ptype, pfixed, plorder, pprec, pshift, pmethod, pporder, prank;
+    int ptype, pfixed, plorder, pprec, pshift, pmethod, pporder, prank, psim;
     int pcoef_n;
     s32 pcoef[32];
 };
@@ -2037,13 +2092,15 @@ struct Models {
     BM sr_t[16];
     BM srv_eq[2];
     BM ch_t[16][4][4][16];
+    BM ch_sim[2][2];
+    BM ch_ff[2][2];
     BM bpsc_eq[2];
     BM bpsc_t[8];
     BM num_eq[2];
     BM w_eq[2][4];
     UModel w_val;
-    BM type_t[2][5][4];
-    BM forder_t[5][2][8];
+    BM type_t[2][5][5][4];
+    BM forder_t[5][2][6][8];
     BM lorder_t[33][32];
     BM prec_t[16][16];
     BM shift_t[33][32];
@@ -2051,6 +2108,7 @@ struct Models {
     BM coef_s[32];
     BM cand_f[24][4];
     BM cand_g[24][4];
+    BM lpc_sim[2][2];
     BM method_b[3][2];
     BM po_eqL[4];
     BM po_eqF[4];
@@ -2069,6 +2127,7 @@ struct Models {
 
 struct FrameState {
     int first;
+    u32 ffh, lfh;
     int pblocking, pbscode, psrcode, pchcode, pbpscode;
     u32 psrval, pbs;
     u64 frame_counter, sample_counter;
@@ -2080,10 +2139,15 @@ struct FrameState {
     u32 exscore[2];
     int ff_method;  // ffmpeg order selection method
     u32 ffscore[4];
+    int sim_on, sim_newv;  // libFLAC simulation enabled / 1.4 estimator variants
+    u32 simstat[2];
+    int rice_new, fix_le;  // libFLAC >= 1.4.3 rice estimate / >= 1.4.0 fixed-order tie rule
+    u32 rvote[2], fvote[2];
+    u32 dbg[8];
     ChState ch[MAXCH];
 };
 
-static void fstate_init(FrameState& s, const StreamParams& sp) {
+static void fstate_init(FrameState& s, const StreamParams& sp, int vendor) {
     memset(&s, 0, sizeof(s));
     s.first = 1;
     s.pbs = 4096;
@@ -2092,6 +2156,10 @@ static void fstate_init(FrameState& s, const StreamParams& sp) {
     s.minpo = 15;
     s.maxpo = 0;
     s.lpc_maxo = 8;
+    // vendor: 0 unknown, -1 ffmpeg, else libFLAC version*100 (e.g. 143)
+    s.sim_on = vendor >= 0;
+    s.rice_new = vendor == 0 || vendor >= 143;
+    s.fix_le = vendor == 0 || vendor >= 140;
     for (int c = 0; c < MAXCH; c++) {
         s.ch[c].ptype = 4;
         s.ch[c].pfixed = 2;
@@ -2161,6 +2229,7 @@ static bool model_residual(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, con
         int kf = rs.est_ff(po, i, lim);
         int k = ac.dec ? 0 : (s.param[i] == esc_code ? 31 : s.param[i]);
         int ctx = (kn == ko) + 2 * (kn == kf) + 4 * (i == 0);
+        int kvote = kn != ko;
         if (ac.bit(M.k_eq1[ctx], k == kn))
             k = kn;
         else {
@@ -2179,6 +2248,8 @@ static bool model_residual(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, con
             }
             if (!done) k = ac.tree(M.k_t[kn], 5, k);
         }
+        if (kvote && k == kn) st.rvote[1]++;
+        if (kvote && k == ko) st.rvote[0]++;
         if (k == 31) {
             ac.cat = C_ESC;
             // predicted raw bits: minimal signed width
@@ -2209,8 +2280,14 @@ static bool model_residual(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, con
     if (!s.method)
         for (int i = 0; i < np; i++)
             if (s.param[i] == 31) s.param[i] = 15;
+    if (st.rvote[0] + st.rvote[1] >= 8) st.rice_new = st.rvote[1] > st.rvote[0];
     return true;
 }
+
+struct SimOut {
+    u64 bits;
+    int type, order, wid;
+};
 
 // libFLAC exhaustive model search: order with minimal estimated subframe bits.
 // Leaves P.lpall valid for the candidate (evaluated up to maxo).
@@ -2218,7 +2295,8 @@ static int lpc_exh_guess(Ctx& cx, FrameState& st, int id, int maxo, const s64* x
     LpcPredictor& P = *cx.lp;
     int mo = P.eval(id, Min(maxo, bs - 1));
     if (!mo) return 0;
-    bool newv = P.cand[id].ac == AC_DBL;
+    const s32* x32 = to32(x, bs);
+    bool newv = st.rice_new;
     int lim = cx.sp.bps > 16 ? 30 : 14;
     int best = 0;
     u64 bb = ~0ull;
@@ -2233,12 +2311,12 @@ static int lpc_exh_guess(Ctx& cx, FrameState& st, int id, int maxo, const s64* x
             ebs = e < 0.0 ? 1e32 : 0.0;
         if (ebs >= (double)ebps) continue;
         int prec = st.maxprec;
-        if (ebps <= 17) prec = Min(prec, 32 - ebps - ilog2_64(o));
+        if (ebps <= (st.fix_le ? 17 : 16)) prec = Min(prec, 32 - ebps - ilog2_64(o));
         int sh;
         if (!lpc_quantize(P.lpall + (o - 1) * 32, o, prec, q, &sh)) continue;
-        lpc_residual(x, bs, q, o, sh, g_res2);
+        lpc_residual_fast(x, x32, bs, q, o, sh, g_res2);
         ResStats& rs = cx.rs;
-        rs.compute(g_res2, bs, o);
+        rs.compute(g_res2, bs, o, false);
         int hi = Min(st.maxpo, rs.maxpo);
         while (hi > 0 && ((u32)bs >> hi) <= (u32)o) hi--;
         int lo = Min(st.minpo, hi);
@@ -2363,16 +2441,19 @@ static void lpc_learn(Ctx& cx, FrameState& st, int id, int order, int bs, int eb
     int ge = lpc_exh_guess(cx, st, id, st.lpc_maxseen, x, bs, ebps);
     st.exscore[0] += gn == order;
     st.exscore[1] += ge == order;
-    st.lpc_exh = st.exscore[1] > st.exscore[0];
+    // exhaustive search is expensive to simulate: require clear evidence
+    st.lpc_exh = st.exscore[1] > st.exscore[0] + st.exscore[0] / 4 + 4;
     int mo = P.eval(id, Min(32, bs - 1));
     for (int v = 0; v < 2; v++) {
         int ov = ebps + (v ? 5 : prec);
         for (int m = order; m <= mo; m++)
             if (lpc_best_order(P.lerr, m, bs, ov) == order) st.oscore[v][m]++;
     }
+    // the encoder's max order is at least the largest order seen
+    if (st.lpc_maxo < st.lpc_maxseen) st.lpc_maxo = st.lpc_maxseen;
     u32 best = st.oscore[st.lpc_ov][st.lpc_maxo];
     for (int v = 0; v < 2; v++)
-        for (int m = 1; m <= 32; m++)
+        for (int m = st.lpc_maxseen; m <= 32; m++)
             if (st.oscore[v][m] > best) {
                 best = st.oscore[v][m];
                 st.lpc_maxo = m;
@@ -2387,33 +2468,73 @@ static void mru_hit(LpcPredictor& P, int r) {
     P.mru[0] = id;
 }
 
-static bool model_lpc(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s64* x, int bs, int ebps) {
+static bool model_lpc(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s64* x, int bs, int ebps,
+                      const SimOut& sim) {
     AC& ac = *cx.ac;
     Models& M = *cx.m;
     LpcPredictor& P = *cx.lp;
     P.begin(x, bs);
     s32 q[32];
     int sh = 0;
-    int skip_unhit = P.nsub >= 64 && (P.nsub & 31) != 0;
+    // encoder-side search budget: candidates that never matched are only tried when
+    // exact matches are common (or occasionally), to bound the time spent on unknown encoders
+    int try_unhit = P.nsub < 64 || P.nmiss * 4 < P.nsub || (P.nsub & 15) == 0;
     P.nsub++;
+    // stage 0: the simulated encoder's choice (window + order)
+    if (sim.type == ST_LPC && sim.wid >= 0 && sim.order <= bs - 1) {
+        ac.cat = C_ORDER;
+        int id = sim.wid;
+        int maxo = Min(st.lpc_exh ? st.lpc_maxseen : st.lpc_maxo, bs - 1);
+        int ok = 0;
+        int mo = P.eval(id, Max(maxo, sim.order));
+        if (mo >= sim.order && P.quant(id, sim.order, s.prec, q, &sh)) ok = 1;
+        int hit = ok && !ac.dec && sim.order == s.order && sh == s.shift && !memcmp(q, s.coef, sizeof(s32) * s.order);
+        hit = ac.bit(M.lpc_sim[ok][cs.psim], hit);
+        cs.psim = hit;
+        st.dbg[hit]++;
+        if (!hit && !ac.dec && g_verbose >= 4) {
+            int ge = lpc_exh_guess(cx, st, id, st.lpc_maxseen, x, bs, ebps);
+            fprintf(stderr, "s0miss: sim order %d wid %d, actual order %d prec %d, exhguess %d ok=%d ebps=%d mp=%d\n", sim.order, id, s.order, s.prec, ge, ok, ebps, st.maxprec);
+        }
+        if (hit) {
+            if (!ok) return false;
+            s.order = sim.order;
+            s.shift = sh;
+            memcpy(s.coef, q, sizeof(s32) * s.order);
+            int r = 0;
+            while (r < P.ncand && P.mru[r] != id) r++;
+            if (r < P.ncand) mru_hit(P, r);
+            st.lfh++;
+            cs.plorder = s.order - 1;
+            cs.pshift = s.shift;
+            cs.prank = 0;
+            lpc_learn(cx, st, id, s.order, bs, ebps, s.prec, x);
+            return true;
+        }
+    }
     // stage 1: window candidate with the encoder's own order choice
     ac.cat = C_ORDER;
     int found = -1;
     if (!ac.dec) {
-        for (int r = 0; r < P.ncand; r++) {
-            int id = P.mru[r];
-            if (P.hits[id] == 0 && skip_unhit) continue;
-            int g = order_guess(cx, st, id, x, bs, ebps, s.prec);
-            if (g != s.order) continue;
-            if (!P.quant(id, g, s.prec, q, &sh)) continue;
-            if (sh != s.shift || memcmp(q, s.coef, sizeof(s32) * g)) continue;
-            found = r;
-            break;
+        // (never-matched candidates are left to the cheaper stage-2 search)
+        for (int pass = 0; pass < 2 && found < 0; pass++) {
+            if (pass && (!try_unhit || P.nsub > 64)) break;
+            for (int r = 0; r < P.ncand; r++) {
+                int id = P.mru[r];
+                if ((P.hits[id] == 0) != (pass == 1)) continue;
+                int g = order_guess(cx, st, id, x, bs, ebps, s.prec);
+                if (g != s.order) continue;
+                if (!P.quant(id, g, s.prec, q, &sh)) continue;
+                if (sh != s.shift || memcmp(q, s.coef, sizeof(s32) * g)) continue;
+                found = r;
+                break;
+            }
         }
     }
     int r;
     for (r = 0; r < P.ncand; r++)
         if (ac.bit(M.cand_g[Min(r, 23)][cs.prank], r == found)) break;
+    st.dbg[2 + (r < P.ncand)]++;
     if (r < P.ncand) {
         int id = P.mru[r];
         int g = order_guess(cx, st, id, x, bs, ebps, s.prec);
@@ -2422,6 +2543,8 @@ static bool model_lpc(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s6
         s.shift = sh;
         memcpy(s.coef, q, sizeof(s32) * g);
         mru_hit(P, r);
+        if (P.cand[id].kind == 3) st.ffh++; else st.lfh++;
+        if (st.ffh > 8 && st.ffh > st.lfh) st.sim_on = 0;
         cs.prank = r == 0 ? 0 : r < 4 ? 1 : 2;
         cs.plorder = s.order - 1;
         cs.pshift = s.shift;
@@ -2435,13 +2558,16 @@ static bool model_lpc(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s6
     ac.cat = C_COEF;
     found = -1;
     if (!ac.dec) {
-        for (int k = 0; k < P.ncand; k++) {
-            int id = P.mru[k];
-            if (P.hits[id] == 0 && skip_unhit) continue;
-            if (!P.at_order(id, s.order, s.prec, q, &sh)) continue;
-            if (sh != s.shift || memcmp(q, s.coef, sizeof(s32) * s.order)) continue;
-            found = k;
-            break;
+        for (int pass = 0; pass < 2 && found < 0; pass++) {
+            if (pass && !try_unhit) break;
+            for (int k = 0; k < P.ncand; k++) {
+                int id = P.mru[k];
+                if ((P.hits[id] == 0) != (pass == 1)) continue;
+                if (!P.at_order(id, s.order, s.prec, q, &sh)) continue;
+                if (sh != s.shift || memcmp(q, s.coef, sizeof(s32) * s.order)) continue;
+                found = k;
+                break;
+            }
         }
     }
     if (!ac.dec && found < 0 && g_verbose >= 3) {
@@ -2472,10 +2598,13 @@ static bool model_lpc(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s6
         s.shift = sh;
         memcpy(s.coef, q, sizeof(s32) * s.order);
         mru_hit(P, r);
+        if (P.cand[id].kind == 3) st.ffh++; else st.lfh++;
+        if (st.ffh > 8 && st.ffh > st.lfh) st.sim_on = 0;
         cs.prank = r == 0 ? 0 : r < 4 ? 1 : 2;
         lpc_learn(cx, st, id, s.order, bs, ebps, s.prec, x);
     } else {
         cs.prank = 3;
+        P.nmiss++;
         // no exact candidate: code shift and deltas against the best guess
         int have = -1;
         for (int k = 0; k < Min(P.ncand, 4) && have < 0; k++)
@@ -2499,6 +2628,171 @@ static bool model_lpc(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s6
     }
     cs.pshift = s.shift;
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// libFLAC subframe cost simulation (process_subframe_ estimates)
+
+// windows the encoder appears to use (libFLAC candidates with hits); for windows that exist
+// in several numeric variants (autocorrelation flavour etc.) only the most used variant is kept
+static int sim_windows(LpcPredictor& P, int* ids) {
+    u32 mx = 0;
+    for (int i = 0; i < P.ncand; i++)
+        if (P.cand[i].kind != 3) mx = Max(mx, P.hits[i]);
+    int n = 0;
+    if (!mx) return 0;
+    for (int i = 0; i < P.ncand && n < 16; i++) {
+        const CandDef& a = P.cand[i];
+        if (a.kind == 3 || !P.hits[i] || P.hits[i] * 32 < mx) continue;
+        bool dominated = false;
+        for (int j = 0; j < P.ncand; j++) {
+            const CandDef& b = P.cand[j];
+            if (j == i || b.kind != a.kind || b.b != a.b || b.c != a.c) continue;
+            bool samewin = b.win == a.win || ((a.win == W_T50 || a.win == W_T50_12) && (b.win == W_T50 || b.win == W_T50_12));
+            if (!samewin) continue;
+            if (P.hits[j] > P.hits[i] || (P.hits[j] == P.hits[i] && j < i)) dominated = true;
+        }
+        if (!dominated) ids[n++] = i;
+    }
+    return n;
+}
+
+static SimOut sim_subframe(Ctx& cx, FrameState& st, const s64* xin, int n, int sbps, const int* wids, int nw) {
+    LpcPredictor& P = *cx.lp;
+    s64* xs = g_simx;
+    u64 o = 0;
+    for (int i = 0; i < n; i++) o |= (u64)xin[i];
+    int w = o ? ctz64(o) : 0;
+    if (w >= sbps) w = sbps - 1;
+    for (int i = 0; i < n; i++) xs[i] = xin[i] >> w;
+    int eb = sbps - w;
+    SimOut best = {8 + (u64)w + (u64)n * eb, ST_VERB, 0, -1};
+    if (n <= 4) return best;
+    bool newv = st.rice_new;
+    int lim = cx.sp.bps > 16 ? 30 : 14;
+    ResStats& rs = cx.rs;
+    // fixed predictor estimate
+    u64 e[5] = {0, 0, 0, 0, 0};
+    for (int i = 4; i < n; i++) {
+        s64 a = xs[i], b = xs[i - 1], c = xs[i - 2], d = xs[i - 3], f = xs[i - 4];
+        s64 r0 = a, r1 = a - b, r2 = a - 2 * b + c, r3 = a - 3 * b + 3 * c - d, r4 = a - 4 * b + 6 * c - 4 * d + f;
+        e[0] += (u64)(r0 < 0 ? -r0 : r0);
+        e[1] += (u64)(r1 < 0 ? -r1 : r1);
+        e[2] += (u64)(r2 < 0 ? -r2 : r2);
+        e[3] += (u64)(r3 < 0 ? -r3 : r3);
+        e[4] += (u64)(r4 < 0 ? -r4 : r4);
+    }
+    float rbps[5];
+    for (int k = 0; k < 5; k++)
+        rbps[k] = e[k] ? (float)det_log2(0.69314718055994530942 * (double)e[k] / (double)(n - 4)) : 0.0f;
+    if (rbps[1] == 0.0f) {
+        bool cst = true;
+        for (int i = 1; i < n; i++)
+            if (xs[i] != xs[0]) {
+                cst = false;
+                break;
+            }
+        if (cst) {
+            u64 b = 8 + (u64)w + eb;
+            if (b < best.bits) best = {b, ST_CONST, 0, -1};
+            return best;
+        }
+    }
+    int g;
+    if (st.fix_le) {
+        if (e[0] <= Min(Min(Min(e[1], e[2]), e[3]), e[4])) g = 0;
+        else if (e[1] <= Min(Min(e[2], e[3]), e[4])) g = 1;
+        else if (e[2] <= Min(e[3], e[4])) g = 2;
+        else if (e[3] <= e[4]) g = 3;
+        else g = 4;
+    } else {
+        if (e[0] < Min(Min(Min(e[1], e[2]), e[3]), e[4])) g = 0;
+        else if (e[1] < Min(Min(e[2], e[3]), e[4])) g = 1;
+        else if (e[2] < Min(e[3], e[4])) g = 2;
+        else if (e[3] < e[4]) g = 3;
+        else g = 4;
+    }
+    int f0 = st.lpc_exh ? 0 : g, f1 = st.lpc_exh ? 4 : g;
+    if (f1 >= n) f1 = n - 1;
+    for (int ord = f0; ord <= f1; ord++) {
+        if (rbps[ord] >= (float)eb) continue;
+        fixed_residual(xs, n, ord, g_res2);
+        rs.compute(g_res2, n, ord, false);
+        int hi = Min(st.maxpo, rs.maxpo);
+        while (hi > 0 && ((u32)n >> hi) <= (u32)ord) hi--;
+        int lo = Min(st.minpo, hi);
+        u64 b = 8 + (u64)w + (u64)ord * eb + rs.bits_lf(lo, hi, lim, newv);
+        if (b < best.bits) best = {b, ST_FIXED, ord, -1};
+    }
+    // LPC
+    if (!nw) return best;
+    P.begin(xs, n);
+    const s32* x32 = to32(xs, n);
+    int maxo = Min(st.lpc_exh ? st.lpc_maxseen : st.lpc_maxo, n - 1);
+    if (maxo < 1) return best;
+    for (int wi = 0; wi < nw; wi++) {
+        int id = wids[wi];
+        int mo = P.eval(id, maxo);
+        if (!mo) continue;
+        int o0, o1;
+        if (st.lpc_exh) {
+            o0 = 1;
+            o1 = mo;
+        } else {
+            o0 = o1 = lpc_best_order(P.lerr, mo, n, eb + (st.lpc_ov ? 5 : st.maxprec));
+        }
+        for (int ord = o0; ord <= o1; ord++) {
+            double er = P.lerr[ord - 1], ebs;
+            if (er > 0.0) {
+                ebs = 0.5 * det_log2(0.5 / (double)(n - ord) * er);
+                if (ebs < 0.0) ebs = 0.0;
+            } else
+                ebs = er < 0.0 ? 1e32 : 0.0;
+            if (ebs >= (double)eb) continue;
+            int prec = st.maxprec;
+            if (eb <= (st.fix_le ? 17 : 16)) prec = Min(prec, 32 - eb - ilog2_64(ord));
+            s32 q[32];
+            int sh;
+            if (!lpc_quantize(P.lpall + (ord - 1) * 32, ord, prec, q, &sh)) continue;
+            lpc_residual_fast(xs, x32, n, q, ord, sh, g_res2);
+            rs.compute(g_res2, n, ord, false);
+            int hi = Min(st.maxpo, rs.maxpo);
+            while (hi > 0 && ((u32)n >> hi) <= (u32)ord) hi--;
+            int lo = Min(st.minpo, hi);
+            u64 b = 8 + (u64)w + 9 + (u64)ord * (prec + eb) + rs.bits_lf(lo, hi, lim, newv);
+            if (b < best.bits) best = {b, ST_LPC, ord, id};
+        }
+    }
+    return best;
+}
+
+// libFLAC's channel assignment decision (-m); returns chcode or -1
+static SimOut g_sim4[4];
+static int sim_stereo(Ctx& cx, FrameState& st, s32** pcm, int n) {
+    LpcPredictor& P = *cx.lp;
+    int wids[16];
+    int nw = sim_windows(P, wids);
+    static s64* sig[4];
+    if (!sig[0])
+        for (int k = 0; k < 4; k++) sig[k] = (s64*)xmalloc(sizeof(s64) * MAXBS);
+    for (int i = 0; i < n; i++) {
+        s64 l = pcm[0][i], r = pcm[1][i];
+        sig[0][i] = l;
+        sig[1][i] = r;
+        sig[2][i] = (l + r) >> 1;
+        sig[3][i] = l - r;
+    }
+    u64 b[4];
+    for (int k = 0; k < 4; k++) {
+        g_sim4[k] = sim_subframe(cx, st, sig[k], n, cx.sp.bps + (k == 3), wids, nw);
+        b[k] = g_sim4[k].bits;
+    }
+    u64 t[4] = {b[0] + b[1], b[0] + b[3], b[1] + b[3], b[2] + b[3]};
+    int best = 0;
+    for (int k = 1; k < 4; k++)
+        if (t[k] < t[best]) best = k;
+    static const int map[4] = {1, 8, 9, 10};
+    return map[best];
 }
 
 // cheap estimate of the best stereo decorrelation (libFLAC-like fixed predictor cost)
@@ -2617,9 +2911,26 @@ static bool model_frame(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st, WavRea
         f.number = ac.raw(f.number, 36);
     ac.cat = C_CH;
     if (cx.sp.nch == 2) {
-        int pm = stereo_guess(pcm, bs);
         int pf = ff_stereo_guess(pcm, bs, cx.sp.bps > 16 ? 30 : 14);
-        f.chcode = ac.tree(M.ch_t[st.pchcode][pm][pf], 4, f.chcode);
+        static const int map[4] = {1, 8, 9, 10};
+        int cf = map[pf];
+        int cl = st.sim_on ? sim_stereo(cx, st, pcm, bs) : -1;
+        int done = 0;
+        if (cl >= 0) {
+            if (ac.bit(M.ch_sim[cl == cf][cl == st.pchcode], f.chcode == cl)) {
+                f.chcode = cl;
+                done = 1;
+            }
+        }
+        if (!done && cf != cl) {
+            if (ac.bit(M.ch_ff[cf == st.pchcode][cl >= 0], f.chcode == cf)) {
+                f.chcode = cf;
+                done = 1;
+            }
+        }
+        if (!done) f.chcode = ac.tree(M.ch_t[st.pchcode][pf][0], 4, f.chcode);
+        if (!ac.dec && g_verbose >= 2 && cl >= 0)
+            st.simstat[f.chcode == cl]++;
     }
     else
         f.chcode = cx.sp.nch - 1;
@@ -2632,6 +2943,19 @@ static bool model_frame(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st, WavRea
         int sbps = f.bps + side_channel(f.chcode, ch);
         s64* x = g_x;
         subframe_signal(f.chcode, ch, pcm, bs, x);
+        SimOut sim = {0, 4, 0, -1};
+        if (st.sim_on) {
+            if (cx.sp.nch == 2) {
+                static const int sig_of[11][2] = {{0, 1}, {0, 1}, {0, 1}, {0, 1}, {0, 1}, {0, 1},
+                                                  {0, 1}, {0, 1}, {0, 3}, {3, 1}, {2, 3}};
+                sim = g_sim4[sig_of[f.chcode][ch]];
+                if (f.chcode < 8 && f.chcode != 1) sim.type = 4;
+            } else {
+                int wids[16];
+                int nw = sim_windows(*cx.lp, wids);
+                sim = sim_subframe(cx, st, x, bs, sbps, wids, nw);
+            }
+        }
         // wasted bits
         ac.cat = C_WASTED;
         u64 o = 0;
@@ -2653,7 +2977,7 @@ static bool model_frame(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st, WavRea
                 isconst = 0;
                 break;
             }
-        s.type = ac.tree(M.type_t[isconst][cs.ptype], 2, s.type);
+        s.type = ac.tree(M.type_t[isconst][sim.type][cs.ptype], 2, s.type);
         cs.ptype = s.type;
         if (s.type == ST_CONST) {
             if (!isconst) return false;
@@ -2668,8 +2992,14 @@ static bool model_frame(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st, WavRea
         if (s.type == ST_FIXED) {
             int gn, go;
             fixed_guess(x, bs, gn, go);
-            s.order = ac.tree(M.forder_t[gn][gn == go], 3, s.order);
+            int gs = sim.type == ST_FIXED ? sim.order : 5;
+            s.order = ac.tree(M.forder_t[gn][gn == go][gs], 3, s.order);
             if (s.order > 4 || s.order > bs) return false;
+            if (gn != go) {
+                if (s.order == gn) st.fvote[1]++;
+                if (s.order == go) st.fvote[0]++;
+                if (st.fvote[0] + st.fvote[1] >= 4) st.fix_le = st.fvote[1] > st.fvote[0];
+            }
             cs.pfixed = s.order;
             fixed_residual(x, bs, s.order, g_res);
         } else {
@@ -2677,7 +3007,7 @@ static bool model_frame(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st, WavRea
             s.prec = ac.tree(M.prec_t[cs.pprec], 4, s.prec - 1) + 1;
             if (s.prec > 15) return false;
             cs.pprec = s.prec - 1;
-            if (!model_lpc(cx, s, cs, st, x, bs, sbps - s.wasted)) return false;
+            if (!model_lpc(cx, s, cs, st, x, bs, sbps - s.wasted, sim)) return false;
             lpc_residual(x, bs, s.coef, s.order, s.shift, g_res);
         }
         if (!model_residual(cx, s, cs, st, g_res, bs)) return false;
@@ -3292,6 +3622,36 @@ static void code_derived(AC& ac, FlacLayout& L, FrameStats& fs) {
         if (L.blocks[i].type == 3 && L.blocks[i].structured) code_seektable(ac, L.blocks[i], fs, L.sp);
 }
 
+// encoder hint from the VORBIS_COMMENT vendor string: 0 unknown, -1 ffmpeg, libFLAC version*100
+static int vendor_hint(const FlacLayout& L) {
+    for (size_t i = 0; i < L.blocks.n; i++) {
+        const MBlock& b = L.blocks[i];
+        if (b.type != 4 || b.len < 4) continue;
+        u32 vl = rd_le32(b.data);
+        if ((u64)vl + 4 > b.len) return 0;
+        const char* v = (const char*)b.data + 4;
+        if (vl >= 4 && (!memcmp(v, "Lavf", 4) || !memcmp(v, "Lavc", 4))) return -1;
+        const char* pre = "reference libFLAC ";
+        size_t pl = strlen(pre);
+        if (vl > pl && !memcmp(v, pre, pl)) {
+            int d[3] = {0, 0, 0}, k = 0;
+            for (u32 j = (u32)pl; j < vl && k < 3; j++) {
+                char c = v[j];
+                if (c >= '0' && c <= '9')
+                    d[k] = d[k] * 10 + (c - '0');
+                else if (c == '.')
+                    k++;
+                else
+                    break;
+            }
+            if (d[0] == 0 && d[1] == 0) return 150;  // git builds
+            return d[0] * 100 + d[1] * 10 + d[2];
+        }
+        return 0;
+    }
+    return 0;
+}
+
 static u64 header_size(const FlacLayout& L) {
     u64 s = L.prefix.n + 4;
     for (size_t i = 0; i < L.blocks.n; i++) s += 4 + L.blocks[i].len;
@@ -3461,7 +3821,7 @@ static int do_compress(const char* inname, const char* prefix, const Options& op
     cx.lp->init();
     cx.total_samples = total_samples;
     FrameState st;
-    fstate_init(st, sp);
+    fstate_init(st, sp, vendor_hint(L));
     FrameStats fs;
     fs.init();
     fs.audio_start = audio_start;
@@ -3510,6 +3870,10 @@ static int do_compress(const char* inname, const char* prefix, const Options& op
         fprintf(stderr, "frames: %llu modelled, %llu raw, %llu junk bytes; %llu samples\n", (unsigned long long)nframes,
                 (unsigned long long)nraw, (unsigned long long)njunk, (unsigned long long)total_samples);
         print_stats(ac, meta.n);
+        fprintf(stderr, "stage0 %u/%u stage1 %u/%u exscore %u/%u\n", st.dbg[1], st.dbg[0], st.dbg[3], st.dbg[2],
+                st.exscore[0], st.exscore[1]);
+        fprintf(stderr, "stereo sim: %u hit, %u miss; rice_new=%d fix_le=%d exh=%d maxo=%d\n", st.simstat[1], st.simstat[0],
+                st.rice_new, st.fix_le, st.lpc_exh, st.lpc_maxo);
         LpcPredictor& P = *cx.lp;
         fprintf(stderr, "lpc subframes %u, candidate hits:", P.nsub);
         for (int i = 0; i < P.ncand; i++)
@@ -3566,7 +3930,7 @@ static bool decompress_core(const u8* meta, size_t meta_n, WavReader& wav, Sink&
     cx.lp->init();
     cx.total_samples = wav.nsamples;
     FrameState st;
-    fstate_init(st, sp);
+    fstate_init(st, sp, vendor_hint(L));
     FrameStats fs;
     fs.init();
     fs.audio_start = pos;
@@ -3666,6 +4030,7 @@ int main(int argc, char** argv) {
     init_rates();
     init_squash();
     alloc_work();
+    init_fast();
     Options opt;
     opt.verify = 1;
     const char* mode = argv[1];
