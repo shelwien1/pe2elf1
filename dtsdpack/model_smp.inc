@@ -93,7 +93,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // starts, learned on where a lossless WAV's 16 samples' first group wasn't the encoder's -- a
   // perceptron's step of the vector (1/512 of it, then as the steps double from 1024, half as much
   // each time, to 1/16384) to the encoder's group's W and from the first's, the same of 64 to their
-  // bias (anal.inc's hf_group_score(): e = -2 bias - |W|^2, kept from 0); the steps so far
+  // bias (anal.inc's hf_group_score(): e = -2 bias - |W|^2, kept from 0); the steps so far. (Not
+  // from a vector whose peak is over 8 times the code book's: where the WAV isn't the encoder's
+  // input, as at a splice, a few such moved the scores so far that `s.2.dts`'s first 1.2 MB twice
+  // over had 18% of its second copy's groups wrong, from 6%)
+  static constexpr int HF_VQ_PEAK = 89;  // (HF_VQ's largest magnitude)
   S32 hgw[32][16];
   S64 hge[32];
   U32 hg_n;
@@ -112,6 +116,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
   }
   void hg_learn(const S64* x, S64 sc, int t, int f) {
+    S64 mx = 0;
+    for (int j = 0; j < 16; j++) mx = x[j] > mx ? x[j] : -x[j] > mx ? -x[j] : mx;
+    if (mx > ((S64)8 * HF_VQ_PEAK * sc << (AQ_F - 4))) return;  // (x: HF_VQ's values times sc / 16)
     const int sh = 9 + imin(bit_len((U64)(hg_n >> 10)), 5);
     hg_n += hg_n < (1u << 30);
     const S64 den = sc << (sh + 3);  // (x / den: the vector u times 2^-sh, in 512ths)
@@ -403,11 +410,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // 24, 7 and 8, an index this near the boundary missing there 3 to 15 times as often as in
   // subband 5's; no direction to it): the nearness those counts are by (nl, its distance against
   // the level) is against the level times the subband's error's scale, which is learned as the
-  // stream goes, in quarter doublings (from 0): a step up where the subband's misses since its
+  // stream goes, in quarter doublings (from HC_S0: most streams' end up at -3 to -15, a decoded
+  // WAV's near -3; from 0, a short stream's were still on their way down at its end, `s.2.dts`'s
+  // first 1.2 MB 0.3% bigger): a step up where the subband's misses since its
   // last step are more than those its cells expected by 1.25 times the root of those (once 2 or
   // more were), down where fewer by as much (to HC_MAX either way); both halved as those expected
   // pass 1024. The core's subbands', then X96's
-  static constexpr int HC_MAX = 32;
+  static constexpr int HC_MAX = 32, HC_S0 = -9;
   struct HitCal {
     S32 s;   // (the scale: 2^(s/4))
     U32 m;   // (the misses)
@@ -446,6 +455,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     memcpy(hge, HF_GE, sizeof hge);
     for (int g = 0; g < 32; g++) hg_dist(g);
     hg_n = 0;
+    for (int k = 0; k < NSUB + NSUB96; k++) hcal[k].s = HC_S0;
     for (int i = 0; i < 128; i++) lfe_cn[i] = -1;
     lfe_nsf = 0;
     lfe_lp = 9;
