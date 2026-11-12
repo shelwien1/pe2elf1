@@ -143,7 +143,7 @@ allocations in):
 |---|---:|---:|---|
 | `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 29378 (1.56%) | the 96 kHz decode's 64-band analysis's lower half (99.79% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
 | `Master Audio 5.0 96khz.dts` | 1768548 | 4288 (0.24%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
-| `Master Audio 7.1.dts` | 1945604 | 6631 (0.34%) | a downmix of its 7.1 |
+| `Master Audio 7.1.dts` | 1945604 | 5145 (0.26%) | a downmix of its 7.1 |
 | `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 4396 (0.16%) | its 3.1 |
 | `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 2958 (0.06%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
 | FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 1851 (0.37%) | the same (1.95%) |
@@ -559,7 +559,14 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   where fitted without it), and is taken where it is the better: from a decoded WAV's first values,
   which the fits haven't learned yet (FATE's 7-frame `dcadec-suite` streams with an LFE 18-21 bytes
   smaller each, their LFE 51-53 bytes to 31-33: their values all made but where the WAV is
-  silent or ends). A lossless WAV's choices are the same as without it. The LFE
+  silent or ends). A lossless WAV's choices are the same as without it. But `Master Audio
+  7.1.dts`'s encoder decimates its LFE by another filter at each place of a frame's values (8 a
+  frame: a fit at each makes 90% of those that aren't 0 within half a step, the one fit 10%). So
+  a sixth is the third at each place apart (format 68; 16 of them, a longer frame's 16th and later
+  places sharing one), which once learned makes 93% of its values, the best of the others 30% (its
+  LFE 1990 bytes to 502, the stream 22% smaller). They are refitted only where the first five
+  missed more than a quarter of the values since the last refit: every time, they'd cost nearly
+  as much as all the other fits (`s.2.dts`'s first 1.2 MB 1.6% slower to compress). The LFE
   scale factor comes after the samples in the bitstream; the model codes it with the first of
   them (the subframe's values as predicted, for the ones not yet coded), and the samples against
   the predictions at its step. That step is the 7-bit table's entry times 0.56 (the quantizer's
@@ -967,7 +974,7 @@ files.
 
 ### The format
 
-"dtsdpack", the format's version (67), the level, the WAV's binding (the offset; each core channel's
+"dtsdpack", the format's version (68), the level, the WAV's binding (the offset; each core channel's
 WAV channel, the second of its mix and their gains, Q23; the LFE's channel; the WAV's samples to
 the core's, 1, 2 or 4 (its lower band, then 2), and the lower band's resolution; the WAV's format,
 size and the CRC-32 of its first 64 KB), then the
