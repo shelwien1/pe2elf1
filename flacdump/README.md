@@ -46,13 +46,16 @@ Results on a test corpus (real-world files from archive.org encoded by libFLAC
 
 | encoder / settings                   | FLAC size | .meta |
 |--------------------------------------|----------:|------:|
-| libFLAC 1.4.3 `-5`, 16 bit (40 s)    | 4.4 MB    | 38 B  |
-| libFLAC 1.4.3 `-8`, 16 bit (40 s)    | 4.4 MB    | 162 B |
-| libFLAC 1.4.2, 24 bit, 3 min         | 33.6 MB   | 147 B |
-| libFLAC 1.3.1 `-8 -e`-like, 3 min    | 35.3 MB   | 145 B |
-| libFLAC 1.2.1 `-8`, 3.5 min          | 18.4 MB   | 91 B  |
-| ffmpeg flac, compression 5/8/12      | 4.4 MB    | 63-74 B |
-| 6 channels, 12/20/32 bit, 8 bit, mono| -         | 40-310 B |
+| libFLAC 1.4.3 `-5`, 16 bit, 40 s     | 4.4 MB    | 33 B  |
+| libFLAC 1.4.3 `-8`, 16 bit, 40 s     | 4.4 MB    | 152 B |
+| libFLAC 1.4.2, 24 bit, 3 min         | 33.6 MB   | 137 B |
+| libFLAC 1.3.1, 24 bit, 3.3 min       | 35.3 MB   | 136 B |
+| libFLAC 1.2.1 `-8`, 16 bit, 3.4 min  | 18.4 MB   | 82 B  |
+| ffmpeg flac, compression 5 / 8 / 12  | 4.4 MB    | 61 / 63 / 72 B |
+| 6 channels, mono, 8/12/20/32 bit     | 1-12 MB   | 29-300 B |
+
+For comparison, storing the same decisions without prediction costs about
+0.2-0.3% of the FLAC size (tens of kilobytes for an album track).
 
 A good part of what remains is genuine information: tag text in
 VORBIS_COMMENT, cover art, foreign metadata.

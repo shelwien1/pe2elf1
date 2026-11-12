@@ -2281,6 +2281,45 @@ struct Models {
     BM mtype[8][128];
 };
 
+// priors: "prediction was right" flags start out confident
+static void prior(BM* m, size_t cnt, int p1) {
+    for (size_t i = 0; i < cnt; i++) {
+        m[i].p = (u16)p1;
+        m[i].n = 4;
+    }
+}
+#define PRIOR(arr, p1) prior((BM*)&(arr), sizeof(arr) / sizeof(BM), p1)
+static void models_init(Models& M) {
+    model_init(M);
+    const int HI = 62000, LO = 3500;
+    PRIOR(M.blocking, LO);
+    PRIOR(M.bs_eq, HI);
+    PRIOR(M.bscode_eq, HI);
+    PRIOR(M.sr_eq, HI);
+    PRIOR(M.srv_eq, HI);
+    PRIOR(M.bpsc_eq, HI);
+    PRIOR(M.num_eq, HI);
+    PRIOR(M.w_eq, HI);
+    PRIOR(M.po_eqL, HI);
+    PRIOR(M.k_eq0, HI);
+    PRIOR(M.k_eq1, HI);
+    PRIOR(M.ch_sim, HI);
+    PRIOR(M.lpc_sim, HI);
+    PRIOR(M.mflag, HI);
+    for (int k = 0; k < 4; k++) {
+        M.cand_g[0][k].p = HI;
+        M.cand_g[0][k].n = 2;
+        for (int r = 1; r < 24; r++) {
+            M.cand_g[r][k].p = 16000;
+            M.cand_f[r][k].p = 16000;
+        }
+    }
+    for (int i = 0; i < 5; i++) {
+        M.seg[i][1].p = LO;  // FRAME segments dominate
+        M.seg[i][1].n = 4;
+    }
+}
+
 struct FrameState {
     int first;
     u32 ffh, lfh;
@@ -4030,7 +4069,7 @@ static int do_compress(const char* inname, const char* prefix, const Options& op
     AC ac;
     ac.enc_init(&meta);
     Models* M = (Models*)xmalloc(sizeof(Models));
-    model_init(*M);
+    models_init(*M);
     if (!code_layout(ac, *M, L)) die("internal: layout");
     Ctx cx;
     cx.ac = &ac;
@@ -4134,7 +4173,7 @@ static bool decompress_core(const u8* meta, size_t meta_n, WavReader& wav, Sink&
     AC ac;
     ac.dec_init(meta + 2, meta_n - 2);
     Models* M = (Models*)xmalloc(sizeof(Models));
-    model_init(*M);
+    models_init(*M);
     FlacLayout L;
     if (!code_layout(ac, *M, L)) return false;
     const StreamParams& sp = L.sp;
