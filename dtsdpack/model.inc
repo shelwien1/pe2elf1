@@ -157,7 +157,6 @@ struct Model : ModelX96<f_DEC, LV> {
                        // `dts_es.dts`'s 2.1%)
         account(CAT_SIDE);
         B::abc[ch][b].g = -1;
-        B::pm_g[ch][b] = -1;
         int fit = -1;
         if (bound[ch] && B::ss_rule() && es[ch][b]) {
           const int e = es[ch][b], n = s.nssc * 8;
@@ -193,7 +192,6 @@ struct Model : ModelX96<f_DEC, LV> {
                 // one: the encoders seen predict in none, `s.2.dts` none of its 64 that would gain, the
                 // other lossless WAVs' none of their 86: its core 0.03% smaller, theirs 0.4-0.6%)
           const int gq = !bound[ch] ? 9 : b >= r.nvqsub[ch] || B::pm_quiet(ch, b) ? 0 : B::pmode_gain(ch, b);
-          B::pm_g[ch][b] = (S8)(bound[ch] ? gq : -1);
           v = side_code(SF_PMODE, ch, b, v, 0, 1, 1, hist.pmode[ch][b], b ? s.pmode[ch][b - 1] + 1 : 0,
                         bound[ch] ? ac[ch][b] : 8, bound[ch] ? imin(B::lpg4[ch][b], 27) : 0, gq, tr);
         }
@@ -260,13 +258,6 @@ struct Model : ModelX96<f_DEC, LV> {
         const int tg = fe != B::FE_NONE ? B::ap_guess(pass, b, fe, &tm) : -1, ut = tg >= 0 && B::ap_rule(pass);
         const int sg = ut ? tg : sg0;
         const int sm = ut ? tm : fe != B::FE_NONE ? B::level_margin(pass, st, fe, sg0) : 0;
-        // (a transient's: the guesses at its values' energy and at those from it on's)
-        int gw = -1, ga = -1;
-        if (fe != B::FE_NONE && B::fe_a[ch][b] != B::FE_NONE) {
-          int m1;
-          gw = ut ? B::ap_guess(pass, b, B::fe_w[ch][b], &m1) : B::level_guess(pass, st, B::fe_w[ch][b]);
-          ga = ut ? B::ap_guess(pass, b, B::fe_a[ch][b], &m1) : B::level_guess(pass, st, B::fe_a[ch][b]);
-        }
         int eq = e ? B::eq[ch][b] : 4;
         if (e && s.pmode[ch][b]) {  // (an ADPCM subband's: its prediction's residual's)
           int near;
@@ -321,10 +312,7 @@ struct Model : ModelX96<f_DEC, LV> {
         // (where the first guess is the staircase's, the second the ABITS across the nearer edge of
         // its energies: a miss's, nearly always)
         const int ms = Sn == sg + 1 ? sm : 0;
-        int alt = ms ? (ms <= 8 ? sg - 1 : sg + 1) : -1;
-        // (a transient's, the guess at the energy not taken is the second, where it differs)
-        const int tro = fs && gw >= 0 && ga >= 0 && gw != ga ? (sg == ga ? gw : ga) : -1;
-        if (tro >= 0 && tro != sg) alt = tro;
+        const int alt = ms ? (ms <= 8 ? sg - 1 : sg + 1) : -1;
         // (the budget: what the samples may still take, toward the edge ms says, in steps of this
         // subband's bits across it; a lossless WAV's only: a decoded WAV's streams 0.1-0.9% bigger
         // with it)
@@ -342,7 +330,7 @@ struct Model : ModelX96<f_DEC, LV> {
         // none: a decoded WAV's search, right in 99.99% where they agree, misses 20% where not)
         const int og2 = ut ? sg0 : tg;
         const int sa = !fs && G && Sn == G ? (sg < 0 ? 0 : sg == G - 1 ? 1 : hist.abits[ch][b] && sg == hist.abits[ch][b] - 1 ? 2 : 3) : -1;
-        const int ag = sa >= 0 ? sa : tro >= 0 && tro != sg ? 4 : !fs || og2 < 0 ? 0 : og2 == sg ? 1 : og2 == alt ? 2 : 3;
+        const int ag = sa >= 0 ? sa : !fs || og2 < 0 ? 0 : og2 == sg ? 1 : og2 == alt ? 2 : 3;
         v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
                        s.pmode[ch][b], lbd, nb, mx, Sn, near_e ? 14 : nn, sc, eq, ms,
                        alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag);
@@ -355,7 +343,6 @@ struct Model : ModelX96<f_DEC, LV> {
           B::ap_add(pass, b, fe, (int)v);
         }
         if (ut) B::n_tb++, B::n_tbhit += v == tg;
-        if (gw >= 0 && ga >= 0) B::ab_ev[ch][b] = (U8)(gw == ga ? 3 : v == ga ? 2 : v == gw ? 1 : 0);
         if (fs) B::n_st++, B::n_sthit += v == sg;
         if (sc) B::n_abhit += v == G - 1;
         if (srch) {
@@ -380,10 +367,12 @@ struct Model : ModelX96<f_DEC, LV> {
                                // TMODEs 1.4 KB to 1.0, to 0.3 at the subband's threshold)
           int tg;
           int tc = B::tmode_rule(s, ch, b, &tg);
-          if (tc >= 3) {  // (and what its ABITS said: 3 the values' energy, 6 or 8 that from the transient on)
-            const int ev = B::ab_ev[ch][b], r4 = tc >= 5;
-            tc = ev == 1 ? 3 : ev == 2 ? (r4 ? 8 : 6) : r4 ? 7 : 4 + (s.abits[ch][b] >= 10);
-            if (ev == 1) tg = 0;
+          if (tc >= 3) {  // (and whether the encoders take one there, ab_transient()'s: 3 not, 6 or 8 they
+                          // do, by the rise; `s.2.dts`'s core 0.07% smaller than by which mean square its
+                          // ABITS went by, the other lossless WAVs' 0.2-0.3%)
+            const bool tk = B::fe_a[ch][b] != B::FE_NONE;
+            tc = !tk ? 3 : tc >= 5 ? 8 : 6;
+            if (!tk) tg = 0;
           }
           v = side_code(SF_TMODE, ch, b, v, lo, hi, 0, 1 + (tc >= 3 ? tg : 0), hist.tmode[ch][b], tc,
                         1 + imin(s.abits[ch][b], 26), ec[ch][b], s.pmode[ch][b] ? 0 : B::pm_rise(s, ch, b));

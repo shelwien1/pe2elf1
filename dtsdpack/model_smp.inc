@@ -67,9 +67,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     } obs[NCH * NSUB];
   } abl[2];
   S32 fe_s[NCH][NSUB];  // the subframe's subbands' fine energies (FE_NONE: none)
-  S32 fe_w[NCH][NSUB], fe_a[NCH][NSUB];  // (a transient's: its values', those from it on; else FE_NONE)
-  S8 pm_g[NCH][NSUB];  // (PMODE's gain context, pmode_gain()'s, where a lossless WAV's: -1 none)
-  U8 ab_ev[NCH][NSUB];  // what its ABITS said (1 the values', 2 those from the transient on; 0 neither, 3 both)
+  S32 fe_a[NCH][NSUB];  // (a transient's, where the encoders take one: its values' from it on; else FE_NONE)
   // the core's subframe's bit budget as its ABITS come (ab_budget()): the subbands coded, the bits
   // their ABITS' samples take
   U8 bg_done[NCH][NSUB];
@@ -673,15 +671,14 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     memcpy(ab_snap[p], ab_st[p], sizeof ab_snap[p]);
     for (int ch = r.ch0(); ch < r.ch1(); ch++)
       for (int b = 0; b < r.nvqsub[ch]; b++) {
-        fe_s[ch][b] = fe_w[ch][b] = fe_a[ch][b] = FE_NONE, ab_ev[ch][b] = 0;
+        fe_s[ch][b] = fe_a[ch][b] = FE_NONE;
         if (!bound[ch]) continue;
         S64* const x = bud_v[ch][b];
         const int n = scale_values(s, ch, b, 0, s.nssc, x);
         int near;
         fe_s[ch][b] = fine_energy(x, n);
-        // (a transient's, its rise 3 doublings or more: the encoders' energy may be the part from it
-        // on, where its second scale factor is: ab_transient())
-        fe_w[ch][b] = fe_s[ch][b], ab_ev[ch][b] = 0;
+        // (a transient's: the encoders' energy is the part from it on, where its second scale factor
+        // is: ab_transient())
         fe_s[ch][b] = ab_transient(s, ch, b, x, n, fe_s[ch][b], &fe_a[ch][b]);
         bud_n[ch][b] = n;
         bud_si[ch][b] = scale_pred(x, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
@@ -803,10 +800,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // A lossless WAV's subband with a transient (where a subsubframe's mean square is 8 times the one
   // before's or more, the largest such rise's; not an ADPCM subband's, not from 20 up: tmode_rule()):
   // the encoders seen allocate its bits by the mean square of its values from the transient on,
-  // where they take one, the rise rise_thr() or more; the fine energy the ABITS are guessed by (fe
-  // the subframe's; *fa those values', FE_NONE none). From 3 doublings, a subband that doesn't
-  // predict where its gain says it would has a transient, whatever the threshold (the encoders make
-  // no prediction where they take one: `s.2.dts`'s core 0.03% smaller)
+  // where they take one, the rise rise_thr() or more, else by the subframe's: the fine energy the
+  // ABITS are guessed by (fe the subframe's; *fa those values' where they take one, else FE_NONE).
+  // As the threshold is theirs, the other of the two mean squares is no second guess (`s.2.dts`'s
+  // core 0.15% smaller without it, the other lossless WAVs' up to 0.45%), nor is a subband that
+  // doesn't predict where its gain says it would a transient by that alone.
   S32 ab_transient(const CoreSub& s, int ch, int b, const S64* x, int n, S32 fe, S32* fa_) const {
     *fa_ = FE_NONE;
     if (s.pmode[ch][b] || b >= 20 || s.nssc < 2 || fe == FE_NONE) return fe;
@@ -819,10 +817,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (rr > tr) tr = rr, tk = k;
     }
     if (!tk || tr < 3 * 128) return fe;
-    const S32 fa = *fa_ = fine_energy(x + 8 * tk, n - 8 * tk);
-    if (pm_g[ch][b] >= 4) return fa;  // (no prediction where the gain says one, 2^(6/4): a transient)
     int k;
-    return rise_max(s, ch, b, &k) >= rise_thr(b) ? fa : fe;
+    if (rise_max(s, ch, b, &k) < rise_thr(b)) return fe;
+    return *fa_ = fine_energy(x + 8 * tk, n - 8 * tk);
   }
   // the bits the core's bound subbands' samples would take at the table's ABITS at level l (where it
   // has none, the staircases', else the last ABITS)

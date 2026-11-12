@@ -74,8 +74,8 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      lv its last value (0 none, else 1 + it, to 63), pq the value of the place before in the
 //      subframe (the subband below's; LFE: the sample before), st whether that one kept its last
 //      value, ac the audio's subband's lag-1 autocorrelation over the subframe (0-7, as -1..1; 8
-//      none; a lossless WAV's TMODE: the transient's class, model_smp.inc's tmode_rule() as what
-//      the ABITS said makes it, model.inc), ab the subband's ABITS where coded before (1 + it; 0
+//      none; a lossless WAV's TMODE: the transient's class, model_smp.inc's tmode_rule() as whether
+//      the encoders take one makes it, model.inc), ab the subband's ABITS where coded before (1 + it; 0
 //      none; PMODE: the gain of the subband's LPC, in quarters of halvings, to 27), ec how its
 //      energy changes over the subframe's subsubframes (0-8, 9 none; PMODE: model_smp.inc's
 //      pmode_gain()), tr (PMODE, TMODE) how its energy rises against where the encoders seen take a
@@ -105,9 +105,9 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      from it; 0 none: the encoders fill their frames, so where the staircases would leave bits,
 //      an ABITS near its upper edge rises, and where they would take too many, one near its lower
 //      edge falls), ag where sn is the staircase's or the allocation table's, what the other one
-//      says (0 none, 1 the same, 2 the ABITS across sn's nearer edge, 3 another; 4 a transient's,
-//      whose guess at the other of its energies, the second guess, isn't sn: model_smp.inc's
-//      ab_transient()); where sn is the bit allocation search's, what the staircase's or table's
+//      says (0 none, 1 the same, 2 the ABITS across sn's nearer edge, 3 another; 4 none since
+//      format 63, once a transient's guess at its other mean square); where sn is the bit
+//      allocation search's, what the staircase's or table's
 //      guess says (0 none, 1 the same, 2 the last ABITS, 3 another)
 // scl: kd (0 a subband's first scale factor, 1 its second, after its transient, 2 a high-frequency
 //      VQ subband's, 3 the LFE's), ab its ABITS (1 + it, 0 none), pm whether it predicts, pk whether the audio

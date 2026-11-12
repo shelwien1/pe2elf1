@@ -33,22 +33,22 @@ void D9_raw_make( const M_raw_v & D, tcx & X ) {
 
   e = 0;
   e = e*4 + D9_raw_e_code[__min(3,__max(0,(code)-(1-1)))];
-  e = e*7 + D9_raw_e_at[__min(39,__max(0,(at)-(1-1)))];
+  e = e*6 + D9_raw_e_at[__min(39,__max(0,(at)-(1-1)))];
 
   h = 0;
   h = h*4 + D9_raw_h_code[__min(3,__max(0,(code)-(1-1)))];
-  h = h*21 + D9_raw_h_cl[__min(256,__max(0,(cl)-(1-1)))];
+  h = h*22 + D9_raw_h_cl[__min(256,__max(0,(cl)-(1-1)))];
   h = (h<<7) + (((((c1)>>2)&63)<<1) + ((c1)&1)); // 11111101
 
   i = 0;
   i = i*4 + D9_raw_i_code[__min(3,__max(0,(code)-(1-1)))];
   i = (i<<6) + (((((c1)>>7)&1)<<5) + ((((c1)>>5)&1)<<4) + ((c1)&15)); // 10101111
-  i = i*4 + D9_raw_i_at[__min(39,__max(0,(at)-(1-1)))];
+  i = i*5 + D9_raw_i_at[__min(39,__max(0,(at)-(1-1)))];
 
   j = 0;
   j = j*4 + D9_raw_j_code[__min(3,__max(0,(code)-(1-1)))];
-  j = j*50 + D9_raw_j_cl[__min(256,__max(0,(cl)-(1-1)))];
-  j = j*5 + D9_raw_j_at[__min(39,__max(0,(at)-(1-1)))];
+  j = j*52 + D9_raw_j_cl[__min(256,__max(0,(cl)-(1-1)))];
+  j = j*7 + D9_raw_j_at[__min(39,__max(0,(at)-(1-1)))];
 
   k = 0;
   k = (k<<5) + (((((c1)>>6)&1)<<4) + ((((c1)>>2)&7)<<1) + ((c1)&1)); // 01011101
@@ -70,7 +70,7 @@ void D9_raw_make( const M_raw_v & D, tcx & X ) {
   m = m*4 + D9_raw_m_code[__min(3,__max(0,(code)-(1-1)))];
 
   w = 0;
-  w = w*5 + D9_raw_w_at[__min(39,__max(0,(at)-(1-1)))];
+  w = w*6 + D9_raw_w_at[__min(39,__max(0,(at)-(1-1)))];
 
   t = 0;
 

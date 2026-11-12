@@ -24,7 +24,7 @@ Index b
 Index c
  c_kd: kd, 1!101
  c_pk: pk, 1!1
- c_ab: ab, 1!000011011111110101111111100
+ c_ab: ab, 1!000011011111110101111111000
 
 Index d
  d_kd: kd, 1!001
@@ -56,22 +56,22 @@ Index j
  j_nb: nb, 1!100111101
 
 Index k
- k_kd: kd, 1!110
+ k_kd: kd, 1!111
  k_pk: pk, 1!1
- k_lp: lp, 1!011111011
+ k_lp: lp, 1!111111011
  k_pn: pn, 1!0011100
 
 Index l
- l_kd: kd, 1!100
+ l_kd: kd, 1!101
  l_pk: pk, 1!1
  l_hm: hm, 1!11
- l_ab: ab, 1!011011011011010000010000000
+ l_ab: ab, 1!011011010011010000011001000
 
 Index s
  s_kd: kd, 1!110
  s_pk: pk, 1!1
  s_pn: pn, 1!1000101
- s_dp: dp, 1!1101000
+ s_dp: dp, 1!1101001
  s_cc: cc, 1!11
 
 Index f
@@ -82,7 +82,7 @@ Index f
 Index m
  m_kd: kd, 1!010
  m_pk: pk, 1!1
- m_dp: dp, 1!1000110
+ m_dp: dp, 1!0001110
 
 Index w
  w_pn: pn, 1!1100001
@@ -104,11 +104,11 @@ Number rA, 1, 0!00000000
 Number mwA, 1, 0!01111111
 Number rB, 1, 0!11111011
 Number mwB, 1, 0!00001000
-Number rC, 1, 0!10000011
+Number rC, 1, 0!10100000
 Number mwC, 1, 0!01101001
 Number rD, 1, 0!01010101
 Number mwD, 1, 0!11111010
-Number rE, 1, 0!10101011
+Number rE, 1, 0!10001001
 Number mwE, 1, 0!11111000
 Number rH, 1, 0!11111111
 Number mwH, 1, 0!00000011
@@ -116,9 +116,9 @@ Number rI, 1, 0!01011001
 Number mwI, 1, 0!00000001
 Number rJ, 1, 0!11111111
 Number mwJ, 1, 0!00000100
-Number rK, 1, 0!11110011
-Number mwK, 1, 0!11001010
-Number rL, 1, 0!10101001
+Number rK, 1, 0!11111110
+Number mwK, 1, 0!11101010
+Number rL, 1, 0!10101101
 Number mwL, 1, 0!11111100
 Number lr, 1, 0!01111
 Number mb, 1, 0!01111000

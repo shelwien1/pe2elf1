@@ -10,16 +10,16 @@ Debug 1
 Const 0
 
 Index a
- a_bd: bd, 1!1111001110111101100011101011000
- a_es: es, &00111111
+ a_bd: bd, 1!1111011110101111100010111001000
+ a_es: es, &01111111
 
 Index b
- b_la: la, 1!001000110011100000110100100
- b_lb: lb, 1!100010110010000100101110100
+ b_la: la, 1!001000110011100000010100100
+ b_lb: lb, 1!100010110001011100110101100
 
 Index c
  c_sn: sn, 1!111101111111100001110111001
- c_la: la, 1!101111111111100001000000100
+ c_la: la, 1!101110111101100001000000000
 
 Index d
  d_sn: sn, 1!010000001000000000000000000
@@ -28,21 +28,21 @@ Index d
  d_sc: sc, 1!10000000000000
  d_sm: sm, 1!0011010010111100
  d_bg: bg, 1!1001000
- d_ag: ag, 1!1111
+ d_ag: ag, 1!0111
 
 Index e
  e_bd: bd, 1!0011100000000000001100000100000
- e_sn: sn, 1!101111001000100011011111011
+ e_sn: sn, 1!111111001000100011011111011
 
 Index h
  h_lb: lb, 1!000000000111111110001011100
  h_es: es, &00011111
- h_bd: bd, 1!0001001011101110000000000000100
+ h_bd: bd, 1!0001001100001110000000000000100
 
 Index i
  i_es: es, &00001110
  i_nb: nb, 1!001100010
- i_la: la, 1!101110100100011111111110000
+ i_la: la, 1!101110100100011111011101000
 
 Index j
  j_es: es, &00000000
@@ -50,27 +50,27 @@ Index j
  j_pm: pm, 1!0
 
 Index k
- k_sn: sn, 1!101000000010100001011110011
+ k_sn: sn, 1!111000000010100001011110011
  k_nn: nn, 1!000000000000001
- k_sc: sc, 1!01110000000011
+ k_sc: sc, 1!11110000000111
  k_eq: eq, 1!0000
- k_sm: sm, 1!0110100010110000
+ k_sm: sm, 1!0110100011110000
  k_bg: bg, 1!1100010
  k_ag: ag, 1!0100
 
 Index l
  l_bd: bd, 1!1000010000000000000000001010000
  l_cc: cc, 1!10
- l_la: la, 1!100000000100000000010000000
+ l_la: la, 1!100000000100000000010100100
 
 Index s
- s_sn: sn, 1!010111111110000000000000011
+ s_sn: sn, 1!010111111110000000000000010
  s_sd: sd, 1!10
  s_nn: nn, 1!000000000000000
  s_sc: sc, 1!11111111110000
  s_sm: sm, 1!1101100011001000
  s_bg: bg, 1!1011100
- s_ag: ag, 1!0001
+ s_ag: ag, 1!0000
 
 Index f
  f_es: es, &01100000
@@ -92,24 +92,24 @@ Index g
  g_bd: bd, 1!1111111111111111111111111111111
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
-Number rA, 1, 0!00011111
+Number rA, 1, 0!00001111
 Number mwA, 1, 0!11101010
-Number rB, 1, 0!11111110
+Number rB, 1, 0!11111101
 Number mwB, 1, 0!10011111
 Number rC, 1, 0!01101001
-Number mwC, 1, 0!00101101
-Number rD, 1, 0!11110111
+Number mwC, 1, 0!00101011
+Number rD, 1, 0!11110101
 Number mwD, 1, 0!00000001
 Number rE, 1, 0!00000000
 Number mwE, 1, 0!10000110
-Number rH, 1, 0!11111110
+Number rH, 1, 0!10111010
 Number mwH, 1, 0!01011101
 Number rI, 1, 0!11111111
-Number mwI, 1, 0!10100000
+Number mwI, 1, 0!10110101
 Number rJ, 1, 0!00000000
-Number mwJ, 1, 0!10000011
-Number rK, 1, 0!11011000
-Number mwK, 1, 0!00000110
+Number mwJ, 1, 0!10000010
+Number rK, 1, 0!11001010
+Number mwK, 1, 0!00000100
 Number rL, 1, 0!11111101
 Number mwL, 1, 0!11011000
 Number lr, 1, 0!10111
@@ -126,7 +126,7 @@ Number mt, 1, 0!100
 ! Number lrm, 1, 0!11111
 ! Number mbm, 1, 0!00011001
 Number rG, 1, 0!00010000
-Number mwG, 1, 0!00100000
+Number mwG, 1, 0!00100011
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
 #  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.

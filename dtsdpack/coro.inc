@@ -14,7 +14,7 @@ enum { BO_OFF = 0, BO_MAP = 4, BO_MAP2 = BO_MAP + NCH, BO_G1 = BO_MAP2 + NCH, BO
        DP_BIND = BO_CRC + 4 };  // (the binding's bytes)
 enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND, DP_HEAD = DP_AT_BIND + DP_BIND };  // the header's
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
-constexpr int DP_VERSION = 62;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
+constexpr int DP_VERSION = 63;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
                                // extension as records; 4: a WAV at twice the core's rate, X96 and XXCH; 5: the
                                // scale factor search; 6: the bit allocation search; 7: the bits after the
                                // subframes as the bytes they end in, the energy's quarter of its bucket, the
@@ -108,7 +108,9 @@ constexpr int DP_VERSION = 62;  // the format's (2: a core channel's binding a m
                                // noise; vqr retuned; 62: the transients' threshold by the subband,
                                // 8 (19 + b) / 19, for PMODE's and TMODE's rise and the transients'
                                // ABITS; a quiet subband by its RMS under 100; no prediction in the
-                               // HF VQ subbands)
+                               // HF VQ subbands; 63: the transients' ABITS and TMODE's class by
+                               // that threshold alone, no second guess from the other mean square;
+                               // every family retuned)
 
 static void put_le(U8* p, U64 v, int n) {
   for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));
