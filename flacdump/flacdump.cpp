@@ -1184,9 +1184,10 @@ static void code_bytes(AC& ac, u8* data, size_t len, bool prime) {
 // LPC / rice estimation helpers used as predictors for the meta model
 
 // libFLAC fixed order guess (data starts at index 4), two variants of tie rule
-static void fixed_guess(const s64* x, int n, int& g_new, int& g_old) {
+static void fixed_guess(const s64* x, int n, int& g_new, int& g_old, u64* esum = nullptr) {
     if (n <= 4) {
         g_new = g_old = 0;
+        if (esum) memset(esum, 0, sizeof(u64) * 5);
         return;
     }
     u64 e0 = 0, e1 = 0, e2 = 0, e3 = 0, e4 = 0;
@@ -1198,6 +1199,13 @@ static void fixed_guess(const s64* x, int n, int& g_new, int& g_old) {
         e2 += (u64)(r2 < 0 ? -r2 : r2);
         e3 += (u64)(r3 < 0 ? -r3 : r3);
         e4 += (u64)(r4 < 0 ? -r4 : r4);
+    }
+    if (esum) {
+        esum[0] = e0;
+        esum[1] = e1;
+        esum[2] = e2;
+        esum[3] = e3;
+        esum[4] = e4;
     }
     if (e0 <= Min(Min(Min(e1, e2), e3), e4))
         g_new = 0;
@@ -1250,14 +1258,39 @@ static inline u64 lf_bits(int k, u32 ps, u64 sum) {
     return b > 0xFFFFFFFFull ? 0xFFFFFFFFull : b;
 }
 
+static double det_log2(double x);
+
+// libFLAC <= 1.3 "suggested" rice parameter for partition order 0
+static int k0_from_bps(double bps, int lim) {
+    int k = (bps > 0.0 ? (int)(u32)(bps + 0.5) : 0) + 1;
+    return k > lim ? lim : k;
+}
+// libFLAC <= 1.3.1 scaled the LPC error by ln(2)^2 when estimating bits
+static int g_ln2sq = 0;
+static inline double err_scale(int total) {
+    return g_ln2sq ? 0.5 * 0.69314718055994530942 * 0.69314718055994530942 / (double)total : 0.5 / (double)total;
+}
+static double lpc_expected_bps(double err, int total) {
+    if (err > 0.0) {
+        double b = 0.5 * det_log2(err_scale(total) * err);
+        return b >= 0.0 ? b : 0.0;
+    }
+    return err < 0.0 ? 1e32 : 0.0;
+}
+static float fixed_rbps(u64 e, int len) {
+    return e ? (float)det_log2(0.69314718055994530942 * (double)e / (double)len) : 0.0f;
+}
+
 // Per-subframe residual statistics for porder / rice parameter prediction
 struct ResStats {
     int bs, order, maxpo;
+    int k0;  // libFLAC <= 1.3: rice parameter used for partition order 0 (-1: mean based)
     // sums per order: abs sums (libFLAC) and zigzag sums (ffmpeg); layout: offset[o] .. +2^o
     u64* asum;
     u64* zsum;
     int off[16];
     void alloc() {
+        k0 = -1;
         asum = (u64*)xmalloc(sizeof(u64) * 2 * MAXPART + 64);
         zsum = (u64*)xmalloc(sizeof(u64) * 2 * MAXPART + 64);
     }
@@ -1330,7 +1363,7 @@ struct ResStats {
             u64 bits = 6;
             for (int i = 0; i < (1 << po); i++) {
                 u32 ps = psamples(po, i);
-                int k = est_lf(po, i, lim, newv);
+                int k = (po == 0 && k0 >= 0) ? k0 : est_lf(po, i, lim, newv);
                 bits += lf_bits(k, ps, asum[off[po] + i]);
             }
             if (bits < bb) bb = bits;
@@ -1345,7 +1378,7 @@ struct ResStats {
             u64 bits = 6;
             for (int i = 0; i < (1 << po); i++) {
                 u32 ps = psamples(po, i);
-                int k = est_lf(po, i, lim, newv);
+                int k = (po == 0 && k0 >= 0) ? k0 : est_lf(po, i, lim, newv);
                 bits += lf_bits(k, ps, asum[off[po] + i]);
             }
             if (bits < bb) {
@@ -1660,7 +1693,7 @@ static double det_log2(double x) {
 
 // FLAC__lpc_compute_best_order
 static int lpc_best_order(const double* lpc_error, int max_order, int total_samples, int overhead) {
-    double error_scale = 0.5 / (double)total_samples;
+    double error_scale = err_scale(total_samples);
     int best = 0;
     double best_bits = 4294967295.0;
     for (int i = 0; i < max_order; i++) {
@@ -2113,6 +2146,7 @@ struct Models {
     BM po_eqL[4];
     BM po_eqF[4];
     BM po_t[16][16];
+    BM k_eq0[2];
     BM k_eq1[8];
     BM k_eq2[8];
     BM k_eq3[8];
@@ -2142,6 +2176,10 @@ struct FrameState {
     int sim_on, sim_newv;  // libFLAC simulation enabled / 1.4 estimator variants
     u32 simstat[2];
     int rice_new, fix_le;  // libFLAC >= 1.4.3 rice estimate / >= 1.4.0 fixed-order tie rule
+    int k0mode;            // libFLAC <= 1.3 suggested rice parameter for partition order 0
+    u32 k0vote[2];
+    int ln2sq;  // libFLAC <= 1.3.1 error scaling
+    u32 esvote[2];
     u32 rvote[2], fvote[2];
     u32 dbg[8];
     ChState ch[MAXCH];
@@ -2160,6 +2198,8 @@ static void fstate_init(FrameState& s, const StreamParams& sp, int vendor) {
     s.sim_on = vendor >= 0;
     s.rice_new = vendor == 0 || vendor >= 143;
     s.fix_le = vendor == 0 || vendor >= 140;
+    s.k0mode = vendor > 0 && vendor < 140;
+    s.ln2sq = vendor > 0 && vendor <= 131;
     for (int c = 0; c < MAXCH; c++) {
         s.ch[c].ptype = 4;
         s.ch[c].pfixed = 2;
@@ -2183,12 +2223,13 @@ struct Ctx {
     u64 total_samples;  // total PCM samples (per channel) in wav
 };
 
-static bool model_residual(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s64* res, int bs) {
+static bool model_residual(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s64* res, int bs, int k0) {
     AC& ac = *cx.ac;
     Models& M = *cx.m;
     ResStats& rs = cx.rs;
     rs.compute(res, bs, s.order);
     int lim = cx.sp.bps > 16 ? 30 : 14;
+    rs.k0 = st.k0mode ? k0 : -1;
     // partition order
     ac.cat = C_PORDER;
     int hi = Min(st.maxpo, rs.maxpo);
@@ -2208,6 +2249,39 @@ static bool model_residual(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, con
             po = pF;
         else
             po = ac.tree(M.po_t[pL], 4, po);
+    }
+    if (!ac.dec && g_verbose >= 4 && po != pL)
+        fprintf(stderr, "pomiss: actual %d pL %d pF %d lo %d hi %d order %d type %d bs %d k0 %d mode %d votes %u/%u\n", po, pL, pF, lo, hi, s.order, s.type, bs, k0, st.k0mode, st.k0vote[0], st.k0vote[1]);
+    if (!ac.dec && g_verbose >= 4) {
+        // test: exact bit counting
+        u64 bb = ~0ull; int bp = hi;
+        for (int q = hi; q >= lo; q--) {
+            if (((u32)bs >> q) <= (u32)s.order && q > 0) continue;
+            u64 bits = 6; u32 off = 0;
+            for (int i = 0; i < (1 << q); i++) {
+                u32 ps = rs.psamples(q, i);
+                int k = (q == 0 && rs.k0 >= 0) ? rs.k0 : rs.est_lf(q, i, lim, st.rice_new);
+                u64 b = 4 + (u64)(k + 1) * ps;
+                for (u32 j = 0; j < ps; j++) { s64 v = res[off + j]; u64 u = ((u64)v << 1) ^ (u64)(v >> 63); b += u >> k; }
+                off += ps; bits += b;
+            }
+            if (bits < bb) { bb = bits; bp = q; }
+        }
+        st.dbg[4 + (bp == po)]++;
+        st.dbg[6 + (pL == po)]++;
+    }
+    if (!ac.dec && g_verbose >= 5 && po != pL) {
+        for (int q = 0; q <= hi; q++) {
+            u64 b = rs.bits_lf(q, q, lim, st.rice_new);
+            fprintf(stderr, "   po %d bits %llu ks:", q, (unsigned long long)b);
+            for (int i = 0; i < (1 << q) && i < 8; i++) fprintf(stderr, " %d", rs.est_lf(q, i, lim, st.rice_new));
+            fprintf(stderr, " sums:");
+            for (int i = 0; i < (1 << q) && i < 4; i++) fprintf(stderr, " %llu", (unsigned long long)rs.asum[rs.off[q] + i]);
+            fprintf(stderr, "\n");
+        }
+        fprintf(stderr, "   actual params:");
+        for (int i = 0; i < (1 << s.porder) && i < 8; i++) fprintf(stderr, " %d", s.param[i]);
+        fprintf(stderr, "\n");
     }
     s.porder = po;
     if (po > rs.maxpo) {
@@ -2230,7 +2304,16 @@ static bool model_residual(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, con
         int k = ac.dec ? 0 : (s.param[i] == esc_code ? 31 : s.param[i]);
         int ctx = (kn == ko) + 2 * (kn == kf) + 4 * (i == 0);
         int kvote = kn != ko;
-        if (ac.bit(M.k_eq1[ctx], k == kn))
+        int use0 = po == 0 && k0 >= 0;
+        if (use0 && g_verbose >= 4 && !ac.dec) fprintf(stderr, "po0: k %d k0 %d kn %d ko %d type %d order %d\n", k, k0, kn, ko, s.type, s.order);
+        if (use0 && k0 != (st.rice_new ? kn : ko)) {
+            if (k == k0) st.k0vote[1]++;
+            else if (k == (st.rice_new ? kn : ko)) st.k0vote[0]++;
+            if (st.k0vote[0] + st.k0vote[1] >= 4) st.k0mode = st.k0vote[1] > st.k0vote[0];
+        }
+        if (use0 && st.k0mode && ac.bit(M.k_eq0[k0 == kn], k == k0))
+            k = k0;
+        else if (ac.bit(M.k_eq1[ctx], k == kn))
             k = kn;
         else {
             int done = 0;
@@ -2281,6 +2364,7 @@ static bool model_residual(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, con
         for (int i = 0; i < np; i++)
             if (s.param[i] == 31) s.param[i] = 15;
     if (st.rvote[0] + st.rvote[1] >= 8) st.rice_new = st.rvote[1] > st.rvote[0];
+    rs.k0 = -1;
     return true;
 }
 
@@ -2303,12 +2387,7 @@ static int lpc_exh_guess(Ctx& cx, FrameState& st, int id, int maxo, const s64* x
     s32 q[32];
     for (int o = 1; o <= mo; o++) {
         // "don't even try"
-        double e = P.lerr[o - 1], ebs;
-        if (e > 0.0) {
-            ebs = 0.5 * det_log2(0.5 / (double)(bs - o) * e);
-            if (ebs < 0.0) ebs = 0.0;
-        } else
-            ebs = e < 0.0 ? 1e32 : 0.0;
+        double ebs = lpc_expected_bps(P.lerr[o - 1], bs - o);
         if (ebs >= (double)ebps) continue;
         int prec = st.maxprec;
         if (ebps <= (st.fix_le ? 17 : 16)) prec = Min(prec, 32 - ebps - ilog2_64(o));
@@ -2320,7 +2399,9 @@ static int lpc_exh_guess(Ctx& cx, FrameState& st, int id, int maxo, const s64* x
         int hi = Min(st.maxpo, rs.maxpo);
         while (hi > 0 && ((u32)bs >> hi) <= (u32)o) hi--;
         int lo = Min(st.minpo, hi);
+        rs.k0 = st.k0mode ? k0_from_bps(ebs, lim) : -1;
         u64 bits = (u64)o * (prec + ebps) + rs.bits_lf(lo, hi, lim, newv);
+        rs.k0 = -1;
         if (bits < bb) {
             bb = bits;
             best = o;
@@ -2436,7 +2517,18 @@ static void lpc_learn(Ctx& cx, FrameState& st, int id, int order, int bs, int eb
     int gn = 0;
     {
         int mo = P.eval(id, Min(st.lpc_maxo, bs - 1));
-        if (mo) gn = lpc_best_order(P.lerr, mo, bs, ebps + (st.lpc_ov ? 5 : prec));
+        if (mo) {
+            gn = lpc_best_order(P.lerr, mo, bs, ebps + (st.lpc_ov ? 5 : prec));
+            g_ln2sq = !g_ln2sq;
+            int gn2 = lpc_best_order(P.lerr, mo, bs, ebps + (st.lpc_ov ? 5 : prec));
+            g_ln2sq = !g_ln2sq;
+            if (gn != gn2) {
+                st.esvote[st.ln2sq] += gn == order;
+                st.esvote[!st.ln2sq] += gn2 == order;
+                if (st.esvote[0] + st.esvote[1] >= 4) st.ln2sq = st.esvote[1] > st.esvote[0];
+                g_ln2sq = st.ln2sq;
+            }
+        }
     }
     int ge = lpc_exh_guess(cx, st, id, st.lpc_maxseen, x, bs, ebps);
     st.exscore[0] += gn == order;
@@ -2469,7 +2561,9 @@ static void mru_hit(LpcPredictor& P, int r) {
 }
 
 static bool model_lpc(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s64* x, int bs, int ebps,
-                      const SimOut& sim) {
+                      const SimOut& sim, int& k0) {
+    k0 = -1;
+    const int klim = cx.sp.bps > 16 ? 30 : 14;
     AC& ac = *cx.ac;
     Models& M = *cx.m;
     LpcPredictor& P = *cx.lp;
@@ -2508,7 +2602,8 @@ static bool model_lpc(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s6
             cs.plorder = s.order - 1;
             cs.pshift = s.shift;
             cs.prank = 0;
-            lpc_learn(cx, st, id, s.order, bs, ebps, s.prec, x);
+            k0 = k0_from_bps(lpc_expected_bps(P.lerr[s.order - 1], bs - s.order), klim);
+        lpc_learn(cx, st, id, s.order, bs, ebps, s.prec, x);
             return true;
         }
     }
@@ -2548,6 +2643,7 @@ static bool model_lpc(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s6
         cs.prank = r == 0 ? 0 : r < 4 ? 1 : 2;
         cs.plorder = s.order - 1;
         cs.pshift = s.shift;
+        k0 = k0_from_bps(lpc_expected_bps(P.lerr[s.order - 1], bs - s.order), klim);
         lpc_learn(cx, st, id, s.order, bs, ebps, s.prec, x);
         return true;
     }
@@ -2601,6 +2697,7 @@ static bool model_lpc(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s6
         if (P.cand[id].kind == 3) st.ffh++; else st.lfh++;
         if (st.ffh > 8 && st.ffh > st.lfh) st.sim_on = 0;
         cs.prank = r == 0 ? 0 : r < 4 ? 1 : 2;
+        k0 = k0_from_bps(lpc_expected_bps(P.lerr[s.order - 1], bs - s.order), klim);
         lpc_learn(cx, st, id, s.order, bs, ebps, s.prec, x);
     } else {
         cs.prank = 3;
@@ -2721,7 +2818,9 @@ static SimOut sim_subframe(Ctx& cx, FrameState& st, const s64* xin, int n, int s
         int hi = Min(st.maxpo, rs.maxpo);
         while (hi > 0 && ((u32)n >> hi) <= (u32)ord) hi--;
         int lo = Min(st.minpo, hi);
+        rs.k0 = st.k0mode ? k0_from_bps(rbps[ord], lim) : -1;
         u64 b = 8 + (u64)w + (u64)ord * eb + rs.bits_lf(lo, hi, lim, newv);
+        rs.k0 = -1;
         if (b < best.bits) best = {b, ST_FIXED, ord, -1};
     }
     // LPC
@@ -2742,12 +2841,7 @@ static SimOut sim_subframe(Ctx& cx, FrameState& st, const s64* xin, int n, int s
             o0 = o1 = lpc_best_order(P.lerr, mo, n, eb + (st.lpc_ov ? 5 : st.maxprec));
         }
         for (int ord = o0; ord <= o1; ord++) {
-            double er = P.lerr[ord - 1], ebs;
-            if (er > 0.0) {
-                ebs = 0.5 * det_log2(0.5 / (double)(n - ord) * er);
-                if (ebs < 0.0) ebs = 0.0;
-            } else
-                ebs = er < 0.0 ? 1e32 : 0.0;
+            double ebs = lpc_expected_bps(P.lerr[ord - 1], n - ord);
             if (ebs >= (double)eb) continue;
             int prec = st.maxprec;
             if (eb <= (st.fix_le ? 17 : 16)) prec = Min(prec, 32 - eb - ilog2_64(ord));
@@ -2759,7 +2853,9 @@ static SimOut sim_subframe(Ctx& cx, FrameState& st, const s64* xin, int n, int s
             int hi = Min(st.maxpo, rs.maxpo);
             while (hi > 0 && ((u32)n >> hi) <= (u32)ord) hi--;
             int lo = Min(st.minpo, hi);
+            rs.k0 = st.k0mode ? k0_from_bps(ebs, lim) : -1;
             u64 b = 8 + (u64)w + 9 + (u64)ord * (prec + eb) + rs.bits_lf(lo, hi, lim, newv);
+            rs.k0 = -1;
             if (b < best.bits) best = {b, ST_LPC, ord, id};
         }
     }
@@ -2860,6 +2956,7 @@ static int stereo_guess(s32** pcm, int n) {
 static bool model_frame(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st, WavReader* src, u64 samples_done) {
     AC& ac = *cx.ac;
     Models& M = *cx.m;
+    g_ln2sq = st.ln2sq;
     ac.cat = C_HDR;
     f.blocking = ac.bit(M.blocking[st.pblocking], f.blocking);
     // block size
@@ -2988,10 +3085,12 @@ static bool model_frame(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st, WavRea
             s.order = 0;
             continue;
         }
+        int k0 = -1;
         ac.cat = C_ORDER;
         if (s.type == ST_FIXED) {
             int gn, go;
-            fixed_guess(x, bs, gn, go);
+            u64 esum[5];
+            fixed_guess(x, bs, gn, go, esum);
             int gs = sim.type == ST_FIXED ? sim.order : 5;
             s.order = ac.tree(M.forder_t[gn][gn == go][gs], 3, s.order);
             if (s.order > 4 || s.order > bs) return false;
@@ -3002,15 +3101,16 @@ static bool model_frame(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st, WavRea
             }
             cs.pfixed = s.order;
             fixed_residual(x, bs, s.order, g_res);
+            if (bs > 4) k0 = k0_from_bps(fixed_rbps(esum[s.order], bs - 4), cx.sp.bps > 16 ? 30 : 14);
         } else {
             ac.cat = C_PREC;
             s.prec = ac.tree(M.prec_t[cs.pprec], 4, s.prec - 1) + 1;
             if (s.prec > 15) return false;
             cs.pprec = s.prec - 1;
-            if (!model_lpc(cx, s, cs, st, x, bs, sbps - s.wasted, sim)) return false;
+            if (!model_lpc(cx, s, cs, st, x, bs, sbps - s.wasted, sim, k0)) return false;
             lpc_residual(x, bs, s.coef, s.order, s.shift, g_res);
         }
-        if (!model_residual(cx, s, cs, st, g_res, bs)) return false;
+        if (!model_residual(cx, s, cs, st, g_res, bs, k0)) return false;
     }
     // update state
     st.first = 0;
@@ -3870,8 +3970,8 @@ static int do_compress(const char* inname, const char* prefix, const Options& op
         fprintf(stderr, "frames: %llu modelled, %llu raw, %llu junk bytes; %llu samples\n", (unsigned long long)nframes,
                 (unsigned long long)nraw, (unsigned long long)njunk, (unsigned long long)total_samples);
         print_stats(ac, meta.n);
-        fprintf(stderr, "stage0 %u/%u stage1 %u/%u exscore %u/%u\n", st.dbg[1], st.dbg[0], st.dbg[3], st.dbg[2],
-                st.exscore[0], st.exscore[1]);
+        fprintf(stderr, "stage0 %u/%u stage1 %u/%u exscore %u/%u  po exact %u/%u est %u/%u\n", st.dbg[1], st.dbg[0], st.dbg[3], st.dbg[2],
+                st.exscore[0], st.exscore[1], st.dbg[5], st.dbg[4], st.dbg[7], st.dbg[6]);
         fprintf(stderr, "stereo sim: %u hit, %u miss; rice_new=%d fix_le=%d exh=%d maxo=%d\n", st.simstat[1], st.simstat[0],
                 st.rice_new, st.fix_le, st.lpc_exh, st.lpc_maxo);
         LpcPredictor& P = *cx.lp;
