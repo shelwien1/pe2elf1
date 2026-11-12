@@ -2155,6 +2155,8 @@ struct Models {
     // misc
     UModel len_m;
     UModel num_m;
+    UModel clen_m;
+    BM vendor_t[32];
     BM mflag[16];
     BM mtype[8][128];
 };
@@ -3428,6 +3430,78 @@ static void code_stream_params(AC& ac, StreamParams& sp) {
         sp.bps = (int)ac.raw(sp.bps - 1, 5) + 1;
 }
 
+static const char* k_vendors[] = {
+    "reference libFLAC 1.1.0 20030126", "reference libFLAC 1.1.1 20041001", "reference libFLAC 1.1.2 20050205",
+    "reference libFLAC 1.1.3 20061120", "reference libFLAC 1.1.4 20070213", "reference libFLAC 1.2.0 20070715",
+    "reference libFLAC 1.2.1 20070917", "reference libFLAC 1.3.0 20130526", "reference libFLAC 1.3.1 20141125",
+    "reference libFLAC 1.3.2 20170101", "reference libFLAC 1.3.3 20190804", "reference libFLAC 1.3.4 20220220",
+    "reference libFLAC 1.4.0 20220909", "reference libFLAC 1.4.1 20220922", "reference libFLAC 1.4.2 20221022",
+    "reference libFLAC 1.4.3 20230623", "reference libFLAC 1.5.0 20250211"};
+enum { NVENDORS = sizeof(k_vendors) / sizeof(k_vendors[0]) };
+
+static bool vorbis_ok(const u8* d, u32 len);
+
+// structured VORBIS_COMMENT coding: vendor from a dictionary, lengths as numbers, text with a shared CM
+static bool code_vorbis(AC& ac, Models& M, MBlock& b) {
+    int ok = ac.dec ? 0 : vorbis_ok(b.data, b.len);
+    ok = ac.bit(M.mflag[2], ok);
+    if (!ok) {
+        code_bytes(ac, b.data, b.len, true);
+        return true;
+    }
+    ByteCM cm;
+    cm.init();
+    for (const char* t = k_prime_text; *t; t++) cm.byte(nullptr, (u8)*t, nullptr);
+    u32 p = 0;
+    auto put32 = [&](u32 v) {
+        if (p + 4 > b.len) return false;
+        wr_le32(b.data + p, v);
+        p += 4;
+        return true;
+    };
+    auto text = [&](u32 n) {
+        if (p + n > b.len) return false;
+        cm.c1 = cm.c2 = cm.c3 = 0;
+        for (u32 i = 0; i < n; i++) b.data[p + i] = (u8)cm.byte(&ac, b.data[p + i], nullptr);
+        p += n;
+        return true;
+    };
+    // vendor
+    u32 vl = ac.dec ? 0 : rd_le32(b.data);
+    int vi = NVENDORS;
+    if (!ac.dec)
+        for (int i = 0; i < NVENDORS; i++)
+            if (strlen(k_vendors[i]) == vl && !memcmp(b.data + 4, k_vendors[i], vl)) vi = i;
+    vi = ac.tree(M.vendor_t, 5, vi);
+    bool good = true;
+    if (vi < NVENDORS) {
+        vl = (u32)strlen(k_vendors[vi]);
+        good = put32(vl) && p + vl <= b.len;
+        if (good) {
+            memcpy(b.data + p, k_vendors[vi], vl);
+            p += vl;
+        }
+    } else {
+        vl = (u32)code_uint(ac, M.len_m, vl);
+        good = put32(vl) && text(vl);
+    }
+    if (!good) {
+        cm.release();
+        return false;
+    }
+    u32 cnt = (u32)code_uint(ac, M.num_m, ac.dec ? 0 : rd_le32(b.data + p));
+    if (!put32(cnt)) {
+        cm.release();
+        return false;
+    }
+    for (u32 i = 0; i < cnt && good; i++) {
+        u32 l = (u32)code_uint(ac, M.clen_m, ac.dec ? 0 : rd_le32(b.data + p));
+        good = put32(l) && text(l);
+    }
+    cm.release();
+    return good && p == b.len;
+}
+
 static bool vorbis_ok(const u8* d, u32 len) {
     if (len < 8) return false;
     u32 vl = rd_le32(d);
@@ -3493,7 +3567,7 @@ static bool code_layout(AC& ac, Models& M, FlacLayout& L) {
             b.structured = s;
             if (!s) code_bytes(ac, b.data, b.len, false);
         } else if (b.type == 4) {
-            code_bytes(ac, b.data, b.len, true);
+            if (!code_vorbis(ac, M, b)) return false;
         } else {
             code_bytes(ac, b.data, b.len, false);
         }
