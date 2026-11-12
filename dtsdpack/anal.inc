@@ -669,6 +669,32 @@ struct HfFirst {
   }
 };
 static const HfFirst hf_first;
+// The same at each of the first 16 places: v[j][e] the e-th distinct value at place j, bit k of
+// m[j][e] set where entry k's is that; made where first asked for (jx_search_vq()'s)
+struct HfPlaces {
+  int nv[16];
+  S8 v[16][128];
+  U64 m[16][128][16];
+  bool made;
+  void make() {
+    for (int j = 0; j < 16; j++) {
+      int at[256];
+      for (int e = 0; e < 256; e++) at[e] = -1;
+      nv[j] = 0;
+      for (int k = 0; k < 1024; k++) {
+        const int e = HF_VQ[k][j] + 128;
+        if (at[e] < 0) {
+          at[e] = nv[j], v[j][nv[j]] = HF_VQ[k][j];
+          for (int x = 0; x < 16; x++) m[j][nv[j]][x] = 0;
+          nv[j]++;
+        }
+        m[j][at[e]][k >> 6] |= 1ull << (k & 63);
+      }
+    }
+    made = true;
+  }
+};
+static HfPlaces hf_places;
 
 // entry q's distance (in 2^(AQ_F + 4) sc units)
 static INLINE S128 hf_dist(int q, const S64* x, int n, S64 sc) {
@@ -688,28 +714,34 @@ static INLINE S128 hf_dist(int q, const S64* x, int n, S64 sc) {
 // index of equals; the groups' as well, hf_bound_grp(): `s.2.dts`'s core 2.3% smaller, its top
 // subband's HF VQ 31.5 KB to 29.5, 3 MB of its middle 1.7%). Group g's entries, by their distances
 // k (hf_dist()'s, over their first n values), into o.
-struct HfPairs {  // (each group's entries' distances from each other over their first 16 values)
+struct HfPairs {  // (each group's entries' distances from each other over their first 16 values: a
+                  // group's made where it is first asked for, f's from i's the same as i's from f's)
   double d[32][32][32];
-  HfPairs() {
-    for (int g = 0; g < 32; g++)
+  U8 made[32];
+  const double* group(int g) {
+    if (!made[g]) {
       for (int i = 0; i < 32; i++)
-        for (int f = 0; f < 32; f++) {
+        for (int f = 0; f <= i; f++) {
           double s2 = 0;
           for (int j = 0; j < 16; j++) {
             const double e = (double)HF_VQ[g * 32 + i][j] - (double)HF_VQ[g * 32 + f][j];
             s2 += e * e;
           }
-          d[g][i][f] = sqrt(s2);
+          d[g][i][f] = d[g][f][i] = sqrt(s2);
         }
+      made[g] = 1;
+    }
+    return &d[g][0][0];
   }
 };
-static const HfPairs hf_pairs;
+static HfPairs hf_pairs;
 static void hf_bound_vec(const S128* k, int g, int n, S128* o) {
   int f = 0;
   for (int i = 1; i < 32; i++) f = k[i] < k[f] ? i : f;
+  const double* const dg = n == 16 ? hf_pairs.group(g) : nullptr;
   for (int i = 0; i < 32; i++) {
     double d;
-    if (n == 16) d = hf_pairs.d[g][i][f];
+    if (n == 16) d = dg[32 * i + f];
     else {
       double s2 = 0;
       for (int j = 0; j < n; j++) {
@@ -925,6 +957,27 @@ static int select_rank(KeyIx* a, int n, int r) {
     else break;
   }
   return a[r].i;
+}
+// the same of distinct 64-bit keys: the one of rank r (quickselect, reordering a)
+static U64 select_u64(U64* a, int n, int r) {
+  int lo = 0, hi = n - 1;
+  while (lo < hi) {
+    const U64 p = a[lo + (hi - lo) / 2];
+    int i = lo, j = hi;
+    while (i <= j) {
+      while (a[i] < p) i++;
+      while (p < a[j]) j--;
+      if (i <= j) {
+        const U64 t = a[i];
+        a[i++] = a[j];
+        a[j--] = t;
+      }
+    }
+    if (r <= j) hi = j;
+    else if (r >= i) lo = i;
+    else break;
+  }
+  return a[r];
 }
 // how far the best of n candidates beats the next: 0 (within 1/256), 1 (1/128) ... 11 (by 4 times
 // or more), 12 by all (where the encoder's search misses, it is nearly always a near tie: 40% of

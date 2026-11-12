@@ -1399,6 +1399,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // `open bitrate.dts`'s 16.2%, FATE's `dts_es.dts`'s 3.6%.)
   KeyIx pvsel[4096];  // (code_pvq()'s selection, and its candidates' heap)
   int pvtop[4096];
+  U64 pvpk[4096], pvpks[4096];  // (and its keys packed, d 2^12 + q, and their selection)
   S64 code_pvq(const CoreRec& r, const CoreSub& s, int ch, int b, S64 v) {
     S64* const d = this->pvqd;
     pvq_dists(lpc[ch][b], d);
@@ -1407,23 +1408,37 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     QErr fq;
     S128 flim = 0;
     if (ss_rule()) {
-      for (int q = 0; q < 4096; q++) cand[q].k = d[q], cand[q].i = q;
       // (fewer, PV_KLOW, where few of the first 4 fit: a 96/24 stream's core's; there, whether few
       // do goes by the first 4 however many are tried)
       const int K = pv_none * 4 > pv_n ? PV_KLOW : 1024, kn = K < 1024 ? 4 : K;
-      // (the order's first K: the K-th by selection, those up to it on a heap, taken in order)
+      // (the order's first K: the K-th by selection, those up to it on a heap, taken in order. By
+      // keys d 2^12 + q, the order of d and q, where the K-th's d is under 2^52 - 1: those of it or
+      // more held at that come after the first K as they do; else by the 128-bit keys)
       int nk = 0, hn;
       int* const top = pvtop;
-      memcpy(pvsel, cand, sizeof pvsel);
-      const KeyIx kk = cand[select_rank(pvsel, 4096, K - 1)];
-      for (int q = 0; q < 4096; q++)
-        if (!key_less(kk, cand[q])) top[nk++] = q;
+      const U64* const pk = pvpk;
+      constexpr S64 PK_SAT = ((S64)1 << 52) - 1;
+      for (int q = 0; q < 4096; q++) pvpk[q] = (U64)(d[q] < PK_SAT ? d[q] : PK_SAT) << 12 | (U64)q;
+      memcpy(pvpks, pvpk, sizeof pvpks);
+      const U64 kp = select_u64(pvpks, 4096, K - 1);
+      const bool packed = (S64)(kp >> 12) < PK_SAT;
+      if (packed) {
+        for (int q = 0; q < 4096; q++)
+          if (pk[q] <= kp) top[nk++] = q;
+      } else {
+        for (int q = 0; q < 4096; q++) cand[q].k = d[q], cand[q].i = q;
+        memcpy(pvsel, cand, sizeof pvsel);
+        const KeyIx kk = cand[select_rank(pvsel, 4096, K - 1)];
+        for (int q = 0; q < 4096; q++)
+          if (!key_less(kk, cand[q])) top[nk++] = q;
+      }
+      auto before = [&](int a, int b) { return packed ? pk[a] < pk[b] : key_less(cand[a], cand[b]); };
       auto sift = [&](int i, int n) {
         for (;;) {
           const int l = 2 * i + 1, rt = l + 1;
           int m = i;
-          if (l < n && key_less(cand[top[l]], cand[top[m]])) m = l;
-          if (rt < n && key_less(cand[top[rt]], cand[top[m]])) m = rt;
+          if (l < n && before(top[l], top[m])) m = l;
+          if (rt < n && before(top[rt], top[m])) m = rt;
           if (m == i) return;
           const int t = top[i];
           top[i] = top[m], top[m] = t;
@@ -1776,16 +1791,21 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     QErr qe[NP];
     int np = 0;
     const int i0 = imax(p - 3, 0), i1 = imin(p + 5, nt - 1);
-    // (from the guesses out, g's and p: of equal distances the nearer pair)
+    // (from the guesses out, g's and p: of equal distances the nearer pair; the scale factors' order
+    // made once)
+    int io[17], ni = 0;
+    for (int ki = 0; ki <= 2 * (i1 - i0); ki++) {
+      const int i = ki & 1 ? p + (ki + 1) / 2 : p - ki / 2;
+      if (i >= i0 && i <= i1) io[ni++] = i;
+    }
     const int ga = clip(g, a0, a1);
     for (int ka = 0; ka <= 2 * (a1 - a0); ka++) {
       const int a = ka & 1 ? ga + (ka + 1) / 2 : ga - ka / 2;
       if (a < a0 || a > a1) continue;
       S64 lo, hi;
       quant_range(r, ch, a, lo, hi);
-      for (int ki = 0; ki <= 2 * (i1 - i0); ki++) {
-        const int i = ki & 1 ? p + (ki + 1) / 2 : p - ki / 2;
-        if (i < i0 || i > i1) continue;
+      for (int z = 0; z < ni; z++) {
+        const int i = io[z];
         const S64 ss = step_for(r, ch, a, i);
         if (ss <= 0 || np >= NP) continue;
         QErr& q = qe[np];
@@ -1797,28 +1817,24 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         np++;
       }
     }
-    struct Key {
-      U64 d;
-      int k;
-    } ord[NP];  // (those under cut, by that distance, the first of equals first: a heap)
+    U128 ord[NP];  // (those under cut, by that distance, the first of equals first: a heap of d 2^8 + k)
     int no = 0;
     for (int k = 0; k < np; k++)
-      if (pr[k].d < cut) ord[no].d = pr[k].d, ord[no++].k = k;
+      if (pr[k].d < cut) ord[no++] = (U128)pr[k].d << 8 | (unsigned)k;
     if (!no) return 0;
-    auto before = [](const Key& a, const Key& b) { return a.d < b.d || (a.d == b.d && a.k < b.k); };
     auto down = [&](int i) {
       for (int c; (c = 2 * i + 1) < no; i = c) {
-        if (c + 1 < no && before(ord[c + 1], ord[c])) c++;
-        if (!before(ord[c], ord[i])) break;
-        const Key t = ord[c];
+        if (c + 1 < no && ord[c + 1] < ord[c]) c++;
+        if (!(ord[c] < ord[i])) break;
+        const U128 t = ord[c];
         ord[c] = ord[i], ord[i] = t;
       }
     };
     for (int i = no / 2 - 1; i >= 0; i--) down(i);
     U64 d1 = ~0ull, d2 = cut;
     int best = -1, bnz = 0;
-    while (no > 0 && (ord[0].d < d2 || (best >= 0 && ord[0].d <= d1))) {
-      const int at = ord[0].k;
+    while (no > 0 && ((U64)(ord[0] >> 8) < d2 || (best >= 0 && (U64)(ord[0] >> 8) <= d1))) {
+      const int at = (int)(ord[0] & 255);
       ord[0] = ord[--no];
       down(0);
       const QErr& q = qe[at];
@@ -2202,11 +2218,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // they leave and the decoder's samples they make)
   struct JxCand {
     S64 res;
-    double x, cb, lim;  // (jx_pick()'s test's parts: res in the decoder's units, its bound but for the
-                        // step's part, the steps under which the test holds)
-    S32 c, dc, y;       // (the index, its distance from the gain's, the decoder's sample)
+    S32 c, dc, y;  // (the index, its distance from the gain's, the decoder's sample)
   };
-  static INLINE int jx_cands(S64 w, S32 pred, S64 ss, S64 lo, S64 hi, S64 al, JxCand* cd) {
+  struct JxTest {  // (jx_pick()'s test's parts, each candidate's: res in the decoder's units, its bound but
+                   // for the step's part, the steps under which the test holds)
+    double x[8], cb[8], lim[8];
+  };
+  static INLINE int jx_cands(S64 w, S32 pred, S64 ss, S64 lo, S64 hi, S64 al, JxCand* cd, JxTest& ct) {
     S128 d;
     S64 o;
     const S64 ca = requant(((w >> 4) * al >> 8) - shl64(pred, AQ_F), ss, lo, hi, &d, &o);
@@ -2215,12 +2233,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       const S64 c = k < 5 ? ca + k - 2 : requant(w - shl64(pred, AQ_F), ss, lo, hi, &d, &o);
       if (c < lo || c > hi || (k == 5 && c >= ca - 2 && c <= ca + 2)) continue;
       const S32 y = clip23((S64)dequantize((S32)c, ss) + pred);
-      JxCand& e = cd[n++];
+      JxCand& e = cd[n];
       e.res = w - shl64(y, AQ_F), e.c = (S32)c, e.dc = (S32)(c < ca ? ca - c : c - ca), e.y = y;
-      e.x = (double)e.res * (1.0 / 65536);
-      const double ax = e.x < 0 ? -e.x : e.x;
-      e.cb = 1.0 + 1e-6 + 4e-7 * ax, e.lim = 4194304.0 - ax;
+      const double x = (double)e.res * (1.0 / 65536), ax = x < 0 ? -x : x;
+      ct.x[n] = x, ct.cb[n] = 1.0 + 1e-6 + 4e-7 * ax, ct.lim[n] = 4194304.0 - ax;
+      n++;
     }
+    for (int i = n; i < 8; i++) ct.x[i] = 0, ct.cb[i] = 0, ct.lim[i] = 0;  // (the rest, which jx_pick() reads 4 at a time)
     return n;
   }
   // of the candidates cd (n of them), the one jx_fit() takes at X96's step k: its place in cd (-1
@@ -2229,21 +2248,36 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // q's point, by dequantize()'s rounding and shift, and |q| t is at most |x| + t / 2: so where it
   // lies 1 + (|x| + t) 4e-7 + 1e-6 away or more, it doesn't. Only at a step of 3 or more can x lie
   // that far; past 4095, and where clip23() could decide, the exact test's.)
-  static INLINE int jx_pick(const JxCand* cd, int n, int k, S64* rr) {
+  static INLINE int jx_pick(const JxCand* cd, const JxTest& ct, int n, int k, S64* rr) {
     const S64 s9 = jx_steps.v[k];
     const double it = jx_steps.it[k], t = jx_steps.t[k], tb = jx_steps.tb[k];
-    const bool f = t >= 3;
+    U32 off = 0;  // (the candidates the test rules out, by bit: 4 at a time where AVX2 is, as the loop below)
+    if (t >= 3) {
+#ifdef DTSD_AVX2
+      const __m256d vit = _mm256_set1_pd(it), vt = _mm256_set1_pd(t), vtb = _mm256_set1_pd(tb), half = _mm256_set1_pd(0.5),
+                    qlo = _mm256_set1_pd(-4095.0), qhi = _mm256_set1_pd(4095.0), sgn = _mm256_set1_pd(-0.0);
+      for (int h = 0; h < 8; h += 4) {
+        const __m256d x = _mm256_loadu_pd(ct.x + h);
+        const __m256d q = _mm256_floor_pd(_mm256_add_pd(_mm256_mul_pd(x, vit), half));
+        const __m256d ad = _mm256_andnot_pd(sgn, _mm256_sub_pd(x, _mm256_mul_pd(q, vt)));
+        const __m256d m = _mm256_and_pd(_mm256_and_pd(_mm256_cmp_pd(vt, _mm256_loadu_pd(ct.lim + h), _CMP_LT_OQ), _mm256_cmp_pd(q, qlo, _CMP_GE_OQ)),
+                                        _mm256_and_pd(_mm256_cmp_pd(q, qhi, _CMP_LE_OQ), _mm256_cmp_pd(ad, _mm256_add_pd(_mm256_loadu_pd(ct.cb + h), vtb), _CMP_GE_OQ)));
+        off |= (U32)_mm256_movemask_pd(m) << h;
+      }
+#else
+      for (int i = 0; i < n; i++) {
+        if (!(t < ct.lim[i])) continue;
+        const double q = floor(ct.x[i] * it + 0.5);
+        if (!(q >= -4095 && q <= 4095)) continue;
+        const double d = ct.x[i] - q * t;
+        if ((d < 0 ? -d : d) >= ct.cb[i] + tb) off |= 1u << i;
+      }
+#endif
+    }
     S64 sb = -1;
     int ib = -1;
     for (int i = 0; i < n; i++) {
-      const JxCand& e = cd[i];
-      if (f && t < e.lim) {
-        const double q = floor(e.x * it + 0.5);
-        if (q >= -4095 && q <= 4095) {
-          const double d = e.x - q * t;
-          if ((d < 0 ? -d : d) >= e.cb + tb) continue;
-        }
-      }
+      if (off >> i & 1) continue;
       S128 d;
       S64 o;
       const S64 r = requant(cd[i].res, s9, -4095, 4095, &d, &o);
@@ -2295,6 +2329,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // every step; else where the samples before were decoded the same, as the first one's always
     // are)
     JxCand cd[NSMP][6];
+    JxTest ct[NSMP];
     S32 ck[NSMP][4];
     int nc[NSMP];
     for (int j = 0; j < n; j++) nc[j] = -1;
@@ -2312,11 +2347,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         int j = 0;
         for (; j < n; j++) {
           if (nc[j] < 0 || (pm && memcmp(ck[j], h, sizeof h))) {
-            nc[j] = jx_cands(w[j], pm ? adpcm_pred(s.pvq[ch][b], h) : 0, ss[j], lo, hi, al, cd[j]);
+            nc[j] = jx_cands(w[j], pm ? adpcm_pred(s.pvq[ch][b], h) : 0, ss[j], lo, hi, al, cd[j], ct[j]);
             memcpy(ck[j], h, sizeof h);
           }
           S64 rr;
-          const int ib = jx_pick(cd[j], nc[j], k, &rr);
+          const int ib = jx_pick(cd[j], ct[j], nc[j], k, &rr);
           if (ib < 0) break;
           tot += rr;
           if (best >= 0 && tot > best) break;
@@ -2342,6 +2377,35 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       const int j0 = 16 * q;
       for (int si = 0; si < 64 && !vq[q]; si++) {
         if (!jx_seen(jx_hv[b], lg16((U64)SF6[si] << 22) - l0 + 128)) continue;
+        if (!pm) {  // (without ADPCM prediction, each sample's test by its entry's value there alone:
+                    // of the entries whose values pass at every place, the first, as trying them in
+                    // order finds; each value tried where an entry still in has it)
+          if (!hf_places.made) hf_places.make();
+          U64 in[16];
+          for (int x = 0; x < 16; x++) in[x] = ~0ull;
+          bool any = true;
+          for (int j = 0; j < 16 && any; j++) {
+            U64 mj[16] = {0};
+            for (int e = 0; e < hf_places.nv[j]; e++) {
+              const U64* const me = hf_places.m[j][e];
+              U64 hit = 0;
+              for (int x = 0; x < 16; x++) hit |= me[x] & in[x];
+              if (!hit) continue;
+              const S64 u = w[j0 + j] - shl64(clip23(((S64)hf_places.v[j][e] * SF6[si] + 8) >> 4), AQ_F);
+              S128 d;
+              S64 o;
+              const S64 c = requant(u, ss[j0 + j], lo, hi, &d, &o);
+              if (!jx_near(u - shl64(clip23((S64)dequantize((S32)c, ss[j0 + j])), AQ_F))) continue;
+              for (int x = 0; x < 16; x++) mj[x] |= me[x];
+            }
+            U64 left = 0;
+            for (int x = 0; x < 16; x++) in[x] &= mj[x], left |= in[x];
+            any = left != 0;
+          }
+          for (int x = 0; x < 16 && any && !vq[q]; x++)
+            if (in[x]) vq[q] = 64 * x + __builtin_ctzll(in[x]) + 1, vs[q] = si;
+          continue;
+        }
         const S32 p0 = pm ? adpcm_pred(s.pvq[ch][b], h) : 0;
         // (the entries whose first value leaves the first sample's rest on the lattice, in order)
         U64 mk[16] = {0};

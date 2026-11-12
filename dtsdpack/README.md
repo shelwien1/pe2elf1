@@ -93,15 +93,18 @@ Exit codes:
 | 3 MB from its middle (5.7 s) | 1068372 | 5972 (0.56%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 3356 (0.14%) | | |
 
-Compressing the whole of `s.2.dts`'s core takes 29 seconds (1.7 MB of core a second) and 50 MB of
-memory, decompressing it 30 seconds and 43 MB, on one thread of a 2.1 GHz Xeon. The rows were all
-in the tuning sets (below; the whole of `s.2.dts` since the HF VQ groups' scores were learned), and
-`s.2.dts` in what the HF VQ groups' scores and the ADPCM predictors' codewords were learned from.
-A 96 kHz stream's 64-band analysis costs more: `96-24.dts`'s core (1.9 MB) compresses in 5.1 seconds
-and decompresses in 5.4. The decoded WAVs' searches cost too; every stream below goes at about 500
-KB of core a second or more both ways, the 7-frame samples (7 KB, 9-21 ms each way, a third of that
-the kernel mapping the pages they touch) at 330 KB a second or more: the searches run on every value
-of a stream's first 2048 (the bit allocation search's first 512), which is all of theirs.
+Compressing the whole of `s.2.dts`'s core takes 34 seconds (1.5 MB of core a second) and 45 MB of
+memory, decompressing it 35 seconds and 38 MB, on one thread of a 2.1 GHz Xeon (each figure here
+the median of runs one at a time). The rows were all in the tuning sets (below; the whole of
+`s.2.dts` since the HF VQ groups' scores were learned), and `s.2.dts` in what the HF VQ groups'
+scores and the ADPCM predictors' codewords were learned from. A 96 kHz stream's 64-band analysis
+and X96's searches cost more: `96-24.dts`'s core (1.9 MB) compresses in 6.0 seconds (315 KB of core
+a second) and decompresses in 5.8 (325 KB). The decoded WAVs' searches cost too; every other stream
+below goes at 460 KB of core a second or more both ways. The short samples below (7 frames, 7 to 23
+KB) take 23 to 66 ms each way, 180 to 550 KB a second: about 10 ms of a run is the same for any
+stream (starting, the WAV's header and start, the alignment, the WAV's continuation past its end,
+the kernel mapping the pages the model touches), and the searches run on every value of a stream's
+first 2048 (the bit allocation search's first 512), which is all of theirs.
 
 FFmpeg's small DTS-HD MA samples (`xll_*`, 7 frames each) round-trip too:
 
