@@ -237,7 +237,7 @@ struct Call {
       if (!m) continue;
       if (!core_parse(pre + i, m, r) && wav.rate) {
         core_hz = (U32)core_rate(r.sfreq);
-        if (wav.rate == 4 * core_hz) wav.set_dec(2);  // (decimated by 2: twice the core's rate)
+        if (wav.rate == 4 * core_hz) wav.set_dec(2, wav.low_zeros());  // (its lower band: twice the core's rate)
         if (wav.rate == 2 * core_hz) up = 2;
         else if (wav.rate != core_hz) return;  // (nothing the analysis makes of it lines up: not searched)
       }
@@ -303,6 +303,7 @@ struct Call {
     wav.need(0, 32 * up * (last + 1) + (1536 + 512) * up);
     bind = find_bind(wav, best, nb, nch, filts, up, &corr);
     bind.dec = (S8)wav.dec;
+    bind.dsh = (S8)wav.dsh;
     if (bind.map[0] >= 0) find_mixes(pre, fpos, flen, ft, nf, nch, filts);
     // the LFE: the WAV channel no core channel has whose decimation correlates best with it
     if (bind.map[0] < 0 || nl < 16) return;

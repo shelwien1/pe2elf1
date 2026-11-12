@@ -55,6 +55,7 @@ constexpr S32 BIND_ONE = 1 << 23;
 struct Bind {
   S32 off;
   S8 up, dec;  // (the WAV's samples to the core's for its analysis, 1 or 2; to those analysed, 1 or 2)
+  S8 dsh;      // (dec 2: the stream's resolution, the WAV's samples' 0 bits at the bottom: wav.inc)
   S8 map[NCH];   // each core channel's WAV channel (-1 none)
   S8 map2[NCH];  // the second of its mix (-1 none)
   S32 g1[NCH], g2[NCH];  // their gains (Q23)
@@ -62,6 +63,7 @@ struct Bind {
   void none() {
     off = 0;
     up = dec = 1;
+    dsh = 0;
     for (int ch = 0; ch < NCH; ch++) map[ch] = map2[ch] = -1, g1[ch] = BIND_ONE, g2[ch] = 0;
     lfe = -1;
   }

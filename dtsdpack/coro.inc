@@ -4,7 +4,8 @@
 // The stream: "dtsdpack", the format's version, the model's level; the WAV's binding (bind_put()):
 // how the core lines up with it (the offset, 4 bytes; each channel's WAV channel, 8 bytes, the
 // second WAV channel of its mix, 8, and their gains, 8 and 8 of 4 bytes; the LFE's channel, 1; the
-// WAV's samples to the core's, 1, 2 or 4: decimated by 2, then 2),
+// WAV's samples to the core's, 1, 2 or 4: its lower band, then 2; and in its upper 4 bits, the
+// lower band's resolution),
 // what the WAV was (whether it was one, its channels, its bytes a sample, its size, 8 bytes, and
 // the CRC-32 of its first 64 KB, 4); then the arithmetic coded data: the chunks (kind, then the
 // records of a frame, or a length and the bytes of bytes kept as bytes), the end, and the CRC-32
@@ -14,7 +15,7 @@ enum { BO_OFF = 0, BO_MAP = 4, BO_MAP2 = BO_MAP + NCH, BO_G1 = BO_MAP2 + NCH, BO
        DP_BIND = BO_CRC + 4 };  // (the binding's bytes)
 enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND, DP_HEAD = DP_AT_BIND + DP_BIND };  // the header's
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
-constexpr int DP_VERSION = 66;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
+constexpr int DP_VERSION = 67;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
                                // extension as records; 4: a WAV at twice the core's rate, X96 and XXCH; 5: the
                                // scale factor search; 6: the bit allocation search; 7: the bits after the
                                // subframes as the bytes they end in, the energy's quarter of its bucket, the
@@ -115,7 +116,9 @@ constexpr int DP_VERSION = 66;  // the format's (2: a core channel's binding a m
                                // sid and abt retuned; 65: the bits after the subframes and before
                                // the extension as the encoders' ring of 8 frame buffers leaves them;
                                // XGAP by where the subframes end; 66: FFmpeg's decodes' LFE filter,
-                               // fixed, a fifth predictor; every family retuned)
+                               // fixed, a fifth predictor; every family retuned; 67: a 192 kHz
+                               // WAV's lower band as DTS-HD MA's XLL splits it, at the binding's
+                               // resolution, in place of a lowpass)
 
 static void put_le(U8* p, U64 v, int n) {
   for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));
@@ -135,7 +138,7 @@ static void bind_put(U8* p, const Bind& b, const WavIn& w) {
     put_le(p + BO_G2 + 4 * ch, (U32)b.g2[ch], 4);
   }
   p[BO_LFE] = (U8)b.lfe;
-  p[BO_UP] = (U8)(b.up * b.dec);
+  p[BO_UP] = (U8)(b.up * b.dec + 16 * b.dsh);
   p[BO_OK] = (U8)w.ok;
   p[BO_NCH] = (U8)w.nch;
   p[BO_BPS] = (U8)w.bps;
@@ -152,8 +155,9 @@ static Bind bind_get(const U8* p) {
     b.g2[ch] = (S32)(U32)get_le(p + BO_G2 + 4 * ch, 4);
   }
   b.lfe = (S8)p[BO_LFE];
-  b.up = p[BO_UP] == 2 || p[BO_UP] == 4 ? 2 : 1;
-  b.dec = p[BO_UP] == 4 ? 2 : 1;
+  b.up = (p[BO_UP] & 15) == 2 || (p[BO_UP] & 15) == 4 ? 2 : 1;
+  b.dec = (p[BO_UP] & 15) == 4 ? 2 : 1;
+  b.dsh = (S8)(p[BO_UP] >> 4);
   return b;
 }
 static const char* bind_differs(const U8* p, const WavIn& w) {
