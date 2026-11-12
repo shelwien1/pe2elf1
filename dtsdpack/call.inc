@@ -43,7 +43,7 @@ struct MixCand {
   int w1, w2;
   S32 g1, g2;
 };
-constexpr int MIX_CANDS = 11;
+constexpr int MIX_CANDS = 12;
 struct MixHits {
   MixCand c[NCH][MIX_CANDS];
   int nc[NCH];
@@ -355,8 +355,9 @@ struct Call {
   // How each core channel lines up with the WAV's, the offset found (bind's map, map2, g1, g2): its
   // best single WAV channel and its best pair, by a weighted least squares fit over the frames read
   // first (MixSums), each with its gains as fitted and as the downmix table's entries either side
-  // (gain_near()), and the channel the alignment found, as it is and by the table's gains of an
-  // unweighted fit; of those, the one that makes the most of the channel's indexes exactly
+  // (gain_near()), the best single channel as it is too, and the channel the alignment found, as
+  // it is and by the table's gains of an unweighted fit; of those, the one that makes the most of
+  // the channel's indexes exactly
   // (MixHits; by 0.5% of them at least over the ones before it; not one whose gains are all under
   // 1/64), where that is a fifth of them at least (else the channel isn't bound)
   void find_mixes(pcU8 pre, const U32* pos, const U32* len, const S64* ft, int nf, int nch, int filts) {
@@ -398,7 +399,9 @@ struct Call {
       // table's gains of the unweighted fit (the weighted one can miss them: a decoded WAV's analysis
       // isn't the core's where the filterbank's reconstruction errs most, beside a sudden loud
       // onset, and those samples' fine steps outweigh the rest); one channel by the table's gains
-      // (the nearer first), by the fit's; two channels by the table's, by the fit's
+      // (the nearer first), by the fit's, as it is (where the alignment didn't find it, as it
+      // doesn't XCH's: a clipped decode's fit can be far off, FATE's xbr_xch_61_24_48_3840's XCH
+      // channel's 0.065); two channels by the table's, by the fit's
       int& n = mh.nc[ch];
       S32 ga[2], gb[2];
       if (bind.map[ch] >= 0) {
@@ -414,6 +417,7 @@ struct Call {
         const int na = gain_near(gs, ga);
         for (int a = 0; a < na; a++) mh.c[ch][n++] = MixCand{si, -1, ga[a], 0};
         mh.c[ch][n++] = MixCand{si, -1, (S32)llround(gs * BIND_ONE), 0};
+        if (si != bind.map[ch]) mh.c[ch][n++] = MixCand{si, -1, BIND_ONE, 0};
       }
       if (pi >= 0) {
         const int na = gain_near(pa, ga), nb2 = gain_near(pb, gb);

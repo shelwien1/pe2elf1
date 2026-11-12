@@ -169,7 +169,7 @@ their decodes clip too (0.3-1.2% of the samples):
 | `xch_61_24_48_768` (6.1 by XCH) | 7168 | 2065 (28.81%) |
 | `x96_51_24_96_1509` (X96) | 14084 | 3505 (24.89%) |
 | `x96_xch_61_24_96_3840` | 14084 | 2828 (20.08%) |
-| `xbr_51_24_48_3840`, `xbr_xch_61_24_48_3840` (XBR: its residuals in the decode) | 14084 | 2580 (18.32%), 3555 (25.24%) |
+| `xbr_51_24_48_3840`, `xbr_xch_61_24_48_3840` (XBR: its residuals in the decode) | 14084 | 2580 (18.32%), 3058 (21.71%) |
 | `xll_x96_51_24_96_1509` (DTS-HD MA, X96) | 14084 | 1871 (13.28%) |
 
 ## How it works
@@ -837,8 +837,11 @@ up to 256 of the frames read first, a weighted least squares fit (each decoded s
 its uncertainty squared: its quantization's, step^2 / 12, and the WAV's own, half a unit, 128 for a
 16-bit WAV: the finer, the surer) of the core channel against every WAV channel and every pair of
 them gives its best single channel and its best pair, each with its gains as fitted and as the
-downmix table's entries either side (signed); with the channel the alignment found as it is and
-by the table's gains of an unweighted fit, the candidates. Of those, the one that makes the most of
+downmix table's entries either side (signed), and the best single channel as it is; with the
+channel the alignment found as it is and by the table's gains of an unweighted fit, the candidates
+(the best channel as it is for XCH's channel, which the alignment doesn't place: FATE's
+`xbr_xch_61_24_48_3840`'s, its WAV channel as it is, was bound to it at a gain of 0.065 as
+fitted; as it is, its core 14% smaller). Of those, the one that makes the most of
 the channel's indexes exactly is its binding (a simpler one unless another makes 0.5% more; not one
 whose gains are all under 1/64), if it makes a fifth of them. (A clipped decode's distortion swamps
 a channel's quiet subbands at fine steps: their fit's gains came out at 0.00007 for channels that
