@@ -682,7 +682,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         // (a transient's, its rise 3 doublings or more: the encoders' energy may be the part from it
         // on, where its second scale factor is: ab_transient())
         fe_w[ch][b] = fe_s[ch][b], ab_ev[ch][b] = 0;
-        fe_s[ch][b] = ab_transient(s, ch, b, x, n, p, fe_s[ch][b], &fe_a[ch][b]);
+        fe_s[ch][b] = ab_transient(s, ch, b, x, n, fe_s[ch][b], &fe_a[ch][b]);
         bud_n[ch][b] = n;
         bud_si[ch][b] = scale_pred(x, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
         memset(bud_b[ch][b], 0xFF, sizeof bud_b[ch][b]);
@@ -803,14 +803,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // A lossless WAV's subband with a transient (where a subsubframe's mean square is 8 times the one
   // before's or more, the largest such rise's; not an ADPCM subband's, not from 20 up: tmode_rule()):
   // the encoders seen allocate its bits by the mean square of its values from the transient on,
-  // where the rise is a threshold or more: 3.9 doublings where those values' ABITS by the table is 9
-  // or less, an eighth of one less for each ABITS more, to 3 (`s.2.dts`: 99.9% of its transients
-  // from 4 doublings up, from 3 to 4 more the louder; the table at its last level, or 3.6 doublings);
-  // the fine energy the ABITS are guessed by (fe the subframe's; *fa those values', FE_NONE none).
-  // From 3 doublings, a subband that doesn't predict where its gain says it would has a transient,
-  // whatever the threshold (the encoders make no prediction where they take one: `s.2.dts`'s core
-  // 0.03% smaller)
-  S32 ab_transient(const CoreSub& s, int ch, int b, const S64* x, int n, int p, S32 fe, S32* fa_) const {
+  // where they take one, the rise rise_thr() or more; the fine energy the ABITS are guessed by (fe
+  // the subframe's; *fa those values', FE_NONE none). From 3 doublings, a subband that doesn't
+  // predict where its gain says it would has a transient, whatever the threshold (the encoders make
+  // no prediction where they take one: `s.2.dts`'s core 0.03% smaller)
+  S32 ab_transient(const CoreSub& s, int ch, int b, const S64* x, int n, S32 fe, S32* fa_) const {
     *fa_ = FE_NONE;
     if (s.pmode[ch][b] || b >= 20 || s.nssc < 2 || fe == FE_NONE) return fe;
     int tk = 0;
@@ -824,13 +821,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (!tk || tr < 3 * 128) return fe;
     const S32 fa = *fa_ = fine_energy(x + 8 * tk, n - 8 * tk);
     if (pm_g[ch][b] >= 4) return fa;  // (no prediction where the gain says one, 2^(6/4): a transient)
-    const AbPar& t = abp[p][b];
-    int th = 464;
-    if (t.set) {
-      const int g = ap_abits((S64)fa - apl[p].pri - apl[p].d - t.o);
-      th = clip(496 - 16 * (g - 9), 384, 496);
-    }
-    return tr >= th ? fa : fe;
+    int k;
+    return rise_max(s, ch, b, &k) >= rise_thr(b) ? fa : fe;
   }
   // the bits the core's bound subbands' samples would take at the table's ABITS at level l (where it
   // has none, the staircases', else the last ABITS)
@@ -1055,13 +1047,33 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (m[0] + m[1] >= 1024) m[0] >>= 1, m[1] >>= 1;
   }
 
-  // How subband b's energy rises against where the encoders seen take a transient, for its PMODE
-  // (they make no prediction where they take one: none of `s.2.dts`'s 9353) and TMODE (a sid
-  // context, tr: model.inc): 0 by less than 20 eighths of a
-  // doubling from a subsubframe to the next (the largest rise; or one subsubframe), else by the
-  // rise in eighths less the threshold they take one from at ABITS a (ab_transient()'s: 3.9
-  // doublings at 9 or less, an eighth less for each one more, to 3), floored: 1 -4 or less, 2 -3
-  // or -2, 3 -1, 4 0, 5 more
+  // the largest rise of subband b's energy from a subsubframe to the next (the ratio of the two,
+  // each 1 more; 0 with one subsubframe), where it is (*tk, 1 to nssc - 1; 0 none)
+  double rise_max(const CoreSub& s, int ch, int b, int* tk) const {
+    double qm = 0;
+    *tk = 0;
+    for (int k = 1; k < s.nssc; k++) {
+      S128 e0 = 1, e1 = 1;
+      for (int j = 0; j < 8; j++) {
+        const S64 x0 = X[ch][b][8 * (k - 1) + j], x1 = X[ch][b][8 * k + j];
+        e0 += (S128)x0 * x0, e1 += (S128)x1 * x1;
+      }
+      const double q = (double)e1 / (double)e0;
+      if (q > qm) qm = q, *tk = k;
+    }
+    return qm;
+  }
+  // The rise from a subsubframe to the next at which the encoders seen take a transient in subband
+  // b (below 20; they make no prediction there): 8 (19 + b) / 19 times the energy (to 0.1% in each
+  // subband: `s.2.dts`'s 2441 subbands below 20 that would gain by prediction and rise by it or
+  // more don't predict, of the 216367 that rise less 130 don't; its TMODEs follow it but for 9 of
+  // the 2.27 million that don't predict, all within 2% of it; FFmpeg's master_audio_7.1_24bit.dts's
+  // as well, but for its first subframe)
+  static double rise_thr(int b) { return 8.0 * (19 + b) / 19; }
+  // How subband b's energy rises against that, for its PMODE and TMODE (a sid context, tr:
+  // model.inc): 0 from subband 20, or by less than 20 eighths of a doubling (the largest rise; or
+  // one subsubframe), else by the rise in eighths of a doubling past rise_thr(), floored: 1 -4 or
+  // less, 2 -3 or -2, 3 -1, 4 0, 5 more
   struct Rise8 {  // (2^(r/8), r 0 to 48)
     double t[49];
     Rise8() {
@@ -1070,28 +1082,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       for (int r = 0; r <= 48; r++) t[r] = ldexp(R8[r & 7], r >> 3);
     }
   };
-  int pm_rise(const CoreSub& s, int ch, int b, int a) const {
+  int pm_rise(const CoreSub& s, int ch, int b) const {
     static const Rise8 rise8;
-    int r8 = -1;
-    for (int k = 1; k < s.nssc; k++) {
-      S128 e0 = 1, e1 = 1;
-      for (int j = 0; j < 8; j++) {
-        const S64 x0 = X[ch][b][8 * (k - 1) + j], x1 = X[ch][b][8 * k + j];
-        e0 += (S128)x0 * x0, e1 += (S128)x1 * x1;
-      }
-      const double q = (double)e1 / (double)e0;  // (2^(r/8) at most, r to 48: the largest)
-      if (q < 1) continue;
-      int lo = 0, hi = 48;
-      while (lo < hi) {
-        const int m = (lo + hi + 1) >> 1;
-        if (q >= rise8.t[m]) lo = m;
-        else hi = m - 1;
-      }
-      r8 = imax(r8, lo);
-    }
-    if (r8 < 20) return 0;
-    const int x = imax(a, 9) - 9, d = x >= 8 ? r8 - 24 : r8 + x - 32;
-    return d <= -4 ? 1 : d <= -2 ? 2 : d == -1 ? 3 : d == 0 ? 4 : 5;
+    int tk;
+    const double q = b < 20 ? rise_max(s, ch, b, &tk) : 0;
+    if (q < rise8.t[20]) return 0;
+    const double u = q / rise_thr(b);  // (2^(d/8) at least, d the largest)
+    return u >= rise8.t[1] ? 5 : u >= 1 ? 4 : 2 * u >= rise8.t[7] ? 3 : 2 * u >= rise8.t[5] ? 2 : 1;
   }
   // A lossless WAV's transient (TMODE) as encoders make it: where a subsubframe's energy is 8 times
   // the one before's at least, the largest such rise's (*tg, 1 to nssc - 1, else 0); how likely, the
@@ -1306,6 +1303,16 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     pvr[0] += e0 == v, pvr[1] += q0 == v;
     if (pvr[0] + pvr[1] >= 1u << 16) pvr[0] >>= 1, pvr[1] >>= 1;
     return v;
+  }
+  // Whether channel ch's subband b is quiet as the encoders seen take it, where they make no
+  // prediction: its values' RMS over the subframe under 100 (`s.2.dts`'s subbands that would gain
+  // by it from 99.5 to 100 predict 2.4% of the time, from 100 to 100.5 97%; where the RMS rule's
+  // scale factor under 100 was taken, an RMS under 99.5, 78 more of them the other way: its core
+  // 0.05% smaller, `master_audio_7.1_24bit.dts`'s 0.5%)
+  bool pm_quiet(int ch, int b) const {
+    S128 e = 0;
+    for (int j = 0; j < nsmp; j++) e += (S128)X[ch][b][j] * X[ch][b][j];
+    return e < (S128)nsmp * (((S128)100 << AQ_F) * ((S128)100 << AQ_F));
   }
   // How the encoder would gain by predicting channel ch's subband b: 0 by less than 2^(1/2) (the
   // LPC's gain), 9 by more than 2^(9/4), else by the gain of the entry its search would choose for

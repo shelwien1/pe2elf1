@@ -180,17 +180,19 @@ struct Model : ModelX96<f_DEC, LV> {
         // `96-24.dts`'s core 0.5% smaller)
         int g4 = B::lpg4[ch][b], pg = -1;
         // (and how the energy rises against where the encoders take a transient, as they make no
-        // prediction there, pm_rise(): at the ABITS seen at the subband's energy, which come after,
-        // else its last, else 9: `s.2.dts`'s PMODEs 3.2 KB to 1.3, its bottom subband's 1173 bytes
-        // to 81, `ES 6.1 16bit.dts`'s core 3.0% smaller)
-        const int ga = bound[ch] ? ab_guess(ch, b, 0, es[ch][b]) : 0;
-        const int tr = bound[ch] ? B::pm_rise(s, ch, b, ga ? ga - 1 : hist.abits[ch][b] ? hist.abits[ch][b] - 1 : 9) : 0;
+        // prediction there, pm_rise(): `s.2.dts`'s PMODEs 3.2 KB to 1.3, its bottom subband's 1173
+        // bytes to 81, `ES 6.1 16bit.dts`'s core 3.0% smaller; at the subband's threshold, not one
+        // the ABITS move, 1219 bytes to 1042, its TMODEs 931 to 342 and its bit allocations 9867 to
+        // 9042 (the transients' mean squares, ab_transient()), its core 1.6% smaller)
+        const int tr = bound[ch] ? B::pm_rise(s, ch, b) : 0;
         if (bound[ch] && B::jx_low(b) && B::ss_rule() && B::je_on(ch, b)) B::je_gains(ch, b, &g4, &pg);
         if (fit >= 0)
           v = side_code(SF_PMSR, ch, b, v, 0, 1, 1, hist.pmode[ch][b], b ? s.pmode[ch][b - 1] + 1 : 0, fit,
                         imin(g4, 27), pg >= 0 ? pg : B::pmode_gain(ch, b), tr);
-        else {  // (a quiet subband, its RMS rule's scale factor under 100, predicts as one that wouldn't gain)
-          const int gq = !bound[ch] ? 9 : (r.shuff[ch] == 6 ? SF7 : SF6)[es[ch][b] - 1] < 100 ? 0 : B::pmode_gain(ch, b);
+        else {  // (a quiet subband, pm_quiet()'s, predicts as one that wouldn't gain; as does an HF VQ
+                // one: the encoders seen predict in none, `s.2.dts` none of its 64 that would gain, the
+                // other lossless WAVs' none of their 86: its core 0.03% smaller, theirs 0.4-0.6%)
+          const int gq = !bound[ch] ? 9 : b >= r.nvqsub[ch] || B::pm_quiet(ch, b) ? 0 : B::pmode_gain(ch, b);
           B::pm_g[ch][b] = (S8)(bound[ch] ? gq : -1);
           v = side_code(SF_PMODE, ch, b, v, 0, 1, 1, hist.pmode[ch][b], b ? s.pmode[ch][b - 1] + 1 : 0,
                         bound[ch] ? ac[ch][b] : 8, bound[ch] ? imin(B::lpg4[ch][b], 27) : 0, gq, tr);
@@ -374,8 +376,8 @@ struct Model : ModelX96<f_DEC, LV> {
           v = side_code(SF_TMSR, ch, b, v, lo, hi, 0, 1 + gt, hist.tmode[ch][b], gc, 1 + imin(s.abits[ch][b], 26),
                         ec[ch][b]);
         else if (bound[ch]) {  // (a lossless WAV's: against the rule, its class the context ac; and how the
-                               // energy rises against the threshold at its ABITS, tr: `s.2.dts`'s
-                               // TMODEs 1.4 KB to 1.0)
+                               // energy rises against the subband's transient threshold, tr: `s.2.dts`'s
+                               // TMODEs 1.4 KB to 1.0, to 0.3 at the subband's threshold)
           int tg;
           int tc = B::tmode_rule(s, ch, b, &tg);
           if (tc >= 3) {  // (and what its ABITS said: 3 the values' energy, 6 or 8 that from the transient on)
@@ -384,7 +386,7 @@ struct Model : ModelX96<f_DEC, LV> {
             if (ev == 1) tg = 0;
           }
           v = side_code(SF_TMODE, ch, b, v, lo, hi, 0, 1 + (tc >= 3 ? tg : 0), hist.tmode[ch][b], tc,
-                        1 + imin(s.abits[ch][b], 26), ec[ch][b], s.pmode[ch][b] ? 0 : B::pm_rise(s, ch, b, s.abits[ch][b]));
+                        1 + imin(s.abits[ch][b], 26), ec[ch][b], s.pmode[ch][b] ? 0 : B::pm_rise(s, ch, b));
         } else
           v = side_code(SF_TMODE, ch, b, v, lo, hi, 0, hist.tmode[ch][b], 0, 8, 1 + imin(s.abits[ch][b], 26), 9);
         break;
