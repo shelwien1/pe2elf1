@@ -12,10 +12,11 @@ flacdump d [options] inp_prefix restored.flac  <- inp_prefix.wav + inp_prefix.me
 **bit-exactly**: container layout, metadata blocks, and every encoder decision
 (block sizes, channel assignments, subframe types, predictor orders and
 coefficients, rice partitions/parameters, ...). Embedded files (cover art in
-PICTURE blocks, base64 pictures in VORBIS_COMMENT fields such as
-`METADATA_BLOCK_PICTURE=` or `COVERART=`, JPEG/PNG images inside ID3v2/APE
-tags or other raw regions) are
-written to separate files `out_prefix.1.jpg`, `out_prefix.2.png`, ... so they
+PICTURE blocks, base64 data in VORBIS_COMMENT fields such as
+`METADATA_BLOCK_PICTURE=`, `COVERART=` or other binary tags, JPEG/PNG images
+inside ID3v2/APE tags or other raw regions) are
+written to separate files `out_prefix.1.jpg`, `out_prefix.2.png`,
+`out_prefix.3.bin`, ... so they
 can be handled by format-specific tools; the `.meta` only keeps their position,
 size, type and a CRC. `d` rebuilds the identical file from all of them.
 
@@ -105,17 +106,16 @@ which additionally has no container overhead).
   its magic bytes: jpg, png, gif, bmp, webp, tif, otherwise bin); the block's
   other fields stay in the `.meta`.
 * VORBIS_COMMENT values that are base64 (standard alphabet, with or without
-  `=` padding, no line breaks; must re-encode to exactly the same text) and
-  decode to a FLAC PICTURE structure (`METADATA_BLOCK_PICTURE`) or directly to
-  an image (`COVERART` and similar) are decoded; the image becomes an external
-  file and the remaining fields are coded like a PICTURE block. Other base64
-  or malformed values stay text.
-* Metadata blocks are modelled: STREAMINFO fields are predicted from the
-  restored audio (min/max block and frame sizes, total samples, MD5),
-  SEEKTABLE points are coded as frame indices (usually predicted from the
-  seek point spacing), PADDING as a length, VORBIS_COMMENT with a vendor string
-  dictionary and an order-3 context-mixing text model, other blocks with the
-  CM model (or stored if that does not help).
+  `=` padding, optionally wrapped into fixed-length lines with LF or CR LF;
+  they must re-encode to exactly the same text) are decoded to binary:
+  * a FLAC PICTURE structure (`METADATA_BLOCK_PICTURE=`): the image becomes an
+    external file, the other fields are coded like a PICTURE block;
+  * an image (`COVERART=` etc.): external file;
+  * any other binary (e.g. Serato `SERATO_*` tags, embedded PDFs, text): an
+    external file if it is at least 256 bytes (extension from magic bytes:
+    pdf, zip, gz, xz, 7z, ogg, flac, txt, otherwise bin), otherwise - and with
+    `-i` - it is coded as binary inside the `.meta` when that is cheaper than
+    coding the base64 text (random data and hex strings stay text).
 * The audio region is split into segments: frames that can be re-encoded
   bit-exactly from (PCM + decisions), decodable frames that can't (stored raw,
   PCM still goes to the WAV), and undecodable junk (stored raw). Every modelled

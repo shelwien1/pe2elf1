@@ -1203,7 +1203,9 @@ struct ExtFiles {
 };
 static ExtFiles g_ext = {nullptr, 0, 0, 0};
 
-static const char* k_ext_name[8] = {"bin", "jpg", "png", "gif", "bmp", "webp", "tif", "bin"};
+static const char* k_ext_name[16] = {"bin", "jpg", "png", "gif", "bmp", "webp", "tif", "pdf",
+                                     "zip", "gz",  "xz",  "7z",  "ogg", "flac", "txt",  "bin"};
+static inline bool ext_is_image(int e) { return e >= 1 && e <= 6; }
 
 static int sniff_ext(const u8* p, size_t n) {
     if (n >= 3 && p[0] == 0xFF && p[1] == 0xD8 && p[2] == 0xFF) return 1;
@@ -1212,6 +1214,18 @@ static int sniff_ext(const u8* p, size_t n) {
     if (n >= 2 && p[0] == 'B' && p[1] == 'M') return 4;
     if (n >= 12 && !memcmp(p, "RIFF", 4) && !memcmp(p + 8, "WEBP", 4)) return 5;
     if (n >= 4 && (!memcmp(p, "II*\0", 4) || !memcmp(p, "MM\0*", 4))) return 6;
+    if (n >= 5 && !memcmp(p, "%PDF-", 5)) return 7;
+    if (n >= 4 && !memcmp(p, "PK\3\4", 4)) return 8;
+    if (n >= 3 && p[0] == 0x1F && p[1] == 0x8B && p[2] == 8) return 9;
+    if (n >= 6 && !memcmp(p, "\xFD" "7zXZ\0", 6)) return 10;
+    if (n >= 6 && !memcmp(p, "7z\xBC\xAF\x27\x1C", 6)) return 11;
+    if (n >= 4 && !memcmp(p, "OggS", 4)) return 12;
+    if (n >= 4 && !memcmp(p, "fLaC", 4)) return 13;
+    if (n > 0) {
+        size_t i = 0;
+        while (i < n && ((p[i] >= 0x20 && p[i] < 0x7F) || p[i] == '\t' || p[i] == '\r' || p[i] == '\n')) i++;
+        if (i == n) return 14;
+    }
     return 0;
 }
 
@@ -1308,12 +1322,12 @@ static int find_cuts(const u8* d, size_t n, int kind, Cut* cuts) {
 }
 
 static void ext_name(char* buf, size_t bn, int num, int ext) {
-    snprintf(buf, bn, "%s.%d.%s", g_ext.prefix, num, k_ext_name[ext & 7]);
+    snprintf(buf, bn, "%s.%d.%s", g_ext.prefix, num, k_ext_name[ext & 15]);
 }
 
 struct ExtModels {
     UModel n, off, len;
-    BM ext[8];
+    BM ext[16];
 };
 static ExtModels g_extm;
 
@@ -1332,7 +1346,7 @@ static bool code_region(AC& ac, u8* data, size_t len, int kind, bool prime) {
         u64 gap = code_uint(ac, g_extm.off, ac.dec ? 0 : c.off - pos);
         c.off = pos + gap;
         c.len = code_uint(ac, g_extm.len, c.len);
-        c.ext = (int)ac.tree(g_extm.ext, 3, (u32)c.ext);
+        c.ext = (int)ac.tree(g_extm.ext, 4, (u32)c.ext);
         if (c.off + c.len > len) return false;
         u16 crc = ac.dec ? 0 : crc16(data + c.off, (size_t)c.len);
         u16 want = (u16)ac.raw(crc, 16);
@@ -2478,6 +2492,7 @@ struct Models {
     UModel num_m;
     UModel clen_m;
     BM vendor_t[32];
+    BM b64kind[4];
     BM mflag[16];
     BM mtype[8][128];
 };
@@ -2507,8 +2522,9 @@ static void models_init(Models& M) {
     PRIOR(M.ch_sim, HI);
     PRIOR(M.lpc_sim, HI);
     PRIOR(M.mflag, HI);
-    M.mflag[3].p = LO;  // base64 picture in a comment: rare
-    M.mflag[5].p = 32768;
+    M.mflag[3].p = LO;  // base64 value in a comment: rare
+    M.mflag[6].p = LO;  // CR LF line breaks
+    M.mflag[7].p = 32768;
     for (int k = 0; k < 4; k++) {
         M.cand_g[0][k].p = HI;
         M.cand_g[0][k].n = 2;
@@ -3793,6 +3809,85 @@ static bool b64_decode(const u8* s, size_t m, Buf& out, int& pad) {
     return same;
 }
 
+// base64 text layout: padding, optional line wrapping
+struct B64Fmt {
+    int pad;
+    u32 line;       // chars per line, 0 = single line
+    int crlf;       // line break is CR LF (else LF)
+    int final_eol;  // text ends with a line break
+};
+static size_t b64f_len(size_t n, const B64Fmt& f) {
+    size_t t = b64_len(n, f.pad);
+    if (!f.line || !t) return t;
+    size_t lines = (t + f.line - 1) / f.line;
+    return t + (lines - 1 + f.final_eol) * (f.crlf ? 2 : 1);
+}
+static void b64f_encode(const u8* d, size_t n, const B64Fmt& f, u8* o) {
+    if (!f.line) {
+        b64_encode(d, n, f.pad, o);
+        return;
+    }
+    size_t t = b64_len(n, f.pad);
+    Buf tmp;
+    tmp.reserve(t + 4);
+    b64_encode(d, n, f.pad, tmp.p);
+    for (size_t i = 0; i < t; i += f.line) {
+        size_t k = Min((size_t)f.line, t - i);
+        memcpy(o, tmp.p + i, k);
+        o += k;
+        if (i + k < t || f.final_eol) {
+            if (f.crlf) *o++ = '\r';
+            *o++ = '\n';
+        }
+    }
+    tmp.release();
+}
+// strict parse incl. line wrapping; true only if b64f_encode reproduces the text exactly
+static bool b64f_parse(const u8* s, size_t m, Buf& out, B64Fmt& f) {
+    f.line = 0;
+    f.crlf = 0;
+    f.final_eol = 0;
+    size_t e = 0;
+    while (e < m && s[e] != '\r' && s[e] != '\n') e++;
+    Buf flat;
+    const u8* src = s;
+    size_t sm = m;
+    if (e < m) {
+        if (e < 4) return false;
+        f.line = (u32)e;
+        f.crlf = s[e] == '\r';
+        flat.reserve(m);
+        flat.n = 0;
+        for (size_t i = 0; i < m; i++)
+            if (s[i] != '\r' && s[i] != '\n') flat.p[flat.n++] = s[i];
+        f.final_eol = s[m - 1] == '\n';
+        src = flat.p;
+        sm = flat.n;
+    }
+    bool ok = sm > 0 && b64_decode(src, sm, out, f.pad);
+    if (ok && f.line) {
+        ok = b64f_len(out.n, f) == m;
+        if (ok) {
+            Buf chk;
+            chk.reserve(m + 4);
+            b64f_encode(out.p, out.n, f, chk.p);
+            ok = !memcmp(chk.p, s, m);
+            chk.release();
+        }
+    }
+    flat.release();
+    return ok;
+}
+// estimated CM cost (bits) of a byte string with a fresh model
+static double cm_cost(const u8* d, size_t n) {
+    ByteCM t;
+    t.init();
+    double c = 0;
+    for (size_t i = 0; i < n; i++) t.byte(nullptr, d[i], &c);
+    t.release();
+    return c;
+}
+
 // structured VORBIS_COMMENT coding: vendor from a dictionary, lengths as numbers, text with a shared CM
 static bool code_vorbis(AC& ac, Models& M, MBlock& b) {
     int ok = ac.dec ? 0 : vorbis_ok(b.data, b.len);
@@ -3853,22 +3948,40 @@ static bool code_vorbis(AC& ac, Models& M, MBlock& b) {
             good = false;
             break;
         }
-        // base64 encoded picture? (decoded data is coded / extracted like a PICTURE block)
-        int b64 = 0, kind = 0, pad = 0;
+        // base64 value? Pictures / images / other binary are decoded; pictures and large
+        // blobs become external files, small blobs are coded as binary if that is cheaper
+        int b64 = 0, kind = 0;
+        B64Fmt fmt = {0, 0, 0, 0};
         u32 klen = 0;
         Buf dec;
-        if (!ac.dec && g_ext.prefix && !g_ext.keep_inline && l >= 2 * MINCUT) {
+        if (!ac.dec && l >= 20) {
             const u8* c = b.data + p;
             while (klen < l && c[klen] != '=') klen++;
-            if (klen < l && klen < 256) {
+            if (klen < l && klen < 256 && l - klen - 1 >= 16) {
                 klen++;
-                if (b64_decode(c + klen, l - klen, dec, pad)) {
+                const u8* v = c + klen;
+                u32 vn = l - klen;
+                bool hex = true;
+                for (u32 j = 0; j < vn && hex; j++)
+                    hex = (v[j] >= '0' && v[j] <= '9') || (v[j] >= 'a' && v[j] <= 'f') || (v[j] >= 'A' && v[j] <= 'F') ||
+                          v[j] == '\r' || v[j] == '\n';
+                if (!hex && b64f_parse(v, vn, dec, fmt)) {
+                    bool extract = g_ext.prefix && !g_ext.keep_inline;
                     Cut tmpc[MAXCUTS];
                     if (find_cuts(dec.p, dec.n, 1, tmpc))
                         kind = 1;
-                    else if (sniff_ext(dec.p, dec.n) && dec.n >= MINCUT)
+                    else if (ext_is_image(sniff_ext(dec.p, dec.n)) && dec.n >= MINCUT)
                         kind = 2;
-                    b64 = kind != 0;
+                    else
+                        kind = 3;
+                    bool ext_file = extract && dec.n >= MINCUT;
+                    // text costs ~6 bits per base64 character
+                    double cc = ext_file ? 0 : cm_cost(dec.p, dec.n);
+                    b64 = ext_file || cc + 24 < 6.0 * (double)(b64_len(dec.n, fmt.pad));
+                    if (g_verbose >= 3)
+                        fprintf(stderr, "base64 field %.*s: %zu bytes, kind %d, bin cost %.0f vs text %.0f bits -> %s\n",
+                                (int)klen - 1, c, dec.n, kind, cc, 6.0 * b64_len(dec.n, fmt.pad),
+                                b64 ? (ext_file ? "file" : "binary") : "text");
                 }
             }
         }
@@ -3884,10 +3997,15 @@ static bool code_vorbis(AC& ac, Models& M, MBlock& b) {
             break;
         }
         good = text(klen);
-        pad = ac.bit(M.mflag[4], pad);
-        kind = ac.bit(M.mflag[5], kind == 2) ? 2 : 1;
+        fmt.pad = ac.bit(M.mflag[4], fmt.pad);
+        fmt.line = (u32)code_uint(ac, M.len_m, fmt.line);
+        if (fmt.line) {
+            fmt.crlf = ac.bit(M.mflag[6], fmt.crlf);
+            fmt.final_eol = ac.bit(M.mflag[7], fmt.final_eol);
+        }
+        kind = (int)ac.tree(M.b64kind, 2, (u32)kind);
         u64 dn = code_uint(ac, M.len_m, dec.n);
-        if (!good || b64_len((size_t)dn, pad) != l - klen) {
+        if (!good || kind == 0 || b64f_len((size_t)dn, fmt) != l - klen) {
             good = false;
             break;
         }
@@ -3895,8 +4013,8 @@ static bool code_vorbis(AC& ac, Models& M, MBlock& b) {
             dec.reserve((size_t)dn + 1);
             dec.n = (size_t)dn;
         }
-        good = code_region(ac, dec.p, (size_t)dn, kind, false);
-        if (good && ac.dec) b64_encode(dec.p, dec.n, pad, b.data + p);
+        good = code_region(ac, dec.p, (size_t)dn, kind == 1 ? 1 : 2, false);
+        if (good && ac.dec) b64f_encode(dec.p, dec.n, fmt, b.data + p);
         p += l - klen;
         dec.release();
     }
