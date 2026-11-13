@@ -1260,9 +1260,16 @@ struct Cut {
 };
 enum { MAXCUTS = 64, MINCUT = 256 };
 
-// find embedded files: kind 1 = FLAC PICTURE block (exact), otherwise scan for JPEG/PNG
+// find embedded files: kind 1 = FLAC PICTURE block (exact), 2 = whole buffer, otherwise scan for JPEG/PNG
 static int find_cuts(const u8* d, size_t n, int kind, Cut* cuts) {
     int nc = 0;
+    if (kind == 2) {  // the whole buffer is one file (e.g. base64-decoded cover art)
+        if (n < MINCUT) return 0;
+        cuts[0].off = 0;
+        cuts[0].len = n;
+        cuts[0].ext = sniff_ext(d, n);
+        return 1;
+    }
     if (kind == 1) {
         // type, mime, description, w, h, depth, colors, data_len, data
         size_t p = 4;
@@ -2500,6 +2507,8 @@ static void models_init(Models& M) {
     PRIOR(M.ch_sim, HI);
     PRIOR(M.lpc_sim, HI);
     PRIOR(M.mflag, HI);
+    M.mflag[3].p = LO;  // base64 picture in a comment: rare
+    M.mflag[5].p = 32768;
     for (int k = 0; k < 4; k++) {
         M.cand_g[0][k].p = HI;
         M.cand_g[0][k].n = 2;
@@ -3720,6 +3729,70 @@ enum { NVENDORS = sizeof(k_vendors) / sizeof(k_vendors[0]) };
 
 static bool vorbis_ok(const u8* d, u32 len);
 
+// ---- base64 (pictures embedded in comments: METADATA_BLOCK_PICTURE=, COVERART=, ...) ----
+static const char k_b64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static size_t b64_len(size_t n, int pad) { return pad ? (n + 2) / 3 * 4 : (n * 4 + 2) / 3; }
+static void b64_encode(const u8* s, size_t n, int pad, u8* o) {
+    size_t i = 0;
+    for (; i + 3 <= n; i += 3) {
+        u32 v = (s[i] << 16) | (s[i + 1] << 8) | s[i + 2];
+        *o++ = k_b64[v >> 18];
+        *o++ = k_b64[(v >> 12) & 63];
+        *o++ = k_b64[(v >> 6) & 63];
+        *o++ = k_b64[v & 63];
+    }
+    if (n - i == 1) {
+        u32 v = s[i] << 16;
+        *o++ = k_b64[v >> 18];
+        *o++ = k_b64[(v >> 12) & 63];
+        if (pad) {
+            *o++ = '=';
+            *o++ = '=';
+        }
+    } else if (n - i == 2) {
+        u32 v = (s[i] << 16) | (s[i + 1] << 8);
+        *o++ = k_b64[v >> 18];
+        *o++ = k_b64[(v >> 12) & 63];
+        *o++ = k_b64[(v >> 6) & 63];
+        if (pad) *o++ = '=';
+    }
+}
+// strict decode; true only if re-encoding gives back exactly the same text
+static bool b64_decode(const u8* s, size_t m, Buf& out, int& pad) {
+    static s8 rev[256];
+    if (!rev['B']) {
+        for (int i = 0; i < 256; i++) rev[i] = -1;
+        for (int i = 0; i < 64; i++) rev[(u8)k_b64[i]] = (s8)i;
+    }
+    size_t np = 0;
+    while (np < 2 && np < m && s[m - 1 - np] == '=') np++;
+    pad = np > 0 || (m % 4) == 0;
+    size_t q = m - np;
+    if (np && (m % 4)) return false;
+    if ((q % 4) == 1) return false;
+    out.n = 0;
+    out.reserve(q * 3 / 4 + 4);
+    u32 acc = 0;
+    int bits = 0;
+    for (size_t i = 0; i < q; i++) {
+        int v = rev[s[i]];
+        if (v < 0) return false;
+        acc = (acc << 6) | (u32)v;
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            out.p[out.n++] = (u8)(acc >> bits);
+        }
+    }
+    if (b64_len(out.n, pad) != m) return false;
+    Buf chk;
+    chk.reserve(m + 4);
+    b64_encode(out.p, out.n, pad, chk.p);
+    bool same = !memcmp(chk.p, s, m);
+    chk.release();
+    return same;
+}
+
 // structured VORBIS_COMMENT coding: vendor from a dictionary, lengths as numbers, text with a shared CM
 static bool code_vorbis(AC& ac, Models& M, MBlock& b) {
     int ok = ac.dec ? 0 : vorbis_ok(b.data, b.len);
@@ -3775,7 +3848,57 @@ static bool code_vorbis(AC& ac, Models& M, MBlock& b) {
     }
     for (u32 i = 0; i < cnt && good; i++) {
         u32 l = (u32)code_uint(ac, M.clen_m, ac.dec ? 0 : rd_le32(b.data + p));
-        good = put32(l) && text(l);
+        good = put32(l);
+        if (!good || p + l > b.len) {
+            good = false;
+            break;
+        }
+        // base64 encoded picture? (decoded data is coded / extracted like a PICTURE block)
+        int b64 = 0, kind = 0, pad = 0;
+        u32 klen = 0;
+        Buf dec;
+        if (!ac.dec && g_ext.prefix && !g_ext.keep_inline && l >= 2 * MINCUT) {
+            const u8* c = b.data + p;
+            while (klen < l && c[klen] != '=') klen++;
+            if (klen < l && klen < 256) {
+                klen++;
+                if (b64_decode(c + klen, l - klen, dec, pad)) {
+                    Cut tmpc[MAXCUTS];
+                    if (find_cuts(dec.p, dec.n, 1, tmpc))
+                        kind = 1;
+                    else if (sniff_ext(dec.p, dec.n) && dec.n >= MINCUT)
+                        kind = 2;
+                    b64 = kind != 0;
+                }
+            }
+        }
+        b64 = ac.bit(M.mflag[3], b64);
+        if (!b64) {
+            good = text(l);
+            dec.release();
+            continue;
+        }
+        klen = (u32)code_uint(ac, M.len_m, klen);
+        if (klen > l) {
+            good = false;
+            break;
+        }
+        good = text(klen);
+        pad = ac.bit(M.mflag[4], pad);
+        kind = ac.bit(M.mflag[5], kind == 2) ? 2 : 1;
+        u64 dn = code_uint(ac, M.len_m, dec.n);
+        if (!good || b64_len((size_t)dn, pad) != l - klen) {
+            good = false;
+            break;
+        }
+        if (ac.dec) {
+            dec.reserve((size_t)dn + 1);
+            dec.n = (size_t)dn;
+        }
+        good = code_region(ac, dec.p, (size_t)dn, kind, false);
+        if (good && ac.dec) b64_encode(dec.p, dec.n, pad, b.data + p);
+        p += l - klen;
+        dec.release();
     }
     cm.release();
     return good && p == b.len;

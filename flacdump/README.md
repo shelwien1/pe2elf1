@@ -12,7 +12,9 @@ flacdump d [options] inp_prefix restored.flac  <- inp_prefix.wav + inp_prefix.me
 **bit-exactly**: container layout, metadata blocks, and every encoder decision
 (block sizes, channel assignments, subframe types, predictor orders and
 coefficients, rice partitions/parameters, ...). Embedded files (cover art in
-PICTURE blocks, JPEG/PNG images inside ID3v2/APE tags or other raw regions) are
+PICTURE blocks, base64 pictures in VORBIS_COMMENT fields such as
+`METADATA_BLOCK_PICTURE=` or `COVERART=`, JPEG/PNG images inside ID3v2/APE
+tags or other raw regions) are
 written to separate files `out_prefix.1.jpg`, `out_prefix.2.png`, ... so they
 can be handled by format-specific tools; the `.meta` only keeps their position,
 size, type and a CRC. `d` rebuilds the identical file from all of them.
@@ -102,6 +104,12 @@ which additionally has no container overhead).
 * PICTURE blocks: the picture data becomes an external file (extension from
   its magic bytes: jpg, png, gif, bmp, webp, tif, otherwise bin); the block's
   other fields stay in the `.meta`.
+* VORBIS_COMMENT values that are base64 (standard alphabet, with or without
+  `=` padding, no line breaks; must re-encode to exactly the same text) and
+  decode to a FLAC PICTURE structure (`METADATA_BLOCK_PICTURE`) or directly to
+  an image (`COVERART` and similar) are decoded; the image becomes an external
+  file and the remaining fields are coded like a PICTURE block. Other base64
+  or malformed values stay text.
 * Metadata blocks are modelled: STREAMINFO fields are predicted from the
   restored audio (min/max block and frame sizes, total samples, MD5),
   SEEKTABLE points are coded as frame indices (usually predicted from the
