@@ -10,74 +10,74 @@ Debug 1
 Const 0
 
 Index a
- a_kd: kd, 1!001
+ a_kd: kd, 1!000
  a_pk: pk, 1!1
- a_dp: dp, 1!1010011
+ a_dp: dp, 1!1110011
 
 Index b
  b_kd: kd, 1!011
  b_pk: pk, 1!1
  b_pn: pn, 1!0101010
  b_dp: dp, 1!1110111
- b_pl: pl, 1!111100011111001
+ b_pl: pl, 1!101100011101111
 
 Index c
  c_kd: kd, 1!101
  c_pk: pk, 1!1
- c_ab: ab, 1!000001110001110101111101100
+ c_ab: ab, 1!000100100001101111111100100
 
 Index d
  d_kd: kd, 1!001
  d_pk: pk, 1!1
- d_lp: lp, 1!001101101
+ d_lp: lp, 1!110100010
 
 Index e
- e_kd: kd, 1!010
+ e_kd: kd, 1!001
  e_pk: pk, 1!1
  e_hm: hm, 1!11
 
 Index h
  h_kd: kd, 1!001
  h_pk: pk, 1!1
- h_pn: pn, 1!1101011
- h_ab: ab, 1!101101001010001101000000000
+ h_pn: pn, 1!1101111
+ h_ab: ab, 1!101101101010000001000000000
 
 Index i
  i_kd: kd, 1!011
  i_pk: pk, 1!1
  i_pm: pm, 1!1
- i_pn: pn, 1!0010011
+ i_pn: pn, 1!0011011
 
 Index j
  j_kd: kd, 1!110
  j_pk: pk, 1!1
- j_bd: bd, 1!0000000010000010100000100010111
+ j_bd: bd, 1!0000000010000010001000100010111
  j_cc: cc, 1!10
  j_nb: nb, 1!100011101
 
 Index k
- k_kd: kd, 1!010
+ k_kd: kd, 1!110
  k_pk: pk, 1!1
- k_lp: lp, 1!100111011
- k_pn: pn, 1!0011100
+ k_lp: lp, 1!101111011
+ k_pn: pn, 1!0010000
 
 Index l
  l_kd: kd, 1!101
  l_pk: pk, 1!1
- l_hm: hm, 1!11
- l_ab: ab, 1!011011010011010000011000000
+ l_hm: hm, 1!01
+ l_ab: ab, 1!011000111111100000010000000
 
 Index s
  s_kd: kd, 1!110
  s_pk: pk, 1!1
- s_pn: pn, 1!1000101
+ s_pn: pn, 1!1000111
  s_dp: dp, 1!1101001
  s_cc: cc, 1!11
 
 Index f
- f_kd: kd, 1!111
+ f_kd: kd, 1!101
  f_pk: pk, 1!1
- f_pl: pl, 1!111010001001001
+ f_pl: pl, 1!111110001001010
 
 Index m
  m_kd: kd, 1!010
@@ -85,11 +85,11 @@ Index m
  m_dp: dp, 1!0001110
 
 Index w
- w_pn: pn, 1!1100001
- w_pl: pl, 1!110000110000101
+ w_pn: pn, 1!0000000
+ w_pl: pl, 1!000100000000001
 
 Index t
- t_kd: kd, 1!011
+ t_kd: kd, 1!111
  t_pk: pk, 1!1
 
 Index n
@@ -101,40 +101,40 @@ Index g
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
 Number rA, 1, 0!00000000
-Number mwA, 1, 0!01111101
-Number rB, 1, 0!11111011
+Number mwA, 1, 0!01111111
+Number rB, 1, 0!11110001
 Number mwB, 1, 0!00001000
-Number rC, 1, 0!10100000
-Number mwC, 1, 0!01101000
-Number rD, 1, 0!00010111
-Number mwD, 1, 0!11111010
-Number rE, 1, 0!00111000
-Number mwE, 1, 0!11111000
-Number rH, 1, 0!11111111
+Number rC, 1, 0!11110010
+Number mwC, 1, 0!01100001
+Number rD, 1, 0!00000000
+Number mwD, 1, 0!11111001
+Number rE, 1, 0!00101000
+Number mwE, 1, 0!11111101
+Number rH, 1, 0!11110001
 Number mwH, 1, 0!00000011
 Number rI, 1, 0!01011001
 Number mwI, 1, 0!00000001
-Number rJ, 1, 0!11111111
+Number rJ, 1, 0!11111010
 Number mwJ, 1, 0!00000100
 Number rK, 1, 0!01101011
 Number mwK, 1, 0!11100010
-Number rL, 1, 0!10000111
-Number mwL, 1, 0!11111111
+Number rL, 1, 0!00000000
+Number mwL, 1, 0!01011000
 Number lr, 1, 0!01111
 Number mb, 1, 0!01111000
 Number rS1, 1, 0!10000
 Number rS2, 1, 0!01000
-Number qs, 1, 3!1011011
+Number qs, 1, 3!1001101
 Number qf, 1, 3!0010001
 Number bw, 1, 0!01000
-Number rT, 1, 0!00100000
-Number mwT, 1, 0!00100000
-Number mt, 1, 0!101
+Number rT, 1, 0!00000100
+Number mwT, 1, 0!00111011
+Number mt, 1, 0!110
 #  the mantissa mixer's rates: frozen (Index n)
 ! Number lrm, 1, 0!11111
 ! Number mbm, 1, 0!00011001
 Number rG, 1, 0!00100000
-Number mwG, 1, 0!00001000
+Number mwG, 1, 0!00001101
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
 #  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.
