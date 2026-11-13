@@ -1268,20 +1268,335 @@ static size_t png_len(const u8* p, size_t n) {
     return 0;
 }
 
+// ---- base64 (pictures/binary embedded as text: comments, APE/ID3 tags) ----
+static const char k_b64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static size_t b64_len(size_t n, int pad) { return pad ? (n + 2) / 3 * 4 : (n * 4 + 2) / 3; }
+static void b64_encode(const u8* s, size_t n, int pad, u8* o) {
+    size_t i = 0;
+    for (; i + 3 <= n; i += 3) {
+        u32 v = (s[i] << 16) | (s[i + 1] << 8) | s[i + 2];
+        *o++ = k_b64[v >> 18];
+        *o++ = k_b64[(v >> 12) & 63];
+        *o++ = k_b64[(v >> 6) & 63];
+        *o++ = k_b64[v & 63];
+    }
+    if (n - i == 1) {
+        u32 v = s[i] << 16;
+        *o++ = k_b64[v >> 18];
+        *o++ = k_b64[(v >> 12) & 63];
+        if (pad) {
+            *o++ = '=';
+            *o++ = '=';
+        }
+    } else if (n - i == 2) {
+        u32 v = (s[i] << 16) | (s[i + 1] << 8);
+        *o++ = k_b64[v >> 18];
+        *o++ = k_b64[(v >> 12) & 63];
+        *o++ = k_b64[(v >> 6) & 63];
+        if (pad) *o++ = '=';
+    }
+}
+// strict decode; true only if re-encoding gives back exactly the same text
+static bool b64_decode(const u8* s, size_t m, Buf& out, int& pad) {
+    static s8 rev[256];
+    if (!rev['B']) {
+        for (int i = 0; i < 256; i++) rev[i] = -1;
+        for (int i = 0; i < 64; i++) rev[(u8)k_b64[i]] = (s8)i;
+    }
+    size_t np = 0;
+    while (np < 2 && np < m && s[m - 1 - np] == '=') np++;
+    pad = np > 0 || (m % 4) == 0;
+    size_t q = m - np;
+    if (np && (m % 4)) return false;
+    if ((q % 4) == 1) return false;
+    out.n = 0;
+    out.reserve(q * 3 / 4 + 4);
+    u32 acc = 0;
+    int bits = 0;
+    for (size_t i = 0; i < q; i++) {
+        int v = rev[s[i]];
+        if (v < 0) return false;
+        acc = (acc << 6) | (u32)v;
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            out.p[out.n++] = (u8)(acc >> bits);
+        }
+    }
+    if (b64_len(out.n, pad) != m) return false;
+    Buf chk;
+    chk.reserve(m + 4);
+    b64_encode(out.p, out.n, pad, chk.p);
+    bool same = !memcmp(chk.p, s, m);
+    chk.release();
+    return same;
+}
+
+// base64 text layout: padding, optional line wrapping
+struct B64Fmt {
+    int pad;
+    u32 line;       // chars per line, 0 = single line
+    int crlf;       // line break is CR LF (else LF)
+    int final_eol;  // text ends with a line break
+};
+static size_t b64f_len(size_t n, const B64Fmt& f) {
+    size_t t = b64_len(n, f.pad);
+    if (!f.line || !t) return t;
+    size_t lines = (t + f.line - 1) / f.line;
+    return t + (lines - 1 + f.final_eol) * (f.crlf ? 2 : 1);
+}
+static void b64f_encode(const u8* d, size_t n, const B64Fmt& f, u8* o) {
+    if (!f.line) {
+        b64_encode(d, n, f.pad, o);
+        return;
+    }
+    size_t t = b64_len(n, f.pad);
+    Buf tmp;
+    tmp.reserve(t + 4);
+    b64_encode(d, n, f.pad, tmp.p);
+    for (size_t i = 0; i < t; i += f.line) {
+        size_t k = Min((size_t)f.line, t - i);
+        memcpy(o, tmp.p + i, k);
+        o += k;
+        if (i + k < t || f.final_eol) {
+            if (f.crlf) *o++ = '\r';
+            *o++ = '\n';
+        }
+    }
+    tmp.release();
+}
+// strict parse incl. line wrapping; true only if b64f_encode reproduces the text exactly
+static bool b64f_parse(const u8* s, size_t m, Buf& out, B64Fmt& f) {
+    f.line = 0;
+    f.crlf = 0;
+    f.final_eol = 0;
+    size_t e = 0;
+    while (e < m && s[e] != '\r' && s[e] != '\n') e++;
+    Buf flat;
+    const u8* src = s;
+    size_t sm = m;
+    if (e < m) {
+        if (e < 4) return false;
+        f.line = (u32)e;
+        f.crlf = s[e] == '\r';
+        flat.reserve(m);
+        flat.n = 0;
+        for (size_t i = 0; i < m; i++)
+            if (s[i] != '\r' && s[i] != '\n') flat.p[flat.n++] = s[i];
+        f.final_eol = s[m - 1] == '\n';
+        src = flat.p;
+        sm = flat.n;
+    }
+    bool ok = sm > 0 && b64_decode(src, sm, out, f.pad);
+    if (ok && f.line) {
+        ok = b64f_len(out.n, f) == m;
+        if (ok) {
+            Buf chk;
+            chk.reserve(m + 4);
+            b64f_encode(out.p, out.n, f, chk.p);
+            ok = !memcmp(chk.p, s, m);
+            chk.release();
+        }
+    }
+    flat.release();
+    return ok;
+}
+// estimated CM cost (bits) of a byte string with a fresh model
+static double cm_cost(const u8* d, size_t n) {
+    ByteCM t;
+    t.init();
+    double c = 0;
+    for (size_t i = 0; i < n; i++) t.byte(nullptr, d[i], &c);
+    t.release();
+    return c;
+}
+
 struct Cut {
     u64 off, len;
     int ext;
+    int b64;     // region bytes are base64 text of 'dec'
+    int kind;    // for b64: 1 PICTURE structure, 2 image, 3 other binary
+    B64Fmt fmt;
+    Buf dec;
 };
 enum { MAXCUTS = 64, MINCUT = 256 };
 
-// find embedded files: kind 1 = FLAC PICTURE block (exact), 2 = whole buffer, otherwise scan for JPEG/PNG
-static int find_cuts(const u8* d, size_t n, int kind, Cut* cuts) {
+static int find_cuts(const u8* d, size_t n, int kind, Cut* cuts, bool extract);
+
+// should decoded base64 data replace its text? (sets kind)
+static bool b64_worth(const Buf& dec, const B64Fmt& f, bool extract, int& kind) {
+    static Cut tmp[MAXCUTS];
+    if (find_cuts(dec.p, dec.n, 1, tmp, false))
+        kind = 1;
+    else if (ext_is_image(sniff_ext(dec.p, dec.n)) && dec.n >= MINCUT)
+        kind = 2;
+    else
+        kind = 3;
+    if (extract && dec.n >= MINCUT) return true;
+    // the base64 text itself costs ~6 bits per character
+    return cm_cost(dec.p, dec.n) + 24 < 6.0 * (double)b64_len(dec.n, f.pad);
+}
+
+static inline bool is_b64c(u8 c) {
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '+' || c == '/';
+}
+
+// try to take d[s..e) as base64 text; also without trailing NULs / line breaks and after "KEY="
+static bool b64_try(const u8* d, size_t s, size_t e, bool extract, Cut& c) {
+    c.b64 = 0;
+    while (e > s && d[e - 1] == 0) e--;
+    size_t st = s;
+    while (st < e && (d[st] == '\r' || d[st] == '\n')) st++;
+    for (int pass = 0; pass < 2; pass++) {
+        if (pass) {  // "KEY=base64": start after the last '=' followed by base64 characters
+            size_t k = e;
+            while (k > st && !(d[k - 1] == '=' && k < e && is_b64c(d[k]))) k--;
+            if (k <= st) break;
+            st = k;
+        }
+        if (e - st < 64) continue;
+        bool hex = true;
+        for (size_t k = st; k < e && hex; k++)
+            hex = (d[k] >= '0' && d[k] <= '9') || (d[k] >= 'a' && d[k] <= 'f') || (d[k] >= 'A' && d[k] <= 'F') ||
+                  d[k] == '\r' || d[k] == '\n';
+        if (hex) continue;
+        for (int t = 0; t < 3; t++) {
+            size_t en = e;
+            for (int u = 0; u < t && en > st && (d[en - 1] == '\r' || d[en - 1] == '\n'); u++) en--;
+            if (t && en == e) break;
+            if (!b64f_parse(d + st, en - st, c.dec, c.fmt)) continue;
+            if (!b64_worth(c.dec, c.fmt, extract, c.kind)) continue;
+            c.b64 = 1;
+            c.off = st;
+            c.len = en - st;
+            c.ext = 0;
+            return true;
+        }
+    }
+    return false;
+}
+
+// base64 text run in an unparsed raw region starting at d[i]; returns run length to skip
+static size_t find_b64_run(const u8* d, size_t n, size_t i, bool extract, Cut& c) {
+    size_t j = i;
+    while (j < n && (is_b64c(d[j]) || d[j] == '=' || d[j] == '\r' || d[j] == '\n')) j++;
+    size_t run = j - i;
+    c.b64 = 0;
+    if (run < 64) return run ? run : 1;
+    for (size_t s0 = i; s0 < i + 4 && s0 + 64 <= j; s0++)
+        if (is_b64c(d[s0]) && b64_try(d, s0, j, extract, c)) break;
+    return run;
+}
+
+// ---- tag structures: exact spans of text values (ID3v2 text/comment frames, APEv2 text items) ----
+struct Span {
+    size_t off, len;
+};
+struct SpanList {
+    Span s[512];
+    int n;
+    Span tag[16];  // parsed tag structures (no raw base64 scanning inside)
+    int nt;
+};
+static void add_span(SpanList& L, size_t off, size_t len) {
+    if (L.n < 512 && len >= 64) L.s[L.n++] = {off, len};
+}
+static inline u32 syncsafe32(const u8* p) { return ((p[0] & 0x7F) << 21) | ((p[1] & 0x7F) << 14) | ((p[2] & 0x7F) << 7) | (p[3] & 0x7F); }
+
+// ID3v2 tag at d[p]: collects ISO-8859-1 / UTF-8 text values; returns tag size (0 if not a tag)
+static size_t id3_spans(const u8* d, size_t n, size_t p, SpanList& L) {
+    if (p + 10 > n || memcmp(d + p, "ID3", 3)) return 0;
+    int ver = d[p + 3], fl = d[p + 5];
+    if (ver < 2 || ver > 4 || d[p + 4] == 0xFF || (d[p + 6] | d[p + 7] | d[p + 8] | d[p + 9]) & 0x80) return 0;
+    size_t size = 10 + syncsafe32(d + p + 6) + ((ver == 4 && (fl & 0x10)) ? 10 : 0);
+    if (p + size > n) return 0;
+    if (fl & 0x80) return size;  // unsynchronised: values are not plain text
+    size_t q = p + 10, end = p + 10 + syncsafe32(d + p + 6);
+    if (fl & 0x40) {  // extended header
+        if (q + 4 > end) return size;
+        q += ver == 4 ? syncsafe32(d + q) : rd_be32(d + q) + 4;
+    }
+    while (q + (ver == 2 ? 6 : 10) <= end) {
+        const u8* h = d + q;
+        if (!h[0]) break;  // padding
+        size_t fs, hl;
+        int fflags = 0;
+        bool txxx, text, comm;
+        if (ver == 2) {
+            fs = rd_be24(h + 3);
+            hl = 6;
+            txxx = !memcmp(h, "TXX", 3);
+            comm = !memcmp(h, "COM", 3);
+        } else {
+            fs = ver == 4 ? syncsafe32(h + 4) : rd_be32(h + 4);
+            fflags = (h[8] << 8) | h[9];
+            hl = 10;
+            txxx = !memcmp(h, "TXXX", 4);
+            comm = !memcmp(h, "COMM", 4);
+        }
+        text = h[0] == 'T';
+        if (q + hl + fs > end) break;
+        size_t v = q + hl, ve = q + hl + fs;
+        bool plain = ver == 2 || !(ver == 3 ? (fflags & 0xC0) : (fflags & 0x0F));
+        if (plain && fs > 1 && (text || comm) && (d[v] == 0 || d[v] == 3)) {
+            v++;
+            if (comm) v += 3;
+            if (txxx || comm) {  // skip description
+                while (v < ve && d[v]) v++;
+                v++;
+            }
+            if (v < ve) add_span(L, v, ve - v);
+        }
+        q = ve;
+    }
+    if (L.nt < 16) L.tag[L.nt++] = {p, size};
+    return size;
+}
+
+// APEv2 tag whose header or footer starts at d[p] ("APETAGEX"); returns 1 if parsed
+static bool ape_spans(const u8* d, size_t n, size_t p, SpanList& L) {
+    if (p + 32 > n || memcmp(d + p, "APETAGEX", 8)) return false;
+    u32 size = rd_le32(d + p + 12), cnt = rd_le32(d + p + 16), fl = rd_le32(d + p + 20);
+    size_t items, end;
+    if (fl & (1u << 29)) {  // header: items follow
+        items = p + 32;
+        end = items + size - 32;
+    } else {  // footer: items precede
+        if (size < 32 || size > p + 32) return false;
+        items = p + 32 - size;
+        end = p;
+    }
+    if (end > n || items > end) return false;
+    size_t q = items;
+    for (u32 i = 0; i < cnt && q + 9 <= end; i++) {
+        u32 vl = rd_le32(d + q), ifl = rd_le32(d + q + 4);
+        size_t k = q + 8;
+        while (k < end && d[k]) k++;
+        size_t v = k + 1;
+        if (v + vl > end) break;
+        if (((ifl >> 1) & 3) == 0) add_span(L, v, vl);  // UTF-8 text item
+        q = v + vl;
+    }
+    if (L.nt < 16) L.tag[L.nt++] = {items, end - items};
+    return true;
+}
+
+static bool in_tag(const SpanList& L, size_t i) {
+    for (int k = 0; k < L.nt; k++)
+        if (i >= L.tag[k].off && i < L.tag[k].off + L.tag[k].len) return true;
+    return false;
+}
+
+// find embedded files: kind 1 = FLAC PICTURE block (exact), 2 = whole buffer, otherwise scan for
+// JPEG/PNG (if extracting) and base64 text
+static int find_cuts(const u8* d, size_t n, int kind, Cut* cuts, bool extract) {
     int nc = 0;
     if (kind == 2) {  // the whole buffer is one file (e.g. base64-decoded cover art)
         if (n < MINCUT) return 0;
         cuts[0].off = 0;
         cuts[0].len = n;
         cuts[0].ext = sniff_ext(d, n);
+        cuts[0].b64 = 0;
         return 1;
     }
     if (kind == 1) {
@@ -1301,20 +1616,55 @@ static int find_cuts(const u8* d, size_t n, int kind, Cut* cuts) {
         cuts[0].off = p;
         cuts[0].len = dl;
         cuts[0].ext = sniff_ext(d + p, dl);
+        cuts[0].b64 = 0;
         return 1;
     }
+    // text values of ID3v2 / APEv2 tags found in the region
+    static SpanList L;
+    L.n = L.nt = 0;
+    for (size_t i = 0; i + 10 <= n; i++) {
+        if (d[i] == 'I' && d[i + 1] == 'D' && d[i + 2] == '3') {
+            size_t t = id3_spans(d, n, i, L);
+            if (t) i += t - 1;
+        } else if (d[i] == 'A' && d[i + 1] == 'P' && !memcmp(d + i, "APETAGEX", 8))
+            ape_spans(d, n, i, L);
+    }
+    for (int k = 0; k < L.n; k++)  // spans are sorted unless an APE footer preceded its items
+        for (int m = k; m > 0 && L.s[m - 1].off > L.s[m].off; m--) {
+            Span t = L.s[m];
+            L.s[m] = L.s[m - 1];
+            L.s[m - 1] = t;
+        }
+    int si = 0;
     for (size_t i = 0; i + 8 <= n && nc < MAXCUTS;) {
+        while (si < L.n && L.s[si].off < i) si++;
+        if (si < L.n && L.s[si].off == i) {  // a tag text value
+            Span sp = L.s[si++];
+            if (b64_try(d, sp.off, sp.off + sp.len, extract, cuts[nc])) {
+                i = cuts[nc].off + cuts[nc].len;
+                nc++;
+                continue;
+            }
+        }
         size_t l = 0;
-        if (d[i] == 0xFF && d[i + 1] == 0xD8 && d[i + 2] == 0xFF)
+        if (extract && d[i] == 0xFF && d[i + 1] == 0xD8 && d[i + 2] == 0xFF)
             l = jpeg_len(d + i, n - i);
-        else if (d[i] == 0x89 && d[i + 1] == 'P')
+        else if (extract && d[i] == 0x89 && d[i + 1] == 'P')
             l = png_len(d + i, n - i);
         if (l >= MINCUT) {
             cuts[nc].off = i;
             cuts[nc].len = l;
             cuts[nc].ext = sniff_ext(d + i, l);
+            cuts[nc].b64 = 0;
             nc++;
             i += l;
+        } else if (is_b64c(d[i]) && !in_tag(L, i)) {
+            size_t r = find_b64_run(d, n, i, extract, cuts[nc]);
+            if (cuts[nc].b64) {
+                i = cuts[nc].off + cuts[nc].len;
+                nc++;
+            } else
+                i += r;
         } else
             i++;
     }
@@ -1326,52 +1676,91 @@ static void ext_name(char* buf, size_t bn, int num, int ext) {
 }
 
 struct ExtModels {
-    UModel n, off, len;
+    UModel n, off, len, line, dlen;
     BM ext[16];
+    BM isb64, pad, crlf, fin;
+    BM kind[4];
 };
 static ExtModels g_extm;
 
-// Code a byte region whose length is known on both sides, extracting embedded files.
+static bool code_region(AC& ac, u8* data, size_t len, int kind, bool prime);
+
+// one cut: an external file, or base64 text replaced by its decoded data (coded recursively)
+static bool code_cut(AC& ac, u8* data, Cut& c) {
+    c.b64 = ac.bit(g_extm.isb64, c.b64);
+    if (c.b64) {
+        c.fmt.pad = ac.bit(g_extm.pad, c.fmt.pad);
+        c.fmt.line = (u32)code_uint(ac, g_extm.line, c.fmt.line);
+        if (c.fmt.line) {
+            c.fmt.crlf = ac.bit(g_extm.crlf, c.fmt.crlf);
+            c.fmt.final_eol = ac.bit(g_extm.fin, c.fmt.final_eol);
+        } else
+            c.fmt.crlf = c.fmt.final_eol = 0;
+        c.kind = (int)ac.tree(g_extm.kind, 2, (u32)c.kind);
+        u64 dn = code_uint(ac, g_extm.dlen, c.dec.n);
+        if (c.kind == 0 || b64f_len((size_t)dn, c.fmt) != c.len) return false;
+        if (ac.dec) {
+            c.dec.reserve((size_t)dn + 1);
+            c.dec.n = (size_t)dn;
+        }
+        if (!code_region(ac, c.dec.p, (size_t)dn, c.kind == 1 ? 1 : 2, false)) return false;
+        if (ac.dec) b64f_encode(c.dec.p, c.dec.n, c.fmt, data + c.off);
+        return true;
+    }
+    c.ext = (int)ac.tree(g_extm.ext, 4, (u32)c.ext);
+    u16 crc = ac.dec ? 0 : crc16(data + c.off, (size_t)c.len);
+    u16 want = (u16)ac.raw(crc, 16);
+    char name[4200];
+    ext_name(name, sizeof(name), ++g_ext.count, c.ext);
+    if (!ac.dec) {
+        FILE* f = fopen(name, "wb");
+        if (!f || fwrite(data + c.off, 1, (size_t)c.len, f) != c.len || fclose(f)) die("cannot write embedded file");
+        g_ext.bytes += c.len;
+        return true;
+    }
+    FILE* f = fopen(name, "rb");
+    if (!f) {
+        fprintf(stderr, "flacdump: cannot open embedded file %s\n", name);
+        return false;
+    }
+    size_t got = fread(data + c.off, 1, (size_t)c.len, f);
+    int extra = fgetc(f);
+    fclose(f);
+    if (got != c.len || extra != EOF || crc16(data + c.off, (size_t)c.len) != want) {
+        fprintf(stderr, "flacdump: embedded file %s does not match the .meta\n", name);
+        return false;
+    }
+    return true;
+}
+
+// Code a byte region whose length is known on both sides, extracting embedded files
+// and decoding base64 text.
 static bool code_region(AC& ac, u8* data, size_t len, int kind, bool prime) {
-    Cut cuts[MAXCUTS];
+    Cut* cuts = (Cut*)xcalloc(sizeof(Cut) * MAXCUTS);  // zeroed: empty Bufs
     int nc = 0;
-    if (!ac.dec && !g_ext.keep_inline && g_ext.prefix) nc = find_cuts(data, len, kind, cuts);
+    bool extract = !g_ext.keep_inline && g_ext.prefix;
+    if (!ac.dec && (extract || kind == 0)) nc = find_cuts(data, len, kind, cuts, extract);
     int savecat = ac.cat;
     ac.cat = C_META;
     nc = (int)code_uint(ac, g_extm.n, (u64)nc);
-    if (nc > MAXCUTS) return false;
+    bool ok = nc <= MAXCUTS;
     u64 pos = 0, total = 0;
-    for (int i = 0; i < nc; i++) {
+    for (int i = 0; i < nc && ok; i++) {
         Cut& c = cuts[i];
         u64 gap = code_uint(ac, g_extm.off, ac.dec ? 0 : c.off - pos);
         c.off = pos + gap;
         c.len = code_uint(ac, g_extm.len, c.len);
-        c.ext = (int)ac.tree(g_extm.ext, 4, (u32)c.ext);
-        if (c.off + c.len > len) return false;
-        u16 crc = ac.dec ? 0 : crc16(data + c.off, (size_t)c.len);
-        u16 want = (u16)ac.raw(crc, 16);
-        char name[4200];
-        ext_name(name, sizeof(name), ++g_ext.count, c.ext);
-        if (!ac.dec) {
-            FILE* f = fopen(name, "wb");
-            if (!f || fwrite(data + c.off, 1, (size_t)c.len, f) != c.len || fclose(f)) die("cannot write embedded file");
-            g_ext.bytes += c.len;
-        } else {
-            FILE* f = fopen(name, "rb");
-            if (!f) {
-                fprintf(stderr, "flacdump: cannot open embedded file %s\n", name);
-                return false;
-            }
-            size_t got = fread(data + c.off, 1, (size_t)c.len, f);
-            int extra = fgetc(f);
-            fclose(f);
-            if (got != c.len || extra != EOF || crc16(data + c.off, (size_t)c.len) != want) {
-                fprintf(stderr, "flacdump: embedded file %s does not match the .meta\n", name);
-                return false;
-            }
+        if (c.off + c.len > len || !code_cut(ac, data, c)) {
+            ok = false;
+            break;
         }
         total += c.len;
         pos = c.off + c.len;
+    }
+    for (int i = 0; i < MAXCUTS; i++) cuts[i].dec.release();
+    if (!ok) {
+        free(cuts);
+        return false;
     }
     ac.cat = savecat;
     // the remaining bytes, concatenated
@@ -1401,6 +1790,7 @@ static bool code_region(AC& ac, u8* data, size_t len, int kind, bool prime) {
         memcpy(data + p0, rest.p + q, (size_t)(len - p0));
     }
     rest.release();
+    free(cuts);
     return true;
 }
 
@@ -3745,149 +4135,6 @@ enum { NVENDORS = sizeof(k_vendors) / sizeof(k_vendors[0]) };
 
 static bool vorbis_ok(const u8* d, u32 len);
 
-// ---- base64 (pictures embedded in comments: METADATA_BLOCK_PICTURE=, COVERART=, ...) ----
-static const char k_b64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-static size_t b64_len(size_t n, int pad) { return pad ? (n + 2) / 3 * 4 : (n * 4 + 2) / 3; }
-static void b64_encode(const u8* s, size_t n, int pad, u8* o) {
-    size_t i = 0;
-    for (; i + 3 <= n; i += 3) {
-        u32 v = (s[i] << 16) | (s[i + 1] << 8) | s[i + 2];
-        *o++ = k_b64[v >> 18];
-        *o++ = k_b64[(v >> 12) & 63];
-        *o++ = k_b64[(v >> 6) & 63];
-        *o++ = k_b64[v & 63];
-    }
-    if (n - i == 1) {
-        u32 v = s[i] << 16;
-        *o++ = k_b64[v >> 18];
-        *o++ = k_b64[(v >> 12) & 63];
-        if (pad) {
-            *o++ = '=';
-            *o++ = '=';
-        }
-    } else if (n - i == 2) {
-        u32 v = (s[i] << 16) | (s[i + 1] << 8);
-        *o++ = k_b64[v >> 18];
-        *o++ = k_b64[(v >> 12) & 63];
-        *o++ = k_b64[(v >> 6) & 63];
-        if (pad) *o++ = '=';
-    }
-}
-// strict decode; true only if re-encoding gives back exactly the same text
-static bool b64_decode(const u8* s, size_t m, Buf& out, int& pad) {
-    static s8 rev[256];
-    if (!rev['B']) {
-        for (int i = 0; i < 256; i++) rev[i] = -1;
-        for (int i = 0; i < 64; i++) rev[(u8)k_b64[i]] = (s8)i;
-    }
-    size_t np = 0;
-    while (np < 2 && np < m && s[m - 1 - np] == '=') np++;
-    pad = np > 0 || (m % 4) == 0;
-    size_t q = m - np;
-    if (np && (m % 4)) return false;
-    if ((q % 4) == 1) return false;
-    out.n = 0;
-    out.reserve(q * 3 / 4 + 4);
-    u32 acc = 0;
-    int bits = 0;
-    for (size_t i = 0; i < q; i++) {
-        int v = rev[s[i]];
-        if (v < 0) return false;
-        acc = (acc << 6) | (u32)v;
-        bits += 6;
-        if (bits >= 8) {
-            bits -= 8;
-            out.p[out.n++] = (u8)(acc >> bits);
-        }
-    }
-    if (b64_len(out.n, pad) != m) return false;
-    Buf chk;
-    chk.reserve(m + 4);
-    b64_encode(out.p, out.n, pad, chk.p);
-    bool same = !memcmp(chk.p, s, m);
-    chk.release();
-    return same;
-}
-
-// base64 text layout: padding, optional line wrapping
-struct B64Fmt {
-    int pad;
-    u32 line;       // chars per line, 0 = single line
-    int crlf;       // line break is CR LF (else LF)
-    int final_eol;  // text ends with a line break
-};
-static size_t b64f_len(size_t n, const B64Fmt& f) {
-    size_t t = b64_len(n, f.pad);
-    if (!f.line || !t) return t;
-    size_t lines = (t + f.line - 1) / f.line;
-    return t + (lines - 1 + f.final_eol) * (f.crlf ? 2 : 1);
-}
-static void b64f_encode(const u8* d, size_t n, const B64Fmt& f, u8* o) {
-    if (!f.line) {
-        b64_encode(d, n, f.pad, o);
-        return;
-    }
-    size_t t = b64_len(n, f.pad);
-    Buf tmp;
-    tmp.reserve(t + 4);
-    b64_encode(d, n, f.pad, tmp.p);
-    for (size_t i = 0; i < t; i += f.line) {
-        size_t k = Min((size_t)f.line, t - i);
-        memcpy(o, tmp.p + i, k);
-        o += k;
-        if (i + k < t || f.final_eol) {
-            if (f.crlf) *o++ = '\r';
-            *o++ = '\n';
-        }
-    }
-    tmp.release();
-}
-// strict parse incl. line wrapping; true only if b64f_encode reproduces the text exactly
-static bool b64f_parse(const u8* s, size_t m, Buf& out, B64Fmt& f) {
-    f.line = 0;
-    f.crlf = 0;
-    f.final_eol = 0;
-    size_t e = 0;
-    while (e < m && s[e] != '\r' && s[e] != '\n') e++;
-    Buf flat;
-    const u8* src = s;
-    size_t sm = m;
-    if (e < m) {
-        if (e < 4) return false;
-        f.line = (u32)e;
-        f.crlf = s[e] == '\r';
-        flat.reserve(m);
-        flat.n = 0;
-        for (size_t i = 0; i < m; i++)
-            if (s[i] != '\r' && s[i] != '\n') flat.p[flat.n++] = s[i];
-        f.final_eol = s[m - 1] == '\n';
-        src = flat.p;
-        sm = flat.n;
-    }
-    bool ok = sm > 0 && b64_decode(src, sm, out, f.pad);
-    if (ok && f.line) {
-        ok = b64f_len(out.n, f) == m;
-        if (ok) {
-            Buf chk;
-            chk.reserve(m + 4);
-            b64f_encode(out.p, out.n, f, chk.p);
-            ok = !memcmp(chk.p, s, m);
-            chk.release();
-        }
-    }
-    flat.release();
-    return ok;
-}
-// estimated CM cost (bits) of a byte string with a fresh model
-static double cm_cost(const u8* d, size_t n) {
-    ByteCM t;
-    t.init();
-    double c = 0;
-    for (size_t i = 0; i < n; i++) t.byte(nullptr, d[i], &c);
-    t.release();
-    return c;
-}
-
 // structured VORBIS_COMMENT coding: vendor from a dictionary, lengths as numbers, text with a shared CM
 static bool code_vorbis(AC& ac, Models& M, MBlock& b) {
     int ok = ac.dec ? 0 : vorbis_ok(b.data, b.len);
@@ -3965,24 +4212,8 @@ static bool code_vorbis(AC& ac, Models& M, MBlock& b) {
                 for (u32 j = 0; j < vn && hex; j++)
                     hex = (v[j] >= '0' && v[j] <= '9') || (v[j] >= 'a' && v[j] <= 'f') || (v[j] >= 'A' && v[j] <= 'F') ||
                           v[j] == '\r' || v[j] == '\n';
-                if (!hex && b64f_parse(v, vn, dec, fmt)) {
-                    bool extract = g_ext.prefix && !g_ext.keep_inline;
-                    Cut tmpc[MAXCUTS];
-                    if (find_cuts(dec.p, dec.n, 1, tmpc))
-                        kind = 1;
-                    else if (ext_is_image(sniff_ext(dec.p, dec.n)) && dec.n >= MINCUT)
-                        kind = 2;
-                    else
-                        kind = 3;
-                    bool ext_file = extract && dec.n >= MINCUT;
-                    // text costs ~6 bits per base64 character
-                    double cc = ext_file ? 0 : cm_cost(dec.p, dec.n);
-                    b64 = ext_file || cc + 24 < 6.0 * (double)(b64_len(dec.n, fmt.pad));
-                    if (g_verbose >= 3)
-                        fprintf(stderr, "base64 field %.*s: %zu bytes, kind %d, bin cost %.0f vs text %.0f bits -> %s\n",
-                                (int)klen - 1, c, dec.n, kind, cc, 6.0 * b64_len(dec.n, fmt.pad),
-                                b64 ? (ext_file ? "file" : "binary") : "text");
-                }
+                if (!hex && b64f_parse(v, vn, dec, fmt))
+                    b64 = b64_worth(dec, fmt, g_ext.prefix && !g_ext.keep_inline, kind);
             }
         }
         b64 = ac.bit(M.mflag[3], b64);

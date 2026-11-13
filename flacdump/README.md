@@ -14,7 +14,7 @@ flacdump d [options] inp_prefix restored.flac  <- inp_prefix.wav + inp_prefix.me
 coefficients, rice partitions/parameters, ...). Embedded files (cover art in
 PICTURE blocks, base64 data in VORBIS_COMMENT fields such as
 `METADATA_BLOCK_PICTURE=`, `COVERART=` or other binary tags, JPEG/PNG images
-inside ID3v2/APE tags or other raw regions) are
+inside ID3v2/APE tags (including base64 text in ID3v2/APE tag values) or other raw regions) are
 written to separate files `out_prefix.1.jpg`, `out_prefix.2.png`,
 `out_prefix.3.bin`, ... so they
 can be handled by format-specific tools; the `.meta` only keeps their position,
@@ -102,6 +102,12 @@ which additionally has no container overhead).
   junk) are kept; JPEG/PNG images found inside them (validated by parsing the
   JPEG marker / PNG chunk structure, >= 256 bytes) become external files, the
   rest is coded with the CM byte model.
+* ID3v2 (2.2/2.3/2.4) and APEv2 tags in those regions are parsed to find the
+  exact text values (ID3 `T***`/`TXXX`/`COMM` frames in ISO-8859-1 or UTF-8,
+  APE text items). Values that are base64 - also line broken - are decoded
+  exactly as described for VORBIS_COMMENT below (pictures/blobs become files,
+  small blobs are coded as binary when cheaper). Outside parsed tags, runs of
+  base64 text are detected heuristically.
 * PICTURE blocks: the picture data becomes an external file (extension from
   its magic bytes: jpg, png, gif, bmp, webp, tif, otherwise bin); the block's
   other fields stay in the `.meta`.
