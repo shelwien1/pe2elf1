@@ -411,7 +411,19 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // both, at 64, those two 0.08% and 0.11% smaller still; at 16, with HIT_PRIOR 1 rather than 2,
   // FATE's samples 1.0-1.6% smaller, the 7-frame xll ones 0.3-0.7%, `s.2.dts`'s core 0.04%)
   static constexpr U32 HIT_ONE = 256, HIT_PRIOR = 1, HIT_LIMIT = 1u << 4, HIT_SLIMIT = 1u << 18, HIT_RLIMIT = 1u << 12;
-  U32 hit_c[2][4][8][QB_N][QB_N][4], hit_r[2][4][8][QB_N][2];
+  U32 hit_c[2][4][16][QB_N][QB_N][4], hit_r[2][4][16][QB_N][2];
+  // (format 80) An index's miss in the channels coded before, at the same subband's same sample:
+  // where the WAV isn't what the encoder had, or a decoder's values aren't the core's, the channels
+  // miss together (in 3 MB from `s.2.dts`'s middle, cut from it, a sample missed 0.11% of the time
+  // where none had, 20% where one had, 85% where two; in a lossless WAV as it goes, the channels'
+  // near ties, which the nearness has, 0.09% and 0.5%). So such a sample's hit flag has cells of its
+  // own (the class cb + 8), counted always, and taken while they have coded those flags in fewer
+  // bits than the others, by 4 bits and a 32nd (xm_loss); while they are, the others don't count
+  // those flags: the short streams 0.2% smaller, `master_audio_7.1_24bit.dts`'s core 1.8%, the
+  // 7-frame XLL samples with XCH and X96 2-3%, `s.2.dts`'s the same
+  S64 xm_id[NSUB][NSMP];  // (the subframe each count is of)
+  U8 xm_cnt[NSUB][NSMP];  // how many channels' indexes missed at subband b's sample j of the subframe so far
+  S64 xm_loss[2];         // (those flags' costs, 2^-16 bits: by the others' cells, by their own; halved as they grow)
   // The encoder's arithmetic errs more in some subbands than in others, the same ones through a
   // stream (`s.2.dts`'s encoder's: those next to the multiples of 3 kHz, 15 and 16 most, then 23,
   // 24, 7 and 8, an index this near the boundary missing there 3 to 15 times as often as in
@@ -2971,6 +2983,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // where not, and then that one 99.5% of the time; its core 1.1% smaller)
     int jd = 0;
     S64 qe = 0;
+    const S64 xid = tframe * 8 + (&s - r.sub);
+    const int xm = bnd && xm_id[b][j] == xid ? xm_cnt[b][j] : 0;
     const bool je = bnd && x96a && ss_rule() && jx_low(b) && je_on(ch, b);
     if (je) {
       S128 d1;
@@ -2980,7 +2994,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     v = code_index(D, v, bnd, qp, alt, lo, hi, &how, &hcal[b], dist, !ss_rule() ? (S128)tlev[ch][j] << 22 : lvu,
                    (pc >= 8 ? 3 : pc >= 3 ? 2 : pc >= 1 ? 1 : 0) + 4 * jd, bnd ? (S128)ss << AQ_F : 0,
-                   __builtin_popcount(miss[ch][b]));
+                   __builtin_popcount(miss[ch][b]), xm > 0);
+    if (bnd && how != 0) {
+      if (xm_id[b][j] != xid) xm_id[b][j] = xid, xm_cnt[b][j] = 0;
+      xm_cnt[b][j] += xm_cnt[b][j] < 255;
+    }
     if (je) {
       je_qn[b][0]++, je_qn[b][1] += qe == v;
       if (je_qn[b][0] >= 1u << 16) je_qn[b][0] >>= 1, je_qn[b][1] >>= 1;
@@ -3019,7 +3037,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // the lesser guess; -1 none: against that, D.nl; su, the unit of D.nr's nearness against the
   // step, 0 none)
   S64 code_index(const M_smp_v& D, S64 v, int pk, S64 qp, S64 alt, S64 lo, S64 hi, int* how, HitCal* hc = nullptr,
-                 S128 dist = 0, S128 unit = 0, int cb = 0, S128 su = 0, int hn = -1) {
+                 S128 dist = 0, S128 unit = 0, int cb = 0, S128 su = 0, int hn = -1, bool xm = false) {
     *how = 2;
     if (pk) {
       const int kd = D.ab == 27 ? 2 : D.pm;
@@ -3055,34 +3073,55 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         // missed; D.hm's 0, 1, 2, more where not, X96's: the core's 0.04-0.2% smaller, FATE's
         // samples 0.4-1.6%)
         const int hq = hn < 0 ? D.hm : hn >= 7 ? 3 : hn >= 4 ? 2 : hn >= 1 ? 1 : 0;
-        U32* const ce[4] = {hit_c[kd][hq][cb][j0][i0], hit_c[kd][hq][cb][j0][i1], hit_c[kd][hq][cb][j1][i0],
-                            hit_c[kd][hq][cb][j1][i1]};
-        U32* const ro[2] = {hit_r[kd][hq][cb][i0], hit_r[kd][hq][cb][i1]};
         const U32 cw[4] = {(U32)(v0 * w0), (U32)(v0 * w1), (U32)(v1 * w0), (U32)(v1 * w1)}, rw[2] = {16u * w0, 16u * w1};
-        const U64 rd[2] = {2 * (U64)ro[0][1] + 2 * HIT_ONE, 2 * (U64)ro[1][1] + 2 * HIT_ONE},
-                  rn[2] = {HIT_PRIOR * HIT_ONE * (2 * (U64)ro[0][0] + HIT_ONE), HIT_PRIOR * HIT_ONE * (2 * (U64)ro[1][0] + HIT_ONE)};
-        S64 lp = 0;  // (the weights' sum of the rates' log2, 2^-16 units: each cell's two)
-        for (int k = 0; k < 4; k++) {
-          if (!cw[k]) continue;
-          const U32* ck = ce[k];
-          const U64 r = rd[k & 1];
-          lp += (S64)cw[k] * (lg2tab.log2x((U64)ck[0] * r + rn[k & 1]) - lg2tab.log2x(((U64)ck[1] + HIT_PRIOR * HIT_ONE) * r));
-          lp += (S64)cw[k] * (lg2tab.log2x((U64)ck[2] * r + rn[k & 1]) - lg2tab.log2x(((U64)ck[3] + HIT_PRIOR * HIT_ONE) * r));
-        }
-        const U32 pq = lg2tab.prob(lp >> 9);
+        // (a class's cells' probability of a miss, and their counts after the flag)
+        auto cprob = [&](int cl) {
+          U32* const ce[4] = {hit_c[kd][hq][cl][j0][i0], hit_c[kd][hq][cl][j0][i1], hit_c[kd][hq][cl][j1][i0],
+                              hit_c[kd][hq][cl][j1][i1]};
+          U32* const ro[2] = {hit_r[kd][hq][cl][i0], hit_r[kd][hq][cl][i1]};
+          const U64 rd[2] = {2 * (U64)ro[0][1] + 2 * HIT_ONE, 2 * (U64)ro[1][1] + 2 * HIT_ONE},
+                    rn[2] = {HIT_PRIOR * HIT_ONE * (2 * (U64)ro[0][0] + HIT_ONE), HIT_PRIOR * HIT_ONE * (2 * (U64)ro[1][0] + HIT_ONE)};
+          S64 lp = 0;  // (the weights' sum of the rates' log2, 2^-16 units: each cell's two)
+          for (int k = 0; k < 4; k++) {
+            if (!cw[k]) continue;
+            const U32* ck = ce[k];
+            const U64 r = rd[k & 1];
+            lp += (S64)cw[k] * (lg2tab.log2x((U64)ck[0] * r + rn[k & 1]) - lg2tab.log2x(((U64)ck[1] + HIT_PRIOR * HIT_ONE) * r));
+            lp += (S64)cw[k] * (lg2tab.log2x((U64)ck[2] * r + rn[k & 1]) - lg2tab.log2x(((U64)ck[3] + HIT_PRIOR * HIT_ONE) * r));
+          }
+          return lg2tab.prob(lp >> 9);
+        };
+        auto cupd = [&](int cl, int ht) {
+          U32* const ce[4] = {hit_c[kd][hq][cl][j0][i0], hit_c[kd][hq][cl][j0][i1], hit_c[kd][hq][cl][j1][i0],
+                              hit_c[kd][hq][cl][j1][i1]};
+          U32* const ro[2] = {hit_r[kd][hq][cl][i0], hit_r[kd][hq][cl][i1]};
+          for (int k = 0; k < 4; k++)
+            if (cw[k]) {
+              ce[k][0] += ht ? 0 : cw[k], ce[k][2] += ht ? 0 : cw[k];
+              if ((ce[k][1] += cw[k]) >= HIT_ONE * HIT_LIMIT) ce[k][0] >>= 1, ce[k][1] >>= 1;
+              if ((ce[k][3] += cw[k]) >= HIT_ONE * HIT_SLIMIT) ce[k][2] >>= 1, ce[k][3] >>= 1;
+            }
+          for (int k = 0; k < 2; k++)
+            if (rw[k]) {
+              ro[k][0] += ht ? 0 : rw[k];
+              if ((ro[k][1] += rw[k]) >= HIT_ONE * HIT_RLIMIT) ro[k][0] >>= 1, ro[k][1] >>= 1;
+            }
+        };
+        // (where a channel coded before missed at this sample, the cells of their own, cb + 8, while
+        // they have cost less: xm_loss)
+        const U32 p0 = cprob(cb), p1 = xm ? cprob(cb + 8) : 0;
+        const bool ux = xm && xm_loss[1] + ((S64)4 << 16) + xm_loss[0] / 32 < xm_loss[0];
+        const U32 pq = ux ? p1 : p0;
         hit = c->code_bit(pq, ENC && v == qp);
         if (hk) hc_learn(*hc, hit, pq);
-        for (int k = 0; k < 4; k++)
-          if (cw[k]) {
-            ce[k][0] += hit ? 0 : cw[k], ce[k][2] += hit ? 0 : cw[k];
-            if ((ce[k][1] += cw[k]) >= HIT_ONE * HIT_LIMIT) ce[k][0] >>= 1, ce[k][1] >>= 1;
-            if ((ce[k][3] += cw[k]) >= HIT_ONE * HIT_SLIMIT) ce[k][2] >>= 1, ce[k][3] >>= 1;
-          }
-        for (int k = 0; k < 2; k++)
-          if (rw[k]) {
-            ro[k][0] += hit ? 0 : rw[k];
-            if ((ro[k][1] += rw[k]) >= HIT_ONE * HIT_RLIMIT) ro[k][0] >>= 1, ro[k][1] >>= 1;
-          }
+        if (!ux) cupd(cb, hit);
+        if (xm) {
+          cupd(cb + 8, hit);
+          const S64 one = lg2tab.log2x(CO_ONE);
+          xm_loss[0] += one - lg2tab.log2x(hit ? CO_ONE - p0 : p0);
+          xm_loss[1] += one - lg2tab.log2x(hit ? CO_ONE - p1 : p1);
+          if (xm_loss[0] + xm_loss[1] >= (S64)1 << 40) xm_loss[0] >>= 1, xm_loss[1] >>= 1;
+        }
         if (hit) return *how = 0, qp;
         B::sel(f_hit, H);  // (the family's rows for a miss only)
       } else {
