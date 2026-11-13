@@ -80,14 +80,14 @@ struct MixHits {
         if (!s.abits[ch][b] || s.pmode[ch][b]) continue;
         const S64 ss = step_scale(r, s, ch, b, j >> 3);
         if (ss <= 0) continue;
-        S64 lo, hi;
+        S64 lo, hi, xlo, xhi;
         quant_range(r, ch, s.abits[ch][b], lo, hi);
-        QErr q;  // (requant()'s index, by a reciprocal)
-        q.set(ss, lo, hi);
+        index_cell(s.q[ch][b][j], ss, lo, hi, &xlo, &xhi);  // (the values requant() takes to its index)
         for (int k = 0; k < nc[ch]; k++) {
           const MixCand& m = c[ch][k];
           const S128 v = (S128)xw[m.w1][b] * m.g1 + (m.w2 >= 0 ? (S128)xw[m.w2][b] * m.g2 : 0);
-          hits[ch][k] += q.index((S64)((v + (1 << 22)) >> 23)) == s.q[ch][b][j];
+          const S64 x = (S64)((v + (1 << 22)) >> 23);
+          hits[ch][k] += x >= xlo && x <= xhi;
         }
         n[ch]++;
       }

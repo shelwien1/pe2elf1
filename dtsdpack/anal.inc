@@ -494,13 +494,68 @@ struct QErr {
     return v - shl64(clip23(rshift(q * ssh, 22 - shift)), AQ_F);
   }
 };
-// the squared distances' sum of the values v (n of them, 2^-AQ_F; 2^-2AQ_F)
+// The values whose index (QErr::index()'s, at step ss, in lo..hi) is t: *xlo to *xhi (none where
+// *xlo > *xhi): the index is floor((128 |x| + ss) / 2 ss) with x's sign, so a positive t's are from
+// ceil((2 t - 1) ss / 128) to ceil((2 t + 1) ss / 128) - 1, 0's to ceil(ss / 128) - 1 either side;
+// lo's and hi's on to the end
+static void index_cell(S64 t, S64 ss, S64 lo, S64 hi, S64* xlo, S64* xhi) {
+  constexpr S64 BIG = (S64)1 << 62;
+  if (t < lo || t > hi) {
+    *xlo = 1, *xhi = 0;
+    return;
+  }
+  const S64 at = t < 0 ? -t : t;
+  auto up = [&](S64 m) { return (S64)(((S128)m * ss + 127) >> 7); };  // (ceil(m ss / 128), m >= 0)
+  const S64 a = at ? up(2 * at - 1) : 0, b = up(2 * at + 1) - 1;  // (|x| from a to b)
+  if (t > 0) *xlo = a, *xhi = b;
+  else if (t < 0) *xlo = -b, *xhi = -a;
+  else *xlo = -b, *xhi = b;
+  if (t == hi) *xhi = BIG;
+  if (t == lo) *xlo = -BIG;
+}
+// the squared distances' sum of the values v (n of them, 2^-AQ_F; 2^-2AQ_F): 4 at a time in
+// doubles where |v| < 2^44 and ss < 2^48 (each index's estimate within 1 of it, and the rest
+// t - 2 q ss that tells it exact, as dev()'s; the point as dequantize() makes it, and the distance,
+// integers within 2^52), the squares in 128 bits
 static S128 quant_err(const S64* v, int n, S64 ss, S64 lo, S64 hi) {
   QErr q;
   q.set(ss, lo, hi);
   S128 e = 0;
-  int nz = 0;
-  for (int j = 0; j < n; j++) e += q.err(v[j], &nz);
+  int nz = 0, j = 0;
+#ifdef DTSD_AVX2
+  S64 mx = 0;
+  for (int k = 0; k < n; k++) mx |= v[k] < 0 ? -v[k] : v[k];
+  if (mx < (S64)1 << 44 && ss < (S64)1 << 48) {
+    const int sh = 22 - q.shift;
+    const __m256d vinv = _mm256_set1_pd(q.inv), half = _mm256_set1_pd(0.5), dss = _mm256_set1_pd((double)ss),
+                  dss2 = _mm256_set1_pd(2.0 * (double)ss), one = _mm256_set1_pd(1.0), zero = _mm256_setzero_pd(),
+                  vlo = _mm256_set1_pd((double)lo), vhi = _mm256_set1_pd((double)hi), vssh = _mm256_set1_pd((double)q.ssh),
+                  vdh = _mm256_set1_pd(sh > 0 ? (double)((U64)1 << (sh - 1)) : 0.0),
+                  vdsc = _mm256_set1_pd(sh > 0 ? 1.0 / (double)((U64)1 << sh) : 1.0), c23lo = _mm256_set1_pd(-8388608.0),
+                  c23hi = _mm256_set1_pd(8388607.0), f16 = _mm256_set1_pd(65536.0), mg = _mm256_set1_pd(6755399441055744.0),
+                  sgn = _mm256_set1_pd(-0.0);
+    const __m256i mgi = _mm256_castpd_si256(mg);
+    for (; j + 4 <= n; j += 4) {
+      alignas(32) double vv[4];
+      for (int k = 0; k < 4; k++) vv[k] = (double)v[j + k];
+      const __m256d vd = _mm256_load_pd(vv), a = _mm256_mul_pd(_mm256_andnot_pd(sgn, vd), _mm256_set1_pd(64.0));
+      const __m256d t = _mm256_add_pd(_mm256_add_pd(a, a), dss);
+      __m256d qa = _mm256_floor_pd(_mm256_add_pd(_mm256_mul_pd(a, vinv), half));
+      const __m256d r = _mm256_sub_pd(t, _mm256_mul_pd(dss2, qa));  // (exact: integers within 2^53)
+      qa = _mm256_sub_pd(qa, _mm256_and_pd(_mm256_cmp_pd(r, zero, _CMP_LT_OQ), one));
+      qa = _mm256_add_pd(qa, _mm256_and_pd(_mm256_cmp_pd(r, dss2, _CMP_GE_OQ), one));
+      const __m256d qv = _mm256_min_pd(_mm256_max_pd(_mm256_or_pd(qa, _mm256_and_pd(sgn, vd)), vlo), vhi);
+      __m256d y = _mm256_mul_pd(qv, vssh);
+      if (sh > 0) y = _mm256_floor_pd(_mm256_mul_pd(_mm256_add_pd(y, vdh), vdsc));
+      y = _mm256_min_pd(_mm256_max_pd(y, c23lo), c23hi);
+      const __m256d d = _mm256_sub_pd(vd, _mm256_mul_pd(y, f16));
+      alignas(32) S64 di[4];
+      _mm256_store_si256((__m256i*)di, _mm256_sub_epi64(_mm256_castpd_si256(_mm256_add_pd(d, mg)), mgi));
+      for (int k = 0; k < 4; k++) e += (S128)di[k] * di[k];
+    }
+  }
+#endif
+  for (; j < n; j++) e += q.err(v[j], &nz);
   return e;
 }
 // the same of a high-frequency VQ vector q at scale factor sc: its entries as the decoder scales them
