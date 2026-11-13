@@ -404,27 +404,28 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // how often a subband sample's index wasn't the audio's, of how many (code_index()), by pm, hm, cb
   // (4 more where the fit of the core's values says another: code_q()) and nearness: in each cell
   // (nr, nl), and in each row (nl); in 256ths (HIT_ONE), a flag counted in the cells either side of
-  // where its nearnesses lie. Halved as they pass their limits: a row's at 2^14 flags; a cell's
-  // counts twice over, at 64 flags and at 2^18, its rate the geometric mean of the two, as the
+  // where its nearnesses lie. Halved as they pass their limits: a row's at 2^12 flags; a cell's
+  // counts twice over, at 16 flags and at 2^18, its rate the geometric mean of the two, as the
   // encoder's arithmetic errs by more or less than the level says as the signal goes (format 71's
   // one count at 128: `s.2.dts`'s core 0.4% smaller than at 2^18, `96-24.dts`'s 0.1% bigger; with
-  // both, those two 0.08% and 0.11% smaller still)
-  static constexpr U32 HIT_ONE = 256, HIT_PRIOR = 2, HIT_LIMIT = 1u << 6, HIT_SLIMIT = 1u << 18, HIT_RLIMIT = 1u << 14;
+  // both, at 64, those two 0.08% and 0.11% smaller still; at 16, with HIT_PRIOR 1 rather than 2,
+  // FATE's samples 1.0-1.6% smaller, the 7-frame xll ones 0.3-0.7%, `s.2.dts`'s core 0.04%)
+  static constexpr U32 HIT_ONE = 256, HIT_PRIOR = 1, HIT_LIMIT = 1u << 4, HIT_SLIMIT = 1u << 18, HIT_RLIMIT = 1u << 12;
   U32 hit_c[2][4][8][QB_N][QB_N][4], hit_r[2][4][8][QB_N][2];
   // The encoder's arithmetic errs more in some subbands than in others, the same ones through a
   // stream (`s.2.dts`'s encoder's: those next to the multiples of 3 kHz, 15 and 16 most, then 23,
   // 24, 7 and 8, an index this near the boundary missing there 3 to 15 times as often as in
   // subband 5's; no direction to it): the nearness those counts are by (nl, its distance against
   // the level) is against the level times the subband's error's scale, which is learned as the
-  // stream goes, in quarter doublings (from HC_S0: most streams' end up at -3 to -15, a decoded
-  // WAV's near -3; from 0, a short stream's were still on their way down at its end, `s.2.dts`'s
-  // first 1.2 MB 0.3% bigger): a step up where the subband's misses since its
+  // stream goes, in quarter doublings (from HC_S0, -9 before format 73: most streams' end up at -3
+  // to -15, a decoded WAV's near -3; from 0, a short stream's were still on their way down at its
+  // end, `s.2.dts`'s first 1.2 MB 0.3% bigger): a step up where the subband's misses since its
   // last step are more than those its cells expected by 1.25 times the root of those (once 2 or
   // more were), down where fewer by as much (to HC_MAX either way); both halved as those expected
   // pass 1024. After its first HC_K steps, by 2 times the root: a long stream's scales then stray
-  // less (`s.2.dts`'s core 0.05% smaller, the short streams the same). The core's subbands', then
-  // X96's
-  static constexpr int HC_MAX = 32, HC_S0 = -9, HC_K = 16;
+  // less (`s.2.dts`'s core 0.05% smaller after 16, the short streams the same; after 8, from -10,
+  // 0.03% more). The core's subbands', then X96's
+  static constexpr int HC_MAX = 32, HC_S0 = -10, HC_K = 8;
   struct HitCal {
     S32 s;   // (the scale: 2^(s/4))
     U32 m;   // (the misses)
