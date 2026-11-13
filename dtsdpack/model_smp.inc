@@ -404,11 +404,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // how often a subband sample's index wasn't the audio's, of how many (code_index()), by pm, hm, cb
   // (4 more where the fit of the core's values says another: code_q()) and nearness: in each cell
   // (nr, nl), and in each row (nl); in 256ths (HIT_ONE), a flag counted in the cells either side of
-  // where its nearnesses lie. Both halved as they pass their limits: a cell's at 128 flags, as the
-  // encoder's arithmetic errs by more or less than the level says as the signal goes (`s.2.dts`'s
-  // core 0.4% smaller than at 2^18, `96-24.dts`'s 0.1% bigger), a row's at 2^14
-  static constexpr U32 HIT_ONE = 256, HIT_PRIOR = 2, HIT_LIMIT = 1u << 7, HIT_RLIMIT = 1u << 14;
-  U32 hit_c[2][4][8][QB_N][QB_N][2], hit_r[2][4][8][QB_N][2];
+  // where its nearnesses lie. Halved as they pass their limits: a row's at 2^14 flags; a cell's
+  // counts twice over, at 64 flags and at 2^18, its rate the geometric mean of the two, as the
+  // encoder's arithmetic errs by more or less than the level says as the signal goes (format 71's
+  // one count at 128: `s.2.dts`'s core 0.4% smaller than at 2^18, `96-24.dts`'s 0.1% bigger; with
+  // both, those two 0.08% and 0.11% smaller still)
+  static constexpr U32 HIT_ONE = 256, HIT_PRIOR = 2, HIT_LIMIT = 1u << 6, HIT_SLIMIT = 1u << 18, HIT_RLIMIT = 1u << 14;
+  U32 hit_c[2][4][8][QB_N][QB_N][4], hit_r[2][4][8][QB_N][2];
   // The encoder's arithmetic errs more in some subbands than in others, the same ones through a
   // stream (`s.2.dts`'s encoder's: those next to the multiples of 3 kHz, 15 and 16 most, then 23,
   // 24, 7 and 8, an index this near the boundary missing there 3 to 15 times as often as in
@@ -419,12 +421,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // first 1.2 MB 0.3% bigger): a step up where the subband's misses since its
   // last step are more than those its cells expected by 1.25 times the root of those (once 2 or
   // more were), down where fewer by as much (to HC_MAX either way); both halved as those expected
-  // pass 1024. The core's subbands', then X96's
-  static constexpr int HC_MAX = 32, HC_S0 = -9;
+  // pass 1024. After its first HC_K steps, by 2 times the root: a long stream's scales then stray
+  // less (`s.2.dts`'s core 0.05% smaller, the short streams the same). The core's subbands', then
+  // X96's
+  static constexpr int HC_MAX = 32, HC_S0 = -9, HC_K = 16;
   struct HitCal {
     S32 s;   // (the scale: 2^(s/4))
     U32 m;   // (the misses)
     U64 e;   // (those expected: the probabilities coded, in CO_ONE)
+    U32 k;   // (its steps so far, to HC_K)
   };
   HitCal hcal[NSUB + NSUB96];
   // unit u times hc's scale
@@ -438,10 +443,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     hc.m += !hit, hc.e += pq;
     if (hc.e < 2 * (U64)CO_ONE) return;
     const S64 d = (S64)hc.m * CO_ONE - (S64)hc.e;  // ((d / CO_ONE)^2 > 1.25^2 e / CO_ONE)
-    if (16 * (U128)((S128)d * d) > 25 * (U128)hc.e * CO_ONE) {
+    if (16 * (U128)((S128)d * d) > (hc.k < HC_K ? 25u : 64u) * (U128)hc.e * CO_ONE) {
       if (d > 0) hc.s += hc.s < HC_MAX;
       else hc.s -= hc.s > -HC_MAX;
       hc.m = 0, hc.e = 0;
+      hc.k += hc.k < HC_K;
     } else if (hc.e > 1024 * (U64)CO_ONE) {
       hc.m >>= 1, hc.e >>= 1;
     }
@@ -2901,20 +2907,22 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         const U32 cw[4] = {(U32)(v0 * w0), (U32)(v0 * w1), (U32)(v1 * w0), (U32)(v1 * w1)}, rw[2] = {16u * w0, 16u * w1};
         const U64 rd[2] = {2 * (U64)ro[0][1] + 2 * HIT_ONE, 2 * (U64)ro[1][1] + 2 * HIT_ONE},
                   rn[2] = {HIT_PRIOR * HIT_ONE * (2 * (U64)ro[0][0] + HIT_ONE), HIT_PRIOR * HIT_ONE * (2 * (U64)ro[1][0] + HIT_ONE)};
-        S64 lp = 0;  // (the weights' sum of the rates' log2, 2^-16 units)
+        S64 lp = 0;  // (the weights' sum of the rates' log2, 2^-16 units: each cell's two)
         for (int k = 0; k < 4; k++) {
           if (!cw[k]) continue;
           const U32* ck = ce[k];
           const U64 r = rd[k & 1];
           lp += (S64)cw[k] * (lg2tab.log2x((U64)ck[0] * r + rn[k & 1]) - lg2tab.log2x(((U64)ck[1] + HIT_PRIOR * HIT_ONE) * r));
+          lp += (S64)cw[k] * (lg2tab.log2x((U64)ck[2] * r + rn[k & 1]) - lg2tab.log2x(((U64)ck[3] + HIT_PRIOR * HIT_ONE) * r));
         }
-        const U32 pq = lg2tab.prob(lp >> 8);
+        const U32 pq = lg2tab.prob(lp >> 9);
         hit = c->code_bit(pq, ENC && v == qp);
         if (hk) hc_learn(*hc, hit, pq);
         for (int k = 0; k < 4; k++)
           if (cw[k]) {
-            ce[k][0] += hit ? 0 : cw[k];
+            ce[k][0] += hit ? 0 : cw[k], ce[k][2] += hit ? 0 : cw[k];
             if ((ce[k][1] += cw[k]) >= HIT_ONE * HIT_LIMIT) ce[k][0] >>= 1, ce[k][1] >>= 1;
+            if ((ce[k][3] += cw[k]) >= HIT_ONE * HIT_SLIMIT) ce[k][2] >>= 1, ce[k][3] >>= 1;
           }
         for (int k = 0; k < 2; k++)
           if (rw[k]) {
