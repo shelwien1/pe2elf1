@@ -1324,11 +1324,14 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (mlu > 0 && (kd == VK_HFV || kd == VK_HFG)) {  // (how many are near ties with the nearest: where
                                                       // the encoder's arithmetic makes another its choice,
                                                       // which one; the groups' too, in their unit's terms:
-                                                      // `s.2.dts`'s core 0.06% smaller)
+                                                      // `s.2.dts`'s core 0.06% smaller; within 2^-20 of
+                                                      // the unit for the groups and 2^-19 for the
+                                                      // vectors, from 2^-18 for both, 0.18% more)
       S128 d1 = cand[0].k;
       for (int i = 1; i < n; i++) d1 = cand[i].k < d1 ? cand[i].k : d1;
       int c = -1;
-      for (int i = 0; i < n; i++) c += cand[i].k - d1 <= mlu >> 18;
+      const S128 tie = mlu >> (kd == VK_HFG ? 20 : 19);
+      for (int i = 0; i < n; i++) c += cand[i].k - d1 <= tie;
       D.nc = c <= 2 ? c : c <= 4 ? 3 : c <= 8 ? 4 : 5;
     }
     D.gn = gn;
@@ -1572,9 +1575,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // (a lossless WAV's, where the RMS rule's region of the encoder's scale factor (code_scale()'s
     // rule: the top subband's with the leak's noise in it) doesn't hold the values' RMS: the
     // encoder's values were louder or quieter than these, so the groups and the vectors go by these
-    // scaled a quarter into the region, where that has ranked the encoder's group higher clearly
-    // more often than the values as they are: `s.2.dts`'s top subband's group the first 64.3% of
-    // the time there from 62.7%, its vector the nearest 59.8% from 58.3%, its core 0.5% smaller)
+    // scaled into the region, where that has ranked the encoder's group higher clearly more often
+    // than the values as they are: `s.2.dts`'s top subband's group the first 64.3% of the time there
+    // from 62.7%, its vector the nearest 59.8% from 58.3%, its core 0.5% smaller, a quarter of the way
+    // in; a sixteenth of the way, just past the edge, 0.1% more)
     S64 xr[NSMP];
     bool resc = false;
     if (bound[ch] && !ss_rule() && !x96a && nsmp == 16) {
@@ -1598,7 +1602,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         const S64 hi = si != r1 ? vv : r1 + 1 < nt ? ((S64)V + tab[r1 + 1]) << (AQ_F - 1) : -1;
         const S64 rr = isqrt128((U128)(ms + nz));
         if (ms > 0 && hi > lo && (rr < lo || rr >= hi)) {
-          const S64 t = rr < lo ? lo + (hi - lo) / 4 : hi - (hi - lo) / 4;
+          const S64 t = rr < lo ? lo + (hi - lo) / 16 : hi - (hi - lo) / 16;
           const double t2 = (double)t * (double)t - (double)nz;
           if (t2 > 0) {
             const double a = sqrt(t2 / (double)ms);
@@ -2231,7 +2235,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // between tab's entry p (nt entries) and the one beside it on the RMS's side, as the encoder's
   // arithmetic errs, for the RMS rule's nearness (code_scale()): the nearer of the distance times
   // the root of n against the channel's level in the subframe times the subband's error's scale
-  // (hcal's, less their mean), from 2^-24, and against the RMS itself, from 2^-16, in doublings
+  // (hcal's, less their mean), from 2^-25 (2^-24 before format 74: `s.2.dts`'s core 0.24% smaller),
+  // and against the RMS itself, from 2^-16, in doublings
   // (0-15; -1 where there is no boundary). Where p ends a run of entries with its value, the value
   // is a boundary too, the one between the run's two ends (anal.inc's sf_run()): the nearer counts
   // (`s.2.dts`'s core 0.6% smaller; pn's nearness, the relative one, stays the midpoint's: which side
@@ -2257,7 +2262,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     const S128 ul = hc_unit((S128)lev, hcal[b].s - sm);
     const S128 u = add > 0 ? (S128)isqrt128((U128)(ul * ul + shl128(add, 48))) : ul;
-    const int a = near_bucket((S128)dd * isqrt128((U128)n << 8) >> 4, u, 24);
+    const int a = near_bucket((S128)dd * isqrt128((U128)n << 8) >> 4, u, 25);
     return imin(a, near_bucket((S128)dd, (S128)rr, 16));
   }
 
@@ -2812,10 +2817,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.sq = bnd ? svar(qp) : 0;
     D.s1 = qs[ch][b];
     int how;
-    // (cb: how many of the channel's last 32 missed, 0, 1, 2-3, more: where the WAV isn't what the
-    // encoder had, as in the frames after a cut stream's start (its decoder's state not the
-    // encoder's), nearly all of a channel's indexes miss by a step or two for a while; its
-    // subbands' own last 8 tell it 32 times later)
+    // (cb: how many of the channel's last 32 missed, 0, 1-2, 3-7, more (0, 1, 2-3, more before format
+    // 74): where the WAV isn't what the encoder had, as in the frames after a cut stream's start (its
+    // decoder's state not the encoder's), nearly all of a channel's indexes miss by a step or two
+    // for a while; its subbands' own last 8 tell it 32 times later)
     const int pc = __builtin_popcount(chm[ch]);
     // (where the core has little of the decode's values, the index of the fit's value (je_one()),
     // where it isn't the audio's and has been the core's more than 3/4 of the time, the second guess,
@@ -2831,7 +2836,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (qe != qp && (U64)je_qn[b][1] * 4 > (U64)je_qn[b][0] * 3) jd = 1, alt = qe;
     }
     v = code_index(D, v, bnd, qp, alt, lo, hi, &how, &hcal[b], dist, !ss_rule() ? (S128)tlev[ch][j] << 22 : lvu,
-                   (pc >= 4 ? 3 : pc >= 2 ? 2 : pc) + 4 * jd, bnd ? (S128)ss << AQ_F : 0);
+                   (pc >= 8 ? 3 : pc >= 3 ? 2 : pc >= 1 ? 1 : 0) + 4 * jd, bnd ? (S128)ss << AQ_F : 0,
+                   __builtin_popcount(miss[ch][b]));
     if (je) {
       je_qn[b][0]++, je_qn[b][1] += qe == v;
       if (je_qn[b][0] >= 1u << 16) je_qn[b][0] >>= 1, je_qn[b][1] >>= 1;
@@ -2870,7 +2876,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // the lesser guess; -1 none: against that, D.nl; su, the unit of D.nr's nearness against the
   // step, 0 none)
   S64 code_index(const M_smp_v& D, S64 v, int pk, S64 qp, S64 alt, S64 lo, S64 hi, int* how, HitCal* hc = nullptr,
-                 S128 dist = 0, S128 unit = 0, int cb = 0, S128 su = 0) {
+                 S128 dist = 0, S128 unit = 0, int cb = 0, S128 su = 0, int hn = -1) {
     *how = 2;
     if (pk) {
       const int kd = D.ab == 27 ? 2 : D.pm;
@@ -2902,9 +2908,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         if (hc) near_frac(ld, lg16n(hc_unit(unit, hk ? hc->s : 0)), 28, &i0, &w1);
         if (su > 0) near_frac(ld, lg16n(su), 16, &j0, &v1);
         const int i1 = i0 + (w1 > 0), j1 = j0 + (v1 > 0), w0 = 16 - w1, v0 = 16 - v1;
-        U32* const ce[4] = {hit_c[kd][D.hm][cb][j0][i0], hit_c[kd][D.hm][cb][j0][i1], hit_c[kd][D.hm][cb][j1][i0],
-                            hit_c[kd][D.hm][cb][j1][i1]};
-        U32* const ro[2] = {hit_r[kd][D.hm][cb][i0], hit_r[kd][D.hm][cb][i1]};
+        // (the cells' classes of the subband's last 8: 0, 1-3, 4-6, more, where hn says how many
+        // missed; D.hm's 0, 1, 2, more where not, X96's: the core's 0.04-0.2% smaller, FATE's
+        // samples 0.4-1.6%)
+        const int hq = hn < 0 ? D.hm : hn >= 7 ? 3 : hn >= 4 ? 2 : hn >= 1 ? 1 : 0;
+        U32* const ce[4] = {hit_c[kd][hq][cb][j0][i0], hit_c[kd][hq][cb][j0][i1], hit_c[kd][hq][cb][j1][i0],
+                            hit_c[kd][hq][cb][j1][i1]};
+        U32* const ro[2] = {hit_r[kd][hq][cb][i0], hit_r[kd][hq][cb][i1]};
         const U32 cw[4] = {(U32)(v0 * w0), (U32)(v0 * w1), (U32)(v1 * w0), (U32)(v1 * w1)}, rw[2] = {16u * w0, 16u * w1};
         const U64 rd[2] = {2 * (U64)ro[0][1] + 2 * HIT_ONE, 2 * (U64)ro[1][1] + 2 * HIT_ONE},
                   rn[2] = {HIT_PRIOR * HIT_ONE * (2 * (U64)ro[0][0] + HIT_ONE), HIT_PRIOR * HIT_ONE * (2 * (U64)ro[1][0] + HIT_ONE)};
