@@ -269,6 +269,8 @@ struct Model : ModelX96<f_DEC, LV> {
         const int sg0 = fe != B::FE_NONE ? B::level_guess(pass, st, fe) : -1;
         int tm = 0;
         const int tg = fe != B::FE_NONE ? B::ap_guess(pass, b, fe, &tm) : -1, ut = tg >= 0 && B::ap_rule(pass);
+        // (and how its guess stands against the levels the subframe's ABITS so far allow: sx)
+        const int sx = ut ? B::ap_strad(pass, ch, b, tg) : 0;
         const int sg = ut ? tg : sg0;
         const int sm = ut ? tm : fe != B::FE_NONE ? B::level_margin(pass, st, fe, sg0) : 0;
         int eq = e ? B::eq[ch][b] : 4;
@@ -346,7 +348,7 @@ struct Model : ModelX96<f_DEC, LV> {
         const int ag = sa >= 0 ? sa : !fs || og2 < 0 ? 0 : og2 == sg ? 1 : og2 == alt ? 2 : 3;
         v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
                        s.pmode[ch][b], lbd, nb, mx, Sn, near_e ? 14 : nn, sc, eq, ms,
-                       alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag);
+                       alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag, fs && ut ? sx : 0);
         v = checked(v, lo, hi);
         if (!pass && bound[ch]) B::ab_budget_add(r, ch, b, (int)v);
         if (sn) *sn = (U8)(v + 1);
@@ -354,6 +356,7 @@ struct Model : ModelX96<f_DEC, LV> {
           B::level_add(pass, st, fe, (int)v);
           B::ap_score(pass, sg0, tg, (int)v);
           B::ap_add(pass, b, fe, (int)v);
+          B::ap_range(pass, ch, b, (int)v);
         }
         if (ut) B::n_tb++, B::n_tbhit += v == tg;
         if (fs) B::n_st++, B::n_sthit += v == sg;

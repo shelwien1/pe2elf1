@@ -14,27 +14,27 @@ Index a
  a_fld: fld, &011000
 
 Index b
- b_fld: fld, &111111
- b_lv: lv, &001100
+ b_fld: fld, &101111
+ b_lv: lv, &011100
 
 Index c
- c_fld: fld, &000100
- c_lv: lv, &101000
+ c_fld: fld, &000001
+ c_lv: lv, &011001
  c_l2: l2, 1!01
 
 Index d
- d_fld: fld, &111011
- d_pos: pos, 1!0100100000000000000000001100000
+ d_fld: fld, &101011
+ d_pos: pos, 1!0100100000000000000000001000000
 
 Index e
  e_fld: fld, &000010
- e_st: st, 1!01
- e_nch: nch, 1!111
+ e_st: st, 1!11
+ e_nch: nch, 1!000
 
 Index h
- h_fld: fld, &101011
- h_lv: lv, &100011
- h_pos: pos, 1!1000100000000010000010001000000
+ h_fld: fld, &111011
+ h_lv: lv, &010011
+ h_pos: pos, 1!1000100000001000001010000000000
 
 Index i
  i_fld: fld, &110100
@@ -43,24 +43,24 @@ Index i
 
 Index j
  j_fld: fld, &100100
- j_lv: lv, &000000
+ j_lv: lv, &000100
  j_st: st, 1!11
 
 Index k
  k_fld: fld, &101110
- k_pos: pos, 1!0000000000010000100000001000001
+ k_pos: pos, 1!0000101000010000000100001000000
  k_l2: l2, 1!00
 
 Index l
- l_fld: fld, &110010
- l_nch: nch, 1!010
+ l_fld: fld, &101110
+ l_nch: nch, 1!110
 
 Index s
- s_fld: fld, &111110
+ s_fld: fld, &111111
  s_l2: l2, 1!11
 
 Index f
- f_fld: fld, &111100
+ f_fld: fld, &111111
 
 Index m
  m_fld: fld, &111111
@@ -70,7 +70,7 @@ Index w
  w_st: st, 1!11
 
 Index t
- t_fld: fld, &011110
+ t_fld: fld, &010110
 
 Index n
 #  Frozen: the mantissa mixer it is for mixes only by a hint, and nothing gives this family one.
@@ -84,29 +84,29 @@ Number rA, 1, 0!00000000
 Number mwA, 1, 0!10001111
 Number rB, 1, 0!00000000
 Number mwB, 1, 0!00000000
-Number rC, 1, 0!11110110
-Number mwC, 1, 0!00110111
+Number rC, 1, 0!11001000
+Number mwC, 1, 0!01111101
 Number rD, 1, 0!00000000
-Number mwD, 1, 0!00001000
-Number rE, 1, 0!00100110
-Number mwE, 1, 0!00010001
-Number rH, 1, 0!11000110
+Number mwD, 1, 0!00000000
+Number rE, 1, 0!00100101
+Number mwE, 1, 0!00011001
+Number rH, 1, 0!10100000
 Number mwH, 1, 0!00000000
-Number rI, 1, 0!00010101
-Number mwI, 1, 0!00000100
-Number rJ, 1, 0!01000111
-Number mwJ, 1, 0!00111010
-Number rK, 1, 0!11101000
-Number mwK, 1, 0!00000000
+Number rI, 1, 0!01000100
+Number mwI, 1, 0!00001110
+Number rJ, 1, 0!01110001
+Number mwJ, 1, 0!00011110
+Number rK, 1, 0!11110110
+Number mwK, 1, 0!00000001
 Number rL, 1, 0!00000000
-Number mwL, 1, 0!10000000
+Number mwL, 1, 0!10000100
 Number lr, 1, 0!01111
-Number mb, 1, 0!10010001
-Number rS1, 1, 0!01000
+Number mb, 1, 0!11010100
+Number rS1, 1, 0!00011
 Number rS2, 1, 0!01000
-Number qs, 1, 3!1110101
+Number qs, 1, 3!1110011
 Number qf, 1, 3!0101011
-Number bw, 1, 0!00110
+Number bw, 1, 0!00101
 Number rT, 1, 0!00000000
 Number mwT, 1, 0!00000000
 Number mt, 1, 0!110

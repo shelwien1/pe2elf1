@@ -695,6 +695,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int j = 0; j < n; j++) e += (U128)((S128)v[j] * v[j]);
     return e ? fine_log2(e) - fine_log2((U128)n) : FE_NONE;
   }
+  // the same in quarters (512 times the log2)
+  static S32 fine_energy4(const S64* v, int n) {
+    U128 e = 0;
+    for (int j = 0; j < n; j++) e += (U128)((S128)v[j] * v[j]);
+    return e ? fine_log2_4(e) - fine_log2_4((U128)n) : FE_NONE;
+  }
+  S32 fe_s4[NCH][NSUB];  // (fe_s's energies in quarters)
   // the staircase t's ABITS at the energy x (-1 none)
   static int stair_guess(const AbStair& t, S32 x) {
     int kb = -1;
@@ -765,7 +772,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     memcpy(ab_snap[p], ab_st[p], sizeof ab_snap[p]);
     for (int ch = r.ch0(); ch < r.ch1(); ch++)
       for (int b = 0; b < r.nvqsub[ch]; b++) {
-        fe_s[ch][b] = fe_a[ch][b] = FE_NONE;
+        fe_s[ch][b] = fe_a[ch][b] = fe_s4[ch][b] = FE_NONE;
         if (!bound[ch]) continue;
         S64* const x = bud_v[ch][b];
         const int n = scale_values(s, ch, b, 0, s.nssc, x);
@@ -773,7 +780,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         fe_s[ch][b] = fine_energy(x, n);
         // (a transient's: the encoders' energy is the part from it on, where its second scale factor
         // is: ab_transient())
-        fe_s[ch][b] = ab_transient(s, ch, b, x, n, fe_s[ch][b], &fe_a[ch][b]);
+        int tk_ = 0;
+        fe_s[ch][b] = ab_transient(s, ch, b, x, n, fe_s[ch][b], &fe_a[ch][b], &tk_);
+        fe_s4[ch][b] = fe_s[ch][b] == FE_NONE   ? FE_NONE
+                       : fe_a[ch][b] != FE_NONE ? fine_energy4(x + 8 * tk_, n - 8 * tk_)
+                                                : fine_energy4(x, n);
         bud_n[ch][b] = n;
         bud_si[ch][b] = scale_pred(x, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
         memset(bud_b[ch][b], 0xFF, sizeof bud_b[ch][b]);
@@ -899,7 +910,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // As the threshold is theirs, the other of the two mean squares is no second guess (`s.2.dts`'s
   // core 0.15% smaller without it, the other lossless WAVs' up to 0.45%), nor is a subband that
   // doesn't predict where its gain says it would a transient by that alone.
-  S32 ab_transient(const CoreSub& s, int ch, int b, const S64* x, int n, S32 fe, S32* fa_) const {
+  S32 ab_transient(const CoreSub& s, int ch, int b, const S64* x, int n, S32 fe, S32* fa_, int* tko = nullptr) const {
     *fa_ = FE_NONE;
     if (s.pmode[ch][b] || b >= 20 || s.nssc < 2 || fe == FE_NONE) return fe;
     int tk = 0;
@@ -913,6 +924,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (!tk || tr < 3 * 128) return fe;
     int k;
     if (rise_max(s, ch, b, &k) < rise_thr(b)) return fe;
+    if (tko) *tko = tk;
     return *fa_ = fine_energy(x + 8 * tk, n - 8 * tk);
   }
   // the bits the core's bound subbands' samples would take at the table's ABITS at level l (where it
@@ -1010,10 +1022,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // WAVs' 2-6%); a subframe's level, the core's from the budget as the staircases' centre is
   // (level_centre(), at the table's ABITS: c0t), the extension's that centre, plus how far the last
   // subframes' levels lay from it, then the shift at which the table makes the most of the
-  // subframe's ABITS so far (as the staircases' level). Its guesses are the first ones where they
-  // have missed less than the staircases' (ap_rule()).
+  // subframe's ABITS so far (as the staircases' level). Its guesses are the first ones but where
+  // they have missed far more than the staircases' (ap_rule()). That level is a whole 128th, the
+  // encoders' lies between them: with the energies exact, a level for each subframe makes all but
+  // 0.033% of `s.2.dts`'s ABITS, the nearest 128th 0.21% wrong. So how the table's guess stands
+  // against the levels at which it makes all of the subframe's ABITS so far, from the energies in
+  // quarters of a 128th (apl's ilo, ihi: ap_range()), is abt's context sx (ap_strad()): where
+  // every one of them makes the guess it misses 0.025% of the time, where some don't 5-24%.
   static constexpr int AP_W = 1024;  // (a band's offsets: within AP_W of its first)
-  static constexpr int AP_SH = 64;   // (the level: within AP_SH of the prior)
+  static constexpr int AP_SH = 96;   // (the level: within AP_SH of the prior; 64 before format 78)
   static constexpr S64 AP_FAR = (S64)1 << 40;
   struct AbPar {
     S32 c, o;              // the scores' centre (the band's first ABITS above 1's), its offset
@@ -1049,6 +1066,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     S32 c0t, cb;      // (the core's) the centre the budget makes of the table's ABITS; the one the prior is from
     int cset;         // (whether c0t is)
     U32 miss[2];      // the staircases' first guesses wrong, the table's (where both have one)
+    S64 ilo, ihi;     // (the levels, in quarters, at which the table makes all of the subframe's ABITS so far: ilo < l <= ihi)
   } apl[2];
   U64 n_tb, n_tbhit;  // (-s: the ABITS the table said, those it said right)
   // ABITS a's lower edge (a 2-27: 27 none)
@@ -1072,6 +1090,42 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     A.d = 0;
     A.anch = p ? abl[p].tgt > 0 : abl[p].rn > 0;
     memset(A.sc, 0, sizeof A.sc);
+    A.ilo = -AP_INF, A.ihi = AP_INF;
+  }
+  static constexpr S64 AP_INF = (S64)1 << 50;
+  static S64 imax64(S64 a, S64 b) { return a > b ? a : b; }
+  static S64 imin64(S64 a, S64 b) { return a < b ? a : b; }
+  // band b's offset in quarters (ap_off()'s, its shape's slope exact)
+  S64 ap_off4(int p, int b, bool* ok) const {
+    const AbPool& q = app[p];
+    *ok = true;
+    if (q.set)
+      return 4 * (S64)q.best[q.k] + (b < 5 && !q.k ? 4 * ap_shape(0, b) : 0) + (b > 19 ? (1024 * (S64)(b - 19) + 1) / 3 : 0);
+    *ok = abp[p][b].set;
+    return 4 * (S64)abp[p][b].o;
+  }
+  // how the table's guess g for channel ch's band b stands against the levels at which it makes the
+  // subframe's ABITS so far: 0 they don't bound it, 1 all of them say g, 2 under half another, 3 more
+  int ap_strad(int p, int ch, int b, int g) const {
+    const AbParLevel& A = apl[p];
+    bool ok;
+    const S64 o = ap_off4(p, b, &ok);
+    if (!ok || fe_s4[ch][b] == FE_NONE || g < 1 || g > 26) return 0;
+    const S64 y = fe_s4[ch][b] - o, glo = y - 4 * ap_edge(g + 1), ghi = y - 4 * ap_edge(g);
+    if (glo <= A.ilo && A.ihi <= ghi) return 1;
+    if (A.ilo <= -AP_INF || A.ihi >= AP_INF) return 0;
+    const S64 w = A.ihi - A.ilo, in = imax64(0, imin64(A.ihi, ghi) - imax64(A.ilo, glo));
+    return 2 * (w - in) < w ? 2 : 3;
+  }
+  // and its ABITS was v
+  void ap_range(int p, int ch, int b, int v) {
+    AbParLevel& A = apl[p];
+    bool ok;
+    const S64 o = ap_off4(p, b, &ok);
+    if (!ok || fe_s4[ch][b] == FE_NONE || v < 1 || v > 26) return;
+    const S64 y = fe_s4[ch][b] - o, lo = v < 26 ? y - 4 * ap_edge(v + 1) : -AP_INF, hi = v > 1 ? y - 4 * ap_edge(v) : AP_INF;
+    A.ilo = imax64(A.ilo, lo), A.ihi = imin64(A.ihi, hi);
+    if (A.ilo >= A.ihi) A.ilo = lo, A.ihi = hi;  // (none: from this one on)
   }
   // the table's ABITS for band b at the fine energy x (-1 none), and how sure it is (*m, as
   // level_margin()'s)
@@ -1229,9 +1283,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     A.drift = A.dset ? A.drift + (dd - A.drift) / 32 : dd;
     A.dset = 1;
   }
-  // whether the table's guesses are the first ones: its misses, of the last 1024 or so where both
-  // had one, fewer than the staircases' (by 2)
-  bool ap_rule(int p) const { return apl[p].miss[1] + 1 < apl[p].miss[0]; }
+  // whether the table's guesses are the first ones: but where its misses, of the last 1024 or so
+  // where both had one, are the staircases' and 128 more (format 77's: where they were fewer by
+  // 2, from a stream's start on the staircases)
+  bool ap_rule(int p) const { return apl[p].miss[1] < apl[p].miss[0] + 128; }
   // pass p's ABITS v: the staircases' guess sg, the table's tg
   void ap_score(int p, int sg, int tg, int v) {
     if (sg < 0 || tg < 0) return;

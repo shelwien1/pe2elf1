@@ -108,7 +108,10 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      says (0 none, 1 the same, 2 the ABITS across sn's nearer edge, 3 another; 4 none since
 //      format 63, once a transient's guess at its other mean square); where sn is the bit
 //      allocation search's, what the staircase's or table's
-//      guess says (0 none, 1 the same, 2 the last ABITS, 3 another)
+//      guess says (0 none, 1 the same, 2 the last ABITS, 3 another), sx where sn is the
+//      allocation table's, how it stands against the levels at which the table makes all of the
+//      subframe's ABITS so far, in quarters of a 128th (model_smp.inc's ap_strad(): 1 they all make
+//      sn, 2 under half of them another ABITS, 3 more; 0 none or they don't bound the level)
 // scl: kd (0 a subband's first scale factor, 1 its second, after its transient, 2 a high-frequency
 //      VQ subband's, 3 the LFE's), ab its ABITS (1 + it, 0 none), pm whether it predicts, pk whether the audio
 //      predicts the scale factor, pn how near its RMS lies to the midpoint between two (0-7), lp
@@ -150,7 +153,7 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      the byte at the place in the last field of the kind (0 none, else 1 + it)
 #define M_hdr_VARS(X) X(fld) X(lv) X(l2) X(pos) X(st) X(nch)
 #define M_sid_VARS(X) X(fld) X(cc) X(bd) X(lv) X(pq) X(st) X(ac) X(ab) X(ec) X(tr)
-#define M_abt_VARS(X) X(bd) X(cc) X(la) X(lb) X(es) X(de) X(ls) X(pm) X(st) X(nb) X(mx) X(sn) X(sd) X(nn) X(sc) X(eq) X(sm) X(bg) X(ag)
+#define M_abt_VARS(X) X(bd) X(cc) X(la) X(lb) X(es) X(de) X(ls) X(pm) X(st) X(nb) X(mx) X(sn) X(sd) X(nn) X(sc) X(eq) X(sm) X(bg) X(ag) X(sx)
 #define M_scl_VARS(X) X(kd) X(ab) X(pm) X(pk) X(pn) X(lp) X(hm) X(bd) X(dp) X(cc) X(nb) X(pl)
 #define M_hit_VARS(X) X(pm) X(nr) X(nl) X(ab) X(ql) X(hm)
 #define M_smp_VARS(X) X(ab) X(hw) X(pk) X(nr) X(nl) X(ql) X(hm) X(pm) X(bd) X(m1) X(m2) X(sq) X(s1)

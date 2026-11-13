@@ -15,7 +15,7 @@ enum { BO_OFF = 0, BO_MAP = 4, BO_MAP2 = BO_MAP + NCH, BO_G1 = BO_MAP2 + NCH, BO
        DP_BIND = BO_CRC + 4 };  // (the binding's bytes)
 enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND, DP_HEAD = DP_AT_BIND + DP_BIND };  // the header's
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
-constexpr int DP_VERSION = 77;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
+constexpr int DP_VERSION = 78;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
                                // extension as records; 4: a WAV at twice the core's rate, X96 and XXCH; 5: the
                                // scale factor search; 6: the bit allocation search; 7: the bits after the
                                // subframes as the bytes they end in, the energy's quarter of its bucket, the
@@ -131,7 +131,10 @@ constexpr int DP_VERSION = 77;  // the format's (2: a core channel's binding a m
                                // the hit cells' classes of the recent misses, the HF VQ near ties
                                // and region, the scale factors' nearness by 2^-25 of the level;
                                // 75: scl and hit retuned; 76: smp and vqr retuned; 77: the
-                               // allocation table's offsets one for all the bands, by its shape)
+                               // allocation table's offsets one for all the bands, by its shape;
+                               // 78: its guesses first from the start, the level's shift wider,
+                               // abt's sx (its guess against the subframe's levels in quarters);
+                               // abt, hdr and raw retuned)
 
 static void put_le(U8* p, U64 v, int n) {
   for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));
