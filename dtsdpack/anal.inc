@@ -766,6 +766,71 @@ static INLINE int lg16(U64 x) {
   const int e = ilog2(x);
   return 16 * e + (int)((e >= 4 ? x >> (e - 4) : x << (4 - e)) & 15);
 }
+// lg16() of x > 0 of 128 bits
+static INLINE int lg16w(U128 x) {
+  const U64 h = (U64)(x >> 64);
+  if (!h) return lg16((U64)x);
+  const int e = 127 - __builtin_clzll(h);  // (>= 64: its 4 bits after the top one within x >> 60)
+  return 16 * e + (int)((U64)(x >> (e - 4)) & 15);
+}
+// near_bucket()'s nearness with its fraction, of a distance and a unit by their lg16n() (ld, lu):
+// 16 log2(d / u) + 16 k, as the bucket at its floor (*i, 0..QB_N - 1) and the sixteenths of the way
+// from it to the next (*w; 0 at either end)
+constexpr int LG16_NONE = -(1 << 30);  // (lg16n() of a value <= 0)
+static INLINE void near_frac(int ld, int lu, int k, int* i, int* w) {
+  *w = 0;
+  if (lu == LG16_NONE || ld == LG16_NONE) {
+    *i = lu == LG16_NONE ? QB_N - 1 : 0;
+    return;
+  }
+  const int t = ld - lu + 16 * k;
+  *i = t < 0 ? 0 : t >> 4;
+  if (t > 0 && *i < QB_N - 1) *w = t & 15;
+  if (*i > QB_N - 1) *i = QB_N - 1;
+}
+static INLINE int lg16n(S128 x) { return x > 0 ? lg16w((U128)x) : LG16_NONE; }
+// log2 and 2^x in 2^-16 units by tables of 256 made in integers alone, so that every build has
+// the same: lg[i] = 2^16 log2(1 + (i + 1/2) / 256), the fraction's bits by squaring;
+// ex[i] = 2^31 2^((i + 1/2) / 256), the product of the 2^(2^-k) of its bits, each the root of
+// the one before (isqrt128())
+struct Lg2Tab {
+  S32 lg[256];
+  U32 ex[256];
+  Lg2Tab() {
+    for (int i = 0; i < 256; i++) {
+      U64 x = (U64)(513 + 2 * i) << 53;  // (in [1, 2) at 2^62)
+      int f = 0;
+      for (int b = 0; b < 18; b++) {
+        x = (U64)((U128)x * x >> 62);
+        f = 2 * f + (int)(x >> 63);
+        if (x >> 63) x >>= 1;
+      }
+      lg[i] = (f + 2) >> 2;
+    }
+    U64 r[10];  // (2^(2^-k) at 2^62)
+    r[0] = (U64)1 << 63;
+    for (int k = 1; k < 10; k++) r[k] = (U64)isqrt128((U128)r[k - 1] << 62);
+    for (int i = 0; i < 256; i++) {
+      U64 p = (U64)1 << 62;
+      for (int k = 1; k <= 9; k++)
+        if ((2 * i + 1) >> (9 - k) & 1) p = (U64)((U128)p * r[k] >> 62);
+      ex[i] = (U32)((p + ((U64)1 << 30)) >> 31);
+    }
+  }
+  // 2^16 log2(x), x >= 1
+  INLINE S32 log2x(U64 x) const {
+    const int e = ilog2(x);
+    return (e << 16) + lg[(x << (63 - e)) >> 55 & 255];
+  }
+  // 2^(l / 2^16) in CO_ONE units (l <= 0: a probability), within 1..CO_ONE - 1
+  INLINE U32 prob(S64 l) const {
+    const S64 q = l + ((S64)CO_PBITS << 16);
+    if (q < 0) return 1;
+    const U64 v = (((U64)ex[q >> 8 & 255] << (q >> 16)) + ((U64)1 << 30)) >> 31;
+    return (U32)(v < 1 ? 1 : v > CO_ONE - 1 ? CO_ONE - 1 : v);
+  }
+};
+static const Lg2Tab lg2tab;
 // X96's steps: each LOSSY_QUANT entry times each SF6 scale factor (x96_ss()'s, 2^-22), and their
 // lg16(); made where first needed (make())
 struct JxSteps {

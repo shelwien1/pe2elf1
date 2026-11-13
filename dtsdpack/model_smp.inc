@@ -403,8 +403,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   U64 n_vq[VK_N], n_vqhit[VK_N];    // (and the ranks, those 0)
   // how often a subband sample's index wasn't the audio's, of how many (code_index()), by pm, hm, cb
   // (4 more where the fit of the core's values says another: code_q()) and nearness: in each cell
-  // (nr, nl), and in each row (nl)
-  static constexpr U32 HIT_PRIOR = 16, HIT_LIMIT = 1u << 18;
+  // (nr, nl), and in each row (nl); in 256ths (HIT_ONE), a flag counted in the cells either side of
+  // where its nearnesses lie. Both halved as they pass their limits: a cell's at 128 flags, as the
+  // encoder's arithmetic errs by more or less than the level says as the signal goes (`s.2.dts`'s
+  // core 0.4% smaller than at 2^18, `96-24.dts`'s 0.1% bigger), a row's at 2^14
+  static constexpr U32 HIT_ONE = 256, HIT_PRIOR = 2, HIT_LIMIT = 1u << 7, HIT_RLIMIT = 1u << 14;
   U32 hit_c[2][4][8][QB_N][QB_N][2], hit_r[2][4][8][QB_N][2];
   // The encoder's arithmetic errs more in some subbands than in others, the same ones through a
   // stream (`s.2.dts`'s encoder's: those next to the multiples of 3 kHz, 15 and 16 most, then 23,
@@ -2821,7 +2824,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (qe != qp && (U64)je_qn[b][1] * 4 > (U64)je_qn[b][0] * 3) jd = 1, alt = qe;
     }
     v = code_index(D, v, bnd, qp, alt, lo, hi, &how, &hcal[b], dist, !ss_rule() ? (S128)tlev[ch][j] << 22 : lvu,
-                   (pc >= 4 ? 3 : pc >= 2 ? 2 : pc) + 4 * jd);
+                   (pc >= 4 ? 3 : pc >= 2 ? 2 : pc) + 4 * jd, bnd ? (S128)ss << AQ_F : 0);
     if (je) {
       je_qn[b][0]++, je_qn[b][1] += qe == v;
       if (je_qn[b][0] >= 1u << 16) je_qn[b][0] >>= 1, je_qn[b][1] >>= 1;
@@ -2857,9 +2860,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // (0 the audio's, 1 the other side's, 2 coded)
   // (nt: how near the boundary against the channel's level at the sample, a lossless WAV's: the
   // encoder's arithmetic errs by about the level of all its signal there, its loudest subband's
-  // the lesser guess; -1 none: against that, D.nl)
+  // the lesser guess; -1 none: against that, D.nl; su, the unit of D.nr's nearness against the
+  // step, 0 none)
   S64 code_index(const M_smp_v& D, S64 v, int pk, S64 qp, S64 alt, S64 lo, S64 hi, int* how, HitCal* hc = nullptr,
-                 S128 dist = 0, S128 unit = 0, int cb = 0) {
+                 S128 dist = 0, S128 unit = 0, int cb = 0, S128 su = 0) {
     *how = 2;
     if (pk) {
       const int kd = D.ab == 27 ? 2 : D.pm;
@@ -2878,19 +2882,45 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         // probabilities are finer than the families'; the nearness against the level, unit, times
         // the subband's error's scale, hc's, where the channel's last 32 missed 3 times or fewer:
         // the encoder's arithmetic's misses, not those of a WAV that isn't what it had)
+        // (the nearnesses with their fractions, near_frac()'s: the cells at their floors and the
+        // next ones, each by how near; the probability their rates' geometric mean, each cell's
+        // (misses + HIT_PRIOR times its row's (misses + 1/2) / (all + 1)) / (all + HIT_PRIOR), the
+        // row's by the nearness against the level alone; each counts the flag by its weight, in
+        // 256ths. Within a doubling the rate changes several times over: `s.2.dts`'s core 0.7%
+        // smaller, FATE's samples' 1.3-2.6%; the subbands' error scales, which the scale factors'
+        // nearness goes by too, learn from these probabilities)
         const bool hk = hc && (cb & 3) < 3;
-        const int nl = hc ? near_bucket(dist, hc_unit(unit, hk ? hc->s : 0), 28) : D.nl;
-        U32 *cell = hit_c[kd][D.hm][cb][D.nr][nl], *row = hit_r[kd][D.hm][cb][nl];
-        const U64 pr = ((U64)(2 * row[0] + 1) << CO_PBITS) / (2 * (U64)row[1] + 2);
-        const U64 pc = (((U64)cell[0] << CO_PBITS) + HIT_PRIOR * pr) / (cell[1] + HIT_PRIOR);
-        const U32 pq = (U32)(pc < 1 ? 1 : pc > CO_ONE - 1 ? CO_ONE - 1 : pc);
+        int i0 = D.nl, w1 = 0, j0 = D.nr, v1 = 0;
+        const int ld = lg16n(dist);
+        if (hc) near_frac(ld, lg16n(hc_unit(unit, hk ? hc->s : 0)), 28, &i0, &w1);
+        if (su > 0) near_frac(ld, lg16n(su), 16, &j0, &v1);
+        const int i1 = i0 + (w1 > 0), j1 = j0 + (v1 > 0), w0 = 16 - w1, v0 = 16 - v1;
+        U32* const ce[4] = {hit_c[kd][D.hm][cb][j0][i0], hit_c[kd][D.hm][cb][j0][i1], hit_c[kd][D.hm][cb][j1][i0],
+                            hit_c[kd][D.hm][cb][j1][i1]};
+        U32* const ro[2] = {hit_r[kd][D.hm][cb][i0], hit_r[kd][D.hm][cb][i1]};
+        const U32 cw[4] = {(U32)(v0 * w0), (U32)(v0 * w1), (U32)(v1 * w0), (U32)(v1 * w1)}, rw[2] = {16u * w0, 16u * w1};
+        const U64 rd[2] = {2 * (U64)ro[0][1] + 2 * HIT_ONE, 2 * (U64)ro[1][1] + 2 * HIT_ONE},
+                  rn[2] = {HIT_PRIOR * HIT_ONE * (2 * (U64)ro[0][0] + HIT_ONE), HIT_PRIOR * HIT_ONE * (2 * (U64)ro[1][0] + HIT_ONE)};
+        S64 lp = 0;  // (the weights' sum of the rates' log2, 2^-16 units)
+        for (int k = 0; k < 4; k++) {
+          if (!cw[k]) continue;
+          const U32* ck = ce[k];
+          const U64 r = rd[k & 1];
+          lp += (S64)cw[k] * (lg2tab.log2x((U64)ck[0] * r + rn[k & 1]) - lg2tab.log2x(((U64)ck[1] + HIT_PRIOR * HIT_ONE) * r));
+        }
+        const U32 pq = lg2tab.prob(lp >> 8);
         hit = c->code_bit(pq, ENC && v == qp);
         if (hk) hc_learn(*hc, hit, pq);
-        U32* const ts[2] = {cell, row};
-        for (int k = 0; k < 2; k++) {
-          ts[k][0] += !hit;
-          if (++ts[k][1] >= HIT_LIMIT) ts[k][0] >>= 1, ts[k][1] >>= 1;
-        }
+        for (int k = 0; k < 4; k++)
+          if (cw[k]) {
+            ce[k][0] += hit ? 0 : cw[k];
+            if ((ce[k][1] += cw[k]) >= HIT_ONE * HIT_LIMIT) ce[k][0] >>= 1, ce[k][1] >>= 1;
+          }
+        for (int k = 0; k < 2; k++)
+          if (rw[k]) {
+            ro[k][0] += hit ? 0 : rw[k];
+            if ((ro[k][1] += rw[k]) >= HIT_ONE * HIT_RLIMIT) ro[k][0] >>= 1, ro[k][1] >>= 1;
+          }
         if (hit) return *how = 0, qp;
         B::sel(f_hit, H);  // (the family's rows for a miss only)
       } else {

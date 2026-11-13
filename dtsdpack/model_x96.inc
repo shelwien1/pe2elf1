@@ -1011,7 +1011,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     D.sq = bd ? svar(qp) : 0;
     D.s1 = qs9[ch][b];
     int how;
-    v = code_index(D, v, bd, qp, alt, lo, hi, &how, &B::hcal[NSUB + b], dist, lvu);
+    v = code_index(D, v, bd, qp, alt, lo, hi, &how, &B::hcal[NSUB + b], dist, lvu, 0, bd ? (S128)ss << AQ_F : 0);
     miss9[ch][b] = (U8)(miss9[ch][b] << 1 | (bd && how != 0));
     n_smp9++;
     n_hit9 += bd && how == 0;
