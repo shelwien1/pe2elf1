@@ -9,7 +9,7 @@ to code is where the encoder chose otherwise. Decompression, with the same WAV, 
 stream byte for byte.
 
 The core of `s.2.dts` (4 minutes 25 seconds of 5.1 at 1509 kbps; 50008260 bytes) compresses to
-90937 bytes (0.18%); without its audio, dtsdpack's model gets 71.83% and `xz -9e` 88.21%.
+90935 bytes (0.18%); without its audio, dtsdpack's model gets 71.84% and `xz -9e` 88.21%.
 
 The core substream's extensions are coded too: XCH (6.1's back centre) and XXCH (7.1's other
 channels) as more channels, X96 (DTS 96/24's 24-48 kHz band and the core's residuals) as subbands
@@ -52,16 +52,16 @@ WAV is the one `c` had: its format, its size and the CRC of its first 64 KB are 
 
 ```
 $ dtsdpack c -s s2.dtsc s2_full.wav s2.dtsd
-s2.dtsc: 50008260 -> 90937 bytes (0.18%, -9); 24855 frames, 24855 packed; 0 bytes between frames; 5 channels and the LFE against the WAV (offset 512, correlation 1.0000)
+s2.dtsc: 50008260 -> 90935 bytes (0.18%, -9); 24855 frames, 24855 packed; 0 bytes between frames; 5 channels and the LFE against the WAV (offset 512, correlation 1.0000)
   bytes                             input     packed
   bytes kept as bytes                   0          3    0.00%
   headers, container              1059444        150    0.01%
   side information                2521040      41307    1.64%
-  bit allocations                 2174812       6470    0.30%
-  scale factors                   3512740      21099    0.60%
-  subband samples                40631706      23743    0.06%
+  bit allocations                 2174812       6474    0.30%
+  scale factors                   3512740      21111    0.60%
+  subband samples                40631706      23725    0.06%
   bits after the subframes         108518          1    0.00%
-  total                          50008260      92775    0.19%
+  total                          50008260      92773    0.19%
   the audio's indexes: 99.91% of the samples; the audio's scale factors: 99.07%
   the bit allocations' staircases: 95.53% of the ABITS, right in 99.50% of them
   the encoders' allocation table: 94.75% of the ABITS, right in 99.51% of them
@@ -88,10 +88,10 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 90937 (0.18%) | 71.83% | 88.21% |
-| its first 3 MB (6.8 s) | 1275608 | 3870 (0.30%) | | |
-| 3 MB from its middle (5.7 s) | 1068372 | 5771 (0.54%) | | |
-| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 3102 (0.13%) | | |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 90935 (0.18%) | 71.84% | 88.21% |
+| its first 3 MB (6.8 s) | 1275608 | 3859 (0.30%) | | |
+| 3 MB from its middle (5.7 s) | 1068372 | 5754 (0.54%) | | |
+| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 3079 (0.13%) | | |
 
 Compressing the whole of `s.2.dts`'s core takes 20 seconds (2.5 MB of core a second) and 41 MB of
 memory, decompressing it 21 seconds and 33 MB, on one thread of a 2.3 GHz Xeon (each figure here
@@ -110,10 +110,10 @@ FFmpeg's small DTS-HD MA samples (`xll_*`, 7 frames each) round-trip too:
 
 | Sample | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `xll_51_24_48_768` | 7168 | 447 (6.24%) | the WAV's 5.1 |
-| `xll_71_24_48_768_0` | 7168 | 388 (5.41%) | a downmix of its 7.1: every channel at -3 dB, each surround its side and rear surround |
-| `xll_71_24_48_768_1` | 7168 | 413 (5.76%) | the same, the rear surrounds' sign inverted |
-| `xll_xch_61_24_48_768` | 7168 | 858 (11.97%) | its 6.1's 5.1, the back centre in the surrounds at about -3 dB; and in the XCH extension, the back centre |
+| `xll_51_24_48_768` | 7168 | 443 (6.18%) | the WAV's 5.1 |
+| `xll_71_24_48_768_0` | 7168 | 382 (5.33%) | a downmix of its 7.1: every channel at -3 dB, each surround its side and rear surround |
+| `xll_71_24_48_768_1` | 7168 | 406 (5.66%) | the same, the rear surrounds' sign inverted |
+| `xll_xch_61_24_48_768` | 7168 | 856 (11.94%) | its 6.1's 5.1, the back centre in the surrounds at about -3 dB; and in the XCH extension, the back centre |
 | `xll_71_24_96_768` | 7168 | 349 (4.87%) | the 96 kHz WAV's 64-band analysis's lower half, a downmix as the 48 kHz one's |
 | `xll_51_16_192_768_1` | 7168 | 330 (4.60%) | the 64-band analysis's lower half of the 192 kHz WAV's lower frequency band, as DTS-HD MA's XLL makes it (below) |
 | `xll_51_16_192_768_0` | 7168 | 311 (4.34%) | the same (the same WAV, another core) |
@@ -144,19 +144,19 @@ allocations in):
 
 | Stream | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 29317 (1.55%) | the 96 kHz decode's 64-band analysis's lower half (99.79% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
-| `Master Audio 5.0 96khz.dts` | 1768548 | 4094 (0.23%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
-| `Master Audio 7.1.dts` | 1945604 | 4868 (0.25%) | a downmix of its 7.1 |
-| `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 4144 (0.15%) | its 3.1 |
-| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 2915 (0.06%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
+| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 29314 (1.55%) | the 96 kHz decode's 64-band analysis's lower half (99.79% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
+| `Master Audio 5.0 96khz.dts` | 1768548 | 4091 (0.23%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
+| `Master Audio 7.1.dts` | 1945604 | 4848 (0.25%) | a downmix of its 7.1 |
+| `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 4125 (0.15%) | its 3.1 |
+| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 2912 (0.06%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
 | FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 1838 (0.37%) | the same (1.95%) |
-| `open bitrate.dts` (stereo, open rate) | 5242416 | 1279 (0.02%) | decoded (99.99% of the indexes, 99.96% of the scale factors, 99.82% of the bit allocations, 99.99% of the HF VQ groups, 99.82% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
+| `open bitrate.dts` (stereo, open rate) | 5242416 | 1280 (0.02%) | decoded (99.99% of the indexes, 99.96% of the scale factors, 99.82% of the bit allocations, 99.99% of the HF VQ groups, 99.82% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
 
 No stream at hand has XXCH in its core substream: FATE's XXCH samples (`xxch_71_24_48_2046`,
 `xbr_xxch_71_24_48_3840`, `x96_xxch_71_24_96_3840`, 7 frames each) have it in their extension
 substreams. Their XXCH frames moved into their core frames after the subframes (EXT_AUDIO set,
 EXT_AUDIO_ID 6), the extension substream dropped, make core-substream XXCH streams that FFmpeg
-decodes as 7.1; dtsdpack round-trips them against those decodes (15.84%, 17.58%, 14.60%; 21.64%
+decodes as 7.1; dtsdpack round-trips them against those decodes (15.84%, 17.59%, 14.59%; 21.64%
 and 22.63% before the binding stopped taking a gain a clipped decode's fit makes, below). Their
 signal is a silent frame, then white noise near full scale; the decoder undoes XXCH's downmix
 pre-scaling (every core channel times 1.41), so the decodes clip, and only partly line up with
@@ -168,11 +168,11 @@ their decodes clip too (0.3-1.2% of the samples):
 
 | Stream | Core | dtsdpack |
 |---|---:|---:|
-| `core_51_24_48_768_0`, `_1` (5.1) | 7168 | 1897 (26.46%), 1892 (26.40%) |
-| `xch_61_24_48_768` (6.1 by XCH) | 7168 | 1913 (26.69%) |
-| `x96_51_24_96_1509` (X96) | 14084 | 3303 (23.45%) |
-| `x96_xch_61_24_96_3840` | 14084 | 2624 (18.63%) |
-| `xbr_51_24_48_3840`, `xbr_xch_61_24_48_3840` (XBR: its residuals in the decode) | 14084 | 2415 (17.15%), 2852 (20.25%) |
+| `core_51_24_48_768_0`, `_1` (5.1) | 7168 | 1902 (26.53%), 1896 (26.45%) |
+| `xch_61_24_48_768` (6.1 by XCH) | 7168 | 1917 (26.74%) |
+| `x96_51_24_96_1509` (X96) | 14084 | 3302 (23.45%) |
+| `x96_xch_61_24_96_3840` | 14084 | 2622 (18.62%) |
+| `xbr_51_24_48_3840`, `xbr_xch_61_24_48_3840` (XBR: its residuals in the decode) | 14084 | 2417 (17.16%), 2849 (20.23%) |
 | `xll_x96_51_24_96_1509` (DTS-HD MA, X96) | 14084 | 1790 (12.71%) |
 
 ## How it works
@@ -293,11 +293,17 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   2^-3.75, a decoded WAV's near 2^-0.75; from 1, a short stream's were still on their way down at
   its end: `s.2.dts`'s first 1.2 MB 0.3% smaller), a step where the subband's misses since its last
   have strayed from those its counts expected by more than 1.25 times their root, and only where
-  the channel's last 32 missed 3 times or fewer (`s.2.dts`'s core 3.8% smaller, its subband
-  samples 28.9 KB to 24.4; its first 3 MB 2.0%, `3-1.dts` 1.1%, the other lossless WAVs' 0.4-0.7%,
-  `96-24.dts`'s 0.3%, the 7-frame samples within 4 bytes; 0.75% slower). A decoded WAV's misses are
-  the lattice's, not the arithmetic's, and keep the loudest subband's. Each nearness is a doubling's
-  bucket, and within one the miss rate changes several times over; so (format 71) a flag's
+  the channel's last 32 missed 3 times or fewer (`s.2.dts`'s core 3.8% smaller, its subband samples
+  28.9 KB to 24.4; its first 3 MB 2.0%, `3-1.dts` 1.1%, the other lossless WAVs' 0.4-0.7%,
+  `96-24.dts`'s 0.3%, the 7-frame samples within 4 bytes; 0.75% slower). Since format 79, where the
+  WAV is at the core's rate, each subband's starts where the lossless WAVs' end on average: 2^-1 to
+  2^-2 next to the multiples of 6 kHz (subbands 7-8, 15-16 and 23-24), 2^-3 to 2^-4 elsewhere, the
+  same in `s.2.dts`'s, `Master Audio 7.1.dts`'s, `master_audio_7.1_24bit.dts`'s and `3-1.dts`'s,
+  three encoders'; back to 2^-2.5 at the least where the scale factor search's rule first holds, a
+  decoded WAV's (the short streams 0.1% smaller, `master_audio_7.1_24bit.dts`'s core 0.7%). A
+  decoded WAV's misses are the lattice's, not the arithmetic's, and keep the loudest subband's. Each
+  nearness is a doubling's bucket, and within one the miss rate changes several times over; so
+  (format 71) a flag's
   probability is the geometric mean of the rates of the cells either side of where its two
   nearnesses lie, each by how near (in 16ths of a doubling, its log2's fraction by the 4 bits after
   the top one; log2 and 2^x by tables made in integers alone), and the flag counts in each of them
@@ -717,8 +723,9 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   but 0.21% (and steps of 1.5 dB, not quarter doublings, all but 0.63%). So the levels at which the
   table makes all of the subframe's ABITS so far are kept, from the energies in quarters of a 128th
   (`fine_log2_4()`: the 128th, then three more thresholds within it), and how its guess stands
-  against them is a context (sx, format 78): where every one of them makes the guess, it misses
-  0.025% of the time; where some make another ABITS, 5-24%. The table says 94.75% of `s.2.dts`'s
+  against them is a context (sx, format 78; since format 79 by the share of them that makes
+  another ABITS: under a tenth, half, nine tenths, more): where every one of them makes the guess,
+  it misses 0.025% of the time; where some make another ABITS, 5-24%. The table says 94.75% of `s.2.dts`'s
   ABITS, right in 99.51% of them (90.53% and 99.53% before format 78; by each band's own offset
   56.51% and 99.33%, the staircases missing less; 90.96% and 99.29% before that, until the
   transients' threshold went by the subband): its bit allocations went from 26.5 KB to 15.9 KB by
@@ -1036,14 +1043,16 @@ the short streams 38 bytes bigger). With sx (format 78), abt, sid, hdr and raw (
 on new dumps weighted the same way; hdr's and raw's first passes and sid's start on the dumps
 before sx, which they don't see): 1.85%, 0.02%, 3.8% and 7.3% off their output on them; abt's,
 hdr's and raw's kept (`s.2.dts`'s core 72 bytes smaller, the short streams 160, `Master Audio
-7.1.dts`'s 29), sid's not (the short streams 31 bytes bigger).
+7.1.dts`'s 29), sid's not (the short streams 31 bytes bigger). With sx in six classes (format 79),
+abt again (two passes, on new dumps): 0.17% off its output on them, the short streams 9 bytes
+smaller, the others within 4.
 `./mk.sh check 9 stream wav ...`
 confirms that the tuning build, the shipping build and the build without AVX2 write the same
 files.
 
 ### The format
 
-"dtsdpack", the format's version (78), the level, the WAV's binding (the offset; each core channel's
+"dtsdpack", the format's version (79), the level, the WAV's binding (the offset; each core channel's
 WAV channel, the second of its mix and their gains, Q23; the LFE's channel; the WAV's samples to
 the core's, 1, 2 or 4 (its lower band, then 2), and the lower band's resolution; the WAV's format,
 size and the CRC-32 of its first 64 KB), then the

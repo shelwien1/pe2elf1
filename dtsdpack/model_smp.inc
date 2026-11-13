@@ -424,7 +424,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // more were), down where fewer by as much (to HC_MAX either way); both halved as those expected
   // pass 1024. After its first HC_K steps, by 2 times the root: a long stream's scales then stray
   // less (`s.2.dts`'s core 0.05% smaller after 16, the short streams the same; after 8, from -10,
-  // 0.03% more). The core's subbands', then X96's
+  // 0.03% more). The core's subbands', then X96's. Where the WAV is at the core's rate, the core's
+  // start where the lossless WAVs' end, on average (HC_B: `s.2.dts`'s, `Master Audio 7.1.dts`'s,
+  // `master_audio_7.1_24bit.dts`'s and `3-1.dts`'s, three encoders': -4 to -8 next to the multiples
+  // of 6 kHz, 7-8, 15-16 and 23-24, -12 to -16 elsewhere), and once the scale factor search's rule
+  // holds (a decoded WAV's), from HC_S0 at the least (hc_dec): the short streams 0.1% smaller,
+  // `master_audio_7.1_24bit.dts`'s core 0.7%, `3-1.dts`'s 0.5%, the 7-frame FATE samples, too short
+  // for the rule, 2-4 bytes bigger
   static constexpr int HC_MAX = 32, HC_S0 = -10, HC_K = 8;
   struct HitCal {
     S32 s;   // (the scale: 2^(s/4))
@@ -433,6 +439,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     U32 k;   // (its steps so far, to HC_K)
   };
   HitCal hcal[NSUB + NSUB96];
+  int hc_dec;  // (whether the scales have been raised to HC_S0 at the least since ss_rule() first held)
   // unit u times hc's scale
   static S128 hc_unit(S128 u, int s) {
     static const int QM[4] = {128, 152, 181, 215};  // (2^(k/4), in 128ths)
@@ -462,7 +469,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     memcpy(hge, HF_GE, sizeof hge);
     for (int g = 0; g < 32; g++) hg_dist(g);
     hg_n = 0;
-    for (int k = 0; k < NSUB + NSUB96; k++) hcal[k].s = HC_S0;
+    static const S8 HC_B[NSUB] = {-12, -14, -15, -14, -13, -16, -15, -8, -7, -14, -15, -12, -12, -14, -13, -4,
+                                  -4,  -12, -13, -9,  -11, -14, -12, -6, -7, -12, -13, -9,  -10, -10, -10, -10};
+    for (int k = 0; k < NSUB + NSUB96; k++) hcal[k].s = k < NSUB && b.up == 1 ? HC_B[k] : HC_S0;
+    hc_dec = 0;
     for (int i = 0; i < 128; i++) lfe_cn[i] = -1;
     lfe_nsf = 0;
     lfe_lp = 9;
@@ -1105,7 +1115,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     return 4 * (S64)abp[p][b].o;
   }
   // how the table's guess g for channel ch's band b stands against the levels at which it makes the
-  // subframe's ABITS so far: 0 they don't bound it, 1 all of them say g, 2 under half another, 3 more
+  // subframe's ABITS so far: 0 they don't bound it, 1 all of them say g; else by the share that says
+  // another, 2 under a tenth, 3 under half, 4 under nine tenths, 5 more
   int ap_strad(int p, int ch, int b, int g) const {
     const AbParLevel& A = apl[p];
     bool ok;
@@ -1115,7 +1126,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (glo <= A.ilo && A.ihi <= ghi) return 1;
     if (A.ilo <= -AP_INF || A.ihi >= AP_INF) return 0;
     const S64 w = A.ihi - A.ilo, in = imax64(0, imin64(A.ihi, ghi) - imax64(A.ilo, glo));
-    return 2 * (w - in) < w ? 2 : 3;
+    const S64 out = w - in;
+    return 10 * out < w ? 2 : 2 * out < w ? 3 : 10 * out < 9 * w ? 4 : 5;
   }
   // and its ABITS was v
   void ap_range(int p, int ch, int b, int v) {
@@ -2872,6 +2884,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // its magnitude and sign by the subband's indexes before; then the decoder's sample, for the
   // ADPCM predictions after it
   S64 code_q(const CoreRec& r, const CoreSub& s, int ch, int b, int j, S64 v, S64 lo, S64 hi) {
+    if (!hc_dec && ss_rule()) {
+      hc_dec = 1;
+      for (int k = 0; k < NSUB; k++) hcal[k].s = hcal[k].s < HC_S0 ? HC_S0 : hcal[k].s;
+    }
     const int a = s.abits[ch][b], pm = s.pmode[ch][b];
     const S64 ss = step_scale(r, s, ch, b, j >> 3);
     const S32 pred = pm ? adpcm_pred(s.pvq[ch][b], yh[ch][b]) : 0;

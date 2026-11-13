@@ -111,7 +111,8 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      guess says (0 none, 1 the same, 2 the last ABITS, 3 another), sx where sn is the
 //      allocation table's, how it stands against the levels at which the table makes all of the
 //      subframe's ABITS so far, in quarters of a 128th (model_smp.inc's ap_strad(): 1 they all make
-//      sn, 2 under half of them another ABITS, 3 more; 0 none or they don't bound the level)
+//      sn; else by the share of them that makes another ABITS, 2 under a tenth, 3 under half, 4
+//      under nine tenths, 5 more; 0 none or they don't bound the level)
 // scl: kd (0 a subband's first scale factor, 1 its second, after its transient, 2 a high-frequency
 //      VQ subband's, 3 the LFE's), ab its ABITS (1 + it, 0 none), pm whether it predicts, pk whether the audio
 //      predicts the scale factor, pn how near its RMS lies to the midpoint between two (0-7), lp
