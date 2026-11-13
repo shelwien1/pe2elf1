@@ -1189,6 +1189,200 @@ static void code_bytes(AC& ac, u8* data, size_t len, bool prime) {
     ac.cat = savecat;
 }
 
+
+// ---------------------------------------------------------------------------
+// Embedded files (cover art etc.): stored as separate files <prefix>.<n>.<ext>
+// instead of inside the .meta. The .meta keeps their position, size, type and
+// a 16-bit CRC; the bytes around them are coded normally.
+
+struct ExtFiles {
+    const char* prefix;  // file name prefix (out_prefix / inp_prefix)
+    int count;           // files referenced so far (numbering, same order in c and d)
+    int keep_inline;     // -i: do not extract
+    u64 bytes;           // total extracted bytes
+};
+static ExtFiles g_ext = {nullptr, 0, 0, 0};
+
+static const char* k_ext_name[8] = {"bin", "jpg", "png", "gif", "bmp", "webp", "tif", "bin"};
+
+static int sniff_ext(const u8* p, size_t n) {
+    if (n >= 3 && p[0] == 0xFF && p[1] == 0xD8 && p[2] == 0xFF) return 1;
+    if (n >= 8 && !memcmp(p, "\x89PNG\r\n\x1a\n", 8)) return 2;
+    if (n >= 6 && (!memcmp(p, "GIF87a", 6) || !memcmp(p, "GIF89a", 6))) return 3;
+    if (n >= 2 && p[0] == 'B' && p[1] == 'M') return 4;
+    if (n >= 12 && !memcmp(p, "RIFF", 4) && !memcmp(p + 8, "WEBP", 4)) return 5;
+    if (n >= 4 && (!memcmp(p, "II*\0", 4) || !memcmp(p, "MM\0*", 4))) return 6;
+    return 0;
+}
+
+// length of a JPEG starting at p (0 if not a well-formed JPEG)
+static size_t jpeg_len(const u8* p, size_t n) {
+    if (n < 4 || p[0] != 0xFF || p[1] != 0xD8 || p[2] != 0xFF) return 0;
+    size_t i = 2;
+    while (i + 1 < n) {
+        if (p[i] != 0xFF) return 0;
+        while (i + 1 < n && p[i + 1] == 0xFF) i++;  // fill bytes
+        if (i + 1 >= n) return 0;
+        u8 m = p[i + 1];
+        i += 2;
+        if (m == 0xD9) return i;  // EOI
+        if ((m >= 0xD0 && m <= 0xD7) || m == 0x01) continue;
+        if (m == 0x00 || i + 2 > n) return 0;
+        size_t sl = (p[i] << 8) | p[i + 1];
+        if (sl < 2 || i + sl > n) return 0;
+        i += sl;
+        if (m == 0xDA) {  // entropy coded data until the next marker
+            while (i + 1 < n) {
+                if (p[i] == 0xFF && p[i + 1] != 0x00 && !(p[i + 1] >= 0xD0 && p[i + 1] <= 0xD7)) break;
+                i++;
+            }
+        }
+    }
+    return 0;
+}
+
+static size_t png_len(const u8* p, size_t n) {
+    if (n < 8 || memcmp(p, "\x89PNG\r\n\x1a\n", 8)) return 0;
+    size_t i = 8;
+    while (i + 12 <= n) {
+        u32 cl = rd_be32(p + i);
+        if (cl > n || i + 12 + (size_t)cl > n) return 0;
+        bool iend = !memcmp(p + i + 4, "IEND", 4);
+        i += 12 + cl;
+        if (iend) return i;
+    }
+    return 0;
+}
+
+struct Cut {
+    u64 off, len;
+    int ext;
+};
+enum { MAXCUTS = 64, MINCUT = 256 };
+
+// find embedded files: kind 1 = FLAC PICTURE block (exact), otherwise scan for JPEG/PNG
+static int find_cuts(const u8* d, size_t n, int kind, Cut* cuts) {
+    int nc = 0;
+    if (kind == 1) {
+        // type, mime, description, w, h, depth, colors, data_len, data
+        size_t p = 4;
+        for (int k = 0; k < 2; k++) {
+            if (p + 4 > n) return 0;
+            u32 l = rd_be32(d + p);
+            if ((u64)p + 4 + l > n) return 0;
+            p += 4 + l;
+        }
+        p += 16;
+        if (p + 4 > n) return 0;
+        u32 dl = rd_be32(d + p);
+        p += 4;
+        if ((u64)p + dl != n || dl < MINCUT) return 0;
+        cuts[0].off = p;
+        cuts[0].len = dl;
+        cuts[0].ext = sniff_ext(d + p, dl);
+        return 1;
+    }
+    for (size_t i = 0; i + 8 <= n && nc < MAXCUTS;) {
+        size_t l = 0;
+        if (d[i] == 0xFF && d[i + 1] == 0xD8 && d[i + 2] == 0xFF)
+            l = jpeg_len(d + i, n - i);
+        else if (d[i] == 0x89 && d[i + 1] == 'P')
+            l = png_len(d + i, n - i);
+        if (l >= MINCUT) {
+            cuts[nc].off = i;
+            cuts[nc].len = l;
+            cuts[nc].ext = sniff_ext(d + i, l);
+            nc++;
+            i += l;
+        } else
+            i++;
+    }
+    return nc;
+}
+
+static void ext_name(char* buf, size_t bn, int num, int ext) {
+    snprintf(buf, bn, "%s.%d.%s", g_ext.prefix, num, k_ext_name[ext & 7]);
+}
+
+struct ExtModels {
+    UModel n, off, len;
+    BM ext[8];
+};
+static ExtModels g_extm;
+
+// Code a byte region whose length is known on both sides, extracting embedded files.
+static bool code_region(AC& ac, u8* data, size_t len, int kind, bool prime) {
+    Cut cuts[MAXCUTS];
+    int nc = 0;
+    if (!ac.dec && !g_ext.keep_inline && g_ext.prefix) nc = find_cuts(data, len, kind, cuts);
+    int savecat = ac.cat;
+    ac.cat = C_META;
+    nc = (int)code_uint(ac, g_extm.n, (u64)nc);
+    if (nc > MAXCUTS) return false;
+    u64 pos = 0, total = 0;
+    for (int i = 0; i < nc; i++) {
+        Cut& c = cuts[i];
+        u64 gap = code_uint(ac, g_extm.off, ac.dec ? 0 : c.off - pos);
+        c.off = pos + gap;
+        c.len = code_uint(ac, g_extm.len, c.len);
+        c.ext = (int)ac.tree(g_extm.ext, 3, (u32)c.ext);
+        if (c.off + c.len > len) return false;
+        u16 crc = ac.dec ? 0 : crc16(data + c.off, (size_t)c.len);
+        u16 want = (u16)ac.raw(crc, 16);
+        char name[4200];
+        ext_name(name, sizeof(name), ++g_ext.count, c.ext);
+        if (!ac.dec) {
+            FILE* f = fopen(name, "wb");
+            if (!f || fwrite(data + c.off, 1, (size_t)c.len, f) != c.len || fclose(f)) die("cannot write embedded file");
+            g_ext.bytes += c.len;
+        } else {
+            FILE* f = fopen(name, "rb");
+            if (!f) {
+                fprintf(stderr, "flacdump: cannot open embedded file %s\n", name);
+                return false;
+            }
+            size_t got = fread(data + c.off, 1, (size_t)c.len, f);
+            int extra = fgetc(f);
+            fclose(f);
+            if (got != c.len || extra != EOF || crc16(data + c.off, (size_t)c.len) != want) {
+                fprintf(stderr, "flacdump: embedded file %s does not match the .meta\n", name);
+                return false;
+            }
+        }
+        total += c.len;
+        pos = c.off + c.len;
+    }
+    ac.cat = savecat;
+    // the remaining bytes, concatenated
+    Buf rest;
+    size_t rn = (size_t)(len - total);
+    rest.reserve(rn + 1);
+    rest.n = rn;
+    if (!ac.dec) {
+        size_t q = 0;
+        u64 p0 = 0;
+        for (int i = 0; i < nc; i++) {
+            memcpy(rest.p + q, data + p0, (size_t)(cuts[i].off - p0));
+            q += (size_t)(cuts[i].off - p0);
+            p0 = cuts[i].off + cuts[i].len;
+        }
+        memcpy(rest.p + q, data + p0, (size_t)(len - p0));
+    }
+    code_bytes(ac, rest.p, rn, prime);
+    if (ac.dec) {
+        size_t q = 0;
+        u64 p0 = 0;
+        for (int i = 0; i < nc; i++) {
+            memcpy(data + p0, rest.p + q, (size_t)(cuts[i].off - p0));
+            q += (size_t)(cuts[i].off - p0);
+            p0 = cuts[i].off + cuts[i].len;
+        }
+        memcpy(data + p0, rest.p + q, (size_t)(len - p0));
+    }
+    rest.release();
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // LPC / rice estimation helpers used as predictors for the meta model
 
@@ -3607,13 +3801,17 @@ static bool vorbis_ok(const u8* d, u32 len) {
 // Part A: prefix, block list, contents not depending on frames
 static bool code_layout(AC& ac, Models& M, FlacLayout& L) {
     ac.cat = C_META;
+    g_ext.count = 0;
+    model_init(g_extm);
+    g_extm.n.len[0].p = 3000;  // most regions contain no embedded files
+    g_extm.n.len[0].n = 4;
     u64 plen = code_uint(ac, M.len_m, L.prefix.n);
     if (ac.dec) {
         L.prefix.n = 0;
         L.prefix.reserve(plen + 1);
         L.prefix.n = (size_t)plen;
     }
-    code_bytes(ac, L.prefix.p, (size_t)plen, false);
+    if (!code_region(ac, L.prefix.p, (size_t)plen, 0, false)) return false;
     ac.cat = C_META;
     code_stream_params(ac, L.sp);
     if (L.sp.nch < 1 || L.sp.nch > 8 || L.sp.bps < 4 || L.sp.bps > 32) return false;
@@ -3646,7 +3844,7 @@ static bool code_layout(AC& ac, Models& M, FlacLayout& L) {
                     if (b.data[j]) z = 0;
             z = ac.bit(M.mflag[0], z);
             b.structured = z;
-            if (!z) code_bytes(ac, b.data, b.len, false);
+            if (!z && !code_region(ac, b.data, b.len, 0, false)) return false;
         } else if (b.type == 3) {  // SEEKTABLE
             int s = ac.bit(M.mflag[1], b.len % 18 == 0);
             b.structured = s;
@@ -3654,7 +3852,7 @@ static bool code_layout(AC& ac, Models& M, FlacLayout& L) {
         } else if (b.type == 4) {
             if (!code_vorbis(ac, M, b)) return false;
         } else {
-            code_bytes(ac, b.data, b.len, false);
+            if (!code_region(ac, b.data, b.len, b.type == 6 ? 1 : 0, false)) return false;
         }
     }
     return true;
@@ -3945,7 +4143,32 @@ static const u8 k_magic[2] = {'F', 0xD1};
 
 struct Options {
     int verify;
+    int dump;  // -x: write <prefix>.side, a plain serialization of the side info (for comparisons)
 };
+
+// plain serialization of everything except PCM-derived data (diagnostics only)
+static void dump_frame_side(Buf& o, const u8* frame, size_t hl, const FrameInfo& f) {
+    o.append(frame, hl - 1);  // header without CRC-8
+    for (int ch = 0; ch < f.nch; ch++) {
+        const SubInfo& s = f.sub[ch];
+        o.put((u8)(s.type * 64 + s.order));
+        o.put((u8)s.wasted);
+        if (s.type < ST_FIXED) continue;
+        if (s.type == ST_LPC) {
+            o.put((u8)s.prec);
+            o.put((u8)s.shift);
+            for (int i = 0; i < s.order; i++) {
+                o.put((u8)s.coef[i]);
+                o.put((u8)(s.coef[i] >> 8));
+            }
+        }
+        o.put((u8)(s.method * 16 + s.porder));
+        for (int i = 0; i < (1 << s.porder); i++) {
+            o.put(s.param[i]);
+            if (s.param[i] == (s.method ? 31 : 15)) o.put(s.raw[i]);
+        }
+    }
+}
 
 static bool parse_layout(const Buf& in, FlacLayout& L, u64& audio_start) {
     size_t pos = 0;
@@ -4005,6 +4228,7 @@ static void print_stats(AC& ac, size_t total) {
 }
 
 static int do_compress(const char* inname, const char* prefix, const Options& opt) {
+    g_ext.prefix = prefix;
     Buf in;
     if (!read_file(inname, in, 64)) die("cannot read input");
     FlacLayout L;
@@ -4022,10 +4246,18 @@ static int do_compress(const char* inname, const char* prefix, const Options& op
     FrameInfo fi;
     frameinfo_init(fi);
     Buf tmp;
+    Buf side;
+    if (opt.dump) side.append(in.p, (size_t)audio_start);
     u64 pos = audio_start;
     u64 nframes = 0, nraw = 0, njunk = 0;
     while (pos < in.n) {
         size_t len = parse_frame(in.p + pos, (size_t)(in.n - pos), sp, fi, g_pcm);
+        if (len && opt.dump) {
+            FrameInfo fh;
+            frameinfo_init(fh);
+            size_t hl = parse_header(in.p + pos, (size_t)(in.n - pos), sp, fh);
+            dump_frame_side(side, in.p + pos, hl, fi);
+        }
         if (len) {
             tmp.n = 0;
             encode_frame(fi, g_pcm, tmp);
@@ -4061,8 +4293,16 @@ static int do_compress(const char* inname, const char* prefix, const Options& op
                 segs.push(s);
             }
             njunk += q - pos;
+            if (opt.dump) side.append(in.p + pos, (size_t)(q - pos));
             pos = q;
         }
+    }
+    if (opt.dump) {
+        char sname[4200];
+        snprintf(sname, sizeof(sname), "%s.side", prefix);
+        FILE* sf = fopen(sname, "wb");
+        if (!sf || fwrite(side.p, 1, side.n, sf) != side.n || fclose(sf)) die("cannot write side dump");
+        side.release();
     }
     u64 total_samples = ww.nsamples;
     if (!ww.close()) die("error writing wav");
@@ -4119,7 +4359,7 @@ static int do_compress(const char* inname, const char* prefix, const Options& op
         } else {
             ac.cat = C_RAW;
             code_uint(ac, M->len_m, s.len - 1);
-            code_bytes(ac, in.p + s.off, (size_t)s.len, false);
+            if (!code_region(ac, in.p + s.off, (size_t)s.len, 0, false)) die("internal: region");
         }
     }
     fs.md5.final(fs.md5sum);
@@ -4143,8 +4383,10 @@ static int do_compress(const char* inname, const char* prefix, const Options& op
             if (P.hits[i]) fprintf(stderr, " %d:%u", i, P.hits[i]);
         fprintf(stderr, "\n");
     }
-    printf("%s: %zu bytes -> wav %llu samples, meta %zu bytes\n", inname, in.n, (unsigned long long)total_samples,
+    printf("%s: %zu bytes -> wav %llu samples, meta %zu bytes", inname, in.n, (unsigned long long)total_samples,
            meta.n);
+    if (g_ext.count) printf(", %d embedded file(s) %llu bytes", g_ext.count, (unsigned long long)g_ext.bytes);
+    printf("\n");
     free(M);
     if (opt.verify) {
         WavReader wr;
@@ -4233,7 +4475,7 @@ static bool decompress_core(const u8* meta, size_t meta_n, WavReader& wav, Sink&
             u64 len = code_uint(ac, M->len_m, 0) + 1;
             tmp.n = 0;
             tmp.reserve(len);
-            code_bytes(ac, tmp.p, (size_t)len, false);
+            if (!code_region(ac, tmp.p, (size_t)len, 0, false)) return false;
             out.write_at(pos, tmp.p, (size_t)len);
             pos += len;
         }
@@ -4255,6 +4497,7 @@ static bool decompress_core(const u8* meta, size_t meta_n, WavReader& wav, Sink&
 }
 
 static int do_decompress(const char* prefix, const char* outname) {
+    g_ext.prefix = prefix;
     char wname[4096], mname[4096];
     snprintf(wname, sizeof(wname), "%s.wav", prefix);
     snprintf(mname, sizeof(mname), "%s.meta", prefix);
@@ -4286,7 +4529,11 @@ static void usage() {
             "  flacdump d [options] inp_prefix restored.flac\n"
             "options:\n"
             "  -v   verbose (print meta size breakdown)\n"
-            "  -n   (c) skip the built-in restore verification\n");
+            "  -n   (c) skip the built-in restore verification\n"
+            "  -i   (c) keep embedded files (cover art etc.) inside the .meta instead of\n"
+            "       writing them to <prefix>.<n>.<ext>\n"
+            "  -x   (c) also write <prefix>.side: an uncompressed dump of the side info\n"
+            "       (headers, predictor/rice parameters, metadata) for comparisons\n");
     exit(1);
 }
 
@@ -4299,6 +4546,7 @@ int main(int argc, char** argv) {
     init_fast();
     Options opt;
     opt.verify = 1;
+    opt.dump = 0;
     const char* mode = argv[1];
     const char* pos[2] = {nullptr, nullptr};
     int np = 0;
@@ -4309,6 +4557,10 @@ int main(int argc, char** argv) {
                     g_verbose++;
                 else if (*p == 'n')
                     opt.verify = 0;
+                else if (*p == 'i')
+                    g_ext.keep_inline = 1;
+                else if (*p == 'x')
+                    opt.dump = 1;
                 else
                     usage();
             }

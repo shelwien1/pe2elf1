@@ -3,16 +3,19 @@
 Lossless extraction / restoration of FLAC files.
 
 ```
-flacdump c [options] input.flac out_prefix     -> out_prefix.wav + out_prefix.meta
-flacdump d [options] inp_prefix restored.flac  <- inp_prefix.wav + inp_prefix.meta
+flacdump c [options] input.flac out_prefix     -> out_prefix.wav + out_prefix.meta [+ out_prefix.N.ext]
+flacdump d [options] inp_prefix restored.flac  <- inp_prefix.wav + inp_prefix.meta [+ inp_prefix.N.ext]
 ```
 
 `c` decodes the FLAC stream into a standard `.wav` file (the PCM) and writes a
 `.meta` file holding everything else needed to rebuild the original `.flac`
 **bit-exactly**: container layout, metadata blocks, and every encoder decision
 (block sizes, channel assignments, subframe types, predictor orders and
-coefficients, rice partitions/parameters, ...). `d` rebuilds the identical
-file from the two.
+coefficients, rice partitions/parameters, ...). Embedded files (cover art in
+PICTURE blocks, JPEG/PNG images inside ID3v2/APE tags or other raw regions) are
+written to separate files `out_prefix.1.jpg`, `out_prefix.2.png`, ... so they
+can be handled by format-specific tools; the `.meta` only keeps their position,
+size, type and a CRC. `d` rebuilds the identical file from all of them.
 
 Options:
 
@@ -20,6 +23,8 @@ Options:
 |--------|---------|
 | `-v`   | print a breakdown of the `.meta` size (`-vv` adds model statistics) |
 | `-n`   | (`c`) skip the built-in verification (by default `c` re-runs the restore in memory and compares it with the input) |
+| `-i`   | (`c`) keep embedded files inside the `.meta` instead of writing `prefix.N.ext` files |
+| `-x`   | (`c`) also write `prefix.side`, a plain uncompressed serialization of the side info (frame headers, predictor and rice parameters, metadata blocks) - only for comparisons with generic compressors |
 
 The typical use is to store/transmit the PCM with a stronger audio compressor
 and restore the original FLAC later, so the `.meta` file should be as small as
@@ -58,14 +63,45 @@ For comparison, storing the same decisions without prediction costs about
 0.2-0.3% of the FLAC size (tens of kilobytes for an album track).
 
 A good part of what remains is genuine information: tag text in
-VORBIS_COMMENT, cover art, foreign metadata.
+VORBIS_COMMENT, foreign metadata. Example with a large cover picture
+(24-bit/48 kHz, 86 MB FLAC, 1.35 MB JPEG in a PICTURE block): `.meta` = 436 bytes
+(of which ~360 are the 678-byte VORBIS_COMMENT), plus `prefix.1.jpg`.
+
+### Integrated coding vs. a generic compressor
+
+`-x` writes the side information in a plain form (raw frame headers; per
+subframe the type, order, wasted bits, precision, shift, 16-bit coefficients,
+partition order, rice parameters; the metadata blocks as they are). Compressed
+with xz/bzip2 this is what a "dump the fields, then xz" approach would need:
+
+| file                                   | plain side info | xz -9e  | bzip2 -9 | flacdump .meta |
+|----------------------------------------|----------------:|--------:|---------:|---------------:|
+| 24 bit, all verbatim (picture removed) | 142,579         | 4,456   | 7,608    | 395            |
+| libFLAC 1.4.2 16 bit                   | 140,360         | 69,948  | 65,156   | 42             |
+| libFLAC 1.2.1 `-8`                     | 194,560         | 93,940  | 84,072   | 84             |
+| libFLAC 1.3.1, 24 bit                  | 142,361         | 101,784 | 97,901   | 138            |
+| libFLAC 1.3.3, 24 bit (unknown build)  | 87,214          | 46,508  | 45,372   | 5,019          |
+| ffmpeg `-compression_level 8`          | 36,752          | 18,044  | 18,177   | 65             |
+| ffmpeg cholesky LPC (not replicated)   | 34,479          | 16,116  | 16,340   | 8,839          |
+| flac `-A hann;welch;gauss(0.3)`        | 35,614          | 14,716  | 13,951   | 6,506          |
+
+A generic compressor cannot know that most of these values are functions of
+the PCM, so even for encoders whose analysis is not replicated the context
+model stays well ahead. For the tag text alone the CM coder also beats raw
+LZMA2 (e.g. 678-byte VORBIS_COMMENT: ~360 bytes vs 471 for `xz --format=raw`,
+which additionally has no container overhead).
 
 ## How it works
 
 ### Container
 
-* Bytes before `fLaC` (ID3v2 tags etc.) and after the last frame (ID3v1, junk)
-  are kept verbatim.
+* Bytes before `fLaC` (ID3v2 tags etc.) and after the last frame (ID3v1, APE,
+  junk) are kept; JPEG/PNG images found inside them (validated by parsing the
+  JPEG marker / PNG chunk structure, >= 256 bytes) become external files, the
+  rest is coded with the CM byte model.
+* PICTURE blocks: the picture data becomes an external file (extension from
+  its magic bytes: jpg, png, gif, bmp, webp, tif, otherwise bin); the block's
+  other fields stay in the `.meta`.
 * Metadata blocks are modelled: STREAMINFO fields are predicted from the
   restored audio (min/max block and frame sizes, total samples, MD5),
   SEEKTABLE points are coded as frame indices (usually predicted from the
@@ -120,7 +156,9 @@ from unknown encoders simply produce a larger `.meta`.
 `'F' 0xD1` followed by a single arithmetic-coded stream: container layout and
 metadata blocks, then one segment per frame/junk run, then the fields that
 depend on the restored audio (STREAMINFO sizes/MD5, seek tables) and a 16-bit
-check of the PCM, so `d` refuses a `.wav` that does not belong to the `.meta`. The format is
+check of the PCM, so `d` refuses a `.wav` that does not belong to the `.meta`.
+External files are referenced by number (`prefix.N.ext`, numbered in file order)
+and checked by size and CRC-16 when restoring. The format is
 defined by the model code; there is no compatibility guarantee between
 different versions of the tool.
 
