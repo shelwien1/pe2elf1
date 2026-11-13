@@ -924,8 +924,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         for (int b = 0; b < r.nvqsub[ch]; b++) {
           int g = -1;
           if (fe_s[ch][b] != FE_NONE) {
-            const AbPar& q = abp[0][b];
-            g = q.set ? ap_abits((S64)fe_s[ch][b] - l - q.o) : q.one ? 1 : stair_guess(ab_st[0][b], fe_s[ch][b] - l);
+            bool ok;
+            const S32 o = ap_off(0, b, &ok);
+            g = ok ? ap_abits((S64)fe_s[ch][b] - l - o) : abp[0][b].one ? 1 : stair_guess(ab_st[0][b], fe_s[ch][b] - l);
           }
           if (g < 0) g = hist.abits[ch][b] ? hist.abits[ch][b] - 1 : 0;
           t += bud_bits(r, ch, b, g);
@@ -995,13 +996,20 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
 
   // The DTS-HD MA encoders seen allocate by one table: a subband's ABITS is a (2 to 26; else 1)
   // where its fine energy, less the level and its band's offset, is ap_edge(a) or more (in 1.5 dB
-  // steps: 64 units), the next's less; the bands' offsets are the stream's (bands 5-19 the same,
-  // 20-27 2 dB more each, the bottom ones lower, or the same). Fitted afterwards, a level per
-  // subframe, the staircases miss 0.6% of a lossless WAV's ABITS where their intervals as they come
-  // miss 1.6%. So each band's offset is the one most of its last ABITS (the newer the more) say at
-  // their subframes' levels; a subframe's level, the core's from the budget as the staircases'
-  // centre is (level_centre(), at the table's ABITS: c0t), the extension's that centre, plus how far
-  // the last subframes' levels lay from it, then the shift at which the table makes the most of the
+  // steps: 64 units), the next's less; the bands' offsets are one offset for the stream and a shape
+  // (ap_shape()): bands 5-19 the same, 20-27 2 dB more each, and the bottom five the same or, the
+  // shape of `s.2.dts`'s encoder and FFmpeg's `master_audio_7.1_24bit.dts`'s, 18, 15, 12, 7.5 and
+  // 4.5 dB lower (the offsets each band's own ABITS make, at the end of a stream, lie within 2 units
+  // of the shape's: within 10 of it in `Master Audio 7.1.dts`'s, a downmix's). Fitted afterwards, a
+  // level per subframe, the staircases miss 0.6% of a lossless WAV's ABITS where their intervals as
+  // they come miss 1.6%. So the stream's offset is the one most of the last ABITS of all the bands
+  // (the newer the more) say at their subframes' levels, for each shape, the shape the one more of
+  // them say (app: from a stream's first frames, where a band of its own has few; and far more
+  // exactly, as every band's ABITS count, than each band's offset by its own ABITS, which the table
+  // goes by until a stream's first ABITS above 1: `s.2.dts`'s core 2.2% smaller, the other lossless
+  // WAVs' 2-6%); a subframe's level, the core's from the budget as the staircases' centre is
+  // (level_centre(), at the table's ABITS: c0t), the extension's that centre, plus how far the last
+  // subframes' levels lay from it, then the shift at which the table makes the most of the
   // subframe's ABITS so far (as the staircases' level). Its guesses are the first ones where they
   // have missed less than the staircases' (ap_rule()).
   static constexpr int AP_W = 1024;  // (a band's offsets: within AP_W of its first)
@@ -1012,6 +1020,25 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     U8 set, one, out;      // (whether c is set; ABITS 1 seen, with c unset; ABITS in a row the scores miss)
     U32 sc[2 * AP_W + 1];  // each offset's score (ap_inc's)
   } abp[2][NSUB];
+  // band b's offset in shape k, less the stream's
+  static S32 ap_shape(int k, int b) {
+    static const S16 LOW[5] = {-768, -640, -512, -320, -192};
+    return (b < 5 && !k ? LOW[b] : 0) + (b > 19 ? (S32)((256 * (b - 19) + 1) / 3) : 0);
+  }
+  struct AbPool {
+    S32 c, best[2];          // the scores' centre (the stream's first ABITS above 1's); each shape's offset
+    U8 set, k, out;          // (whether c is set; the shape taken; ABITS in a row the scores miss)
+    U32 sc[2][2 * AP_W + 1]; // each shape's offsets' scores (ap_inc's)
+  } app[2];
+  // band b's offset (*ok: whether it has one): the stream's in its shape, or where none is set yet,
+  // the band's own
+  S32 ap_off(int p, int b, bool* ok) const {
+    const AbPool& q = app[p];
+    *ok = true;
+    if (q.set) return q.best[q.k] + ap_shape(q.k, b);
+    *ok = abp[p][b].set;
+    return abp[p][b].o;
+  }
   struct AbParLevel {
     U32 inc;          // (the scores' step: it grows, the older ones count less)
     S32 pri, d;       // the subframe's prior level, the shift from it
@@ -1049,10 +1076,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // the table's ABITS for band b at the fine energy x (-1 none), and how sure it is (*m, as
   // level_margin()'s)
   int ap_guess(int p, int b, S32 x, int* m) const {
-    const AbPar& t = abp[p][b];
     *m = 0;
-    if (!t.set) return t.one ? 1 : -1;
-    const S64 y = (S64)x - apl[p].pri - apl[p].d - t.o;
+    bool ok;
+    const S32 o = ap_off(p, b, &ok);
+    if (!ok) return abp[p][b].one ? 1 : -1;
+    const S64 y = (S64)x - apl[p].pri - apl[p].d - o;
     const int g = ap_abits(y);
     const S64 lo = y - ap_edge(g), hi = ap_edge(g + 1) - 1 - y, mm = lo < hi ? lo : hi;
     int k = 0;
@@ -1062,11 +1090,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   }
   // and its ABITS was v: the shifts at which the table would have said it count
   void ap_add(int p, int b, S32 x, int v) {
-    const AbPar& t = abp[p][b];
     AbParLevel& A = apl[p];
-    if (!t.set || v < 1 || v > 26) return;
+    bool ok;
+    const S32 o = ap_off(p, b, &ok);
+    if (!ok || v < 1 || v > 26) return;
     // (edge(v) <= x - pri - s - o < edge(v + 1): x - pri - o - edge(v + 1) < s <= x - pri - o - edge(v))
-    const S64 y = (S64)x - A.pri - t.o;
+    const S64 y = (S64)x - A.pri - o;
     const S64 k0 = clip(y - ap_edge(v + 1) + 1 + AL_ND, AL_ND - AP_SH, AL_ND + AP_SH + 1),
               k1 = clip(y - ap_edge(v) + AL_ND, AL_ND - AP_SH - 1, AL_ND + AP_SH);
     // (as the staircases': a 16th of an ABITS's score off for each unit from the prior; the best,
@@ -1107,6 +1136,46 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     return m;
   }
+  // the stream's offset in each shape: an ABITS v of band b at whose offset lo to hi (as ap_commit()
+  // has them) say it is, as a band's own scores go (from its first ABITS above 1; again where two in
+  // a row lie past the scores, the level having moved)
+  void ap_pool(int p, int b, int v, S64 lo, S64 hi) {
+    AbPool& q = app[p];
+    const U32 inc = apl[p].inc;
+    if (q.set) {
+      const S64 sh = ap_shape(q.k, b);
+      if (hi - sh < (S64)q.c - AP_W || lo - sh > (S64)q.c + AP_W) {
+        if (++q.out >= 2) q.set = 0;
+      } else
+        q.out = 0;
+    }
+    if (!q.set) {
+      if (v < 2) return;
+      const S64 m = ((lo > hi - 255 ? lo : hi - 255) + hi) >> 1;
+      q.set = 1, q.out = 0, q.k = 0, q.c = (S32)(m - ap_shape(0, b));
+      q.best[0] = q.c, q.best[1] = (S32)(m - ap_shape(1, b));
+      memset(q.sc, 0, sizeof q.sc);
+    }
+    U32 mx[2];
+    for (int k = 0; k < 2; k++) {
+      const S64 sh = ap_shape(k, b), cur = clip((S64)q.best[k] - q.c, -AP_W, AP_W) + AP_W;
+      const S64 j0 = clip(lo - sh - q.c, -AP_W, AP_W + 1) + AP_W, j1 = clip(hi - sh - q.c, -AP_W - 1, AP_W) + AP_W;
+      U32 best = q.sc[k][cur];
+      S64 bo = cur;
+      if (j0 <= j1) {  // (the best: the last one, or of those this raised the nearest it)
+        const U32 m = ap_raise(q.sc[k], (int)j0, (int)j1, inc);
+        best = q.sc[k][cur];
+        if (m > best) {
+          best = m, bo = -1;
+          for (S64 j = j0; j <= j1; j++)
+            if (q.sc[k][j] == best && (bo < 0 || (j > cur ? j - cur : cur - j) < (bo > cur ? bo - cur : cur - bo))) bo = j;
+        }
+      }
+      q.best[k] = (S32)(bo - AP_W + q.c);
+      mx[k] = best;
+    }
+    if (mx[1 - q.k] > mx[q.k]) q.k = (U8)(1 - q.k);
+  }
   // pass p's subframe's ABITS all known (abl[p]'s obs): each band's offsets scored at its level, the
   // level's distance from the centre into the average
   void ap_commit(int p) {
@@ -1121,6 +1190,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (v < 1 || v > 26) continue;
       const S64 x = (S64)L.obs[i].x - lv;
       const S64 lo = v < 26 ? x - ap_edge(v + 1) + 1 : -AP_FAR, hi = v > 1 ? x - ap_edge(v) : AP_FAR;
+      ap_pool(p, L.obs[i].b, v, lo, hi);
       // (a band's scores start at its first ABITS above 1; again where two in a row lie past them:
       // the level has moved, as from a silence)
       if (t.set && (hi < (S64)t.c - AP_W || lo > (S64)t.c + AP_W) && ++t.out >= 2) t.set = 0;
@@ -1150,6 +1220,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (A.inc >= 1u << 20) {
         for (int c = 0; c < NSUB; c++)
           for (int k = 0; k <= 2 * AP_W; k++) abp[p][c].sc[k] >>= 10;
+        for (int k = 0; k < 2; k++)
+          for (int j = 0; j <= 2 * AP_W; j++) app[p].sc[k][j] >>= 10;
         A.inc >>= 10;
       }
     }
