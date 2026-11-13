@@ -15,7 +15,7 @@ enum { BO_OFF = 0, BO_MAP = 4, BO_MAP2 = BO_MAP + NCH, BO_G1 = BO_MAP2 + NCH, BO
        DP_BIND = BO_CRC + 4 };  // (the binding's bytes)
 enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND, DP_HEAD = DP_AT_BIND + DP_BIND };  // the header's
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
-constexpr int DP_VERSION = 81;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
+constexpr int DP_VERSION = 82;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
                                // extension as records; 4: a WAV at twice the core's rate, X96 and XXCH; 5: the
                                // scale factor search; 6: the bit allocation search; 7: the bits after the
                                // subframes as the bytes they end in, the energy's quarter of its bucket, the
@@ -137,7 +137,9 @@ constexpr int DP_VERSION = 81;  // the format's (2: a core channel's binding a m
                                // abt, hdr and raw retuned; 79: sx in six classes, abt retuned; the
                                // index misses' error scales from the lossless WAVs' at the core's rate;
                                // 80: an index's hit cells by the earlier channels' misses at its sample;
-                               // 81: scl and smp retuned)
+                               // 81: scl and smp retuned; 82: a lossless WAV's indexes with a bias
+                               // of the bottom subband's value, their nearness and the HF VQ
+                               // margins against the level along the subband's FFT path)
 
 static void put_le(U8* p, U64 v, int n) {
   for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));

@@ -15,16 +15,16 @@ Index a
  a_dp: dp, 1!1110011
 
 Index b
- b_kd: kd, 1!011
+ b_kd: kd, 1!111
  b_pk: pk, 1!1
  b_pn: pn, 1!0111010
  b_dp: dp, 1!1110111
- b_pl: pl, 1!111000001111111
+ b_pl: pl, 1!111000001111010
 
 Index c
  c_kd: kd, 1!100
  c_pk: pk, 1!1
- c_ab: ab, 1!010100001111110111111111100
+ c_ab: ab, 1!000100001101111011110011100
 
 Index d
  d_kd: kd, 1!001
@@ -34,13 +34,13 @@ Index d
 Index e
  e_kd: kd, 1!001
  e_pk: pk, 1!1
- e_hm: hm, 1!11
+ e_hm: hm, 1!01
 
 Index h
  h_kd: kd, 1!001
  h_pk: pk, 1!1
  h_pn: pn, 1!1001011
- h_ab: ab, 1!101001101010001101000000000
+ h_ab: ab, 1!101001001010001101000000000
 
 Index i
  i_kd: kd, 1!011
@@ -58,20 +58,20 @@ Index j
 Index k
  k_kd: kd, 1!110
  k_pk: pk, 1!1
- k_lp: lp, 1!101111011
- k_pn: pn, 1!0010000
+ k_lp: lp, 1!101111111
+ k_pn: pn, 1!0011100
 
 Index l
  l_kd: kd, 1!101
  l_pk: pk, 1!1
  l_hm: hm, 1!01
- l_ab: ab, 1!011100110011010000111111000
+ l_ab: ab, 1!011100110011010000111110000
 
 Index s
  s_kd: kd, 1!110
  s_pk: pk, 1!1
- s_pn: pn, 1!1000111
- s_dp: dp, 1!1101001
+ s_pn: pn, 1!1000101
+ s_dp: dp, 1!1101011
  s_cc: cc, 1!11
 
 Index f
@@ -86,7 +86,7 @@ Index m
 
 Index w
  w_pn: pn, 1!0000000
- w_pl: pl, 1!000100000000001
+ w_pl: pl, 1!000100000000101
 
 Index t
  t_kd: kd, 1!111
@@ -102,19 +102,19 @@ Index g
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
 Number rA, 1, 0!00000000
 Number mwA, 1, 0!01111111
-Number rB, 1, 0!11111011
+Number rB, 1, 0!11000111
 Number mwB, 1, 0!00001001
-Number rC, 1, 0!00100010
-Number mwC, 1, 0!11000110
+Number rC, 1, 0!00100111
+Number mwC, 1, 0!11110100
 Number rD, 1, 0!00000000
 Number mwD, 1, 0!11110001
-Number rE, 1, 0!00011000
-Number mwE, 1, 0!11110001
-Number rH, 1, 0!11111101
+Number rE, 1, 0!00000011
+Number mwE, 1, 0!11111001
+Number rH, 1, 0!11111100
 Number mwH, 1, 0!00000011
-Number rI, 1, 0!01000011
+Number rI, 1, 0!01000001
 Number mwI, 1, 0!00000001
-Number rJ, 1, 0!11111111
+Number rJ, 1, 0!11110110
 Number mwJ, 1, 0!00000100
 Number rK, 1, 0!00101000
 Number mwK, 1, 0!11100111

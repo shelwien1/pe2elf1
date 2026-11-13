@@ -40,6 +40,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   S64 tlev[NCH][NSMP];     // the channel's level at each of the subframe's samples: the root of the sum of its subband
                            // samples' squares (2^-AQ_F)
   S64 tlvl[NCH];           // (and the root of their mean square)
+  // a lossless WAV's at the core's rate, by subband: the level along the subband's path through the
+  // encoder's FFT (path_levels()), at each sample and over the subframe (the root of their mean square)
+  S64 plev[NCH][NSUB][NSMP], plvl[NCH][NSUB];
   int eab[NCH][NSUB];      // the energy ABITS was coded against (es; an ADPCM subband's residual's)
   U8 ab_seen[2][NSUB][129];  // the ABITS each subband had the last time it had that energy (by pm; 1 + it, 0 none)
   // the bit allocations' staircases (stair_guess()), by pass (the core's, the extension's) and
@@ -473,6 +476,62 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
   }
 
+  // A lossless WAV's subband samples as the encoder's arithmetic makes them: its cosine modulation
+  // runs through a 16-point FFT (subbands 2k and 31 - 2k its bin k), whose rounding errs by the
+  // values on a bin's path, so most where the bin shares the most stages with bin 0 (subbands 0 and
+  // 31, where the signal mostly is): bin 8 (subbands 15 and 16), then 4 and 12 (7, 8, 23, 24), then
+  // 2, 6, 10 and 14 (3, 4, 11, 12, 19, 20, 27, 28); 72% of `s.2.dts`'s indexes' bytes are theirs.
+  // Where the bottom subband has 90% of the level, the misses lie within a few 2^-23 of its value of
+  // their boundary (subbands 1 to 4 within 1, 7 and 8 3 to 4, 23 and 24 6, 15 and 16 12), and part
+  // of that is a bias: subband 7's lie 0 to 3 of them below it, 8's 0 to 4 above (none from the
+  // other subbands, nor at other times: the noise is the rounding's). So a subband's value is taken
+  // with m 2^-25 of the bottom subband's value added, m from -12 to 12: the m that has made the
+  // audio's indexes clearly more often (by LK_H, the counts halved each LK_T samples whose index an m
+  // could change), from where the encoders' are, the WAV at the core's rate (`s.2.dts`'s,
+  // `Master Audio 7.1.dts`'s, `master_audio_7.1_24bit.dts`'s, `3-1.dts`'s, the same signs: subband 7's
+  // -6 to -9, 8's 3 to 6, 15 and 16 -7 to 9), else from 0 (`s.2.dts`'s core 0.7% smaller, the
+  // other lossless WAVs' 0.1-0.3%)
+  static constexpr int LK_M = 12, LK_N = 2 * LK_M + 1, LK_H = 8, LK_T = 16384;
+  S8 lk_c[NSUB];                     // (each subband's m)
+  U32 lk_s[NSUB][LK_N], lk_t[NSUB];  // (each m's count of the indexes it made the audio's; how many counted)
+  // (after an index v of subband b: x its value without the bias, x0 the bottom subband's, p its
+  // prediction, ss, lo, hi requant()'s; qp, alt, dist requant()'s of the value with it)
+  void bias_learn(int b, S64 x, S64 x0, S64 p, S64 ss, S64 lo, S64 hi, S64 v, S64 qp, S64 alt, S128 dist) {
+    if (v != qp && v != alt) return;
+    const S64 a0 = x0 < 0 ? -x0 : x0;
+    if ((((S128)a0 * (2 * LK_M) << 22) >> 25) + ((S128)1 << 22) < dist) return;  // (no m makes another index)
+    for (int m = -LK_M; m <= LK_M; m++) {
+      S128 d;
+      S64 o;
+      lk_s[b][m + LK_M] += requant(x + rshift(x0 * m, 25) - p, ss, lo, hi, &d, &o) == v;
+    }
+    if (++lk_t[b] >= LK_T) {
+      lk_t[b] >>= 1;
+      for (int k = 0; k < LK_N; k++) lk_s[b][k] >>= 1;
+    }
+    int best = lk_c[b] + LK_M;
+    for (int k = 0; k < LK_N; k++)
+      if (lk_s[b][k] > lk_s[b][best] + LK_H || (lk_s[b][k] > lk_s[b][best] && k == LK_M)) best = k;
+    lk_c[b] = (S8)(best - LK_M);
+  }
+  // The noise goes by the values on the subband's path: at sample j of channel ch, of the 16 bins'
+  // energies (the squares of subbands 2k and 31 - 2k), the root of a fifth of the sum of all of them,
+  // of those that share the bin's first FFT stage, its first two, its first three, and its own, into
+  // plev (for the indexes' nearness, against the level of all of them: `s.2.dts`'s core 0.14%
+  // smaller; weighted 1, 2, 4, 8 by stage 0.1% bigger, 1, 4, 16, 64 0.6%)
+  void path_levels(int ch, int j) {
+    U128 E[16], S1[2] = {0, 0}, S2[4] = {0, 0, 0, 0}, S3[8] = {0, 0, 0, 0, 0, 0, 0, 0}, T = 0;
+    for (int k = 0; k < 16; k++) {
+      const S64 a = X[ch][2 * k][j], c = X[ch][31 - 2 * k][j];
+      E[k] = (U128)((S128)a * a) + (U128)((S128)c * c);
+      T += E[k], S1[k & 1] += E[k], S2[k & 3] += E[k], S3[k & 7] += E[k];
+    }
+    for (int b = 0; b < NSUB; b++) {
+      const int k = b & 1 ? (31 - b) / 2 : b / 2;
+      plev[ch][b][j] = isqrt128((T + S1[k & 1] + S2[k & 3] + S3[k & 7] + E[k]) / 5);
+    }
+  }
+
   void smp_start(WavIn* w, const Bind& b) {
     wav = w;
     bind = b;
@@ -485,6 +544,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
                                   -4,  -12, -13, -9,  -11, -14, -12, -6, -7, -12, -13, -9,  -10, -10, -10, -10};
     for (int k = 0; k < NSUB + NSUB96; k++) hcal[k].s = k < NSUB && b.up == 1 ? HC_B[k] : HC_S0;
     hc_dec = 0;
+    static const S8 LK0[NSUB] = {0, 0, 0, -1, 1, 0, 0, -7, 5, 0, 0, 0, 0, 0, 0, -4, 4, 0, 0, 0, 0, 0, 0, -1, 2};
+    for (int k = 0; k < NSUB; k++) lk_c[k] = b.up == 1 ? LK0[k] : 0;
+    memset(lk_s, 0, sizeof lk_s), memset(lk_t, 0, sizeof lk_t);
     for (int i = 0; i < 128; i++) lfe_cn[i] = -1;
     lfe_nsf = 0;
     lfe_lp = 9;
@@ -621,8 +683,14 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         for (int b = 0; b < NSUB; b++) t += (U128)((S128)X[ch][b][j] * X[ch][b][j]);
         tlev[ch][j] = isqrt128(t);
         tl += (U128)((S128)tlev[ch][j] * tlev[ch][j]);
+        if (!ss_rule() && up == 1) path_levels(ch, j);
       }
       tlvl[ch] = nsmp ? isqrt128(tl / (U128)nsmp) : 0;
+      for (int b = 0; !ss_rule() && up == 1 && b < NSUB; b++) {
+        U128 pl = 0;
+        for (int j = 0; j < nsmp; j++) pl += (U128)((S128)plev[ch][b][j] * plev[ch][b][j]);
+        plvl[ch][b] = nsmp ? isqrt128(pl / (U128)nsmp) : 0;
+      }
     }
   }
   // (c) the subframe's indexes the analysis makes with the WAV's continuation past its end (on) or
@@ -1793,8 +1861,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const int lk = cpl_leak(r, ch, b, 26, 15), gn = lk >= 0 ? lk : imin(si >> 3, 15);
     // (a lossless WAV's: the unit of the margins against the level, below; the groups' scores run
     // 2^19 times the vectors' distances: `s.2.dts`'s groups' within 2^-4 of that unit were the
-    // first half the time, 98% from 2 times it)
-    S128 mu = bound[ch] && !ss_rule() && !x96a ? (S128)tlvl[ch] * sc << 24 : 0;
+    // first half the time, 98% from 2 times it; at the core's rate the level along the subband's
+    // FFT path, plvl, rather than the channel's: `s.2.dts`'s core 0.1% smaller)
+    S128 mu = bound[ch] && !ss_rule() && !x96a ? (S128)(bind.up == 1 ? plvl[ch][b] : tlvl[ch]) * sc << 24 : 0;
     // (the top subband's with its leak's noise in too: the root of its square and that of 2^46 times
     // the noise's RMS times the scale factor, 2^-2 of the RMS's unit, where it is the encoder's
     // values' noise more than the level's is: `s.2.dts`'s core 0.2% smaller)
@@ -2945,6 +3014,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       qb = requant(xc - shl64(pred, AQ_F), ss, lo, hi, &d, &o);
       if (jx_more(b0r, 4, 1)) xv = xc;
     }
+    // (a lossless WAV's: with its bias, m 2^-25 of the bottom subband's value, bias_learn()'s)
+    const bool lk = bnd && b > 0 && !ss_rule() && !x96a && !fx;
+    const S64 xu = xv;
+    if (lk) xv += rshift(X[ch][0][j] * lk_c[b], 25);
     if (bnd) q0 = qp = requant(xv - shl64(pred, AQ_F), ss, lo, hi, &dist, &alt);
     if (b0) {  // (the decode's own index, for the tally)
       S128 d;
@@ -2992,9 +3065,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       qe = requant(je_one(ch, b, j) - shl64(pred, AQ_F), ss, lo, hi, &d1, &o1);
       if (qe != qp && (U64)je_qn[b][1] * 4 > (U64)je_qn[b][0] * 3) jd = 1, alt = qe;
     }
-    v = code_index(D, v, bnd, qp, alt, lo, hi, &how, &hcal[b], dist, !ss_rule() ? (S128)tlev[ch][j] << 22 : lvu,
+    // (a lossless WAV's nearness against the level at the sample, at the core's rate the level along
+    // the subband's FFT path)
+    const S64 lv = !ss_rule() ? bind.up == 1 ? plev[ch][b][j] : tlev[ch][j] : 0;
+    v = code_index(D, v, bnd, qp, alt, lo, hi, &how, &hcal[b], dist, !ss_rule() ? (S128)lv << 22 : lvu,
                    (pc >= 8 ? 3 : pc >= 3 ? 2 : pc >= 1 ? 1 : 0) + 4 * jd, bnd ? (S128)ss << AQ_F : 0,
                    __builtin_popcount(miss[ch][b]), xm > 0);
+    if (lk) bias_learn(b, xu, X[ch][0][j], shl64(pred, AQ_F), ss, lo, hi, v, qp, alt, dist);
     if (bnd && how != 0) {
       if (xm_id[b][j] != xid) xm_id[b][j] = xid, xm_cnt[b][j] = 0;
       xm_cnt[b][j] += xm_cnt[b][j] < 255;

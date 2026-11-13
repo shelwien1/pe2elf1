@@ -16,7 +16,7 @@ void D9_smp_make( const M_smp_v & D, tcx & X ) {
   M_smp_VARS(M_LOCAL)
 
   a = 0;
-  a = a*9 + D9_smp_a_nr[__min(15,__max(0,(nr)-(1-1)))];
+  a = a*10 + D9_smp_a_nr[__min(15,__max(0,(nr)-(1-1)))];
   a = a*7 + D9_smp_a_nl[__min(15,__max(0,(nl)-(1-1)))];
 
   b = 0;
@@ -25,18 +25,17 @@ void D9_smp_make( const M_smp_v & D, tcx & X ) {
   b = b*12 + D9_smp_b_ql[__min(21,__max(0,(ql)-(1-1)))];
 
   c = 0;
-  c = c*2 + (((pk)>0+(1-1)));
-  c = c*6 + D9_smp_c_nr[__min(15,__max(0,(nr)-(1-1)))];
+  c = c*9 + D9_smp_c_nr[__min(15,__max(0,(nr)-(1-1)))];
   c = c*3 + (((hm)>0+(1-1))+((hm)>1+(1-1)));
 
   d = 0;
-  d = d*14 + D9_smp_d_ab[__min(27,__max(0,(ab)-(1-1)))];
+  d = d*15 + D9_smp_d_ab[__min(27,__max(0,(ab)-(1-1)))];
   d = d*6 + D9_smp_d_m1[__min(22,__max(0,(m1)-(1-1)))];
 
   e = 0;
   e = e*2 + (((pk)>0+(1-1)));
-  e = e*6 + D9_smp_e_ab[__min(27,__max(0,(ab)-(1-1)))];
-  e = e*9 + D9_smp_e_m1[__min(22,__max(0,(m1)-(1-1)))];
+  e = e*4 + D9_smp_e_ab[__min(27,__max(0,(ab)-(1-1)))];
+  e = e*10 + D9_smp_e_m1[__min(22,__max(0,(m1)-(1-1)))];
   e = e*11 + D9_smp_e_m2[__min(22,__max(0,(m2)-(1-1)))];
 
   h = 0;
@@ -49,16 +48,16 @@ void D9_smp_make( const M_smp_v & D, tcx & X ) {
 
   j = 0;
   j = j*10 + D9_smp_j_ab[__min(27,__max(0,(ab)-(1-1)))];
-  j = j*13 + D9_smp_j_bd[__min(31,__max(0,(bd)-(1-1)))];
+  j = j*14 + D9_smp_j_bd[__min(31,__max(0,(bd)-(1-1)))];
 
   k = 0;
-  k = k*6 + D9_smp_k_nr[__min(15,__max(0,(nr)-(1-1)))];
+  k = k*7 + D9_smp_k_nr[__min(15,__max(0,(nr)-(1-1)))];
   k = k*2 + (((pm)>0+(1-1)));
 
   l = 0;
   l = l*2 + (((pk)>0+(1-1)));
-  l = l*9 + D9_smp_l_nl[__min(15,__max(0,(nl)-(1-1)))];
-  l = l*14 + D9_smp_l_ab[__min(27,__max(0,(ab)-(1-1)))];
+  l = l*8 + D9_smp_l_nl[__min(15,__max(0,(nl)-(1-1)))];
+  l = l*17 + D9_smp_l_ab[__min(27,__max(0,(ab)-(1-1)))];
 
   s = 0;
   s = s*7 + D9_smp_s_nr[__min(15,__max(0,(nr)-(1-1)))];
