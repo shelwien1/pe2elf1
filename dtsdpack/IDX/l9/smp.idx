@@ -12,29 +12,29 @@ Const 0
 
 Index a
  a_pk: pk, 1!0
- a_nr: nr, 1!100000100111111
- a_nl: nl, 1!000010110100111
+ a_nr: nr, 1!100000101110111
+ a_nl: nl, 1!000010110101001
 
 Index b
  b_pk: pk, 1!1
- b_ab: ab, 1!010101010011000000000000000
+ b_ab: ab, 1!010101010010000000000000000
  b_ql: ql, 1!101011111101010100000
 
 Index c
  c_pk: pk, 1!1
- c_nr: nr, 1!001000101100011
+ c_nr: nr, 1!000000110110010
  c_hm: hm, 1!11
 
 Index d
- d_pk: pk, 1!1
- d_ab: ab, 1!000111001111010010100100100
+ d_pk: pk, 1!0
+ d_ab: ab, 1!000111001111010010101100100
  d_m1: m1, 1!1111010000000000000000
 
 Index e
  e_pk: pk, 1!1
- e_ab: ab, 1!010001010000000101011110000
- e_m1: m1, 1!1101111001000000000000
- e_m2: m2, 1!1111100011100000000000
+ e_ab: ab, 1!010001010000000001000000001
+ e_m1: m1, 1!1111111001000000000000
+ e_m2: m2, 1!1111100011100101000000
 
 Index h
  h_pk: pk, 1!0
@@ -43,14 +43,14 @@ Index h
 
 Index i
  i_pk: pk, 1!0
- i_ab: ab, 1!000110100111100101101000000
- i_hw: hw, 1!111
+ i_ab: ab, 1!010110100111001011101000000
+ i_hw: hw, 1!001
  i_pm: pm, 1!1
 
 Index j
  j_pk: pk, 1!0
- j_ab: ab, 1!010001010111010010101000000
- j_bd: bd, 1!0100101101001101000001000010011
+ j_ab: ab, 1!010001010111010010100000000
+ j_bd: bd, 1!0100101100001101000001000010111
 
 Index k
  k_pk: pk, 1!0
@@ -59,25 +59,25 @@ Index k
 
 Index l
  l_pk: pk, 1!1
- l_nl: nl, 1!100110110101110
- l_ab: ab, 1!010101101110110100100100000
+ l_nl: nl, 1!100110110100110
+ l_ab: ab, 1!010101101111100100110100000
 
 Index s
  s_pk: pk, 1!0
  s_nr: nr, 1!000001000011111
- s_nl: nl, 1!111010110001001
+ s_nl: nl, 1!111010110111001
 
 Index f
  f_pk: pk, 1!1
- f_nl: nl, 1!010001010000101
+ f_nl: nl, 1!010001000000101
  f_nr: nr, 1!000000101100000
 
 Index m
  m_pk: pk, 1!0
- m_nr: nr, 1!000000011000000
+ m_nr: nr, 1!000000000000000
 
 Index w
- w_nl: nl, 1!000000000110100
+ w_nl: nl, 1!100000000010100
 
 Index t
  t_ab: ab, 1!000000101010110101000000010
@@ -89,27 +89,27 @@ Index n
 Index g
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
-Number rA, 1, 0!01100111
+Number rA, 1, 0!00000100
 Number mwA, 1, 0!11101110
 Number rB, 1, 0!11110101
-Number mwB, 1, 0!00000001
-Number rC, 1, 0!00111111
-Number mwC, 1, 0!11110010
-Number rD, 1, 0!01111001
-Number mwD, 1, 0!00011001
-Number rE, 1, 0!11000101
+Number mwB, 1, 0!00000000
+Number rC, 1, 0!00100111
+Number mwC, 1, 0!11110001
+Number rD, 1, 0!01111011
+Number mwD, 1, 0!00011000
+Number rE, 1, 0!11101110
 Number mwE, 1, 0!00000100
-Number rH, 1, 0!11111000
+Number rH, 1, 0!11011100
 Number mwH, 1, 0!00000000
-Number rI, 1, 0!11110111
-Number mwI, 1, 0!11010100
-Number rJ, 1, 0!10000011
+Number rI, 1, 0!11110001
+Number mwI, 1, 0!11010001
+Number rJ, 1, 0!10000111
 Number mwJ, 1, 0!00000000
-Number rK, 1, 0!11110000
-Number mwK, 1, 0!11101110
-Number rL, 1, 0!11111100
+Number rK, 1, 0!10100001
+Number mwK, 1, 0!11101111
+Number rL, 1, 0!11111111
 Number mwL, 1, 0!01000000
-Number lr, 1, 0!10101
+Number lr, 1, 0!10100
 Number mb, 1, 0!00100000
 Number rS1, 1, 0!01000
 Number rS2, 1, 0!01000
