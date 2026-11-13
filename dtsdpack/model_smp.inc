@@ -1838,8 +1838,17 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const bool ur = resc && hrs[1] > hrs[0] + 64 + hrs[0] / 32;
     S128 gm[32], go[32], md[32], en = 0;  // (the scores of the values taken, and of the others)
     int f0 = 0;
+    // (a lossless WAV's top subband at the core's rate: the scores' squares weighed as its vectors'
+    // distances are below, by T 2^26 times a quarter of the code book's unit, at a mean of 1:
+    // `s.2.dts`'s core 0.18% smaller; 2^25 0.4% bigger)
+    U32 gw[16], gs = 0;
+    const bool gwo = b == NSUB - 1 && bound[ch] && !ss_rule() && !x96a && bind.up == 1 && nsmp == 16;
+    if (gwo) hf_weights(X[ch][0], sc, 72, gw, &gs);
+    auto gscore = [&](int g, const S64* xx) {
+      return gwo && gs ? hf_group_score_w(hgw, hge, g, xx, sc, gw, gs) : hf_group_score(hgw, hge, g, xx, nsmp, sc);
+    };
     for (int g = 0; g < 32; g++) {
-      const S128 k0 = hf_group_score(hgw, hge, g, x, nsmp, sc), k1 = resc ? hf_group_score(hgw, hge, g, xr, nsmp, sc) : k0;
+      const S128 k0 = gscore(g, x), k1 = resc ? gscore(g, xr) : k0;
       gm[g] = ur ? k1 : k0, go[g] = ur ? k0 : k1;
       f0 = gm[g] < gm[f0] ? g : f0;
     }
@@ -1921,8 +1930,19 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     KeyIx oc[32], cc[32];  // (the other order's boundary keys; the order's, as code_cand() may reorder cand)
     S128 kv[32], ko[32], ov[32], oo[32];
     S128 d0[32], d1[32];
-    hf_dists(g, x, nsmp, sc, d0);
-    if (pushed) hf_dists(g, xs, nsmp, sc, d1);
+    // (a lossless WAV's top subband at the core's rate: each value's distance weighed against the
+    // encoder's noise there, its FFT's bin 0's, which goes with the bottom subband's value at the
+    // sample: by T^2 / (T^2 + x0^2), T 2^25.5 times a quarter of the code book's unit (an entry's
+    // step times the scale factor): `s.2.dts`'s core 0.28% smaller; by the total level or the
+    // path's about the same; 2^25 0.03% smaller, 2^24 2.4% bigger; the boundary order by the
+    // weighed distances between the entries 0.07% bigger)
+    if (b == NSUB - 1 && bound[ch] && !ss_rule() && !x96a && bind.up == 1 && nsmp == 16) {
+      hf_dists_w(g, x, sc, X[ch][0], d0);
+      if (pushed) hf_dists_w(g, xs, sc, X[ch][0], d1);
+    } else {
+      hf_dists(g, x, nsmp, sc, d0);
+      if (pushed) hf_dists(g, xs, nsmp, sc, d1);
+    }
     for (int i = 0; i < 32; i++) {
       const S128 k0 = d0[i], k1 = pushed ? d1[i] : k0;
       cand[i].k = kv[i] = up ? k1 : k0, cand[i].i = i;

@@ -761,6 +761,28 @@ static INLINE S128 hf_group_score(const S32 (*W)[16], const S64* E, int g, const
   }
   return d + shl128((S128)E[g] * sc * sc, 32);
 }
+// The weights (in 2^-16) of 16 values against another subband's x0 at their samples:
+// T^2 / (T^2 + x0^2), T^2 sc^2 2^t2 (within 2^118), their sum into *s
+static INLINE void hf_weights(const S64* x0, S64 sc, int t2s, U32* w, U32* s) {
+  const U128 t2 = (U128)((S128)sc * sc) << t2s;
+  *s = 0;
+  for (int j = 0; j < 16; j++) {
+    const U128 a2 = (U128)((S128)x0[j] * x0[j]);
+    w[j] = t2 + a2 ? 65536 - (U32)((a2 << 16) / (t2 + a2)) : 65536, *s += w[j];
+  }
+}
+// hf_group_score() with its 16 squared differences weighed by w (sum s), at a mean of 1: the
+// squares in 2^16 (within 2^96, each term 2^112), their weighed sum t over s, then times 2^20 (t / s
+// within the largest square: 2^116)
+static INLINE S128 hf_group_score_w(const S32 (*W)[16], const S64* E, int g, const S64* x, S64 sc, const U32* w, U32 s) {
+  U128 t = 0;
+  for (int j = 0; j < 16; j++) {
+    const S64 e = x[j] * 8192 - shl64((S64)W[g][j] * sc, AQ_F);
+    t += ((U128)((S128)e * e) >> 16) * w[j];
+  }
+  const U128 q = t / s, r = t % s;
+  return (S128)((q << 20) + (r << 20) / s) + shl128((S128)E[g] * sc * sc, 32);
+}
 // 16 times log2(x) (x > 0), its fraction by the 4 bits after the top one
 static INLINE int lg16(U64 x) {
   const int e = ilog2(x);
@@ -1114,6 +1136,22 @@ static void hf_dists(int g, const S64* x, int n, S64 sc, S128* d) {
     else
       for (int j = 0; j < n; j++) e2 += HF_VQ[g * 32 + i][j] * HF_VQ[g * 32 + i][j];
     d[i] = en - shl128((S128)(S64)a[i] * sc, 21) + shl128((S128)e2 * sc * sc, 32);
+  }
+}
+// The same of 16 values, each value's squared difference weighed (in 2^-16) by T^2 / (T^2 + x0^2),
+// x0 another subband's value at its sample and T sc 2^35.5 (2^25.5 times a quarter of the code
+// book's unit, 2^12 sc in these units), exactly: T^2 sc^2 2^71 (within 2^117), the weights within
+// 2^16, each term within 2^110
+static void hf_dists_w(int g, const S64* x, S64 sc, const S64* x0, S128* d) {
+  U32 w[16], s;
+  hf_weights(x0, sc, 71, w, &s);
+  for (int i = 0; i < 32; i++) {
+    U128 s = 0;
+    for (int j = 0; j < 16; j++) {
+      const S64 e = x[j] * 16 - shl64((S64)HF_VQ[g * 32 + i][j] * sc, AQ_F);  // (hf_dist()'s)
+      s += (U128)((S128)e * e) * w[j];
+    }
+    d[i] = (S128)(s >> 16);
   }
 }
 // The same of the 32 groups' centroids (hf_group_dist()'s): (2^13 x - 2^16 sc c)^2 summed is 2^26
