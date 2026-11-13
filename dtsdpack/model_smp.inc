@@ -306,6 +306,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   U8 jx_wv[NCH][NSUB];
   int jx_lo;
   U32 jx_h[NSUB][256], jx_hn[NSUB], jx_hv[NSUB][256], jx_hvn[NSUB];
+  U64 jx_hb[NSUB][4];  // (jx_h's bins that aren't 0, by bit)
   S128 jx_yw[NSUB], jx_ww[NSUB];
   S64 jx_cs[NSF][NCH][NSUB];
   int jx_k[NCH][NSUB], jx_vq[NCH][NSUB][NSMP / 16], jx_vs[NCH][NSUB][NSMP / 16];
@@ -447,10 +448,6 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     wav = w;
     bind = b;
     tnext = 0;
-    lfit.init();
-    lfit2.init();
-    lfit3.init();
-    for (int k = 0; k < LFE_PL; k++) lfit4[k].init();
     memcpy(hgw, HF_GW, sizeof hgw);
     memcpy(hge, HF_GE, sizeof hge);
     for (int g = 0; g < 32; g++) hg_dist(g);
@@ -460,9 +457,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     lfe_nsf = 0;
     lfe_lp = 9;
     jx_lo = NSUB;
-    b0fit.init();
     for (int ch = 0; ch < NCH; ch++)
-      for (int k = 0; k < NSUB - JE_B0; k++) je_fit[ch][k].init(), je_n[ch][k] = 0, je_ht[ch][k] = -1;
+      for (int k = 0; k < NSUB - JE_B0; k++) je_n[ch][k] = 0, je_ht[ch][k] = -1;
     memset(je_pr, 0, sizeof je_pr);
     memset(je_qn, 0, sizeof je_qn);
   }
@@ -496,6 +492,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     nsmp = s.nssc * 8;
     // (as the header says: whether X96 is there comes after the core's subframes)
     if (!r.xpass) x96a = r.ext && r.ext_id == EXT_X96 && bind.up == 2 && wav && wav->ok;
+    if (x96a) jx_steps.make();
     if (x96a) memset(jx_cs[sf], 0, sizeof jx_cs[sf]);
     fir = r.filts ? FIR_PERFECT : FIR_NONPERFECT;
     for (int ch = 0; ch < NCH; ch++) bound[ch] = 0;
@@ -520,11 +517,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (!ext_set) ext_set = 1, wav_extend(*wav), wav->ext_on = 1;
       if (hs > (S64)wav->nsamp) {
         ext_set = 2;
-        const int m = ENC && ext_hits(r, s, o0, 1) > ext_hits(r, s, o0, 0);
+        int m = 0, hp[2] = {0, 0}, np = 0;
+        if (ENC) m = ext_choose(r, s, o0, hp, &np);
         wav->ext_on = c->code_bit(CO_ONE / 2, m);
-        int hp = 0, np = 0;
-        if (ENC) ext_hits(r, s, o0, wav->ext_on, &hp, &np);
-        past_on = c->code_bit(CO_ONE / 2, ENC && 2 * hp < np);
+        past_on = c->code_bit(CO_ONE / 2, ENC && 2 * hp[wav->ext_on] < np);
       }
     }
     S64 past[LFE_NP];  // (for the scale factor's prediction: the subframe's values as predicted)
@@ -598,29 +594,54 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
   }
   // (c) the subframe's indexes the analysis makes with the WAV's continuation past its end (on) or
-  // with 0s there: those of its bound channels' subbands that neither predict nor are VQ ones
-  // (*hp, *np: those of the samples whose windows lie past the WAV's end by WAV_PAST, and of them)
-  int ext_hits(const CoreRec& r, const CoreSub& s, S64 o0, int on, int* hp = nullptr, int* np = nullptr) {
+  // with 0s there, of channel ch's samples j0..j1 - 1: those of its bound channels' subbands that
+  // neither predict nor are VQ ones (hp: those of the samples whose windows lie past the WAV's end by
+  // WAV_PAST, and of them, np)
+  int ext_hits(const CoreRec& r, const CoreSub& s, S64 o0, int on, int ch, int j0, int j1, int* hp, int* np) {
     wav->ext_on = on;
     int h = 0;
-    for (int ch = r.ch0(); ch < r.ch1(); ch++) {
-      if (!bind.bound(ch, wav->nch)) continue;
-      S64 x[64];
-      for (int j = 0; j < nsmp; j++) {
-        analyze_bound(*wav, bind, ch, o0 + 32 * bind.up * j, fir, x, x96a ? NSUB96 : NSUB, !ss_rule() && !x96a);
-        for (int b = 0; b < r.nvqsub[ch]; b++) {
-          const int a = s.abits[ch][b];
-          if (!a || s.pmode[ch][b]) continue;
-          S64 qlo, qhi, alt;
-          S128 dist;
-          quant_range(r, ch, a, qlo, qhi);
-          const int hit = requant(x[b], step_scale(r, s, ch, b, j >> 3), qlo, qhi, &dist, &alt) == s.q[ch][b][j];
-          h += hit;
-          if (hp && past_far(t0 + j)) *hp += hit, ++*np;
-        }
+    S64 x[64];
+    for (int j = j0; j < j1; j++) {
+      analyze_bound(*wav, bind, ch, o0 + 32 * bind.up * j, fir, x, x96a ? NSUB96 : NSUB, !ss_rule() && !x96a);
+      for (int b = 0; b < r.nvqsub[ch]; b++) {
+        const int a = s.abits[ch][b];
+        if (!a || s.pmode[ch][b]) continue;
+        S64 qlo, qhi, alt;
+        S128 dist;
+        quant_range(r, ch, a, qlo, qhi);
+        const int hit = requant(x[b], step_scale(r, s, ch, b, j >> 3), qlo, qhi, &dist, &alt) == s.q[ch][b][j];
+        h += hit;
+        if (past_far(t0 + j)) *hp += hit, ++*np;
       }
     }
     return h;
+  }
+  // (c) whether the continuation makes more of them than 0s do (ext_hits()), hp[on] and np theirs: of
+  // the samples whose windows reach past the WAV's end (those that end in it are the same either way,
+  // and none of them far past it); the continuation's channel by channel only while its count could
+  // still go past the 0s' (or where it has, for hp[1])
+  int ext_choose(const CoreRec& r, const CoreSub& s, S64 o0, int* hp, int* np) {
+    const S64 st = 32 * (S64)bind.up;
+    const int jin = (int)clip(((S64)wav->nsamp - o0) / st + 1, 0, nsmp);  // (the samples whose windows end in the WAV)
+    int h0 = 0, room = 0, chs[NCH], nc = 0, rest[NCH];
+    for (int ch = r.ch0(); ch < r.ch1(); ch++) {
+      if (!bind.bound(ch, wav->nch)) continue;
+      int k = 0;
+      for (int b = 0; b < r.nvqsub[ch]; b++) k += s.abits[ch][b] && !s.pmode[ch][b];
+      chs[nc] = ch, rest[nc++] = k * (nsmp - jin), room += k * (nsmp - jin);
+      h0 += ext_hits(r, s, o0, 0, ch, jin, nsmp, hp, np);
+    }
+    int h1 = 0, m = -1, n1 = 0;
+    for (int i = 0; i < nc; i++) {
+      h1 += ext_hits(r, s, o0, 1, chs[i], jin, nsmp, hp + 1, &n1);
+      room -= rest[i];
+      if (m < 0 && h1 > h0) m = 1;
+      if (m < 0 && h1 + room <= h0) {
+        m = 0;
+        break;
+      }
+    }
+    return m > 0;
   }
   // the subframe done: the audio's last subband samples, as the next one's history; the LFE's
   // correction fit again
@@ -936,20 +957,27 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   void level_add(int p, AbStair& t, S32 x, int v) {
     AbLevel& L = abl[p];
     S64 a, z;
+    // (the shift the most say, a 16th of an ABITS's score off for each unit from the centre, of
+    // equals the nearer the centre, then the lower: as a scan from the centre out finds it. Only
+    // the shifts k0..k1 gain, by as much each: where the best is among them, it stays; else the
+    // best of them, where better)
+    int bk = L.d + AL_ND;
     if (stair_region(t, v, &a, &z)) {  // (x - c0 - (k - AL_ND) in a..z)
       const S64 k0 = clip((S64)x - L.c0 - z + AL_ND, 0, AL_NK), k1 = clip((S64)x - L.c0 - a + AL_ND, -1, AL_NK - 1);
       for (S64 k = k0; k <= k1; k++) L.sc[k]++;
+      if (k0 <= k1 && (bk < k0 || bk > k1)) {
+        auto score = [&](int k) { return 16 * L.sc[k] - (k > AL_ND ? k - AL_ND : AL_ND - k); };
+        auto rank = [](int k) { return k > AL_ND ? 2 * (k - AL_ND) : k < AL_ND ? 2 * (AL_ND - k) - 1 : 0; };
+        S32 bs = score(bk);
+        for (int k = (int)k0; k <= (int)k1; k++) {
+          const S32 s = score(k);
+          if (s > bs || (s == bs && rank(k) < rank(bk))) bs = s, bk = k;
+        }
+      }
     }
     stair_add(t, x - L.c0 - L.d, v);
     L.obs[L.nobs].x = x, L.obs[L.nobs].b = (U8)(&t - ab_st[p]), L.obs[L.nobs].v = (U8)v, L.nobs++;
     L.cost += ab_bits(v), L.n++;
-    int bk = AL_ND;  // (a 16th of an ABITS's score off for each unit from the centre)
-    S32 bs = 16 * L.sc[AL_ND];
-    for (int k = 1; k <= AL_ND; k++) {
-      const S32 s1 = 16 * L.sc[AL_ND - k] - k, s2 = 16 * L.sc[AL_ND + k] - k;
-      if (s1 > bs) bs = s1, bk = AL_ND - k;
-      if (s2 > bs) bs = s2, bk = AL_ND + k;
-    }
     L.d = bk - AL_ND;
   }
 
@@ -1047,6 +1075,28 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     A.d = (S32)(bk - AL_ND);
   }
+  // sc[i0..i1] each raised by inc: the most of them (8 at a time where AVX2 is)
+  static U32 ap_raise(U32* sc, int i0, int i1, U32 inc) {
+    U32 m = 0;
+    int k = i0;
+#ifdef DTSD_AVX2
+    const __m256i vi = _mm256_set1_epi32((int)inc);
+    __m256i vm = _mm256_setzero_si256();
+    for (; k + 8 <= i1 + 1; k += 8) {
+      const __m256i v = _mm256_add_epi32(_mm256_loadu_si256((const __m256i*)(sc + k)), vi);
+      _mm256_storeu_si256((__m256i*)(sc + k), v);
+      vm = _mm256_max_epu32(vm, v);
+    }
+    alignas(32) U32 m8[8];
+    _mm256_store_si256((__m256i*)m8, vm);
+    for (int i = 0; i < 8; i++) m = m8[i] > m ? m8[i] : m;
+#endif
+    for (; k <= i1; k++) {
+      sc[k] += inc;
+      m = sc[k] > m ? sc[k] : m;
+    }
+    return m;
+  }
   // pass p's subframe's ABITS all known (abl[p]'s obs): each band's offsets scored at its level, the
   // level's distance from the centre into the average
   void ap_commit(int p) {
@@ -1075,15 +1125,16 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       const S64 i0 = clip(lo - t.c, -AP_W, AP_W + 1) + AP_W, i1 = clip(hi - t.c, -AP_W - 1, AP_W) + AP_W;
       if (i0 > i1) continue;
       t.out = 0;
-      // (the best: the last one, or one of those the ABITS raised; of equal ones, the nearer it)
+      // (the best: the last one, or one of those the ABITS raised; of equal ones, the nearer it, then
+      // the lower: the most of them, then of those the nearest)
       const S64 cur = t.o - t.c + AP_W;
-      S64 bo = cur;
-      U32 best = t.sc[cur];
-      for (S64 k = i0; k <= i1; k++) {
-        t.sc[k] += A.inc;
-        const S64 dk = k > cur ? k - cur : cur - k, db = bo > cur ? bo - cur : cur - bo;
-        if (t.sc[k] > best || (t.sc[k] == best && dk < db)) best = t.sc[k], bo = k;
-      }
+      U32 best = ap_raise(t.sc, (int)i0, (int)i1, A.inc);
+      if (t.sc[cur] > best) best = t.sc[cur];
+      S64 bo = -1;
+      if (t.sc[cur] == best) bo = cur;
+      else
+        for (S64 k = i0; k <= i1; k++)
+          if (t.sc[k] == best && (bo < 0 || (k > cur ? k - cur : cur - k) < (bo > cur ? bo - cur : cur - bo))) bo = k;
       t.o = (S32)(bo - AP_W + t.c);
       A.inc += A.inc >> 10;  // (each ABITS: the older ones' scores 1023/1024 of the newer's)
       if (A.inc >= 1u << 20) {
@@ -1635,8 +1686,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const bool up = pushed && hpw[1] > hpw[0] + 16 + hpw[0] / 32;
     KeyIx oc[32], cc[32];  // (the other order's boundary keys; the order's, as code_cand() may reorder cand)
     S128 kv[32], ko[32], ov[32], oo[32];
+    S128 d0[32], d1[32];
+    hf_dists(g, x, nsmp, sc, d0);
+    if (pushed) hf_dists(g, xs, nsmp, sc, d1);
     for (int i = 0; i < 32; i++) {
-      const S128 k0 = hf_dist(g * 32 + i, x, nsmp, sc), k1 = pushed ? hf_dist(g * 32 + i, xs, nsmp, sc) : k0;
+      const S128 k0 = d0[i], k1 = pushed ? d1[i] : k0;
       cand[i].k = kv[i] = up ? k1 : k0, cand[i].i = i;
       ko[i] = up ? k0 : k1;
     }
@@ -1703,9 +1757,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       S128 bd = -1;
       for (int k = 0; k < 2; k++) {
         const S64 sc = tab[clip(p + 3 * k, 0, nt - 1)];
-        for (int g = 0; g < 32; g++) cand[g].k = hf_group_dist(g, v, n, sc), cand[g].i = g;
+        S128 dd[32];
+        hf_group_dists(v, n, sc, dd);
+        for (int g = 0; g < 32; g++) cand[g].k = dd[g], cand[g].i = g;
         const int g = select_rank(cand, 32, 0);
-        for (int e = 0; e < 32; e++) cand[e].k = hf_dist(g * 32 + e, v, n, sc), cand[e].i = e;
+        hf_dists(g, v, n, sc, dd);
+        for (int e = 0; e < 32; e++) cand[e].k = dd[e], cand[e].i = e;
         const int q2 = g * 32 + select_rank(cand, 32, 0);
         const S128 d = vq_err(v, n, q2, sc);
         if (bd < 0 || d < bd) bd = d, vq = q2;
@@ -1771,6 +1828,83 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // no transients.)
   // (The pairs by their distance at the 2 largest values, each one's whole distance, the largest
   // values first, while it could still be less than the second best's: as trying them all does.)
+  // a pair of abits_pass()'s: its step and range, its ABITS and scale factor, and a bound under its
+  // distance (norm_dist()'s of its exact squared distance), lb (ab_bounds())
+  struct AbPair {
+    S64 ss, lo, hi;
+    double lb;
+    S8 a, i;
+  };
+  // The pairs pr's (np of them) distances at the values w (n of them) in doubles: each value's index
+  // as QErr::err() finds it, floor(|64 w| / ss + 1/2), exact in doubles but within 1e-7 of a half
+  // (where the estimate's rounding could decide: then the pair's indexes by QErr's exact rule), its
+  // point as dequantize() makes it (exact), the squares summed (each within 2^-53 of it) and normed:
+  // so within 2^-47 of the exact distance before norm_dist()'s floor, lb 1e-12 under that less 2.
+  static void ab_bounds(const S64* w, int n, AbPair* pr, int np) {
+    alignas(32) double ua[NSMP + 4], sg[NSMP + 4], vd[NSMP + 4];
+    const int n4 = (n + 3) & ~3;
+    for (int j = 0; j < n4; j++) {
+      const S64 v = j < n ? w[j] : 0;
+      ua[j] = (double)(v < 0 ? -v : v) * 64, sg[j] = v < 0 ? -0.0 : 0.0, vd[j] = (double)v;
+    }
+    for (int k = 0; k < np; k++) {
+      AbPair& x = pr[k];
+      int shift = 0;
+      S64 ssh = x.ss;
+      if (x.ss > (1 << 23)) shift = ilog2((U64)(x.ss >> 23)) + 1, ssh = x.ss >> shift;
+      const int sh = 22 - shift;
+      const double inv = 1.0 / (double)x.ss, dh = sh > 0 ? (double)((U64)1 << (sh - 1)) : 0.0,
+                   dsc = sh > 0 ? 1.0 / (double)((U64)1 << sh) : 1.0, dssh = (double)ssh, dlo = (double)x.lo, dhi = (double)x.hi;
+      double e = 0;
+      bool tie = false;
+#ifdef DTSD_AVX2
+      const __m256d vinv = _mm256_set1_pd(inv), half = _mm256_set1_pd(0.5), tl = _mm256_set1_pd(1e-7), th = _mm256_set1_pd(1 - 1e-7),
+                    big = _mm256_set1_pd(16777216.0), vlo = _mm256_set1_pd(dlo), vhi = _mm256_set1_pd(dhi),
+                    vssh = _mm256_set1_pd(dssh), vdh = _mm256_set1_pd(dh), vdsc = _mm256_set1_pd(dsc),
+                    c23lo = _mm256_set1_pd(-8388608.0), c23hi = _mm256_set1_pd(8388607.0), f16 = _mm256_set1_pd(65536.0);
+      __m256d acc = _mm256_setzero_pd(), tm = _mm256_setzero_pd();
+      for (int j = 0; j < n4; j += 4) {
+        const __m256d tq = _mm256_add_pd(_mm256_mul_pd(_mm256_load_pd(ua + j), vinv), half);
+        const __m256d qa = _mm256_floor_pd(tq), fr = _mm256_sub_pd(tq, qa);
+        tm = _mm256_or_pd(tm, _mm256_and_pd(_mm256_cmp_pd(tq, big, _CMP_LT_OQ),
+                                            _mm256_or_pd(_mm256_cmp_pd(fr, tl, _CMP_LT_OQ), _mm256_cmp_pd(fr, th, _CMP_GT_OQ))));
+        const __m256d qv = _mm256_min_pd(_mm256_max_pd(_mm256_xor_pd(qa, _mm256_load_pd(sg + j)), vlo), vhi);
+        __m256d y = _mm256_mul_pd(qv, vssh);
+        if (sh > 0) y = _mm256_floor_pd(_mm256_mul_pd(_mm256_add_pd(y, vdh), vdsc));
+        y = _mm256_min_pd(_mm256_max_pd(y, c23lo), c23hi);
+        const __m256d d = _mm256_sub_pd(_mm256_load_pd(vd + j), _mm256_mul_pd(y, f16));
+        acc = _mm256_add_pd(acc, _mm256_mul_pd(d, d));
+      }
+      alignas(32) double a4[4];
+      _mm256_store_pd(a4, acc);
+      e = (a4[0] + a4[1]) + (a4[2] + a4[3]);
+      tie = _mm256_movemask_pd(tm) != 0;
+#else
+      for (int j = 0; j < n; j++) {
+        const double tq = ua[j] * inv + 0.5, qa = floor(tq), fr = tq - qa;
+        if (tq < 16777216.0 && (fr < 1e-7 || fr > 1 - 1e-7)) tie = true;
+        double qv = sg[j] != 0 || signbit(sg[j]) ? -qa : qa;
+        qv = qv < dlo ? dlo : qv > dhi ? dhi : qv;
+        double y = qv * dssh;
+        if (sh > 0) y = floor((y + dh) * dsc);
+        y = y < -8388608.0 ? -8388608.0 : y > 8388607.0 ? 8388607.0 : y;
+        const double d = vd[j] - y * 65536.0;
+        e += d * d;
+      }
+#endif
+      if (tie) {  // (the indexes exact, as QErr::err() finds them; the squares in doubles still)
+        QErr q;
+        int nz = 0;
+        q.set(x.ss, x.lo, x.hi);
+        e = 0;
+        for (int j = 0; j < n; j++) {
+          const double d = (double)q.dev(w[j], &nz);
+          e += d * d;
+        }
+      }
+      x.lb = e * 268435456.0 / ((double)x.ss * (double)x.ss) * (1 - 1e-12) - 2;
+    }
+  }
   int abits_search(const CoreRec& r, int ch, const S64* v, int n, int g, int a0, int a1, int p, int* conf, U64* dbest,
                    U64 cut = ~0ull, int* ibest = nullptr) {
     constexpr int NP = 27 * 9, NK = 2;
@@ -1782,6 +1916,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       while (k > 0 && mag(w[k - 1]) < mag(v[j])) w[k] = w[k - 1], k--;
       w[k] = v[j];
     }
+    if (!n || !w[0]) return 0;  // (all 0s: every pair's indexes are 0s)
+    ab_v = v;
     struct Pair {
       U64 d;  // (its distance at the largest values: at most its whole one's)
       S128 e;
@@ -1799,6 +1935,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (i >= i0 && i <= i1) io[ni++] = i;
     }
     const int ga = clip(g, a0, a1);
+    if (cut == ~0ull) return abits_pass(r, ch, w, n, ga, a0, a1, p, io, ni, conf, dbest, ibest);
     for (int ka = 0; ka <= 2 * (a1 - a0); ka++) {
       const int a = ka & 1 ? ga + (ka + 1) / 2 : ga - ka / 2;
       if (a < a0 || a > a1) continue;
@@ -1889,6 +2026,119 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     return 1 + pr[best].a;
   }
   U64 ab_tdist;  // (the transient's fit's distance, where abits_search() took one; the caller sets it to ~0)
+  // abits_search() without a cut: of the pairs (in their order, from the guesses out), the nearest
+  // and the second nearest under 128 times its distance and 127 eps (where *conf is 7), as the heap
+  // finds them: of pairs as near, the coarser lattice, then the scale factor nearer p, then the
+  // nearer at the 2 largest values, then the first. Each pair's distance in doubles first (ab_dists()),
+  // a bound under its exact one; then the exact ones, by the bounds from the least, while one could
+  // still be under the second nearest's (or the bound past which *conf is 7).
+  int abits_pass(const CoreRec& r, int ch, const S64* w, int n, int ga, int a0, int a1, int p, const int* io, int ni,
+                 int* conf, U64* dbest, int* ibest) {
+    constexpr int NP = 27 * 9, NK = 2;
+    const int nk = imin(n, NK);
+    const U64 eps = 2 * (U64)n;  // (2^-15 steps squared a value)
+    AbPair pr[NP];
+    int np = 0;
+    for (int ka = 0; ka <= 2 * (a1 - a0); ka++) {
+      const int a = ka & 1 ? ga + (ka + 1) / 2 : ga - ka / 2;
+      if (a < a0 || a > a1) continue;
+      S64 lo, hi;
+      quant_range(r, ch, a, lo, hi);
+      for (int z = 0; z < ni; z++) {
+        const int i = io[z];
+        const S64 ss = step_for(r, ch, a, i);
+        if (ss <= 0 || np >= NP) continue;
+        AbPair& x = pr[np++];
+        x.ss = ss, x.lo = lo, x.hi = hi, x.a = (S8)a, x.i = (S8)i;
+      }
+    }
+    ab_bounds(w, n, pr, np);
+    U64 d1 = ~0ull, d2 = ~0ull, t = ~0ull;
+    int ba = -1, bi = 0, bnz = 0, bk = -1;
+    S64 bss = 0;
+    S128 bpe = 0;  // (the best's distance at the 2 largest values, unnormed; bk its place among the pairs)
+    U64 done[(NP + 63) / 64] = {0};
+    int lo4[4], n4 = 0;  // (the 4 least bounds' pairs, the least first: of equal bounds, the first)
+    for (int m = 0; m < np; m++) {
+      if (n4 == 4 && !(pr[m].lb < pr[lo4[3]].lb)) continue;
+      int z = n4 < 4 ? n4++ : 3;
+      while (z > 0 && pr[m].lb < pr[lo4[z - 1]].lb) lo4[z] = lo4[z - 1], z--;
+      lo4[z] = m;
+    }
+    QErr q;
+    for (int step = 0;; step++) {
+      int k = -1;
+      double lb = 0;
+      if (step < n4) k = lo4[step], lb = pr[k].lb;
+      else if (n4 == 4)
+        for (int m = 0; m < np; m++)
+          if (!(done[m >> 6] >> (m & 63) & 1) && (k < 0 || pr[m].lb < lb)) k = m, lb = pr[m].lb;
+      if (k < 0) break;
+      const U64 B = d2 < t ? d2 : t;
+      if (B != ~0ull && lb > (double)B * (1 + 1e-15) + 2) break;  // (the rest are all past B)
+      done[k >> 6] |= 1ull << (k & 63);
+      const AbPair& x = pr[k];
+      q.set(x.ss, x.lo, x.hi);
+      S128 e = 0, lim = ~(U128)0 >> 1, pe = 0;
+      if (B != ~0ull) {  // (a distance past lim is B's at least: in doubles, made larger)
+        const double l = (double)B * (double)x.ss * (double)x.ss / 268435456.0 * (1 + 1e-9);
+        if (l < 1e36) lim = (l < 9e18 ? (S128)(S64)l : (S128)l) + 1;
+      }
+      int nz = 0, j = 0;
+      for (; j < nk; j++) e += q.err(w[j], &nz);
+      pe = e;
+      while (j < n && e <= lim) e += q.err(w[j++], &nz);
+      if (e > lim) continue;
+      const U64 d = norm_dist(e, x.ss);
+      if (d == ~0ull) continue;
+      const S64 ss = x.ss;
+      const int a = x.a, i = x.i;
+      if (d < d1) {
+        d2 = d1, d1 = d, ba = a, bi = i, bnz = nz, bss = ss, bpe = pe, bk = k;
+        t = d1 > (~0ull - 127 * eps) / 128 ? ~0ull : 128 * d1 + 127 * eps;
+      } else if (d == d1) {
+        bool take = ss > bss || (ss == bss && abs(i - p) < abs(bi - p));
+        if (!take && ss == bss && abs(i - p) == abs(bi - p)) {
+          const U64 u = norm_dist(pe, ss), ub = norm_dist(bpe, bss);
+          take = u < ub || (u == ub && k < bk);
+        }
+        if (take) ba = a, bi = i, bnz = nz, bss = ss, bpe = pe, bk = k;
+      } else if (d < d2) {
+        d2 = d;
+      }
+    }
+    if (ba < 0 || !bnz) return 0;
+    if (n >= 16 && d1 >= ((U64)n << 10) && ab_rule()) {  // (a transient's: abits_search()'s)
+      const int ns = n / 8;
+      const S64* v = ab_v;
+      U64 bk = ~0ull;
+      int bta = -1;
+      for (int a = a0; a <= a1; a++) {
+        S64 lo, hi;
+        quant_range(r, ch, a, lo, hi);
+        for (int k = 1; k < ns; k++) {
+          const U64 dA = part_fit(r, ch, a, lo, hi, v, 8 * k, bk);
+          if (dA >= bk) continue;
+          const U64 dB = part_fit(r, ch, a, lo, hi, v + 8 * k, n - 8 * k, bk - dA);
+          const U64 d = dA + dB < dA ? ~0ull : dA + dB;
+          if (d < bk) bk = d, bta = a;
+        }
+      }
+      if (bta >= 0 && bk != ~0ull && (d1 + eps) / (bk + eps) >= 4) {
+        ab_tdist = bk;
+        const U64 ratio = (d1 + eps) / (bk + eps);
+        *conf = imin(bit_len(ratio) - 3, 7);
+        *dbest = d1;
+        return 1 + bta;
+      }
+    }
+    const U64 ratio = d2 == ~0ull ? ~0ull : (d2 + eps) / (d1 + eps);
+    *conf = imin(bit_len(ratio) - 1, 7);
+    *dbest = d1;
+    if (ibest) *ibest = bi;
+    return 1 + ba;
+  }
+  const S64* ab_v;  // (abits_search()'s values, in their order: abits_pass()'s transients')
   // the nearest fit of the values v (m of them) to ABITS a's lattice (its range lo..hi) at a scale
   // factor from 3 below their RMS rule's to 5 above: its distance (norm_dist()'s)
   U64 part_fit(const CoreRec& r, int ch, int a, S64 lo, S64 hi, const S64* v, int m, U64 lim = ~0ull) const {
@@ -2166,12 +2416,16 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // whether e (2^-AQ_F) is within half a unit
   static INLINE bool jx_near(S64 e) { return e < (S64)1 << (AQ_F - 1) && e > -((S64)1 << (AQ_F - 1)); }
   // a histogram's count of bin i (jx_h's, jx_hv's; its sum n), halved as they grow
-  static void jx_count(U32* h, U32& n, int i) {
+  static void jx_count(U32* h, U32& n, int i, U64* hb = nullptr) {
     if (i < 0 || i > 255) return;
     h[i]++;
+    if (hb) hb[i >> 6] |= 1ull << (i & 63);
     if (++n < 1u << 16) return;
     for (int k = 0; k < 256; k++) h[k] >>= 1;
     n >>= 1;
+    if (hb)
+      for (int k = 0; k < 256; k++)
+        if (!h[k]) hb[k >> 6] &= ~(1ull << (k & 63));
   }
   // whether bin i or one beside it has been seen
   static INLINE bool jx_seen(const U32* h, int i) { return i >= 1 && i <= 254 && (h[i - 1] | h[i] | h[i + 1]); }
@@ -2335,8 +2589,16 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int j = 0; j < n; j++) nc[j] = -1;
     // (the steps by their lg16(), ascending: those a seen bin or one beside it holds; the same
     // fit as all of them in order would make, the scores' sums only growing)
-    for (int i = 1; i <= 254 && jx_hn[b]; i++) {
-      if (!(jx_h[b][i - 1] | jx_h[b][i] | jx_h[b][i + 1])) continue;
+    // (the bins i, 1 to 254, where i - 1, i or i + 1 isn't 0: jx_hb's bits and those beside them)
+    U64 sb[4];
+    for (int x = 0; x < 4; x++) {
+      const U64 m = jx_hb[b][x];
+      sb[x] = m | m << 1 | m >> 1 | (x ? jx_hb[b][x - 1] >> 63 : 0) | (x < 3 ? jx_hb[b][x + 1] << 63 : 0);
+    }
+    sb[0] &= ~1ull, sb[3] &= ~(1ull << 63);
+    for (int x = 0; x < 4 && jx_hn[b]; x++)
+     for (U64 bits = sb[x]; bits; bits &= bits - 1) {
+      const int i = 64 * x + __builtin_ctzll(bits);
       const int l = i + l0 - 128 - jx_steps.lg0;
       if (l < 0 || l >= jx_steps.nl) continue;
       for (int z = jx_steps.at[l]; z < jx_steps.at[l + 1]; z++) {
@@ -2385,19 +2647,40 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           for (int x = 0; x < 16; x++) in[x] = ~0ull;
           bool any = true;
           for (int j = 0; j < 16 && any; j++) {
-            U64 mj[16] = {0};
+            alignas(32) U64 mj[16] = {0};
+#ifdef DTSD_AVX2  // (the masks 4 words at a time)
+            const __m256i i0 = _mm256_loadu_si256((const __m256i*)in), i1 = _mm256_loadu_si256((const __m256i*)(in + 4)),
+                          i2 = _mm256_loadu_si256((const __m256i*)(in + 8)), i3 = _mm256_loadu_si256((const __m256i*)(in + 12));
+            __m256i m0 = _mm256_setzero_si256(), m1 = m0, m2 = m0, m3 = m0;
+#endif
             for (int e = 0; e < hf_places.nv[j]; e++) {
               const U64* const me = hf_places.m[j][e];
+#ifdef DTSD_AVX2
+              const __m256i e0 = _mm256_loadu_si256((const __m256i*)me), e1 = _mm256_loadu_si256((const __m256i*)(me + 4)),
+                            e2 = _mm256_loadu_si256((const __m256i*)(me + 8)), e3 = _mm256_loadu_si256((const __m256i*)(me + 12));
+              const __m256i hv = _mm256_or_si256(_mm256_or_si256(_mm256_and_si256(e0, i0), _mm256_and_si256(e1, i1)),
+                                                 _mm256_or_si256(_mm256_and_si256(e2, i2), _mm256_and_si256(e3, i3)));
+              if (_mm256_testz_si256(hv, hv)) continue;
+#else
               U64 hit = 0;
               for (int x = 0; x < 16; x++) hit |= me[x] & in[x];
               if (!hit) continue;
+#endif
               const S64 u = w[j0 + j] - shl64(clip23(((S64)hf_places.v[j][e] * SF6[si] + 8) >> 4), AQ_F);
               S128 d;
               S64 o;
               const S64 c = requant(u, ss[j0 + j], lo, hi, &d, &o);
               if (!jx_near(u - shl64(clip23((S64)dequantize((S32)c, ss[j0 + j])), AQ_F))) continue;
+#ifdef DTSD_AVX2
+              m0 = _mm256_or_si256(m0, e0), m1 = _mm256_or_si256(m1, e1), m2 = _mm256_or_si256(m2, e2), m3 = _mm256_or_si256(m3, e3);
+#else
               for (int x = 0; x < 16; x++) mj[x] |= me[x];
+#endif
             }
+#ifdef DTSD_AVX2
+            _mm256_store_si256((__m256i*)mj, m0), _mm256_store_si256((__m256i*)(mj + 4), m1);
+            _mm256_store_si256((__m256i*)(mj + 8), m2), _mm256_store_si256((__m256i*)(mj + 12), m3);
+#endif
             U64 left = 0;
             for (int x = 0; x < 16; x++) in[x] &= mj[x], left |= in[x];
             any = left != 0;
@@ -2587,7 +2870,6 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       H.ab = D.ab;
       H.ql = D.ql;
       H.hm = D.hm;
-      B::sel(f_hit, H);
       int hit;
       if (kd < 2) {
         // a subband sample's index is the audio's but where the encoder's arithmetic and this
@@ -2609,7 +2891,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           ts[k][0] += !hit;
           if (++ts[k][1] >= HIT_LIMIT) ts[k][0] >>= 1, ts[k][1] >>= 1;
         }
+        if (hit) return *how = 0, qp;
+        B::sel(f_hit, H);  // (the family's rows for a miss only)
       } else {
+        B::sel(f_hit, H);
         hit = f_hit.bit(HT_HIT, ENC && v == qp);  // (the LFE's misses are the fit's: by the family)
       }
       if (hit) return *how = 0, qp;

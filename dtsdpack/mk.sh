@@ -74,8 +74,12 @@ abspath() {
 }
 
 CXX=${CXX:-g++}
-CXXFLAGS=${CXXFLAGS:--O3}
+# (no stack clash probes: the coroutines' 256 KB frame would be written page by page as a run starts)
+CXXFLAGS=${CXXFLAGS:--O3 -fno-stack-clash-protection}
 PARCH=${PARCH--march=x86-64-v3 -ffp-contract=off}  # AVX2; PARCH= for the plain C++, which codes the same
+# the C++ and GCC runtimes linked in (a run starts 1 ms sooner than with the shared libstdc++ to load,
+# a tenth of a 7-frame stream's run); LDLINK= for the shared ones
+LDLINK=${LDLINK--static-libstdc++ -static-libgcc}
 FAMS=$(sed -n 's/^#define DTSD_FAMS(X) //p' famvars.inc | sed 's/X(\([a-z0-9]*\))/\1/g')  # (the model's list)
 [ -n "$FAMS" ] || { echo "mk.sh: no DTSD_FAMS in famvars.inc" >&2; exit 1; }
 LEVELS="9"
@@ -137,7 +141,7 @@ generate() {
 build() {
   out=$1
   shift
-  $CXX $CXXFLAGS $PARCH -std=c++11 -fno-exceptions -fno-rtti -ILib3 -pthread "$@" -o "$out" dtsdpack.cpp
+  $CXX $CXXFLAGS $PARCH -std=c++11 -fno-exceptions -fno-rtti -ILib3 -pthread "$@" $LDLINK -o "$out" dtsdpack.cpp
 }
 
 level() {

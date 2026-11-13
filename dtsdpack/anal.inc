@@ -92,6 +92,22 @@ struct SplitTabs {
 };
 static const SplitTabs split_tabs;
 
+// (the cosines in doubles, rounded, by sample then band: cd32[i][b] COSQ[b][i]; and each band's sum
+// of |cos| as doubles, a little up: analyze_sp()'s screen; made where first needed)
+struct CosD {
+  alignas(32) double cd32[32][32], cd64[64][64];
+  double cs32[32], cs64[64];
+  bool made[2];
+  template <int M>
+  void make(const S64 (*cq)[M], double (*cd)[M], double* cs) {
+    for (int b = 0; b < M; b++) {
+      double t = 0;
+      for (int i = 0; i < M; i++) cd[i][b] = (double)cq[b][i], t += fabs((double)cq[b][i]);
+      cs[b] = t * (1 + 1e-12);
+    }
+  }
+};
+static CosD cos_d;
 template <int M>
 static void analyze_sp(const S32* sp, const S64* fir, const S64 (*cq)[M], S64* x, int nb);
 template <int M>
@@ -132,15 +148,66 @@ static void analyze_sp(const S32* sp, const S64* fir, const S64 (*cq)[M], S64* x
     const S32(*chp)[M] = (const S32(*)[M])(M == 64 ? &split_tabs.ch64[0][0] : &split_tabs.ch32[0][0]);
     const S32(*clp)[M] = (const S32(*)[M])(M == 64 ? &split_tabs.cl64[0][0] : &split_tabs.cl32[0][0]);
     S32 ah[M], al[M];
-    for (int i = 0; i < M; i++) ah[i] = (S32)(a[i] >> 23), al[i] = (S32)(a[i] & 0x7FFFFF);
-    for (int b = 0; b < nb; b++) {
+    bool split = false;
+    auto exact = [&](int b) {  // (band b's sum exactly, in halves)
+      if (!split) {
+        for (int i = 0; i < M; i++) ah[i] = (S32)(a[i] >> 23), al[i] = (S32)(a[i] & 0x7FFFFF);
+        split = true;
+      }
       S64 hh = 0, hl = 0, lh = 0, ll = 0;
       for (int i = 0; i < M; i++) {
         hh += (S64)ah[i] * chp[b][i], hl += (S64)ah[i] * clp[b][i];
         lh += (S64)al[i] * chp[b][i], ll += (S64)al[i] * clp[b][i];
       }
       const S128 r = (S128)hh * ((S64)1 << 54) + (S128)hl * (1 << 23) + (S128)lh * ((S64)1 << 31) + ll;
-      x[b] = (S64)((r + ((S128)1 << (84 - AQ_F))) >> (85 - AQ_F));  // (2 r: 2^-(24 + 62) to 2^-AQ_F)
+      return (S64)((r + ((S128)1 << (84 - AQ_F))) >> (85 - AQ_F));  // (2 r: 2^-(24 + 62) to 2^-AQ_F)
+    };
+    // (first in doubles: the sum's t = r / 2^(85 - AQ_F) within (M + 4) 2^-53 of the sum of
+    // |a| |cos| (the cosines' rounding and the sums', Higham's dot product bound, FMA's or not),
+    // max |a| times the band's sum of |cos| at most; where t + 1/2 lies past that and 2^-12 (its
+    // own rounding, |t| < 2^40) from an integer, its floor is the exact sum's; else exactly)
+    const int mi = M == 64;
+    if (!cos_d.made[mi]) {
+      if (M == 64) cos_d.make<64>(COSQ64, cos_d.cd64, cos_d.cs64);
+      else cos_d.make<32>(COSQ, cos_d.cd32, cos_d.cs32);
+      cos_d.made[mi] = true;
+    }
+    const double(*cd)[M] = (const double(*)[M])(M == 64 ? &cos_d.cd64[0][0] : &cos_d.cd32[0][0]);
+    const double* const cs = M == 64 ? cos_d.cs64 : cos_d.cs32;
+    const double SC = 1.0 / (double)((U64)1 << 35) / (double)((U64)1 << (85 - AQ_F - 35));  // (2^-(85 - AQ_F), exactly)
+    const double U = 1.0 / 9007199254740992.0, E12 = 1.0 / 4096.0, T40 = 1099511627776.0;  // (2^-53, 2^-12, 2^40)
+    const double ek = (M + 4) * U * ((double)amax + 1) * SC * (1 + 1e-12);
+    alignas(32) double xr[M], ad[M];
+    for (int i = 0; i < M; i++) ad[i] = (double)a[i];
+#ifdef DTSD_AVX2  // (16 bands at a time, in registers)
+    for (int b0 = 0; b0 < nb; b0 += 16) {
+      __m256d s0 = _mm256_setzero_pd(), s1 = s0, s2 = s0, s3 = s0;
+      for (int i = 0; i < M; i++) {
+        const __m256d ai = _mm256_set1_pd(ad[i]);
+        const double* const ci = cd[i] + b0;
+        s0 = _mm256_fmadd_pd(ai, _mm256_load_pd(ci), s0), s1 = _mm256_fmadd_pd(ai, _mm256_load_pd(ci + 4), s1);
+        s2 = _mm256_fmadd_pd(ai, _mm256_load_pd(ci + 8), s2), s3 = _mm256_fmadd_pd(ai, _mm256_load_pd(ci + 12), s3);
+      }
+      _mm256_store_pd(xr + b0, s0), _mm256_store_pd(xr + b0 + 4, s1);
+      _mm256_store_pd(xr + b0 + 8, s2), _mm256_store_pd(xr + b0 + 12, s3);
+    }
+#else
+    for (int b = 0; b < nb; b++) {
+      double t = 0;
+      for (int i = 0; i < M; i++) t += ad[i] * cd[i][b];
+      xr[b] = t;
+    }
+#endif
+    for (int b = 0; b < nb; b++) {
+      const double t = xr[b] * SC, et = ek * cs[b] + E12;
+      if (t < T40 && t > -T40) {
+        const double u = t + 0.5, f = floor(u);
+        if (u - f > et && f + 1 - u > et) {
+          x[b] = (S64)f;
+          continue;
+        }
+      }
+      x[b] = exact(b);
     }
     return;
   }
@@ -152,9 +219,28 @@ static void analyze_sp(const S32* sp, const S64* fir, const S64 (*cq)[M], S64* x
 }
 // the analysis of the WAV's samples to the core's up: 32 bands by the core's prototype fir (up
 // 1), 64 by the 64-band one (2: a WAV at twice the core's rate); its first nb bands into x
-static void analyze(const WavIn& w, int c, S64 o, int up, const S64* fir, S64* x, int nb = 32) {
+static void analyze_raw(const WavIn& w, int c, S64 o, int up, const S64* fir, S64* x, int nb) {
   if (up == 2) analyze_m<64>(w, c, o, FIR_64, COSQ64, x, nb);
   else analyze_m<32>(w, c, o, fir, COSQ, x, nb);
+}
+static void analyze(const WavIn& w, int c, S64 o, int up, const S64* fir, S64* x, int nb = 32) {
+  if (w.ana_n && up == w.ana_up && fir == w.ana_fir && nb <= 32 && o <= w.ana_got && c < w.nch) {  // (made already)
+    const S64 d = o - w.ana_off, st = 32 * (S64)up;
+    if (d >= 0 && d % st == 0) {
+      const S64 t = d / st;
+      int lo = 0, hi = w.ana_n - 1;
+      while (lo < hi) {
+        const int m = (lo + hi) >> 1;
+        if (w.ana_t[m] < t) lo = m + 1;
+        else hi = m;
+      }
+      if (w.ana_t[lo] == t) {
+        memcpy(x, w.ana + ((size_t)lo * w.nch + c) * 32, sizeof(S64) * nb);
+        return;
+      }
+    }
+  }
+  analyze_raw(w, c, o, up, fir, x, nb);
 }
 
 // the first nb subband samples of core channel ch as the binding b makes them from the WAV
@@ -359,22 +445,9 @@ static int scale_ceil(const S64* v, int n, const U32* tab, int nt) {
   return lo;
 }
 
-// How far a decoded WAV's values v (n of them, 2^-AQ_F; the ADPCM prediction off) lie from what the
-// decoder makes of them at step and scale ss: the indexes nearest them, in lo..hi, dequantized as
-// it does (the squared distances' sum, 2^-2AQ_F; by one 64-bit division a value: |v| < 2^40)
-static S128 quant_err(const S64* v, int n, S64 ss, S64 lo, S64 hi) {
-  S128 e = 0;
-  for (int j = 0; j < n; j++) {
-    const S64 u = v[j] * 64;  // (Q22, as ss)
-    S64 q = (u < 0 ? -((-2 * u + ss) / (2 * ss)) : (2 * u + ss) / (2 * ss));
-    q = q < lo ? lo : q > hi ? hi : q;
-    const S64 d = v[j] - shl64(dequantize((S32)q, ss), AQ_F);
-    e += (S128)d * d;
-  }
-  return e;
-}
-// quant_err()'s at one step and scale, value by value, for the searches that try many: the index
-// by a reciprocal, then made exact (the same indexes as its divisions)
+// How far a decoded WAV's values (the ADPCM prediction off) lie from what the decoder makes of them
+// at step and scale ss, value by value: the index nearest each, floor(|64 v| / ss + 1/2) with v's
+// sign, in lo..hi, dequantized as it does (dequantize()); the index by a reciprocal, then made exact
 struct QErr {
   S64 ss, lo, hi, ssh;  // (ssh, shift: dequantize()'s)
   int shift;
@@ -389,6 +462,24 @@ struct QErr {
   }
   // value v's squared distance; *nz set where its index isn't 0
   INLINE S128 err(S64 v, int* nz) const {
+    const S64 d = dev(v, nz);
+    return (S128)d * d;
+  }
+  // (and the index alone, as requant()'s)
+  INLINE S64 index(S64 v) const {
+    const S64 u = v * 64, a = u < 0 ? -u : u, t = 2 * a + ss;
+    S64 q = (S64)((double)a * inv + 0.5), r = t - 2 * q * ss;
+    if (r < 0) q--, r += 2 * ss;
+    else if (r >= 2 * ss) q++, r -= 2 * ss;
+    if (r < 0 || r >= 2 * ss) {
+      while (q > 0 && 2 * q * ss > t) q--;
+      while (2 * (q + 1) * ss <= t) q++;
+    }
+    if (u < 0) q = -q;
+    return q < lo ? lo : q > hi ? hi : q;
+  }
+  // (and the distance itself, v less its index's point)
+  INLINE S64 dev(S64 v, int* nz) const {
     const S64 u = v * 64, a = u < 0 ? -u : u, t = 2 * a + ss;  // (the index: floor(t / 2ss))
     S64 q = (S64)((double)a * inv + 0.5), r = t - 2 * q * ss;  // (the estimate's rest: in 0..2ss where exact)
     if (r < 0) q--, r += 2 * ss;  // (it is within 1 of it but where the values are past 2^50)
@@ -400,10 +491,18 @@ struct QErr {
     if (u < 0) q = -q;
     q = q < lo ? lo : q > hi ? hi : q;
     *nz |= q != 0;
-    const S64 d = v - shl64(clip23(rshift(q * ssh, 22 - shift)), AQ_F);
-    return (S128)d * d;
+    return v - shl64(clip23(rshift(q * ssh, 22 - shift)), AQ_F);
   }
 };
+// the squared distances' sum of the values v (n of them, 2^-AQ_F; 2^-2AQ_F)
+static S128 quant_err(const S64* v, int n, S64 ss, S64 lo, S64 hi) {
+  QErr q;
+  q.set(ss, lo, hi);
+  S128 e = 0;
+  int nz = 0;
+  for (int j = 0; j < n; j++) e += q.err(v[j], &nz);
+  return e;
+}
 // the same of a high-frequency VQ vector q at scale factor sc: its entries as the decoder scales them
 static S128 vq_err(const S64* v, int n, int q, S64 sc) {
   S128 e = 0;
@@ -613,7 +712,7 @@ static INLINE int lg16(U64 x) {
   return 16 * e + (int)((e >= 4 ? x >> (e - 4) : x << (4 - e)) & 15);
 }
 // X96's steps: each LOSSY_QUANT entry times each SF6 scale factor (x96_ss()'s, 2^-22), and their
-// lg16()
+// lg16(); made where first needed (make())
 struct JxSteps {
   S64 v[32 * 64];
   double it[32 * 64], t[32 * 64], tb[32 * 64];  // (2^22 / v, v / 2^22 and 4e-7 of that: jx_pick()'s test)
@@ -624,7 +723,10 @@ struct JxSteps {
   int lg0, nl;
   S16 by[32 * 64];
   int at[NL + 1];
-  JxSteps() {
+  bool made;
+  void make() {  // (once: where a stream first has X96 and the WAV, smp_subframe())
+    if (made) return;
+    made = true;
     for (int a = 0; a < 32; a++)
       for (int i = 0; i < 64; i++) {
         const int k = 64 * a + i;
@@ -646,7 +748,7 @@ struct JxSteps {
       if (v[k] > 0) by[pos[lg[k] - lg0]++] = (S16)k;
   }
 };
-static const JxSteps jx_steps;
+static JxSteps jx_steps;
 // The HF VQ code book's entries by their first value: v[e] the e-th distinct one (in 1/16 of a
 // scale factor, 128 added), bit k of m[e] set where entry k's is that (jx_search_vq()'s)
 struct HfFirst {
@@ -714,42 +816,18 @@ static INLINE S128 hf_dist(int q, const S64* x, int n, S64 sc) {
 // index of equals; the groups' as well, hf_bound_grp(): `s.2.dts`'s core 2.3% smaller, its top
 // subband's HF VQ 31.5 KB to 29.5, 3 MB of its middle 1.7%). Group g's entries, by their distances
 // k (hf_dist()'s, over their first n values), into o.
-struct HfPairs {  // (each group's entries' distances from each other over their first 16 values: a
-                  // group's made where it is first asked for, f's from i's the same as i's from f's)
-  double d[32][32][32];
-  U8 made[32];
-  const double* group(int g) {
-    if (!made[g]) {
-      for (int i = 0; i < 32; i++)
-        for (int f = 0; f <= i; f++) {
-          double s2 = 0;
-          for (int j = 0; j < 16; j++) {
-            const double e = (double)HF_VQ[g * 32 + i][j] - (double)HF_VQ[g * 32 + f][j];
-            s2 += e * e;
-          }
-          d[g][i][f] = d[g][f][i] = sqrt(s2);
-        }
-      made[g] = 1;
-    }
-    return &d[g][0][0];
-  }
-};
-static HfPairs hf_pairs;
 static void hf_bound_vec(const S128* k, int g, int n, S128* o) {
   int f = 0;
   for (int i = 1; i < 32; i++) f = k[i] < k[f] ? i : f;
-  const double* const dg = n == 16 ? hf_pairs.group(g) : nullptr;
+  const S8* const vf = HF_VQ[g * 32 + f];
   for (int i = 0; i < 32; i++) {
-    double d;
-    if (n == 16) d = dg[32 * i + f];
-    else {
-      double s2 = 0;
-      for (int j = 0; j < n; j++) {
-        const double e = (double)HF_VQ[g * 32 + i][j] - (double)HF_VQ[g * 32 + f][j];
-        s2 += e * e;
-      }
-      d = sqrt(s2);
+    const S8* const vi = HF_VQ[g * 32 + i];
+    S32 s2 = 0;  // (the squared distance over the first n values, exactly: a double's as well)
+    for (int j = 0; j < n; j++) {
+      const S32 e = vi[j] - vf[j];
+      s2 += e * e;
     }
+    const double d = sqrt((double)s2);
     o[i] = i == f || d == 0 ? -1 : (S128)((double)(k[i] - k[f]) / d);  // (within 2^99)
   }
 }
@@ -798,7 +876,7 @@ static const HfEnergies hf_energies;
 // The dot products of x (n values, at most 32) with each entry's first n, exactly, and as doubles:
 // *dot and *dd, 1024 of each (valid to the next call); in doubles where |x| < 2^40 (whether: the
 // result; a product within 2^47, the sums 2^52, integers a double holds whatever their order), a
-// group's 32 entries at a time, as HfT32 has them; else in 64 bits. (The values' kept, 32 of them
+// group's 32 entries at a time, as HfT32 has them; else in 64 bits. (The values' kept, 4 of them
 // by a hash: a subband's scale factor search, then its vector's, take the same.)
 struct HfT32 {
   double t[32][32][32];  // group g's entries' value j: t[g][j]
@@ -815,15 +893,15 @@ static bool hf_dots(const S64* x, int n, const S64** dot, const double** dd) {
     int n;
     bool small;
   };
-  static Kept kept[32];
+  static Kept kept[4];
   static bool init = false;
   if (!init) {
-    for (int i = 0; i < 32; i++) kept[i].n = -1;
+    for (int i = 0; i < 4; i++) kept[i].n = -1;
     init = true;
   }
   U64 h = (U64)n;
   for (int j = 0; j < n; j++) h = (h ^ (U64)x[j]) * 0x9E3779B97F4A7C15ull;
-  Kept& e = kept[h >> 59];
+  Kept& e = kept[h >> 62];
   *dot = e.d, *dd = e.f;
   if (e.n == n && !memcmp(x, e.x, sizeof(S64) * n)) return e.small;
   S64 mx = 0;
@@ -838,6 +916,28 @@ static bool hf_dots(const S64* x, int n, const S64** dot, const double** dd) {
   } else {
     double xd[32];
     for (int j = 0; j < n; j++) xd[j] = (double)x[j];
+#ifdef DTSD_AVX2  // (8 vectors of 4 sums a group, in registers; integers all, whatever the rounding: FMA's
+                  // the same; to 64 bits by the magic number 1.5 2^52, as |sum| < 2^51: |x| < 2^40 times
+                  // an entry's sum of |values|, 451 at most)
+    const __m256d mg = _mm256_set1_pd(6755399441055744.0);
+    const __m256i mgi = _mm256_castpd_si256(mg);
+    for (int g = 0; g < 32; g++) {
+      __m256d a0 = _mm256_setzero_pd(), a1 = a0, a2 = a0, a3 = a0, a4 = a0, a5 = a0, a6 = a0, a7 = a0;
+      for (int j = 0; j < n && mx; j++) {
+        const double* const t = hf_t32.t[g][j];
+        const __m256d v = _mm256_set1_pd(xd[j]);
+        a0 = _mm256_fmadd_pd(v, _mm256_loadu_pd(t), a0), a1 = _mm256_fmadd_pd(v, _mm256_loadu_pd(t + 4), a1);
+        a2 = _mm256_fmadd_pd(v, _mm256_loadu_pd(t + 8), a2), a3 = _mm256_fmadd_pd(v, _mm256_loadu_pd(t + 12), a3);
+        a4 = _mm256_fmadd_pd(v, _mm256_loadu_pd(t + 16), a4), a5 = _mm256_fmadd_pd(v, _mm256_loadu_pd(t + 20), a5);
+        a6 = _mm256_fmadd_pd(v, _mm256_loadu_pd(t + 24), a6), a7 = _mm256_fmadd_pd(v, _mm256_loadu_pd(t + 28), a7);
+      }
+      const __m256d av[8] = {a0, a1, a2, a3, a4, a5, a6, a7};
+      for (int k = 0; k < 8; k++) {
+        _mm256_storeu_pd(e.f + g * 32 + 4 * k, av[k]);
+        _mm256_storeu_si256((__m256i*)(e.d + g * 32 + 4 * k), _mm256_sub_epi64(_mm256_castpd_si256(_mm256_add_pd(av[k], mg)), mgi));
+      }
+    }
+#else
     for (int g = 0; g < 32; g++) {
       double a[32];
       for (int i = 0; i < 32; i++) a[i] = 0;
@@ -847,11 +947,72 @@ static bool hf_dots(const S64* x, int n, const S64** dot, const double** dd) {
       }
       for (int i = 0; i < 32; i++) e.d[g * 32 + i] = (S64)a[i], e.f[g * 32 + i] = a[i];
     }
+#endif
     e.small = true;
   }
   e.n = n;
   memcpy(e.x, x, sizeof(S64) * n);
   return e.small;
+}
+// The distances (hf_dist()'s) of group g's 32 entries from the values x (n of them) at once,
+// exactly, into d: (16 x - 2^16 sc v)^2 summed is 256 x x - 2^21 sc x v + 2^32 sc^2 v v, the dot
+// products in doubles where |x| < 2^40 (a product within 2^47, the sums 2^52: integers a double
+// holds, whatever their order), a group at a time as hf_dots() makes them; else entry by entry
+static void hf_dists(int g, const S64* x, int n, S64 sc, S128* d) {
+  S64 mx = 0;
+  for (int j = 0; j < n; j++) mx |= x[j] < 0 ? -x[j] : x[j];
+  if (mx >= (S64)1 << 40) {
+    for (int i = 0; i < 32; i++) d[i] = hf_dist(g * 32 + i, x, n, sc);
+    return;
+  }
+  S128 en = 0;
+  for (int j = 0; j < n; j++) en += (S128)(x[j] * 16) * (x[j] * 16);
+  alignas(32) double a[32];
+#ifdef DTSD_AVX2
+  __m256d a0 = _mm256_setzero_pd(), a1 = a0, a2 = a0, a3 = a0, a4 = a0, a5 = a0, a6 = a0, a7 = a0;
+  for (int j = 0; j < n; j++) {
+    const double* const t = hf_t32.t[g][j];
+    const __m256d v = _mm256_set1_pd((double)x[j]);
+    a0 = _mm256_fmadd_pd(v, _mm256_loadu_pd(t), a0), a1 = _mm256_fmadd_pd(v, _mm256_loadu_pd(t + 4), a1);
+    a2 = _mm256_fmadd_pd(v, _mm256_loadu_pd(t + 8), a2), a3 = _mm256_fmadd_pd(v, _mm256_loadu_pd(t + 12), a3);
+    a4 = _mm256_fmadd_pd(v, _mm256_loadu_pd(t + 16), a4), a5 = _mm256_fmadd_pd(v, _mm256_loadu_pd(t + 20), a5);
+    a6 = _mm256_fmadd_pd(v, _mm256_loadu_pd(t + 24), a6), a7 = _mm256_fmadd_pd(v, _mm256_loadu_pd(t + 28), a7);
+  }
+  _mm256_store_pd(a, a0), _mm256_store_pd(a + 4, a1), _mm256_store_pd(a + 8, a2), _mm256_store_pd(a + 12, a3);
+  _mm256_store_pd(a + 16, a4), _mm256_store_pd(a + 20, a5), _mm256_store_pd(a + 24, a6), _mm256_store_pd(a + 28, a7);
+#else
+  for (int i = 0; i < 32; i++) a[i] = 0;
+  for (int j = 0; j < n; j++) {
+    const double xj = (double)x[j], *const t = hf_t32.t[g][j];
+    for (int i = 0; i < 32; i++) a[i] += xj * t[i];
+  }
+#endif
+  const S32* const ee = (n & 7) ? nullptr : hf_energies.e[n / 8 - 1] + g * 32;
+  for (int i = 0; i < 32; i++) {
+    S32 e2 = 0;
+    if (ee) e2 = ee[i];
+    else
+      for (int j = 0; j < n; j++) e2 += HF_VQ[g * 32 + i][j] * HF_VQ[g * 32 + i][j];
+    d[i] = en - shl128((S128)(S64)a[i] * sc, 21) + shl128((S128)e2 * sc * sc, 32);
+  }
+}
+// The same of the 32 groups' centroids (hf_group_dist()'s): (2^13 x - 2^16 sc c)^2 summed is 2^26
+// x x - 2^30 sc x c + 2^32 sc^2 c c, the dot products in 64 bits (|x| < 2^40: within 2^59)
+static void hf_group_dists(const S64* x, int n, S64 sc, S128* d) {
+  S64 mx = 0;
+  for (int j = 0; j < n; j++) mx |= x[j] < 0 ? -x[j] : x[j];
+  if (mx >= (S64)1 << 40) {
+    for (int g = 0; g < 32; g++) d[g] = hf_group_dist(g, x, n, sc);
+    return;
+  }
+  S128 en = 0;
+  for (int j = 0; j < n; j++) en += (S128)x[j] * x[j];
+  en = shl128(en, 26);
+  for (int g = 0; g < 32; g++) {
+    S64 dt = 0, e2 = 0;
+    for (int j = 0; j < n; j++) dt += x[j] * HF_GC[g][j], e2 += (S64)HF_GC[g][j] * HF_GC[g][j];
+    d[g] = en - shl128((S128)dt * sc, 30) + shl128((S128)e2 * sc * sc, 32);
+  }
 }
 static int hf_shape(const S64* x, int n) {
   const int k = (n + 7) / 8 - 1;
@@ -864,11 +1025,26 @@ static int hf_shape(const S64* x, int n) {
   double top = -1;
   if (small) {
     const double *iv = hf_energies.inv[k], *nz = hf_energies.nz[k];
+#ifdef DTSD_AVX2  // (the same, 4 at a time)
+    const __m256d s8 = _mm256_set1_pd(1.0 / 256), sgn = _mm256_set1_pd(-0.0), one = _mm256_set1_pd(1.0);
+    __m256d mx = _mm256_set1_pd(-1.0);
+    for (int q = 0; q < 1024; q += 4) {
+      const __m256d a = _mm256_andnot_pd(sgn, _mm256_floor_pd(_mm256_mul_pd(_mm256_loadu_pd(dd + q), s8)));
+      const __m256d z = _mm256_loadu_pd(nz + q);
+      const __m256d s = _mm256_add_pd(_mm256_mul_pd(_mm256_mul_pd(a, _mm256_loadu_pd(iv + q)), z), _mm256_sub_pd(z, one));
+      _mm256_storeu_pd(sq + q, s);
+      mx = _mm256_max_pd(mx, s);
+    }
+    alignas(32) double m4[4];
+    _mm256_store_pd(m4, mx);
+    for (int i = 0; i < 4; i++) top = m4[i] > top ? m4[i] : top;
+#else
     for (int q = 0; q < 1024; q++) {
       const double a = fabs(floor(dd[q] * (1.0 / 256)));  // (dot >> 8: exactly)
       sq[q] = a * iv[q] * nz[q] + (nz[q] - 1);
     }
     for (int q = 0; q < 1024; q++) top = sq[q] > top ? sq[q] : top;
+#endif
     if (top == 0)  // (all of them 0: the first)
       for (int q = 0; q < 1024; q++)
         if (sq[q] == 0) return q;
@@ -877,13 +1053,25 @@ static int hf_shape(const S64* x, int n) {
   int bq = -1;
   S128 bd = 0;  // (the best's x e, squared, and e e: as a ratio)
   S64 be = 1;
-  for (int q = 0; q < 1024; q++) {
+  auto take = [&](int q) {
     const S64 ee = hf_energies.e[k][q];
-    if (ee <= 0 || (small && sq[q] < lim)) continue;
+    if (ee <= 0) return;
     const S64 d = dot[q];  // (|x| < 2^40: 2^47 a product, 2^52 the sum)
     const S128 dd2 = (S128)(d >> 8) * (d >> 8);  // (2^88)
     if (bq < 0 || dd2 * be > bd * ee) bd = dd2, be = ee, bq = q;  // (2^88 times 2^19)
-  }
+  };
+  if (small) {  // (those not under lim, in order)
+#ifdef DTSD_AVX2
+    const __m256d vl = _mm256_set1_pd(lim);
+    for (int q = 0; q < 1024; q += 4)
+      for (U32 m = (U32)_mm256_movemask_pd(_mm256_cmp_pd(_mm256_loadu_pd(sq + q), vl, _CMP_NLT_UQ)); m; m &= m - 1)
+        take(q + __builtin_ctz(m));
+#else
+    for (int q = 0; q < 1024; q++)
+      if (!(sq[q] < lim)) take(q);
+#endif
+  } else
+    for (int q = 0; q < 1024; q++) take(q);
   return bq < 0 ? 0 : bq;
 }
 // Each group's entry nearest the samples x (n of them; at most 32): its distance (hf_dist()'s),
@@ -1025,12 +1213,17 @@ constexpr int LFE_Q = 23;  // the LFE's units: 2^-LFE_Q of those of a value time
 
 // the WAV channel c decimated by the prototype, the window ending at sample end, in the units
 // of an LFE value times its scale (lfe_scale()); the WAV's samples to the core's up (2: every other
-// sample, an LFE channel having nothing above the core's band to alias). (|acc| < 2^59, the result
-// within 2^50)
+// sample, an LFE channel having nothing above the core's band to alias). (The samples within 2^23:
+// |acc| < 2^60, in 64 bits; the result within 2^50)
 static S64 lfe_decim(const WavIn& w, int c, S64 end, int up) {
-  S128 acc = 0;
-  for (int m = 0; m < 512; m++) acc += (S128)LFE_FIR[m] * w.at(c, end - 512 * up + up * m);
-  return (S64)((acc * LFE_G) >> (60 - LFE_Q));
+  S32 buf[1024];
+  const S32* const s = w.span(c, end - 512 * up, 512 * up, buf);
+  S64 acc = 0;
+  if (up == 1)
+    for (int m = 0; m < 512; m++) acc += (S64)LFE_FIR[m] * s[m];
+  else
+    for (int m = 0; m < 512; m++) acc += (S64)LFE_FIR[m] * s[up * m];
+  return (S64)(((S128)acc * LFE_G) >> (60 - LFE_Q));
 }
 // the LFE scale factor i's step (FFmpeg's: the 7-bit table's entry times the quantizer's 0.035,
 // times 16, in 2^-LFE_Q, 0 or 2^22 to 2^46): an LFE value v is v times it. (Exactly: the encoder
@@ -1101,6 +1294,21 @@ static INLINE Sf sf_sub(Sf a, Sf b) {
   b.m = -b.m;
   return sf_add(a, b);
 }
+// g less the sum of x[k] y[k], k < n: each product (124 bits) and g floored at 2^-7 of the
+// largest's scale, summed, then rounded once (exact to 2^-117 of the largest term, each)
+static Sf sf_dot_sub(Sf g, const Sf* x, const Sf* y, int n) {
+  constexpr int NONE = -(1 << 30);
+  int top = g.m ? g.e - 62 : NONE;
+  for (int k = 0; k < n; k++)
+    if (x[k].m && y[k].m && x[k].e + y[k].e > top) top = x[k].e + y[k].e;
+  if (top == NONE) return Sf{0, 0};
+  const int A = top + 7;
+  auto down = [](S128 v, int d) { return d >= 127 ? (v < 0 ? (S128)-1 : 0) : v >> d; };
+  S128 acc = g.m ? down(shl128(g.m, 62), A - (g.e - 62)) : 0;
+  for (int k = 0; k < n; k++)  // (a product of 0: 0, past every shift)
+    acc -= down((S128)x[k].m * y[k].m, A - (x[k].m && y[k].m ? x[k].e + y[k].e : NONE));
+  return sf_make(acc, A);
+}
 // a times 2^q as an integer (floored), within +-2^62
 static S64 sf_int(Sf a, int q) {
   const int e = a.e + q;
@@ -1113,87 +1321,127 @@ static S64 sf_int(Sf a, int q) {
 // 64-band analysis 1024), so the analysis of its last frame looks past the WAV's end, at what its
 // encoder had there; 0s there miss three quarters of that frame's indexes. Each channel's
 // continuation instead: the linear prediction of order WAV_LPC fitted to its last WAV_FIT samples
-// (their autocorrelation under a half parabola, the newest weighted most, a 10000th of white noise
-// in it; Levinson's recursion in the soft float), run on for WAV_EXT samples. Made once, as the end
+// (their autocorrelation under a half parabola, the newest weighted most, the windowed samples at 25
+// bits, a 10000th of white noise in it; Levinson's recursion in the soft float), run on for WAV_EXT
+// samples: each channel's fit where its continuation is first read, the continuation as far as it
 // is read (where the model takes it or 0s: model_smp.inc's smp_subframe()).
 constexpr int WAV_LPC = 64, WAV_FIT = 4096, WAV_EXT = 2048;
 constexpr int WAV_PAST = 192;  // (and an index whose window lies past the end by more, without the audio: model_smp.inc's past_end())
 static void wav_extend(WavIn& w) {
   if (w.ext || !w.ok || w.got != w.nsamp) return;
   w.ext = (S32*)xmalloc(sizeof(S32) * (size_t)w.nch * WAV_EXT);
+  memset(w.ext, 0, sizeof(S32) * (size_t)w.nch * WAV_EXT);
   w.ext_n = WAV_EXT;
+  for (int c = 0; c < WAV_CH; c++) w.ext_done[c] = -1;
+}
+// (each channel's fit as its continuation is first read, then the continuation as far as it is
+// read, 256 samples at a time: as making all of it at once)
+void WavIn::ext_more(int c, S64 kneed) const {
+  const WavIn& w = *this;
   static_assert(WAV_FIT <= WAV_WIN, "the samples fitted are in the window");
   const S64 N = (S64)w.nsamp, n = N < WAV_FIT ? N : WAV_FIT;  // (those fitted: the ring has them)
-  // (not on the coroutine's stack: the windowed samples, as h 2^24 + l, 0 <= l < 2^24, and h + l;
-  // the history and the continuation)
-  S32* const xh = (S32*)xmalloc(sizeof(S32) * (3 * WAV_FIT + WAV_LPC + WAV_EXT));
-  S32* const xl = xh + WAV_FIT;
-  S32* const xs = xl + WAV_FIT;
-  S32* const hb = xs + WAV_FIT;
-  for (int c = 0; c < w.nch; c++) {
-    S32* e = w.ext + (size_t)c * WAV_EXT;
-    memset(e, 0, sizeof(S32) * WAV_EXT);
-    if (n <= 2 * WAV_LPC) continue;
-    for (int k = 0; k < (int)n; k++) {
-      const S64 v = (S64)w.at(c, N - n + k) * (k + 1) * (2 * n - k);  // (|x| <= 2^23: within 2^48)
-      xh[k] = (S32)(v >> 24), xl[k] = (S32)(v & 0xFFFFFF), xs[k] = xh[k] + xl[k];
-    }
-    S128 r[WAV_LPC + 1];
-    for (int l = 0; l <= WAV_LPC; l++) {  // (the products' sums, h h, l l and (h + l)(h + l): within 2^62)
-      S64 hh = 0, ss = 0, ll = 0;
-      for (int k = l; k < (int)n; k++) {
-        hh += (S64)xh[k] * xh[k - l];
-        ss += (S64)xs[k] * xs[k - l];
-        ll += (S64)xl[k] * xl[k - l];
+  S64* const q = ext_q[c];  // (the predictor, Q30: x[t] by sum q_i x[t - i])
+  S64& qa = ext_qa[c];      // (the sum of |q_i|, where under 2^39: the sums in 64 bits)
+  if (ext_done[c] < 0) {
+    ext_done[c] = 0;
+    for (int i = 0; i <= WAV_LPC; i++) q[i] = 0;
+    qa = 0;
+    do {
+      if (n <= 2 * WAV_LPC) break;
+      // (not on the coroutine's stack: the windowed samples, within 2^48, shifted down to 25 bits
+      // where longer, so the products' sums are within 2^62; after RP 0s, and 0s to a multiple
+      // of 4 after them, so every lag's sum runs over the same k)
+      constexpr int RP = 68;  // (the lags made, 4 at a time: those past WAV_LPC not taken)
+      const int n4 = ((int)n + 3) & ~3;
+      S64* const xb = (S64*)xmalloc(sizeof(S64) * (RP + WAV_FIT + 4));
+      S64* const xs = xb + RP;
+      for (int k = 0; k < RP; k++) xb[k] = 0;
+      S64 vmax = 0;
+      for (int k = 0; k < (int)n; k++) {
+        xs[k] = (S64)w.at(c, N - n + k) * (k + 1) * (2 * n - k);  // (|x| <= 2^23: within 2^48)
+        vmax |= xs[k] < 0 ? ~xs[k] : xs[k];
       }
-      r[l] = shl128(hh, 48) + shl128(ss - hh - ll, 24) + ll;
-    }
-    if (r[0] <= 0) continue;
-    Sf R[WAV_LPC + 1], a[WAV_LPC + 1], t[WAV_LPC + 1];
-    for (int l = 0; l <= WAV_LPC; l++) R[l] = sf_make(r[l] >> 20, 0);  // (within 2^107: 2^87 or so)
-    R[0] = sf_add(R[0], sf_make((r[0] >> 20) / 10000, 0));
-    const Sf one = sf_make(1, 0);
-    a[0] = one;
-    Sf err = R[0];
-    int m = 1;
-    for (; m <= WAV_LPC; m++) {
-      Sf acc = R[m];
-      for (int i = 1; i < m; i++) acc = sf_add(acc, sf_mul(a[i], R[m - i]));
-      Sf k = sf_div(acc, err);
-      k.m = -k.m;
-      for (int i = 1; i < m; i++) t[i] = sf_add(a[i], sf_mul(k, a[m - i]));
-      for (int i = 1; i < m; i++) a[i] = t[i];
-      a[m] = k;
-      err = sf_mul(err, sf_sub(one, sf_mul(k, k)));
-      if (err.m <= 0) break;
-    }
-    if (m <= WAV_LPC) continue;  // (not a fit: 0s)
-    S64 q[WAV_LPC + 1];  // (the predictor, Q30: x[t] by sum q_i x[t - i])
-    S64 qa = 0;          // (the sum of |q_i|, where under 2^39: the sums in 64 bits)
-    for (int i = 1; i <= WAV_LPC; i++) {
-      Sf u = a[i];
-      u.m = -u.m;
-      q[i] = sf_int(u, 30);
-      qa = qa < (S64)1 << 39 ? qa + (q[i] < 0 ? -q[i] : q[i]) : qa;
-    }
-    for (int i = 0; i < WAV_LPC; i++) hb[i] = w.at(c, N - WAV_LPC + i);  // (the last samples, then e)
-    for (int k = 0; k < WAV_EXT; k++) {
-      const S32* const h = hb + WAV_LPC + k;
-      S64 v;
-      if (qa < (S64)1 << 39) {  // (|x| <= 2^23)
-        S64 p = 0;
-        for (int i = 1; i <= WAV_LPC; i++) p += q[i] * h[-i];
-        v = (p + ((S64)1 << 29)) >> 30;
-      } else {
-        S128 p = 0;
-        for (int i = 1; i <= WAV_LPC; i++) p += (S128)q[i] * h[-i];
-        v = (S64)((p + ((S128)1 << 29)) >> 30);
+      for (int k = (int)n; k < n4; k++) xs[k] = 0;
+      const int sh = vmax ? imax(64 - __builtin_clzll((U64)vmax) - 25, 0) : 0;
+      for (int k = 0; k < (int)n; k++) xs[k] >>= sh;
+      S64 r[RP];
+      for (int l = 0; l < RP; l += 4) {
+#ifdef DTSD_AVX2  // (the low 32 bits of each lane signed: the samples, as they are within 2^25)
+        __m256i a0 = _mm256_setzero_si256(), a1 = a0, a2 = a0, a3 = a0;
+        for (int k = 0; k < n4; k += 4) {
+          const __m256i x = _mm256_loadu_si256((const __m256i*)(xs + k));
+          a0 = _mm256_add_epi64(a0, _mm256_mul_epi32(x, _mm256_loadu_si256((const __m256i*)(xs + k - l))));
+          a1 = _mm256_add_epi64(a1, _mm256_mul_epi32(x, _mm256_loadu_si256((const __m256i*)(xs + k - l - 1))));
+          a2 = _mm256_add_epi64(a2, _mm256_mul_epi32(x, _mm256_loadu_si256((const __m256i*)(xs + k - l - 2))));
+          a3 = _mm256_add_epi64(a3, _mm256_mul_epi32(x, _mm256_loadu_si256((const __m256i*)(xs + k - l - 3))));
+        }
+        alignas(32) S64 t[16];
+        _mm256_store_si256((__m256i*)t, a0), _mm256_store_si256((__m256i*)(t + 4), a1);
+        _mm256_store_si256((__m256i*)(t + 8), a2), _mm256_store_si256((__m256i*)(t + 12), a3);
+        for (int j = 0; j < 4; j++) r[l + j] = t[4 * j] + t[4 * j + 1] + t[4 * j + 2] + t[4 * j + 3];
+#else
+        for (int j = 0; j < 4; j++) {
+          S64 a = 0;
+          for (int k = 0; k < n4; k++) a += xs[k] * xs[k - l - j];
+          r[l + j] = a;
+        }
+#endif
       }
-      e[k] = (S32)(v < -(1 << 23) ? -(1 << 23) : v > (1 << 23) - 1 ? (1 << 23) - 1 : v);
-      hb[WAV_LPC + k] = e[k];
-    }
+      free(xb);
+      if (r[0] <= 0) break;
+      Sf R[WAV_LPC + 1], a[WAV_LPC + 1], t[WAV_LPC + 1];
+      for (int l = 0; l <= WAV_LPC; l++) R[l] = sf_make(r[l], 0);
+      R[0] = sf_add(R[0], sf_make(r[0] / 10000, 0));
+      const Sf one = sf_make(1, 0);
+      a[0] = one;
+      Sf err = R[0];
+      int m = 1;
+      for (; m <= WAV_LPC; m++) {
+        Sf acc = R[m];
+        for (int i = 1; i < m; i++) acc = sf_add(acc, sf_mul(a[i], R[m - i]));
+        Sf k = sf_div(acc, err);
+        k.m = -k.m;
+        for (int i = 1; i < m; i++) t[i] = sf_add(a[i], sf_mul(k, a[m - i]));
+        for (int i = 1; i < m; i++) a[i] = t[i];
+        a[m] = k;
+        err = sf_mul(err, sf_sub(one, sf_mul(k, k)));
+        if (err.m <= 0) break;
+      }
+      if (m <= WAV_LPC) break;  // (not a fit: 0s)
+      for (int i = 1; i <= WAV_LPC; i++) {
+        Sf u = a[i];
+        u.m = -u.m;
+        q[i] = sf_int(u, 30);
+        qa = qa < (S64)1 << 39 ? qa + (q[i] < 0 ? -q[i] : q[i]) : qa;
+      }
+      q[0] = 1;  // (a fit)
+    } while (0);
   }
-  free(xh);
+  S32* const e = w.ext + (size_t)c * WAV_EXT;
+  const int k0 = ext_done[c], k1 = (int)(kneed + 256 < WAV_EXT ? (kneed + 256) & ~255 : WAV_EXT);
+  if (k1 <= k0) return;
+  ext_done[c] = k1;
+  if (!q[0]) return;  // (no fit: 0s, as made)
+  S32 hb[WAV_LPC + WAV_EXT];  // (the samples before the first to make, then those made)
+  for (int i = 0; i < WAV_LPC; i++) {
+    const S64 s = N + k0 - WAV_LPC + i;
+    hb[i] = s < N ? w.at(c, s) : e[s - N];
+  }
+  for (int k = k0; k < k1; k++) {
+    const S32* const h = hb + WAV_LPC + (k - k0);
+    S64 v;
+    if (qa < (S64)1 << 39) {  // (|x| <= 2^23)
+      S64 p = 0;
+      for (int i = 1; i <= WAV_LPC; i++) p += q[i] * h[-i];
+      v = (p + ((S64)1 << 29)) >> 30;
+    } else {
+      S128 p = 0;
+      for (int i = 1; i <= WAV_LPC; i++) p += (S128)q[i] * h[-i];
+      v = (S64)((p + ((S128)1 << 29)) >> 30);
+    }
+    e[k] = (S32)(v < -(1 << 23) ? -(1 << 23) : v > (1 << 23) - 1 ? (1 << 23) - 1 : v);
+    hb[WAV_LPC + (k - k0)] = e[k];
+  }
 }
 
 // The correction's least squares fit: the decimated samples around each LFE sample (f, NF of
@@ -1201,36 +1449,36 @@ static void wav_extend(WavIn& w) {
 // interpolation of the values, 8 of them in each of its samples, so with the last ones the fit
 // sees the next alone) against the LFE value times its scale (y), each weighted by 1 over its
 // scale squared (what the coder pays for is the error in steps), the older ones forgotten (by
-// 2^-FS a subframe), ridged toward no correction. Plain data: init(), then add() each sample,
-// refit() each subframe. (K0: the tap the correction's identity is, ridged toward; -1 none, ridged
-// toward 0.)
+// 2^-FS a subframe), ridged toward no correction. Plain data, zeroed (the model's memory): add()
+// each sample, refit() each subframe. (K0: the tap the correction's identity is, ridged toward;
+// -1 none, ridged toward 0.)
 template <int NF, int K0 = LFE_K, int FS = 5>
 struct LfeFit {
   S128 G[NF][NF], c[NF];  // the sums of f f' and f y
-  S64 w[NF];              // the correction (Q30)
+  S64 w[NF];              // the correction (Q30), less its identity (2^30 at K0): 0s the identity
 
-  void init() {
-    memset((void*)this, 0, sizeof *this);
-    if (K0 >= 0) w[K0] = (S64)1 << 30;
-  }
   S64 predict(const S64* f) const {
-    S128 p = 0;
+    S128 p = K0 >= 0 ? shl128(f[K0 >= 0 ? K0 : 0], 30) : 0;
     for (int k = 0; k < NF; k++) p += (S128)w[k] * f[k];
     return (S64)(p >> 30);
   }
-  // (st: y's step, 0 (nothing to fit) or 2^22 up: f and y divided by it (Q20) weight each by 1 /
-  // st^2; f within 2^52, so within 2^50 in steps, the terms within 2^80)
+  // (st: y's step, 0 (nothing to fit) or 2^22 up: f and y divided by it (Q20, by its reciprocal
+  // 2^82 / st, within 2^60) weight each by 1 / st^2; f within 2^52, so within 2^50 in steps, the
+  // terms within 2^80)
   void add(const S64* f, S64 y, S64 st) {
     if (st <= 0) return;
+    const S64 iv = (S64)(((S128)1 << 82) / (st > (S64)1 << 22 ? st : (S64)1 << 22));
     S64 fs[NF];
-    for (int i = 0; i < NF; i++) fs[i] = (S64)(shl128(f[i], 20) / st);
-    const S64 ys = (S64)(shl128(y, 20) / st);
+    for (int i = 0; i < NF; i++) fs[i] = (S64)((S128)f[i] * iv >> 62);
+    const S64 ys = (S64)((S128)y * iv >> 62);
     for (int i = 0; i < NF; i++) {
       for (int j = 0; j <= i; j++) G[i][j] += (S128)fs[i] * fs[j] >> 20;
       c[i] += (S128)fs[i] * ys >> 20;
     }
   }
-  // (G + r I) w = c + r e_K by LDL', r the mean diagonal / 2^23 (w as it was where that fails)
+  // (G + r I) w = c + r e_K by LDL', r the mean diagonal / 2^23 (w as it was where that fails): L
+  // and E = L D by rows, row i's k < i at i (i - 1) / 2 + k, each entry a dot product of the rows
+  // before it (sf_dot_sub()), L's by D's reciprocal
   void refit() {
     S128 tr = 0;
     for (int i = 0; i < NF; i++) {
@@ -1240,31 +1488,30 @@ struct LfeFit {
     }
     if (tr <= 0) return;
     const Sf r = sf_make(tr / NF / ((S128)1 << 23) + 1, 0);
-    Sf L[NF][NF], D[NF], z[NF];
+    constexpr int NT = NF * (NF - 1) / 2 + 1;
+    Sf L[NT], E[NT], iD[NF], z[NF], t[NF];
     for (int j = 0; j < NF; j++) {
-      Sf d = sf_add(sf_make(G[j][j], 0), r);
-      for (int k = 0; k < j; k++) d = sf_sub(d, sf_mul(sf_mul(L[j][k], L[j][k]), D[k]));
+      const Sf* const Lj = L + j * (j - 1) / 2;
+      const Sf d = sf_dot_sub(sf_add(sf_make(G[j][j], 0), r), E + j * (j - 1) / 2, Lj, j);
       if (d.m <= 0) return;
-      D[j] = d;
+      iD[j] = sf_div(sf_make(1, 0), d);
       for (int i = j + 1; i < NF; i++) {
-        Sf a = sf_make(G[i][j], 0);
-        for (int k = 0; k < j; k++) a = sf_sub(a, sf_mul(sf_mul(L[i][k], L[j][k]), D[k]));
-        L[i][j] = sf_div(a, d);
+        Sf* const Ei = E + i * (i - 1) / 2;
+        Ei[j] = sf_dot_sub(sf_make(G[i][j], 0), Ei, Lj, j);
+        L[i * (i - 1) / 2 + j] = sf_mul(Ei[j], iD[j]);
       }
     }
     for (int i = 0; i < NF; i++) {  // L z = b, then D, then L' w = z
       Sf b = sf_make(c[i], 0);
       if (i == K0) b = sf_add(b, r);
-      for (int k = 0; k < i; k++) b = sf_sub(b, sf_mul(L[i][k], z[k]));
-      z[i] = b;
+      z[i] = sf_dot_sub(b, L + i * (i - 1) / 2, z, i);
     }
-    for (int i = 0; i < NF; i++) z[i] = sf_div(z[i], D[i]);
+    for (int i = 0; i < NF; i++) z[i] = sf_mul(z[i], iD[i]);
     for (int i = NF - 1; i >= 0; i--) {
-      Sf x = z[i];
-      for (int k = i + 1; k < NF; k++) x = sf_sub(x, sf_mul(L[k][i], z[k]));
-      z[i] = x;
+      for (int k = i + 1; k < NF; k++) t[k] = L[k * (k - 1) / 2 + i];
+      z[i] = sf_dot_sub(z[i], t + i + 1, z + i + 1, NF - 1 - i);
     }
-    for (int i = 0; i < NF; i++) w[i] = sf_int(z[i], 30);
+    for (int i = 0; i < NF; i++) w[i] = sf_int(z[i], 30) - (i == K0 ? (S64)1 << 30 : 0);
   }
 };
 

@@ -3,6 +3,42 @@
 //  A family of a level: C is its configuration class (famcfg.inc), whose
 //  constants (the shape, the rates, which indices are hashed) shape the
 //  code here and, in the shipping build, are folded into it
+//  A table's rows by context and node, made where a stream first codes
+//  each: a context's nodes' rows (a block of ND, each 1 + the row, 0 none)
+//  where the context is first selected, a node's row the next one free
+//  where it is first coded. The same model as the direct rows (each row
+//  zeroed, until coded, and its own), on fewer pages: those of the rows a
+//  short stream codes, in order, rather than all those its contexts' rows
+//  lie on (an APM's row is its buckets, up to 504 bytes a node).
+struct tc_slots {
+  u32 *ctx, *node;  // (a context's block in node: 1 + its start; 0 none)
+  sz nctx;
+  u32 nblk, nrow;
+  void Init() {
+    ctx = node = nullptr;
+    nctx = 0;
+    nblk = nrow = 0;
+  }
+  void map(sz contexts, int nd) {
+    nctx = contexts;
+    if(!contexts)
+      return;
+    ctx = (u32 *)tc_map(contexts * sizeof(u32), "a model table's index");
+    node = (u32 *)tc_map(contexts * (sz)nd * sizeof(u32), "a model table's index");
+  }
+  void unmap(int nd) {
+    tc_unmap(ctx, nctx * sizeof(u32));
+    tc_unmap(node, nctx * (sz)nd * sizeof(u32));
+    Init();
+  }
+  INLINE u32 *block(u32 c, int nd) {
+    u32 &e = ctx[c];
+    if(!e)
+      e = 1 + nblk++ * (u32)nd;
+    return node + (e - 1);
+  }
+};
+
 template <int f_DEC, class C> struct tc_fam {
   static constexpr int ENC = (f_DEC == 0);
   static const int NC = C::NC, NIN = C::NIN, ND = C::ND, MND = C::MND;
@@ -33,7 +69,11 @@ template <int f_DEC, class C> struct tc_fam {
   Buf<cm_cnt2> Z;
   Buf<cm_cnt> ZM;
   sz cb[NC];  // the rows of the counters' contexts (select())
-  u32 bs, bf, bm, bw2, bt, bn, bg;
+  u32 bm, bw2, bt, bn, bg;
+  //  (the s and f contexts' nodes' rows: APM 1, mixer 3 and its counts by
+  //  slS, APM 2 by slF; ps and pf the selected contexts' blocks)
+  tc_slots slS, slF;
+  u32 *ps, *pf;
   //  the counters' limits and targets (bit 0, 1) as 32-bit lanes, two each,
   //  for TC_NC_PAD of them (cn_v: their arrays in this order in memory,
   //  coded at once)
@@ -44,6 +84,8 @@ template <int f_DEC, class C> struct tc_fam {
   void Init() {
     Z.Init();
     ZM.Init();
+    slS.Init();
+    slF.Init();
     cn_v = false;
 #ifdef DTSD_DUMP
     dump_.Init(ENC ? C::name() : nullptr);
@@ -52,6 +94,8 @@ template <int f_DEC, class C> struct tc_fam {
   void Quit() {
     Z.Quit();
     ZM.Quit();
+    slS.unmap(ND);
+    slF.unmap(ND);
 #ifdef DTSD_DUMP
     dump_.Quit();
 #endif
@@ -86,11 +130,15 @@ template <int f_DEC, class C> struct tc_fam {
       if(C::NAPM) {
         tc_ifits("APM 1", C::kS, (sz)ND * C::qs);
         tc_ifits("APM 2", C::kF, (sz)ND * C::qf);
-        ap.init(b.S, b.SC, C::qs);
-        ap2.init(b.F, b.FC, C::qf);
+        ap.init(b.S, C::qs);
+        ap2.init(b.F, C::qf);
       }
       mxm.init(b.WM, b.WMC);
     }
+    if(C::NMIX > 1 || C::NAPM)
+      slS.map(C::kS, ND);
+    if(C::NAPM)
+      slF.map(C::kF, ND);
     //  (the inputs past the last are 0 for good)
     for(int i = 0; i < NIN; i++)
       mx.x[i] = 0;
@@ -120,9 +168,9 @@ template <int f_DEC, class C> struct tc_fam {
     for(int k = 0; k < NC; k++)
       cb[k] = (sz)(C::hc[k] ? tc_hrow((u32)x.c[k], C::hc[k]) : (u32)x.c[k]) * ND;
     if(C::NMIX > 1 || C::NAPM)
-      bs = (C::hS ? tc_hrow((u32)x.s, C::hS) : (u32)x.s) * ND;
+      ps = slS.block(C::hS ? tc_hrow((u32)x.s, C::hS) : (u32)x.s, ND);
     if(C::NAPM)
-      bf = (C::hF ? tc_hrow((u32)x.f, C::hF) : (u32)x.f) * ND;
+      pf = slF.block(C::hF ? tc_hrow((u32)x.f, C::hF) : (u32)x.f, ND);
     bm = (C::hM ? tc_hrow((u32)x.m, C::hM) : (u32)x.m) * ND;
     if(C::NMIX > 1)
       bw2 = (u32)x.w * ND;
@@ -131,6 +179,36 @@ template <int f_DEC, class C> struct tc_fam {
     bn = (C::hN ? tc_hrow((u32)x.n, C::hN) : (u32)x.n) * MND;
     bg = (u32)x.g;
     fetch(0);
+  }
+  //  The row of the selected s context's node (APM 1, mixer 3), and of the
+  //  f context's (APM 2): made where first coded, its pages' first touch a
+  //  write (as fetch_rows()'s)
+  INLINE u32 row_s(int node) {
+    u32 &e = ps[node];
+    if(UNLIKELY(!e)) {
+      e = ++slS.nrow;
+      const sz r = e - 1;
+      if(C::NAPM) {
+        CM_TOUCH(ap.e + r * (u32)ap.q);
+        CM_TOUCH(ap.e + (r + 1) * (u32)ap.q - 1);
+      }
+      if(C::NMIX > 1) {
+        CM_TOUCH(mx3.w + r * NIN);
+        CM_TOUCH(mx3.w + (r + 1) * NIN - 1);
+        CM_TOUCH(mx3.c + r);
+      }
+    }
+    return e - 1;
+  }
+  INLINE u32 row_f(int node) {
+    u32 &e = pf[node];
+    if(UNLIKELY(!e)) {
+      e = ++slF.nrow;
+      const sz r = e - 1;
+      CM_TOUCH(ap2.e + r * (u32)ap2.q);
+      CM_TOUCH(ap2.e + (r + 1) * (u32)ap2.q - 1);
+    }
+    return e - 1;
   }
   INLINE int bit(int node, int b) {
     if(UNLIKELY((unsigned)node >= (unsigned)ND))
@@ -158,31 +236,51 @@ template <int f_DEC, class C> struct tc_fam {
   //  The rows a decision of the node reads, on their way into the cache
   //  (for the first node from select(), for the next while one is coded)
   INLINE void fetch(int node) {
+    if(UNLIKELY(tc_touch))
+      fetch_rows<true>(node);
+    else
+      fetch_rows<false>(node);
+  }
+  //  (as a stream starts, tc_touch: each row written as it is fetched, so
+  //  that a page's first touch is a write, CM_TOUCH)
+  template <bool W>
+  INLINE void fetch_rows(int node) {
+#define TC_FETCH(p)   \
+  do {                \
+    if(W)             \
+      CM_TOUCH(p);    \
+    else              \
+      CM_PREFETCH(p); \
+  } while(0)
     for(int k = 0; k < NC; k++)
-      CM_PREFETCH(cnt[k] + cb[k] + node);
+      TC_FETCH(cnt[k] + cb[k] + node);
+    const u32 rs = C::NMIX > 1 || C::NAPM ? ps[node] : 0, rf = C::NAPM ? pf[node] : 0;  // (1 + the rows made; 0 not yet)
     if(C::NAPM) {
-      CM_PREFETCH(ap.t + (sz)(bs + node) * (u32)ap.q);
-      CM_PREFETCH(ap.c + (sz)(bs + node) * (u32)ap.q);
-      if(C::bw < TC_BW_ONE) {
-        CM_PREFETCH(ap2.t + (sz)(bf + node) * (u32)ap2.q);
-        CM_PREFETCH(ap2.c + (sz)(bf + node) * (u32)ap2.q);
-      }
+      if(rs)
+        TC_FETCH(ap.e + (sz)(rs - 1) * (u32)ap.q);
+      if(C::bw < TC_BW_ONE && rf)
+        TC_FETCH(ap2.e + (sz)(rf - 1) * (u32)ap2.q);
     }
     const i32 *w1 = mx.w + (sz)(bm + node) * NIN;
-    CM_PREFETCH(w1);
-    CM_PREFETCH(w1 + NIN - 1);
+    TC_FETCH(w1);
+    TC_FETCH(w1 + NIN - 1);
     if(C::NMIX > 1) {
-      const i32 *w2 = mx2.w + (sz)(bw2 + node) * NIN, *w3 = mx3.w + (sz)(bs + node) * NIN;
-      CM_PREFETCH(w2);
-      CM_PREFETCH(w2 + NIN - 1);
-      CM_PREFETCH(w3);
-      CM_PREFETCH(w3 + NIN - 1);
+      const i32 *w2 = mx2.w + (sz)(bw2 + node) * NIN;
+      TC_FETCH(w2);
+      TC_FETCH(w2 + NIN - 1);
+      if(rs) {
+        const i32 *w3 = mx3.w + (sz)(rs - 1) * NIN;
+        TC_FETCH(w3);
+        TC_FETCH(w3 + NIN - 1);
+      }
     }
-    CM_PREFETCH(mx.c + bm + node);
+    TC_FETCH(mx.c + bm + node);
     if(C::NMIX > 1) {
-      CM_PREFETCH(mx2.c + bw2 + node);
-      CM_PREFETCH(mx3.c + bs + node);
+      TC_FETCH(mx2.c + bw2 + node);
+      if(rs)
+        TC_FETCH(mx3.c + rs - 1);
     }
+#undef TC_FETCH
   }
   //  (No -Wmaybe-uninitialized here: cnt_inputs sets the counters' vectors
   //  and cnt_update reads them, both where cn_v, but GCC at -O3 with AVX2
@@ -215,7 +313,8 @@ template <int f_DEC, class C> struct tc_fam {
     //  (stretched), then zeros to a multiple of 8; the mixers' are the same,
     //  packed once
     int pa = cnt_inputs(r);
-    int p1 = C::NAPM ? ap.pp(pa, bs + (u32)node) : pa;
+    const u32 rs = C::NMIX > 1 || C::NAPM ? row_s(node) : 0;
+    int p1 = C::NAPM ? ap.pp(pa, rs) : pa;
     if(p1 > CM_PONE - 1)
       p1 = CM_PONE - 1;
     int pp = prpa ? prpa[node] : prp;
@@ -224,7 +323,7 @@ template <int f_DEC, class C> struct tc_fam {
               x23 = zc ? cm_stretch(zc->P()) : 0;
     cm_x16<NIN> xp;
     mix_inputs(r, x20, x21, x23, xp);
-    b = mix_code(node, b, xp);
+    b = mix_code(node, b, xp, rs);
     cnt_update(r, b);
     if(zc)
       zc->upd(b, C::rT, C::mwT);
@@ -304,7 +403,7 @@ template <int f_DEC, class C> struct tc_fam {
     }
   }
   //  the mixing, the bit coded with it, and the mixers and APMs trained
-  INLINE int mix_code(int node, int b, const cm_x16<NIN> &xp) {
+  INLINE int mix_code(int node, int b, const cm_x16<NIN> &xp, u32 rs) {
     (void)xp;
 #ifdef DTSD_AVX2
     const cm_x16<NIN> *xq = &xp;
@@ -315,14 +414,14 @@ template <int f_DEC, class C> struct tc_fam {
     if(C::NMIX > 1) {
       mxf.set(0, cm_stretch(mx.mix(bm + (u32)node, mx.x, xq)));
       mxf.set(1, cm_stretch(mx2.mix(bw2 + (u32)node, mx.x, xq)));
-      mxf.set(2, cm_stretch(mx3.mix(bs + (u32)node, mx.x, xq)));
+      mxf.set(2, cm_stretch(mx3.mix(rs, mx.x, xq)));
       mxf.set(3, TC_BIAS);
       pm = mxf.mix((u32)node * HS_N + (u32)hs);  // by node and hint state
     } else {
       pm = mx.mix(bm + (u32)node, mx.x, xq);
     }
     int pf = C::NAPM && C::bw < TC_BW_ONE
-                 ? (C::bw * pm + (TC_BW_ONE - C::bw) * ap2.pp(pm, bf + (u32)node) + TC_BW_ONE / 2) >> TC_BW_BITS
+                 ? (C::bw * pm + (TC_BW_ONE - C::bw) * ap2.pp(pm, row_f(node)) + TC_BW_ONE / 2) >> TC_BW_BITS
                  : pm;
     b = tc_bit(rc, cm_pclip(pf), b);
     mx.upd(b, C::lr, C::mb, mx.x, xq);

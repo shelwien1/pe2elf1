@@ -1039,7 +1039,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
           B::jx_wv[ch][b] = s.abits[ch][b] == 1;
           const S64 cs = B::jx_cs[sf][ch][b];
           if (cs <= 0) continue;
-          if (s.abits[ch][b] >= 2) B::jx_count(B::jx_h[b], B::jx_hn[b], lg16((U64)x96_ss(s, ch, b)) - lg16((U64)cs) + 128);
+          if (s.abits[ch][b] >= 2) B::jx_count(B::jx_h[b], B::jx_hn[b], lg16((U64)x96_ss(s, ch, b)) - lg16((U64)cs) + 128, B::jx_hb[b]);
           else if (s.abits[ch][b] == 1)
             B::jx_count(B::jx_hv[b], B::jx_hvn[b], lg16((U64)SF6[s.scale[ch][b] & 63] << 22) - lg16((U64)cs) + 128);
         }

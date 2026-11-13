@@ -98,7 +98,7 @@ struct FC_NAME {
     b.WF = t.FCX(WF), b.WFC = t.FCX(WFC);
 #endif
 #if FC_NAPM
-    b.S = t.FCX(S), b.SC = t.FCX(SC), b.F = t.FCX(F), b.FC = t.FCX(FC);
+    b.S = t.FCX(S), b.F = t.FCX(F);
 #endif
   }
 };

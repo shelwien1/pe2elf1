@@ -9,7 +9,6 @@ struct tc_tabs {
   cm_cnt *T, *G;
   i32 *W, *WM, *W2, *W3, *WF;
   u8 *WC, *WMC, *W2C, *W3C, *WFC;
-  i16 *S, *F;
-  u8 *SC, *FC;
+  cm_apme *S, *F;
   void Init() { memset((void *)this, 0, sizeof *this); }  // (none)
 };

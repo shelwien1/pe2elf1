@@ -91,6 +91,7 @@
 #include <io.h>
 #include <windows.h>
 #else
+#include <fcntl.h>
 #include <pthread.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
@@ -136,8 +137,18 @@ struct Opts {
 };
 
 // a call's file, "-" for stdin or stdout
+// (an output that is there is written over, and cut to what was written as it is closed
+// (out_close()), not emptied first: rewriting a file of the same length is quicker)
 static FILE* open_file(const char* name, int out) {
   if (!strcmp(name, "-")) return out ? stdout : stdin;
+#ifndef _WIN32
+  if (out) {
+    const int fd = open(name, O_WRONLY | O_CREAT, 0666);
+    FILE* f = fd >= 0 ? fdopen(fd, "wb") : nullptr;
+    if (fd >= 0 && !f) close(fd);
+    return f;
+  }
+#endif
   return fopen(name, out ? "wb" : "rb");
 }
 

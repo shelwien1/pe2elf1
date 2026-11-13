@@ -45,6 +45,17 @@ struct WavIn {
   char why[128];     // why it isn't a WAV it reads
   S32* ext;          // past its end: each channel's continuation, ext_n samples of it (anal.inc's
   int ext_n, ext_on;  // wav_extend()), where ext_on (else 0s)
+  // (c: the binding's first pass's analyses of its first blocks, ana_n of them, at the blocks
+  // ana_t (in order: 32 up samples a block from ana_off), every channel's 32 bands by ana_fir, to
+  // the samples read then, ana_got: analyze() takes them where asked the same, as they are the same)
+  S64* ana;
+  S64* ana_t;
+  int ana_n, ana_up;
+  S64 ana_off, ana_got;
+  const S64* ana_fir;
+  mutable int ext_done[WAV_CH];  // (of it made so far: ext_more() makes it as it is read; -1 not fitted yet)
+  mutable S64 ext_q[WAV_CH][65], ext_qa[WAV_CH];  // (the fit: its predictor, Q30, and the sum of |q|; 0s where none)
+  void ext_more(int c, S64 k) const;  // (channel c's continuation made to its sample k at least)
   int dec;             // its samples to those read (1; 2: its lower band, set_dec())
   int dsh;             // (the stream's resolution, as the bands go: its samples' 0 bits at the bottom)
   S32* raw[WAV_CH];    // (dec 2: the input's last WAV_RAW samples of each channel, rgot of them
@@ -115,8 +126,12 @@ struct WavIn {
     free(rb);
     free(probe);
     free(ext);
+    free(ana);
+    free(ana_t);
     rb = probe = nullptr;
     ext = nullptr;
+    ana = ana_t = nullptr;
+    ana_n = 0;
   }
 
   // sample s of channel c: 0 outside the WAV (past its end, its continuation where made); s in the
@@ -125,7 +140,9 @@ struct WavIn {
     if (s < 0 || c >= nch) return 0;
     if ((U64)s >= got) {
       const U64 k = (U64)s - nsamp;
-      return ext_on && got == nsamp && k < (U64)ext_n ? ext[(size_t)c * ext_n + (size_t)k] : 0;
+      if (!(ext_on && got == nsamp && k < (U64)ext_n)) return 0;
+      if ((S64)k >= ext_done[c]) ext_more(c, (S64)k);
+      return ext[(size_t)c * ext_n + (size_t)k];
     }
     return ring[c][s & (WAV_WIN - 1)];
   }
@@ -147,6 +164,7 @@ struct WavIn {
       if (c < nch && ext_on && got == nsamp && s + i1 - (S64)nsamp < ext_n) {
         const S64 k = s + i1 - (S64)nsamp;
         i2 = i1 + (int)(ext_n - k < n - i1 ? ext_n - k : n - i1);
+        if (k + (i2 - i1) > ext_done[c]) ext_more(c, k + (i2 - i1) - 1);
         memcpy(buf + i1, ext + (size_t)c * ext_n + k, sizeof(S32) * (size_t)(i2 - i1));
       }
       for (int i = i2; i < n; i++) buf[i] = 0;

@@ -48,7 +48,9 @@ struct Model : ModelX96<f_DEC, LV> {
   U64 last_pos;  // the frame's bits counted so far by category (-s: the coder's orig)
   int last_cat;
 
+  int n_frames;  // (the frames so far)
   void Init(void) {
+    n_frames = 0;
 #define M_INIT(F) B::f_##F.Init(), B::t_##F = nullptr;
     DTSD_FAMS(M_INIT)
 #undef M_INIT
@@ -81,6 +83,8 @@ struct Model : ModelX96<f_DEC, LV> {
   // A frame's record r: coded (compressing: r as parsed), or decoded into r; false where it can't
   // be (damaged data). nbytes: its size (compressing; -s's counts).
   bool frame(CoreRec& r, int nbytes) {
+    tc_touch = n_frames < 64;  // (the pages the tables take are the most of them first touched by then)
+    n_frames++;
     Walk<Model> wk(*this);
     rec = &r;
     pos = 0;

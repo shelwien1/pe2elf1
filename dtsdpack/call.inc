@@ -20,18 +20,44 @@ struct MixSums {
   double Cu[NCH][WAV_CH], Gu[NCH][WAV_CH];  // and unweighted (loud samples decide: Call::find_mixes())
   U64 N[NCH];
   void operator()(const CoreRec& r, const CoreSub& s, int j, S64 (*xw)[32]) {
+    double xs[32][WAV_CH];  // (the WAV's channels' values, in decoder units: each once; 0s to a multiple of 4)
+    int nb = 0;
+    const int nw4 = (nw + 3) & ~3;
+    for (int ch = 0; ch < r.npchs + r.nxch; ch++) nb = r.nvqsub[ch] > nb ? r.nvqsub[ch] : nb;
+    for (int b = 0; b < nb && b < 32; b++) {
+      for (int i = 0; i < nw; i++) xs[b][i] = (double)xw[i][b] / 65536;
+      for (int i = nw; i < nw4; i++) xs[b][i] = 0;
+    }
     for (int ch = 0; ch < r.npchs + r.nxch; ch++)
       for (int b = 0; b < r.nvqsub[ch]; b++) {
         if (!s.abits[ch][b] || s.pmode[ch][b]) continue;
         const S64 ss = step_scale(r, s, ch, b, j >> 3);
         if (ss <= 0) continue;
         const double y = dequantize(s.q[ch][b][j], ss), st = (double)ss / 4194304, wt = 1 / (st * st / 12 + sg * sg);
-        for (int i = 0; i < nw; i++) {
-          const double xi = (double)xw[i][b] / 65536;
-          Cu[ch][i] += xi * y, Gu[ch][i] += xi * xi;
-          C[ch][i] += wt * xi * y;
-          for (int k = 0; k <= i; k++) G[ch][i][k] += wt * xi * ((double)xw[k][b] / 65536);
+        const double* const x = xs[b];
+#ifdef DTSD_AVX2  // (the same products and sums, 4 at a time: G's upper half's too, never read; a channel
+                  // past the WAV's, 0s)
+        const __m256d vy = _mm256_set1_pd(y), vw = _mm256_set1_pd(wt);
+        for (int i = 0; i < nw4; i += 4) {
+          const __m256d xi = _mm256_loadu_pd(x + i), wx = _mm256_mul_pd(vw, xi);
+          _mm256_storeu_pd(Cu[ch] + i, _mm256_add_pd(_mm256_loadu_pd(Cu[ch] + i), _mm256_mul_pd(xi, vy)));
+          _mm256_storeu_pd(Gu[ch] + i, _mm256_add_pd(_mm256_loadu_pd(Gu[ch] + i), _mm256_mul_pd(xi, xi)));
+          _mm256_storeu_pd(C[ch] + i, _mm256_add_pd(_mm256_loadu_pd(C[ch] + i), _mm256_mul_pd(wx, vy)));
         }
+        for (int i = 0; i < nw; i++) {
+          const __m256d wx = _mm256_set1_pd(wt * x[i]);
+          double* const g = G[ch][i];
+          for (int k = 0; k <= i; k += 4)
+            _mm256_storeu_pd(g + k, _mm256_add_pd(_mm256_loadu_pd(g + k), _mm256_mul_pd(wx, _mm256_loadu_pd(x + k))));
+        }
+#else
+        for (int i = 0; i < nw; i++) {
+          const double xi = x[i], wx = wt * xi;
+          Cu[ch][i] += xi * y, Gu[ch][i] += xi * xi;
+          C[ch][i] += wx * y;
+          for (int k = 0; k <= i; k++) G[ch][i][k] += wx * x[k];
+        }
+#endif
         Y[ch] += wt * y * y;
         N[ch]++;
       }
@@ -54,13 +80,14 @@ struct MixHits {
         if (!s.abits[ch][b] || s.pmode[ch][b]) continue;
         const S64 ss = step_scale(r, s, ch, b, j >> 3);
         if (ss <= 0) continue;
-        S64 lo, hi, alt;
-        S128 dist;
+        S64 lo, hi;
         quant_range(r, ch, s.abits[ch][b], lo, hi);
+        QErr q;  // (requant()'s index, by a reciprocal)
+        q.set(ss, lo, hi);
         for (int k = 0; k < nc[ch]; k++) {
           const MixCand& m = c[ch][k];
           const S128 v = (S128)xw[m.w1][b] * m.g1 + (m.w2 >= 0 ? (S128)xw[m.w2][b] * m.g2 : 0);
-          hits[ch][k] += requant((S64)((v + (1 << 22)) >> 23), ss, lo, hi, &dist, &alt) == s.q[ch][b][j];
+          hits[ch][k] += q.index((S64)((v + (1 << 22)) >> 23)) == s.q[ch][b][j];
         }
         n[ch]++;
       }
@@ -134,7 +161,13 @@ struct Call {
   // the end of c's or d's call, its run's status r: the output flushed and closed (the input stays
   // open: -v reads it again), the progress line ended; r, or the exit status of an error writing
   int close(int r) {
-    const int flushed = fflush(s.f) == 0, closed = s.f == stdout || fclose(s.f) == 0;
+    int flushed = fflush(s.f) == 0;
+#ifndef _WIN32
+    struct stat st;  // (open_file()'s output: cut to what was written)
+    if (flushed && s.f != stdout && !s.compare && !fstat(fileno(s.f), &st) && S_ISREG(st.st_mode) && (U64)st.st_size > s.pos)
+      flushed = ftruncate(fileno(s.f), (off_t)s.pos) == 0;
+#endif
+    const int closed = s.f == stdout || fclose(s.f) == 0;
     if (!(flushed && closed) && !r) r = (pr.say("dtsdpack: %s: write error\n", out_name), E_WRITE);
     end(r);
     return r;
@@ -328,7 +361,7 @@ struct Call {
   // filled; else kept there, nw channels a block)
   template <class F>
   void mix_pass(pcU8 pre, const U32* pos, const U32* len, const S64* ft, int nf, int nch, int filts, F& f,
-                S64 (*keep)[32], int keep_n, bool filled) {
+                S64 (*keep)[32], S64* keep_t, int keep_n, bool filled) {
     static CoreRec r;
     static S64 xw[WAV_CH][32];
     const S64* fir = filts ? FIR_PERFECT : FIR_NONPERFECT;
@@ -345,7 +378,7 @@ struct Call {
           if (kp && filled) memcpy(xw, kp, sizeof(S64) * 32 * nw);
           else {
             for (int wc = 0; wc < nw; wc++) analyze(wav, wc, 32 * bind.up * tb + bind.off, bind.up, fir, xw[wc]);
-            if (kp) memcpy(kp, xw, sizeof(S64) * 32 * nw);
+            if (kp) memcpy(kp, xw, sizeof(S64) * 32 * nw), keep_t[nb] = tb;
           }
           f(r, s, j, xw);
         }
@@ -375,7 +408,9 @@ struct Call {
     // (the first pass's analyses, of its first MIX_KEEP blocks, for the second)
     const int keep_n = MIX_KEEP;
     S64(*const keep)[32] = (S64(*)[32])xmalloc(sizeof(S64) * 32 * wav.nch * (size_t)keep_n);
-    mix_pass(pre, pos, len, ft, nf, nch, filts, ms, keep, keep_n, false);
+    S64* const keep_t = (S64*)xmalloc(sizeof(S64) * (size_t)keep_n);
+    for (int k = 0; k < keep_n; k++) keep_t[k] = -1;
+    mix_pass(pre, pos, len, ft, nf, nch, filts, ms, keep, keep_t, keep_n, false);
     const int nw = wav.nch;
     auto g = [&](int ch, int i, int k) { return i >= k ? ms.G[ch][i][k] : ms.G[ch][k][i]; };
     for (int ch = 0; ch < NCH; ch++) {  // (XCH's channel too: after the core's)
@@ -426,8 +461,16 @@ struct Call {
         mh.c[ch][n++] = MixCand{pi, pk, (S32)llround(pa * BIND_ONE), (S32)llround(pb * BIND_ONE)};
       }
     }
-    mix_pass(pre, pos, len, ft, nf, nch, filts, mh, keep, keep_n, true);
-    free(keep);
+    mix_pass(pre, pos, len, ft, nf, nch, filts, mh, keep, keep_t, keep_n, true);
+    // (the first pass's analyses, kept for the run: the model's, of the same blocks and channels,
+    // the same)
+    int kn = 0;
+    while (kn < keep_n && keep_t[kn] >= 0) kn++;
+    if (kn) {
+      wav.ana = (S64*)keep, wav.ana_t = keep_t, wav.ana_n = kn, wav.ana_up = bind.up, wav.ana_off = bind.off;
+      wav.ana_got = (S64)wav.got, wav.ana_fir = filts ? FIR_PERFECT : FIR_NONPERFECT;
+    } else
+      free(keep), free(keep_t);
     for (int ch = 0; ch < NCH; ch++) {
       if (!mh.nc[ch] || !mh.n[ch]) continue;
       int bk = 0;  // (the candidates in order of preference: one channel before two, the table's gains before the fit's;

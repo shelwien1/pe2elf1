@@ -127,10 +127,8 @@ struct D9_abt_T {
   cm_cnt2 D9_abt_K[tc_rows(D9_abt_k_Volume, D9_abt_hK) * M_abt_ND];
   cm_cnt2 D9_abt_L[tc_rows(D9_abt_l_Volume, D9_abt_hL) * M_abt_ND];
   cm_cnt D9_abt_MT[tc_rows(D9_abt_t_Volume, D9_abt_hT) * M_abt_MND];
-  i16 D9_abt_S[tc_rows(D9_abt_s_Volume, D9_abt_hS) * M_abt_ND * cm_apm_q(D9_abt_qs)];
-  u8 D9_abt_SC[tc_rows(D9_abt_s_Volume, D9_abt_hS) * M_abt_ND * cm_apm_q(D9_abt_qs)];
-  i16 D9_abt_F[tc_rows(D9_abt_f_Volume, D9_abt_hF) * M_abt_ND * cm_apm_q(D9_abt_qf)];
-  u8 D9_abt_FC[tc_rows(D9_abt_f_Volume, D9_abt_hF) * M_abt_ND * cm_apm_q(D9_abt_qf)];
+  cm_apme D9_abt_S[tc_rows(D9_abt_s_Volume, D9_abt_hS) * M_abt_ND * cm_apm_q(D9_abt_qs)];
+  cm_apme D9_abt_F[tc_rows(D9_abt_f_Volume, D9_abt_hF) * M_abt_ND * cm_apm_q(D9_abt_qf)];
   i32 D9_abt_W[tc_rows(D9_abt_m_Volume, D9_abt_hM) * M_abt_ND * tc_nin(10)];
   u8 D9_abt_WC[tc_rows(D9_abt_m_Volume, D9_abt_hM) * M_abt_ND];
   i32 D9_abt_WM[tc_rows(D9_abt_n_Volume, D9_abt_hN) * M_abt_MND * TC_MIN];
@@ -157,10 +155,8 @@ struct D9_abt_T {
                               + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(D9_abt_k_Volume, D9_abt_hK) * M_abt_ND)
                               + (unsigned long long)sizeof(cm_cnt2) * (unsigned long long)(tc_rows(D9_abt_l_Volume, D9_abt_hL) * M_abt_ND)
                               + (unsigned long long)sizeof(cm_cnt) * (unsigned long long)(tc_rows(D9_abt_t_Volume, D9_abt_hT) * M_abt_MND)
-                              + (unsigned long long)sizeof(i16) * (unsigned long long)(tc_rows(D9_abt_s_Volume, D9_abt_hS) * M_abt_ND * cm_apm_q(D9_abt_qs))
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(D9_abt_s_Volume, D9_abt_hS) * M_abt_ND * cm_apm_q(D9_abt_qs))
-                              + (unsigned long long)sizeof(i16) * (unsigned long long)(tc_rows(D9_abt_f_Volume, D9_abt_hF) * M_abt_ND * cm_apm_q(D9_abt_qf))
-                              + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(D9_abt_f_Volume, D9_abt_hF) * M_abt_ND * cm_apm_q(D9_abt_qf))
+                              + (unsigned long long)sizeof(cm_apme) * (unsigned long long)(tc_rows(D9_abt_s_Volume, D9_abt_hS) * M_abt_ND * cm_apm_q(D9_abt_qs))
+                              + (unsigned long long)sizeof(cm_apme) * (unsigned long long)(tc_rows(D9_abt_f_Volume, D9_abt_hF) * M_abt_ND * cm_apm_q(D9_abt_qf))
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(D9_abt_m_Volume, D9_abt_hM) * M_abt_ND * tc_nin(10))
                               + (unsigned long long)sizeof(u8) * (unsigned long long)(tc_rows(D9_abt_m_Volume, D9_abt_hM) * M_abt_ND)
                               + (unsigned long long)sizeof(i32) * (unsigned long long)(tc_rows(D9_abt_n_Volume, D9_abt_hN) * M_abt_MND * TC_MIN)

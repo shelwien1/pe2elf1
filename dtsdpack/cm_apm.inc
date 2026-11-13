@@ -4,15 +4,19 @@
 constexpr int cm_apm_limit(int rate) {
   return rate >= CM_APM_RATE_FULL ? CM_AMAX : (1 << rate) - 2 < 1 ? 1 : (1 << rate) - 2;
 }
+// an APM's bucket: its value (less the identity's) and its count, side by side (a decision's two
+// buckets in one cache line, mostly, and one page: the tables' pages a short stream touches fewer)
+struct cm_apme {
+  i16 t;
+  u8 c, pad;
+};
 struct cm_apm {
-  rp<i16> t;
-  rp<u8> c;
+  rp<cm_apme> e;
   int idx, bkt, q;
   u16 ident[CM_QMAX];
-  void init(rp<i16> tab, rp<u8> cnt, int qq) {
+  void init(rp<cm_apme> tab, int qq) {
     int j;
-    t = tab;
-    c = cnt;
+    e = tab;
     idx = 0;
     bkt = 0;
     q = cm_apm_q(qq);
@@ -27,17 +31,16 @@ struct cm_apm {
     int w = (pos & ((1 << CM_SBITS) - 1)) >> (CM_SBITS - CM_APM_WBITS);
     bkt = pos >> CM_SBITS;
     idx = (int)(ctx * (u32)q) + bkt;
-    return (((int)ident[bkt] + t[idx]) * ((1 << CM_APM_WBITS) - w) + ((int)ident[bkt + 1] + t[idx + 1]) * w) >>
+    return (((int)ident[bkt] + e[idx].t) * ((1 << CM_APM_WBITS) - w) + ((int)ident[bkt + 1] + e[idx + 1].t) * w) >>
            CM_APM_WBITS;
   }
   INLINE void upd1(int i, int b, int g, int lim) {
-    const rp<u8> cc = c;
-    const rp<i16> tt = t;
-    int k = cc[i];
-    int v = (int)ident[b] + tt[i];
-    cc[i] = (u8)(k + (k < lim));
+    cm_apme& x = e[i];
+    int k = x.c;
+    int v = (int)ident[b] + x.t;
+    x.c = (u8)(k + (k < lim));
     v += ((g - v) * cm_arec[k]) >> CM_CBITS;
-    tt[i] = (i16)(v - (int)ident[b]);
+    x.t = (i16)(v - (int)ident[b]);
   }
   INLINE void upd(int bit, int lim) {
     int g = bit ? 0 : CM_PONE;

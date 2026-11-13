@@ -19,9 +19,17 @@ typedef size_t sz;
 #if defined(__GNUC__) || defined(__clang__)
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
 #define CM_PREFETCH(p) __builtin_prefetch(p)
+#if defined(__x86_64__) || defined(__i386__)
+// (a write to the byte at p, of what it holds: a page's first touch a write, not a read; one read
+// first maps the zero page, which the write then copies: two faults where one does)
+#define CM_TOUCH(p) __asm__ volatile("orb $0, %0" : "+m"(*(volatile char*)(p)))
+#endif
 #else
 #define UNLIKELY(x) (x)
 #define CM_PREFETCH(p)
+#endif
+#ifndef CM_TOUCH
+#define CM_TOUCH(p) CM_PREFETCH(p)
 #endif
 #ifndef __min
 #define __min(a, b) ((a) < (b) ? (a) : (b))
@@ -43,6 +51,9 @@ static INLINE i32 tc_qlog(i64 x) {
 // Tables are mapped, not allocated and filled: a table costs address space when it is made and
 // memory only where the coder reaches it (zeroed pages). tc_map() and tc_unmap() are what the
 // generated tables of a tuning build call (IDX/idx2inc.pl, UseNew 1).
+// whether the families' rows are written as they are fetched (tc_fam's fetch(): a stream's first
+// frames, model.inc's frame())
+static int tc_touch = 1;
 static void* tc_map(sz n, const char* what = "a model table") {
   void* p = map_pages(n);
   if (!p) fatal("cannot map %llu KB for %s", (unsigned long long)((n + KIB - 1) / KIB), what);
