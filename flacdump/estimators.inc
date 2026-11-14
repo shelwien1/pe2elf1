@@ -79,6 +79,7 @@ static inline u64 lf_bits(int k, u32 ps, u64 sum) {
 
 // libFLAC <= 1.3 "suggested" rice parameter for partition order 0
 static int k0_from_bps(double bps, int lim) {
+    if (bps >= lim) return lim;  // (also 1e32 for a negative LPC error: no out-of-range cast)
     int k = (bps > 0.0 ? (int)(u32)(bps + 0.5) : 0) + 1;
     return k > lim ? lim : k;
 }
