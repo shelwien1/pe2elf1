@@ -1685,22 +1685,25 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // the two differ: mixed at a fixed weight, 6% less than either. As the outside prediction,
   // `s.2.dts`'s core 0.72% smaller (the top subband's alone, the stretch as it is, the prior 1/4);
   // doubled, the prior 1/20, 0.25% more (by 3 0.01% less, by 4 0.04%); more passes where the region
-  // leaves few, 0.18%; subbands 28-30 too, 0.27% (their noise at 2^-38 0.11% less; at format 88's
-  // 2^-44, the short streams 0.17% bigger): 81703 bytes to 80550, 3 MB of its middle 0.9% smaller,
-  // its first 3 MB 0.2%, the rest as they were. The top subband's noise at 2 or 4 2^-40, 0.14% and
-  // 0.02% bigger; with heavier tails (Laplace's, Student's t with 5 or 3 degrees of freedom, at the
-  // same variance), the short streams 1-5 bytes bigger; the samples' groups by the scores weighed
+  // leaves few, 0.18% (since format 94 to MC_T kept, at most MC_K, 0.19% more; to 512, at most 1024,
+  // 0.16% more again, but 3 MB of its middle a third slower); subbands 28-30 too, 0.27% (their noise
+  // at 2^-38 0.11% less; at format 88's 2^-44, the short streams 0.17% bigger): 81703 bytes to 80550
+  // in format 93, 3 MB of its middle 0.9% smaller, its first 3 MB 0.2%, the rest as they were. The
+  // top subband's noise at 2 or 4 2^-40, 0.14% and 0.02% bigger; with heavier tails (Laplace's,
+  // Student's t with 5 or 3 degrees of freedom, at the same variance), the short streams 1-5 bytes
+  // bigger; the scores not learning from a miss the samples gave 1/2 or more, bigger (from 1/20, 15
+  // bytes in the short streams); the samples' groups by the scores weighed
   // as the model's are (gw), the same; the posterior's first as the near-tie count's context, bigger.
   // A stop once MC_B samples agree on both, 5 bytes more; with it and the scores' sums in AVX2,
   // `s.2.dts`'s core compresses in 61 seconds where format 92's took 38 (100 without them). The
   // samples: MC_Q's 256 quantiles in an order of each value's own, a pass taking them in another
   // pairing (all in IEEE's basic arithmetic, the scores' products and sums in the same order in the
   // AVX2 build and the plain one)
-  static constexpr int MC_N = 256, MC_B = 32, MC_P = 4, MC_T = 128, MC_NG = 16;
+  static constexpr int MC_N = 256, MC_K = 512, MC_B = 32, MC_P = 8, MC_T = 256, MC_NG = 16;
   static constexpr double MC_A = 0.05;
   double mcz[MC_N][16];      // (the noise's samples)
-  S64 mcy[MC_N][16];         // (the samples kept, the encoder's group and entry for each)
-  int mcg[MC_N], mce[MC_N];
+  S64 mcy[MC_K][16];         // (the samples kept, the encoder's group and entry for each)
+  int mcg[MC_K], mce[MC_K];
   // (the entry of group g nearest y)
   static int hf_near(int g, const S64* y, S64 sc) {
     S128 dd[32];
@@ -1710,7 +1713,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     return be;
   }
   // hf_mc(): the encoder's values sampled about x, the noise's deviation sg at each, those whose mean
-  // square lies in lo2..hi2 kept (to MC_N), each one's group by the scores' rule (hf_group_score()'s,
+  // square lies in lo2..hi2 kept (to MC_K), each one's group by the scores' rule (hf_group_score()'s,
   // in doubles) and its entry there; a block of MC_B at a time, of MC_N in a pass, a pass taking the
   // values' samples in another pairing, until MC_B kept agree, or after a pass MC_T are kept, or MC_P
   // passes; how many were kept
@@ -1725,7 +1728,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     bool same = true;
     for (int pass = 0; pass < MC_P; pass++) {
       for (int t0 = 0; t0 < MC_N; t0 += MC_B) {
-        for (int t = t0; t < t0 + MC_B && mk < MC_N; t++) {
+        for (int t = t0; t < t0 + MC_B && mk < MC_K; t++) {
           S64* y = mcy[mk];
           double ms = 0;
           for (int j = 0; j < 16; j++) {
@@ -1765,7 +1768,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           same = same && (!mk || (bq == mcg[0] && be == mce[0]));
           mk++;
         }
-        if (mk >= MC_N || (same && mk >= MC_B)) return mk;
+        if (mk >= MC_K || (same && mk >= MC_B)) return mk;
       }
       if (mk >= MC_T) return mk;
     }
@@ -3052,6 +3055,50 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     return k;
   }
+  // (sf_mc(): sf_post()'s by sampling, n at most 16: the values with the noise drawn as hf_mc()'s
+  // (MC_N samples, MC_A of a sample to each cell), each sample's mean square counted in its cell.
+  // The top subband's since format 94: where it is weak against the noise, its mean square's
+  // distribution is skewed, where sf_post()'s normal one isn't: `s.2.dts`'s core 0.13% smaller,
+  // the short streams 6 bytes; subbands 28-30's and the rest's, by any power of their noise from
+  // 1/2 to 8 of theirs, 0.1-1.4% bigger)
+  int sf_mc(const S64* v, const double* s2, int n, const U32* tab, int nt, int c0, int* ci, double* pv) {
+    double clo[2 * SP_W + 1], chi[2 * SP_W + 1], sd[16];
+    int cix[2 * SP_W + 1], k = 0;
+    const double U = 65536.0;
+    for (int i = imax(c0 - SP_W, 0); i <= imin(c0 + SP_W, nt - 1); i++) {
+      const bool rl = i > 0 && tab[i - 1] == tab[i], rh = i + 1 < nt && tab[i + 1] == tab[i];
+      if (rl && rh) continue;
+      const double lo = rl ? (double)tab[i] * U : i ? ((double)tab[i - 1] + tab[i]) * (U / 2) : 0.0;
+      const bool top = i + 1 >= nt;
+      const double hi = rh ? (double)tab[i] * U : top ? 0.0 : ((double)tab[i] + tab[i + 1]) * (U / 2);
+      clo[k] = lo * lo, chi[k] = top ? 1e300 : hi * hi, cix[k++] = i;
+    }
+    bool any = false;
+    for (int i = 0; i < n; i++) sd[i] = sqrt(s2[i]), any = any || sd[i] > 0;
+    if (!any || !k) return 0;
+    int cnt[2 * SP_W + 1] = {0};
+    for (int t = 0; t < MC_N; t++) {
+      double ms = 0;
+      for (int i = 0; i < n; i++) {
+        const double y = (double)v[i] + sd[i] * mcz[t][i];
+        ms += y * y;
+      }
+      ms /= n;
+      for (int c = 0; c < k; c++)
+        if (ms >= clo[c] && ms < chi[c]) {
+          cnt[c]++;
+          break;
+        }
+    }
+    int m = 0;
+    for (int c = 0; c < k; c++) {
+      const double pp = (cnt[c] + MC_A) / (MC_N + k * MC_A);
+      int at = m++;
+      while (at > 0 && pv[at - 1] < pp) ci[at] = ci[at - 1], pv[at] = pv[at - 1], at--;
+      ci[at] = cix[c], pv[at] = pp;
+    }
+    return m;
+  }
   // (the scale factor v by sf_post()'s k entries ci, pv, of class g (the top subband, 28-30, the
   // rest); past the first SP_R, f_scl's difference from the likeliest)
   int sf_post_code(int g, const int* ci, const double* pv, int k, S64 v, tcx& X_, u32 kd, int max) {
@@ -3130,7 +3177,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
             if (n == nsmp) {
               double s2[NSMP];
               for (int i = 0; i < n; i++) s2[i] = (double)hf_stair2(X[ch][0][i]) * SP_K;
-              spk = sf_post(v_, s2, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p, spc, spp);
+              spk = n <= 16 ? sf_mc(v_, s2, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p, spc, spp) : sf_post(v_, s2, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p, spc, spp);
               if (spk && (spp[0] >= SP_PT || !sp_on())) spk = 0;
             }
           }
