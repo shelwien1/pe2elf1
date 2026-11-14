@@ -1334,17 +1334,34 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // 0.29% smaller, the short streams 8 bytes (in 32nds 0.24%, in 256ths 0.28%). The guess itself by
   // the quarters, 0.04%, or by these 0.03%, with the level clamped into the range the short streams
   // 0.2% smaller but `s.2.dts`'s core 0.05% bigger; the range's middle as the level, far bigger)
-  int ap_strad(int p, int ch, int b, int g) const {
+  // (*sh: the share of those levels at which the table says g, in 4096ths, -1 where they're
+  // unbounded: abits_code()'s outside prediction since format 97)
+  int ap_strad(int p, int ch, int b, int g, int* sh = nullptr) const {
     const AbParLevel& A = apl[p];
     bool ok;
     const S64 o = ap_off4(p, b, &ok);
+    if (sh) *sh = -1;
     if (!ok || fe_sx[ch][b] == FE_NONE || g < 1 || g > 26) return 0;
     const S64 y = fe_sx[ch][b] - o * AP_XQ, glo = y - ap_edge(g + 1) * AP_XU, ghi = y - ap_edge(g) * AP_XU;
-    if (glo <= A.ilo && A.ihi <= ghi) return 1;
+    if (glo <= A.ilo && A.ihi <= ghi) {
+      if (sh) *sh = 4096;
+      return 1;
+    }
     if (A.ilo <= -AP_INF || A.ihi >= AP_INF) return 0;
     const S64 w = A.ihi - A.ilo, in = imax64(0, imin64(A.ihi, ghi) - imax64(A.ilo, glo));
     const S64 out = w - in;
+    if (sh) *sh = (int)((double)in / (double)w * 4096.0 + 0.5);
     return 10 * out < w ? 2 : 2 * out < w ? 3 : 10 * out < 9 * w ? 4 : 5;
+  }
+  // (the same share for ABITS a)
+  int ap_share(int p, int ch, int b, int a) const {
+    const AbParLevel& A = apl[p];
+    bool ok;
+    const S64 o = ap_off4(p, b, &ok);
+    if (!ok || fe_sx[ch][b] == FE_NONE || a < 1 || a > 26 || A.ilo <= -AP_INF || A.ihi >= AP_INF) return -1;
+    const S64 y = fe_sx[ch][b] - o * AP_XQ, alo = y - ap_edge(a + 1) * AP_XU, ahi = y - ap_edge(a) * AP_XU;
+    const S64 w = A.ihi - A.ilo, in = imax64(0, imin64(A.ihi, ahi) - imax64(A.ilo, alo));
+    return (int)((double)in / (double)w * 4096.0 + 0.5);
   }
   // and its ABITS was v
   void ap_range(int p, int ch, int b, int v) {

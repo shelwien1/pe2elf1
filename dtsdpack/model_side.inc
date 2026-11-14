@@ -69,9 +69,11 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
   // ABITS v (in lo..hi) of channel ch's subband b: against its last value A, the subband below's in
   // the subframe Bw (1 + them, 0 none), and the audio's energy (es, de, ls, lbd as famvars.inc says)
   // (Sn: the first guess, 1 + it, 0 none; then Alt, the second (1 + it), else the last one; then the
-  // difference from the first of them there is)
+  // difference from the first of them there is; pq, pq2: the outside predictions of the first two,
+  // P(not it) in 4096ths, -1 none)
   S64 abits_code(int ch, int b, S64 v, S64 lo, S64 hi, S32 A, S32 Bw, int es, int de, int ls, int pm, int lbd,
-                 int nb, int mx, S32 Sn, int nn, int sc, int eq, int sm, S32 Alt = 0, int bg = 0, int ag = 0, int sx = 0) {
+                 int nb, int mx, S32 Sn, int nn, int sc, int eq, int sm, S32 Alt = 0, int bg = 0, int ag = 0, int sx = 0,
+                 int pq = -1, int pq2 = -1) {
     M_abt_v D;
     tcx X;
     D.bd = b;
@@ -97,7 +99,15 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
     f_abt.make(D, X);
     f_abt.select(X);
     const S32 c1 = Sn ? Sn : A, c2 = Alt ? Alt : Sn ? A : Bw;
+    int pa[HN_N];
+    if (pq >= 0 || pq2 >= 0) {
+      for (int k = 0; k < HN_N; k++) pa[k] = -1;
+      if (pq >= 0) pa[HN_SAME] = cm_pclip(pq);
+      if (pq2 >= 0) pa[HN_SAME2] = cm_pclip(pq2);
+      f_abt.prpa = pa;
+    }
     v = code_val(f_abt, X, 0, v, c1, c2, c1 ? c1 - 1 : c2 ? c2 - 1 : 0, (u32)imin(b, M_abt_NG - 1), lo, hi);  // (X96's subbands past 31: 31's)
+    f_abt.prpa = nullptr;
     ast = !A ? 0 : v == A - 1 ? 1 : 2;
     return v;
   }

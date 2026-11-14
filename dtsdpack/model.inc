@@ -314,7 +314,8 @@ struct Model : ModelX96<f_DEC, LV> {
         int tm = 0;
         const int tg = fe != B::FE_NONE ? B::ap_guess(pass, b, fe, &tm) : -1, ut = tg >= 0 && B::ap_rule(pass);
         // (and how its guess stands against the levels the subframe's ABITS so far allow: sx)
-        const int sx = ut ? B::ap_strad(pass, ch, b, tg) : 0;
+        int shr = -1;
+        const int sx = ut ? B::ap_strad(pass, ch, b, tg, &shr) : 0;
         const int sg = ut ? tg : sg0;
         const int sm = ut ? tm : fe != B::FE_NONE ? B::level_margin(pass, st, fe, sg0) : 0;
         int eq = e ? B::eq[ch][b] : 4;
@@ -372,6 +373,18 @@ struct Model : ModelX96<f_DEC, LV> {
         // its energies: a miss's, nearly always)
         const int ms = Sn == sg + 1 ? sm : 0;
         const int alt = ms ? (ms <= 8 ? sg - 1 : sg + 1) : -1;
+        // (where the first guess is the table's, the share of those levels at which the table says
+        // it is the first node's outside prediction (its miss's), and the share at which it says the
+        // second guess, of the rest, the second node's; each within 1/64 of 0 and 1. Since format 97:
+        // the short streams 0.09% smaller, `s.2.dts`'s core 0.01%; the first alone, 0.05% and 0.01%,
+        // within 1/32, 1/128 or 1/4096 of them the same or a little bigger; the staircase's first
+        // guess too, the same)
+        int pq1 = -1, pq2 = -1;
+        if (fs && ut && shr >= 0) {
+          pq1 = clip(4096 - shr, 64, 4096 - 64);
+          const int sa = shr < 4096 && alt >= 1 ? B::ap_share(pass, ch, b, alt) : -1;
+          if (sa >= 0) pq2 = clip(4096 - (int)((double)sa * 4096.0 / (double)(4096 - shr) + 0.5), 64, 4096 - 64);
+        }
         // (the budget: what the samples may still take, toward the edge ms says, in steps of this
         // subband's bits across it; a lossless WAV's only: a decoded WAV's streams 0.1-0.9% bigger
         // with it)
@@ -393,7 +406,7 @@ struct Model : ModelX96<f_DEC, LV> {
         if (!twin_field(fid, ch, b, v, lo, hi))
           v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
                          s.pmode[ch][b], lbd, nb, mx, Sn, near_e ? 14 : nn, sc, eq, ms,
-                         alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag, fs && ut ? sx : 0);
+                         alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag, fs && ut ? sx : 0, pq1, pq2);
         v = checked(v, lo, hi);
         if (!pass && bound[ch]) B::ab_budget_add(r, ch, b, (int)v);
         if (sn) *sn = (U8)(v + 1);
