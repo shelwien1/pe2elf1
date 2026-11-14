@@ -1241,12 +1241,24 @@ binding's fields at a fixed size: up to a third of a 7-frame DTS-HD MA sample's 
 - The bit allocation search fits the core's lattice alone, and a DTS 96/24 stream's core subbands
   hold X96's residuals too (85% of `96-24.dts`'s ABITS right: its indexes are fitted to both
   lattices, above, and a subband's scale factor where it has one in the subframe, but not its ABITS).
-- A stream cut from a longer one costs most at its ends. Its last frame holds the audio that went
-  on past its WAV: 1.0-1.5 KB of each here, about what a frame costs without the audio (a decoded
-  WAV's could be solved for, the decoder's synthesis being known, but the system is ill-conditioned
-  for the frame's later blocks). And in its first frames the WAV isn't the encoder's input until
-  each channel's decoder state catches up: noise of about a step, white, in all its subbands
-  (`3-1.dts`'s first six frames 1.6 KB). A whole program has neither.
+- A stream costs most at its ends. A cut one's last frame holds the audio that went on past its
+  WAV (its analysis reaches 480 samples past it): 1.0-1.4 KB of each here (`open bitrate.dts`'s
+  0.3), about what a frame costs without the audio, 15 KB of the regression set's 69 KB without
+  `s.2.dts`. The WAV's continuation by LPC makes the indexes whose windows end 64-128 samples past
+  it 71-77% of the time, 42-59% at 128-192, 10-26% at 192-256 (their signs 83-90%); past 192 they
+  go without it (160-320 tried: 224 makes 35 bytes fewer in all, some streams bigger). In three of
+  them the frame before costs as much again, its analysis all in the WAV: the WAV's last frame
+  isn't the encoder's input either (`Master Audio 7.1.dts`'s has two channels 0; `Master Audio 5.0
+  96khz.dts`, the 3 MB from `s.2.dts`'s middle), yet the WAV taken a frame shorter costs more
+  (67-164 bytes). (A decoded WAV's last frame could be solved for, the decoder's synthesis being
+  known, but the system is ill-conditioned for the frame's later blocks.) And in its first frames
+  the WAV isn't quite the encoder's input: `3-1.dts`'s first six 1.6 KB, noise of about a step,
+  white, in all its subbands, as if each channel's decoder state caught up; and a whole program's
+  too, `s.2.dts`'s first 15 frames about 0.8 KB (9% of frame 0's indexes missed, 1% of frame 10's,
+  0.1% after), noise of 0.15 of a step falling to 0.05, in all its subbands, not a gain or an
+  offset, with the XLL residual whole from the first frame: the model's indexes there cost less
+  than their hit flags alone would, the noise's level known frame by frame (573 bytes against
+  686).
 - One thread, one level.
 
 ## Build
