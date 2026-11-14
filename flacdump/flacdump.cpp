@@ -434,7 +434,7 @@ static s64* g_simx;
 static s32* g_pcm[MAXCH];  // PCM of current frame
 static u8* g_parambuf;
 
-// fixed size work buffers (static storage, ~7.5 MB)
+// fixed size work buffers (static storage, 8.5 MiB)
 static s64 s_sig[MAXCH][MAXBS];
 static s32 s_pcm[MAXCH][MAXBS];
 static s64 s_x[MAXBS], s_res[MAXBS], s_res2[MAXBS], s_simx[MAXBS];
