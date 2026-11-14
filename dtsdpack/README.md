@@ -91,7 +91,7 @@ Exit codes:
 | `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 86877 (0.17%) | 71.85% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3812 (0.30%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 5607 (0.52%) | | |
-| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 3011 (0.13%) | | |
+| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2960 (0.13%) | | |
 
 Compressing the whole of `s.2.dts`'s core takes 38 seconds (1.3 MB of core a second) and 42 MB of
 memory, decompressing it 37 seconds and 34 MB, on one thread of a 2.1 GHz Xeon (a virtual machine;
@@ -112,13 +112,13 @@ FFmpeg's small DTS-HD MA samples (`xll_*`, 7 frames each) round-trip too:
 
 | Sample | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `xll_51_24_48_768` | 7168 | 434 (6.05%) | the WAV's 5.1 |
-| `xll_71_24_48_768_0` | 7168 | 382 (5.33%) | a downmix of its 7.1: every channel at -3 dB, each surround its side and rear surround |
-| `xll_71_24_48_768_1` | 7168 | 405 (5.65%) | the same, the rear surrounds' sign inverted |
-| `xll_xch_61_24_48_768` | 7168 | 825 (11.51%) | its 6.1's 5.1, the back centre in the surrounds at about -3 dB; and in the XCH extension, the back centre |
-| `xll_71_24_96_768` | 7168 | 349 (4.87%) | the 96 kHz WAV's 64-band analysis's lower half, a downmix as the 48 kHz one's |
-| `xll_51_16_192_768_1` | 7168 | 330 (4.60%) | the 64-band analysis's lower half of the 192 kHz WAV's lower frequency band, as DTS-HD MA's XLL makes it (below) |
-| `xll_51_16_192_768_0` | 7168 | 311 (4.34%) | the same (the same WAV, another core) |
+| `xll_51_24_48_768` | 7168 | 389 (5.43%) | the WAV's 5.1 |
+| `xll_71_24_48_768_0` | 7168 | 356 (4.97%) | a downmix of its 7.1: every channel at -3 dB, each surround its side and rear surround |
+| `xll_71_24_48_768_1` | 7168 | 373 (5.20%) | the same, the rear surrounds' sign inverted |
+| `xll_xch_61_24_48_768` | 7168 | 646 (9.01%) | its 6.1's 5.1, the back centre in the surrounds at about -3 dB; and in the XCH extension, the back centre |
+| `xll_71_24_96_768` | 7168 | 333 (4.65%) | the 96 kHz WAV's 64-band analysis's lower half, a downmix as the 48 kHz one's |
+| `xll_51_16_192_768_1` | 7168 | 324 (4.52%) | the 64-band analysis's lower half of the 192 kHz WAV's lower frequency band, as DTS-HD MA's XLL makes it (below) |
+| `xll_51_16_192_768_0` | 7168 | 301 (4.20%) | the same (the same WAV, another core) |
 
 Before the downmixes were found, the 7.1 and 6.1 ones went to 36-38%: only 3 of their core's
 channels lined up with a WAV channel, and those at the wrong gain in the 7.1 ones. With its XCH
@@ -158,8 +158,9 @@ No stream at hand has XXCH in its core substream: FATE's XXCH samples (`xxch_71_
 `xbr_xxch_71_24_48_3840`, `x96_xxch_71_24_96_3840`, 7 frames each) have it in their extension
 substreams. Their XXCH frames moved into their core frames after the subframes (EXT_AUDIO set,
 EXT_AUDIO_ID 6), the extension substream dropped, make core-substream XXCH streams that FFmpeg
-decodes as 7.1; dtsdpack round-trips them against those decodes (15.80%, 17.58%, 14.44%; 21.64%
-and 22.63% before the binding stopped taking a gain a clipped decode's fit makes, below). Their
+decodes as 7.1; dtsdpack round-trips them against those decodes (13.31%, 11.91%, 10.54%; 15.80%,
+17.58% and 14.44% before a twin channel's fields went by the earlier one's, below; the first two
+21.64% and 22.63% before the binding stopped taking a gain a clipped decode's fit makes). Their
 signal is a silent frame, then white noise near full scale; the decoder undoes XXCH's downmix
 pre-scaling (every core channel times 1.41), so the decodes clip, and only partly line up with
 any core (their own cores against their core-only decodes, which don't clip, make 18.91%).
@@ -170,12 +171,12 @@ their decodes clip too (0.3-1.2% of the samples):
 
 | Stream | Core | dtsdpack |
 |---|---:|---:|
-| `core_51_24_48_768_0`, `_1` (5.1) | 7168 | 1904 (26.56%), 1898 (26.48%) |
-| `xch_61_24_48_768` (6.1 by XCH) | 7168 | 1914 (26.70%) |
-| `x96_51_24_96_1509` (X96) | 14084 | 3318 (23.56%) |
-| `x96_xch_61_24_96_3840` | 14084 | 2610 (18.53%) |
-| `xbr_51_24_48_3840`, `xbr_xch_61_24_48_3840` (XBR: its residuals in the decode) | 14084 | 2421 (17.19%), 2858 (20.29%) |
-| `xll_x96_51_24_96_1509` (DTS-HD MA, X96) | 14084 | 1745 (12.39%) |
+| `core_51_24_48_768_0`, `_1` (5.1) | 7168 | 1561 (21.78%), 1551 (21.64%) |
+| `xch_61_24_48_768` (6.1 by XCH) | 7168 | 1608 (22.43%) |
+| `x96_51_24_96_1509` (X96) | 14084 | 2906 (20.63%) |
+| `x96_xch_61_24_96_3840` | 14084 | 1997 (14.18%) |
+| `xbr_51_24_48_3840`, `xbr_xch_61_24_48_3840` (XBR: its residuals in the decode) | 14084 | 1736 (12.33%), 2146 (15.24%) |
+| `xll_x96_51_24_96_1509` (DTS-HD MA, X96) | 14084 | 1459 (10.36%) |
 
 ## How it works
 
@@ -1048,6 +1049,23 @@ the first 1024 LFE samples that aren't 0 (`Master Audio 7.1.dts`'s first 1024 ar
   the binding: core channel 0 = 0.707092 WAV 2; core channel 1 = 0.707092 WAV 0; ...; core channel 3 = 0.707092 WAV 4 + 0.707092 WAV 6; ...; LFE = WAV 3
 ```
 
+A core channel bound as an earlier one is (the same WAV channels at the same gains: FATE's
+samples carry the same noise in several channels, and `xll_xch_61_24_48_768`'s surrounds are the
+same mix) is that one's twin (format 89, `model_smp.inc`), and so, for a subframe, is one whose
+subband samples there are an earlier one's, not all 0 (FFmpeg's `master_audio_7.1_24bit.dts` has
+4 channels the same for 8% of its length; silent ones as twins made `Master Audio 7.1.dts` 0.4%
+bigger): the encoder had the same input for both, and nearly always made the same of it. So each
+of a twin's side fields (PMODE, the ADPCM predictor, ABITS, TMODE, its scale factors, its HF VQ
+vector) is coded first as whether it is the earlier channel's, at the odds that has had for that
+field, the two in the same pass (so XXCH's channels are only each other's twins: in FATE's XBR
+and X96 XXCH samples its two are bound to one WAV channel); and an index whose ABITS, step and
+ADPCM prediction are the earlier channel's goes as that one's index, far from any boundary. Where
+they differ but the earlier channel's step is no coarser, its decoded value is taken as the
+audio's, once that has been the index clearly more often than the audio's own: against a clipped
+decode it is, against a lossless WAV it isn't. The 7-frame DTS-HD MA samples 2-22% smaller,
+FATE's other samples 12-28%, the XXCH ones 16-32% (`xbr_xxch_71_24_48_3840`'s 4035 bytes to
+2734), `master_audio_7.1_24bit.dts` 1.7%; no other stream at hand has a twin.
+
 ### The model
 
 Each element is binarised, and each decision goes to one of eight families (`fam.inc`, ac3pack's,
@@ -1188,7 +1206,7 @@ files.
 
 ### The format
 
-"dtsdpack", the format's version (88), the level, the WAV's binding (the offset; each core channel's
+"dtsdpack", the format's version (89), the level, the WAV's binding (the offset; each core channel's
 WAV channel, the second of its mix and their gains, Q23; the LFE's channel; the WAV's samples to
 the core's, 1, 2 or 4 (its lower band, then 2), and the lower band's resolution; the WAV's format,
 size and the CRC-32 of its first 64 KB), then the

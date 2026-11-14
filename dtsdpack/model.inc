@@ -116,6 +116,48 @@ struct Model : ModelX96<f_DEC, LV> {
 
   // --- the elements
   // an element of the walk's (v, in lo..hi; nbits its bits where it is a field of them, else 0)
+  // a twin's side field as its earlier channel's (B::twin_flag()), where that has one in lo..hi and
+  // both are bound in the pass: whether it's that (v then that)
+  bool twin_field(int fid, int ch, int b, S64& v, S64 lo, S64 hi) {
+    const int tw = B::twin_of(ch);
+    const CoreRec& r = *rec;
+    if (tw < 0 || !bound[ch] || !bound[tw]) return false;
+    const CoreSub& s = r.sub[cur_sf];
+    S64 tv;
+    int k;
+    switch (fid) {
+      case F_PMODE:
+        if (b >= r.nsubs[tw]) return false;
+        tv = s.pmode[tw][b], k = 0;
+        break;
+      case F_PVQ:
+        if (b >= r.nsubs[tw] || !s.pmode[tw][b]) return false;
+        tv = s.pvq[tw][b], k = 1;
+        break;
+      case F_ABITS:
+        if (b >= r.nvqsub[tw]) return false;
+        tv = s.abits[tw][b], k = 2;
+        break;
+      case F_TMODE:
+        if (b >= r.nvqsub[tw] || !s.abits[tw][b]) return false;
+        tv = s.tmode[tw][b], k = 3;
+        break;
+      case F_SCALES: {
+        const int nk = b < r.nvqsub[tw] ? (s.abits[tw][b] ? 1 + (s.tmode[tw][b] > 0) : 0) : b < r.nsubs[tw] ? 1 : 0;
+        if (cur_j >= nk) return false;
+        tv = s.scale[tw][b][cur_j], k = 4;
+        break;
+      }
+      case F_HFVQ:
+        if (b < r.nvqsub[tw] || b >= r.nsubs[tw]) return false;
+        tv = s.hfvq[tw][b], k = 5;
+        break;
+      default:
+        return false;
+    }
+    if (tv < lo || tv > hi) return false;
+    return B::twin_flag(k, v, tv);
+  }
   bool code(int fid, S64& v, S64 lo, S64 hi, int nbits) {
     const CoreRec& r = *rec;
     const CoreSub& s = r.sub[cur_sf];
@@ -198,7 +240,8 @@ struct Model : ModelX96<f_DEC, LV> {
         // 9042 (the transients' mean squares, ab_transient()), its core 1.6% smaller)
         const int tr = bound[ch] ? B::pm_rise(s, ch, b) : 0;
         if (bound[ch] && B::jx_low(b) && B::ss_rule() && B::je_on(ch, b)) B::je_gains(ch, b, &g4, &pg);
-        if (fit >= 0)
+        if (twin_field(fid, ch, b, v, lo, hi)) {
+        } else if (fit >= 0)
           v = side_code(SF_PMSR, ch, b, v, 0, 1, 1, hist.pmode[ch][b], b ? s.pmode[ch][b - 1] + 1 : 0, fit,
                         imin(g4, 27), pg >= 0 ? pg : B::pmode_gain(ch, b), tr);
         else {  // (a quiet subband, pm_quiet()'s, predicts as one that wouldn't gain; as does an HF VQ
@@ -239,7 +282,8 @@ struct Model : ModelX96<f_DEC, LV> {
         // (else by the LPC of the core's values as the decode's fit has them, je_lpc(), where its
         // first has been right more often than the decode's: `96-24.dts`'s subband 30's predictors
         // 6.5 bits each from 11.1, its core 1.4% smaller; as a try none fitted)
-        if (pe >= 0 && B::jx_more(B::je_pr[b], 0, 0)) {
+        if (twin_field(fid, ch, b, v, lo, hi)) {
+        } else if (pe >= 0 && B::jx_more(B::je_pr[b], 0, 0)) {
           v = B::code_pvq2(ale, B::pvqd, -1, (int)v, ch, b, ge, B::lrank[ch][b][VK_PVQ], B::lrank[ch][b][VK_PVE]);
           B::pv_nofit();
         } else if (bound[ch] && !(lw && B::jx_more(B::jx_pr[b], 0, 0))) {
@@ -346,9 +390,10 @@ struct Model : ModelX96<f_DEC, LV> {
         const int og2 = ut ? sg0 : tg;
         const int sa = !fs && G && Sn == G ? (sg < 0 ? 0 : sg == G - 1 ? 1 : hist.abits[ch][b] && sg == hist.abits[ch][b] - 1 ? 2 : 3) : -1;
         const int ag = sa >= 0 ? sa : !fs || og2 < 0 ? 0 : og2 == sg ? 1 : og2 == alt ? 2 : 3;
-        v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
-                       s.pmode[ch][b], lbd, nb, mx, Sn, near_e ? 14 : nn, sc, eq, ms,
-                       alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag, fs && ut ? sx : 0);
+        if (!twin_field(fid, ch, b, v, lo, hi))
+          v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
+                         s.pmode[ch][b], lbd, nb, mx, Sn, near_e ? 14 : nn, sc, eq, ms,
+                         alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag, fs && ut ? sx : 0);
         v = checked(v, lo, hi);
         if (!pass && bound[ch]) B::ab_budget_add(r, ch, b, (int)v);
         if (sn) *sn = (U8)(v + 1);
@@ -374,6 +419,7 @@ struct Model : ModelX96<f_DEC, LV> {
                        // sureness the context ac is)
         account(CAT_SIDE);
         int gt = -1, gc = 0;
+        if (twin_field(fid, ch, b, v, lo, hi)) break;
         if (bound[ch] && B::ss_rule()) gt = B::tmode_search(r, s, ch, b, &gc);
         if (gt >= 0)
           v = side_code(SF_TMSR, ch, b, v, lo, hi, 0, 1 + gt, hist.tmode[ch][b], gc, 1 + imin(s.abits[ch][b], 26),
@@ -401,7 +447,7 @@ struct Model : ModelX96<f_DEC, LV> {
                         // `96-24.dts`'s subband 31's 3355 times, all right, its core 0.2% smaller)
         account(CAT_SCALE);
         const int pex = bound[ch] && B::jx_low(b) && B::ss_rule() && s.abits[ch][b] ? B::jx_core_scale(r, s, ch, b) : -1;
-        v = code_scale(r, s, ch, b, cur_j, v, pex);
+        if (!twin_field(fid, ch, b, v, lo, hi)) v = code_scale(r, s, ch, b, cur_j, v, pex);
         break;
       }
       case F_JOIN_SHUFF:
@@ -416,7 +462,8 @@ struct Model : ModelX96<f_DEC, LV> {
       }
       case F_HFVQ:
         account(CAT_SIDE);
-        if (bound[ch]) v = B::code_hfvq(r, s, ch, b, v);
+        if (twin_field(fid, ch, b, v, lo, hi)) {
+        } else if (bound[ch]) v = B::code_hfvq(r, s, ch, b, v);
         else v = side_index(SF_HFVQ, ch, b, v, 10, hist.hfvq[ch][b], 8, 0);
         break;
       case F_LFE: {  // (against the audio's, or signed: coded 128 up, against the sample before)

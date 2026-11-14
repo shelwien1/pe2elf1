@@ -543,9 +543,43 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
   }
 
+  // A twin: a core channel bound to the same WAV channels by the same gains as an earlier one, or,
+  // for a subframe, one whose analysis there is an earlier one's and not all 0 (dtwin_find()). The
+  // encoder's input is the same for both, and so, nearly always, are its choices: each side field of
+  // a twin's coded first as whether it's the earlier channel's (twin_flag()), an index as the earlier
+  // one's where its step and prediction are the same (code_q()). (The 9 short samples with twins by
+  // their binding 22% smaller, 12272 bytes to 9573: `cx_xbr_xxch_71_24_48_3840.dts` 4035 to 2734;
+  // `master_audio_7.1_24bit.dts`, 4 of whose channels are the same for 8% of it, 1.7% smaller; a
+  // silent subframe's channels as twins, `Master Audio 7.1.dts` 0.4% bigger.)
+  int twin[NCH];   // (the earlier channel: -1 none)
+  int dtwin[NCH];  // (else the subframe's: an earlier one of the pass whose analysis is this one's)
+  U16 tw_n[6][2];  // (by field, twin_field()'s k: how often the twin's value wasn't (0) and was (1))
+  S32 tw_pr[NCH][NSUB][8];  // (each channel's ADPCM predictions in the subsubframe, and its decoded
+  S32 tw_y[NCH][NSUB][8];   // values: its twins' after it)
+  U32 tw_t[2];  // (how often the audio's index was a twin's where the earlier channel's decoded value's
+                // wasn't, and the other way around)
+  int twin_of(int ch) const { return ch < NCH ? (twin[ch] >= 0 ? twin[ch] : dtwin[ch]) : -1; }
+  // whether v is the twin's value tv, at the field k's odds so far (v then tv)
+  bool twin_flag(int k, S64& v, S64 tv) {
+    U16* const n = tw_n[k];
+    U32 p = (U32)((U64)(2 * n[0] + 1) * CO_ONE / (2 * ((U64)n[0] + n[1]) + 2));
+    p = p < 1 ? 1 : p > CO_ONE - 1 ? CO_ONE - 1 : p;
+    const int hit = c->code_bit(p, ENC && v == tv);
+    if (++n[hit] >= 1024) n[0] >>= 1, n[1] >>= 1;
+    if (hit) v = tv;
+    return hit;
+  }
+
   void smp_start(WavIn* w, const Bind& b) {
     wav = w;
     bind = b;
+    for (int ch = 0; ch < NCH; ch++) {
+      twin[ch] = -1;
+      for (int e = 0; e < ch && twin[ch] < 0 && b.map[ch] >= 0; e++)
+        if (b.map[e] == b.map[ch] && b.map2[e] == b.map2[ch] && b.g1[e] == b.g1[ch] && b.g2[e] == b.g2[ch]) twin[ch] = e;
+    }
+    for (int k = 0; k < 6; k++) tw_n[k][0] = 1, tw_n[k][1] = 7;
+    tw_t[0] = tw_t[1] = 0;
     tnext = 0;
     memcpy(hgw, HF_GW, sizeof hgw);
     memcpy(hge, HF_GE, sizeof hge);
@@ -601,7 +635,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (x96a) jx_steps.make();
     if (x96a) memset(jx_cs[sf], 0, sizeof jx_cs[sf]);
     fir = r.filts ? FIR_PERFECT : FIR_NONPERFECT;
-    for (int ch = 0; ch < NCH; ch++) bound[ch] = 0;
+    for (int ch = 0; ch < NCH; ch++) bound[ch] = 0, dtwin[ch] = -1;
     lfe_on = 0;
     if (!wav || !wav->ok) return;
     const int up = bind.up;
@@ -702,6 +736,23 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         U128 pl = 0;
         for (int j = 0; j < nsmp; j++) pl += (U128)((S128)plev[ch][b][j] * plev[ch][b][j]);
         plvl[ch][b] = nsmp ? isqrt128(pl / (U128)nsmp) : 0;
+      }
+    }
+    dtwin_find(r);
+  }
+  // each bound channel's twin for the subframe, without one by its binding: the first bound channel
+  // before it in the pass whose subband samples in it are all this one's, not all 0
+  void dtwin_find(const CoreRec& r) {
+    for (int ch = r.ch0(); ch < r.ch1(); ch++) {
+      if (!bound[ch] || twin[ch] >= 0) continue;
+      for (int e = r.ch0(); e < ch && dtwin[ch] < 0; e++) {
+        if (!bound[e]) continue;
+        bool same = true, live = false;
+        for (int b = 0; same && b < NSUB; b++) {
+          same = !memcmp(X[e][b], X[ch][b], nsmp * sizeof X[ch][b][0]);
+          for (int j = 0; same && !live && j < nsmp; j++) live = X[ch][b][j] != 0;
+        }
+        if (same && live) dtwin[ch] = e;
       }
     }
   }
@@ -3259,6 +3310,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const int a = s.abits[ch][b], pm = s.pmode[ch][b];
     const S64 ss = step_scale(r, s, ch, b, j >> 3);
     const S32 pred = pm ? adpcm_pred(s.pvq[ch][b], yh[ch][b]) : 0;
+    tw_pr[ch][b][j & 7] = pred;
     S64 qp = 0, alt = 0;
     S128 dist = 0;
     const int bnd = bound[ch] && !past_end(t0 + j);  // (`s.2.dts`'s first 3 MB 5.0% smaller, cut streams 0.5-5.7%)
@@ -3314,6 +3366,27 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (fx && jx_more(jx_r[b], 4, 1)) {  // (the fit's index, as the audio's: on its lattice point)
       xv = shl64(clip23((S64)dequantize((S32)qf, ss) + pred), AQ_F);
       qp = requant(xv - shl64(pred, AQ_F), ss, lo, hi, &dist, &alt);
+    }
+    // (a twin's index as its earlier channel's, far from a boundary, where the ABITS, the step and
+    // the prediction are the same: the same value quantized the same way; in a pass the earlier
+    // channel is in, bound[]'s, which has coded the subsubframe's samples of the subband. Else,
+    // where the earlier channel's step is no coarser, its decoded value as the audio's, where that
+    // has been the index clearly more often: `cx_xbr_xxch_71_24_48_3840.dts` 2770 bytes to 2734,
+    // the twins of lossless WAVs' streams as they were)
+    const int tw = twin_of(ch);
+    S64 qa = 0, qt = 0;
+    int tq = 0;
+    if (bnd && tw >= 0 && bound[tw] && s.abits[tw][b] == a && step_scale(r, s, tw, b, j >> 3) == ss && tw_pr[tw][b][j & 7] == pred) {
+      qp = s.q[tw][b][j];
+      alt = qp + (qp >= 0 ? 1 : -1);
+      dist = (S128)1 << 100;
+    } else if (bnd && tw >= 0 && bound[tw] && b < r.nvqsub[tw] && s.abits[tw][b] && step_scale(r, s, tw, b, j >> 3) <= ss) {
+      S128 dt;
+      S64 at;
+      qa = qp;
+      qt = requant(shl64(tw_y[tw][b][j & 7], AQ_F) - shl64(pred, AQ_F), ss, lo, hi, &dt, &at);
+      tq = 1;
+      if (jx_more(tw_t, 4, 1)) qp = qt, dist = dt, alt = at;
     }
     M_smp_v D;
     D.ab = a;
@@ -3376,6 +3449,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     qs[ch][b] = (S8)svar(v);
     const S32 y = clip23((S64)dequantize((S32)v, ss) + pred);
     push_y(ch, b, y);
+    tw_y[ch][b][j & 7] = y;
+    if (tq && qa != qt) {
+      if (v == qa) tw_t[0]++;
+      else if (v == qt) tw_t[1]++;
+      if (tw_t[0] + tw_t[1] >= 1u << 16) tw_t[0] >>= 1, tw_t[1] >>= 1;
+    }
     if (x96a) yc[ch][b][fb0 + j] = y;
     if (fx) jx_tally(jx_r[b], v, q0, qf);
     if (b0) {  // (the fit, and the last values)
