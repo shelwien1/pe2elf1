@@ -912,13 +912,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int j = 0; j < n; j++) e += (U128)((S128)v[j] * v[j]);
     return e ? fine_log2(e) - fine_log2((U128)n) : FE_NONE;
   }
-  // the same in quarters (512 times the log2)
-  static S32 fine_energy4(const S64* v, int n) {
+  // the same in 2^-AP_FB of a log2 (AP_FB 9 before format 95: quarters of fine_energy()'s units)
+  static constexpr int AP_FB = 18;
+  static constexpr S64 AP_XU = (S64)1 << (AP_FB - 7), AP_XQ = (S64)1 << (AP_FB - 9);  // (a 128th, a quarter of one, so)
+  static S32 fine_energy_x(const S64* v, int n) {
     U128 e = 0;
     for (int j = 0; j < n; j++) e += (U128)((S128)v[j] * v[j]);
-    return e ? fine_log2_4(e) - fine_log2_4((U128)n) : FE_NONE;
+    return e ? (S32)(log2_bits(e, AP_FB) - log2_bits((U128)n, AP_FB)) : FE_NONE;
   }
-  S32 fe_s4[NCH][NSUB];  // (fe_s's energies in quarters)
+  S32 fe_sx[NCH][NSUB];  // (fe_s's energies so: fine_energy_x()'s)
   // the staircase t's ABITS at the energy x (-1 none)
   static int stair_guess(const AbStair& t, S32 x) {
     int kb = -1;
@@ -989,7 +991,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     memcpy(ab_snap[p], ab_st[p], sizeof ab_snap[p]);
     for (int ch = r.ch0(); ch < r.ch1(); ch++)
       for (int b = 0; b < r.nvqsub[ch]; b++) {
-        fe_s[ch][b] = fe_a[ch][b] = fe_s4[ch][b] = FE_NONE;
+        fe_s[ch][b] = fe_a[ch][b] = fe_sx[ch][b] = FE_NONE;
         if (!bound[ch]) continue;
         S64* const x = bud_v[ch][b];
         const int n = scale_values(s, ch, b, 0, s.nssc, x);
@@ -999,9 +1001,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         // is: ab_transient())
         int tk_ = 0;
         fe_s[ch][b] = ab_transient(s, ch, b, x, n, fe_s[ch][b], &fe_a[ch][b], &tk_);
-        fe_s4[ch][b] = fe_s[ch][b] == FE_NONE   ? FE_NONE
-                       : fe_a[ch][b] != FE_NONE ? fine_energy4(x + 8 * tk_, n - 8 * tk_)
-                                                : fine_energy4(x, n);
+        fe_sx[ch][b] = fe_s[ch][b] == FE_NONE   ? FE_NONE
+                       : fe_a[ch][b] != FE_NONE ? fine_energy_x(x + 8 * tk_, n - 8 * tk_)
+                                                : fine_energy_x(x, n);
         bud_n[ch][b] = n;
         bud_si[ch][b] = scale_pred(x, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
         memset(bud_b[ch][b], 0xFF, sizeof bud_b[ch][b]);
@@ -1283,7 +1285,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     S32 c0t, cb;      // (the core's) the centre the budget makes of the table's ABITS; the one the prior is from
     int cset;         // (whether c0t is)
     U32 miss[2];      // the staircases' first guesses wrong, the table's (where both have one)
-    S64 ilo, ihi;     // (the levels, in quarters, at which the table makes all of the subframe's ABITS so far: ilo < l <= ihi)
+    S64 ilo, ihi;     // (the levels, in fe_sx's units, at which the table makes all of the subframe's ABITS so far: ilo < l <= ihi)
   } apl[2];
   U64 n_tb, n_tbhit;  // (-s: the ABITS the table said, those it said right)
   // ABITS a's lower edge (a 2-27: 27 none)
@@ -1324,12 +1326,19 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // how the table's guess g for channel ch's band b stands against the levels at which it makes the
   // subframe's ABITS so far: 0 they don't bound it, 1 all of them say g; else by the share that says
   // another, 2 under a tenth, 3 under half, 4 under nine tenths, 5 more
+  // (since format 95 the levels and the energies in 2^-18 of a log2, fe_sx's, rather than in
+  // quarters of fine_energy()'s 128ths: the table's misses are 71% of `s.2.dts`'s ABITS' bytes, 82%
+  // of them within a 128th of an edge, and there the energy's quarters still put a third of them on
+  // the wrong side; the levels the ABITS so far allow, so measured, are narrower: `s.2.dts`'s core
+  // 0.29% smaller, the short streams 8 bytes (in 32nds 0.24%, in 256ths 0.28%). The guess itself by
+  // the quarters, 0.04%, or by these 0.03%, with the level clamped into the range the short streams
+  // 0.2% smaller but `s.2.dts`'s core 0.05% bigger; the range's middle as the level, far bigger)
   int ap_strad(int p, int ch, int b, int g) const {
     const AbParLevel& A = apl[p];
     bool ok;
     const S64 o = ap_off4(p, b, &ok);
-    if (!ok || fe_s4[ch][b] == FE_NONE || g < 1 || g > 26) return 0;
-    const S64 y = fe_s4[ch][b] - o, glo = y - 4 * ap_edge(g + 1), ghi = y - 4 * ap_edge(g);
+    if (!ok || fe_sx[ch][b] == FE_NONE || g < 1 || g > 26) return 0;
+    const S64 y = fe_sx[ch][b] - o * AP_XQ, glo = y - ap_edge(g + 1) * AP_XU, ghi = y - ap_edge(g) * AP_XU;
     if (glo <= A.ilo && A.ihi <= ghi) return 1;
     if (A.ilo <= -AP_INF || A.ihi >= AP_INF) return 0;
     const S64 w = A.ihi - A.ilo, in = imax64(0, imin64(A.ihi, ghi) - imax64(A.ilo, glo));
@@ -1341,8 +1350,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     AbParLevel& A = apl[p];
     bool ok;
     const S64 o = ap_off4(p, b, &ok);
-    if (!ok || fe_s4[ch][b] == FE_NONE || v < 1 || v > 26) return;
-    const S64 y = fe_s4[ch][b] - o, lo = v < 26 ? y - 4 * ap_edge(v + 1) : -AP_INF, hi = v > 1 ? y - 4 * ap_edge(v) : AP_INF;
+    if (!ok || fe_sx[ch][b] == FE_NONE || v < 1 || v > 26) return;
+    const S64 y = fe_sx[ch][b] - o * AP_XQ, lo = v < 26 ? y - ap_edge(v + 1) * AP_XU : -AP_INF, hi = v > 1 ? y - ap_edge(v) * AP_XU : AP_INF;
     A.ilo = imax64(A.ilo, lo), A.ihi = imin64(A.ihi, hi);
     if (A.ilo >= A.ihi) A.ilo = lo, A.ihi = hi;  // (none: from this one on)
   }

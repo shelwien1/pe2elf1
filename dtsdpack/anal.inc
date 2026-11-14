@@ -1659,18 +1659,19 @@ static INLINE S32 fine_log2(U128 a) {
     if (f + k <= 127 && m >= LOG2_128[f + k - 1]) f += k;
   return 128 * L + f;
 }
-// 512 times the log2 of a (a > 0), floored: fine_log2()'s 128ths and the quarter within its 128th
-static INLINE S32 fine_log2_4(U128 a) {
-  static const U32 Q4[3] = {1075196443u, 1076653033u, 1078111597u};  // (2^30 2^(q/512))
+// 2^bits times the log2 of a (a > 0, bits <= 24), its fraction bit by bit: the mantissa (in 2^62
+// units, 1 to 2) squared, each bit 1 where the square reaches 2 (then halved), floored at every
+// step (in integers, the same everywhere)
+static INLINE S64 log2_bits(U128 a, int bits) {
   const int L = bitlen128(a) - 1;
-  const U32 m = (U32)(L >= 30 ? a >> (L - 30) : a << (30 - L));
-  int f = 0;
-  for (int k = 64; k; k >>= 1)
-    if (f + k <= 127 && m >= LOG2_128[f + k - 1]) f += k;
-  const U64 base = f ? LOG2_128[f - 1] : 1u << 30;
-  int q = 0;
-  while (q < 3 && ((U64)m << 30) >= base * Q4[q]) q++;
-  return 512 * L + 4 * f + q;
+  U64 x = (U64)(L >= 62 ? a >> (L - 62) : a << (62 - L));
+  S64 f = 0;
+  for (int i = 0; i < bits; i++) {
+    const U128 y = (U128)x * x;
+    if (y >= (U128)1 << 125) f = 2 * f + 1, x = (U64)(y >> 63);
+    else f = 2 * f, x = (U64)(y >> 62);
+  }
+  return ((S64)L << bits) + f;
 }
 static Sf sf_make(S128 m, int e) {
   Sf r = {0, 0};
