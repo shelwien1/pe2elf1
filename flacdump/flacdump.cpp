@@ -154,7 +154,6 @@ static inline void wr_be64(u8* p, u64 v) { wr_be32(p, (u32)(v >> 32)); wr_be32(p
 #include "model_residual.inc"
 #include "lpc_order.inc"
 #include "model_lpc.inc"
-#include "sim_subframe.inc"
 #include "encoder_sim.inc"
 #include "model_frame.inc"
 
@@ -165,9 +164,7 @@ static inline void wr_be64(u8* p, u64 v) { wr_be32(p, (u32)(v >> 32)); wr_be32(p
 #include "frame_stats.inc"
 #include "sink.inc"
 #include "vorbis.inc"
-#include "code_vorbis.inc"
 #include "seektable.inc"
-#include "code_seektable.inc"
 #include "metadata.inc"
 
 // ---------------------------------------------------------------------------
@@ -175,7 +172,6 @@ static inline void wr_be64(u8* p, u64 v) { wr_be32(p, (u32)(v >> 32)); wr_be32(p
 
 #include "decompress.inc"
 #include "compress.inc"
-#include "do_compress.inc"
 
 // ---------------------------------------------------------------------------
 // main

@@ -1,7 +1,67 @@
 # flacdump refactoring plan
 
-**Status:** phase 1 (section 3) is done: the `.inc` files sit next to
-`flacdump.cpp`. Phases 2 and 3 are optional and not done.
+**Status:** all three phases are done. Section 0 shows the resulting source
+layout; sections 1-5 are the plan as it was written, with notes where the
+implementation differs.
+
+## 0. Result: source layout
+
+`flacdump.cpp` (232 lines) holds the prologue (includes, integer types,
+platform macros, `die`, `Min`/`Max`, bit and byte-order helpers), the ordered
+include list and `main`. All other code is in 42 `.inc` files next to it, one
+translation unit. Except for the two mutually recursive pairs (`find_cuts`,
+`code_region`), every function and type is defined before its first use, so
+the include order below is also the dependency order. No function is longer
+than 100 lines (`find_cuts` is exactly 100); classes with member functions
+each have their own file (marked *class*).
+
+| file | lines | contents |
+|------|------:|----------|
+| `buf.inc`, `vec.inc` | 29, 23 | *class* `Buf`, *class* `Vec<T>` (the only heap users) |
+| `file_crc.inc` | 46 | `read_file`, CRC-8 / CRC-16 |
+| `md5.inc` | 91 | *class* `MD5` |
+| `bit_reader.inc`, `fix_out.inc`, `bit_writer.inc` | 55, 24, 51 | *class* `BitReader`, *class* `FixOut`, *class* `BitWriter` |
+| `flac_defs.inc` | 166 | FLAC structures, work buffers, header code tables, fixed/LPC residuals |
+| `lpc_res_fast.inc` | 43 | *class* `LpcResInit<O>`: order-specialised LPC residual kernels |
+| `flac_frame.inc` | 303 | frame parser/decoder and encoder |
+| `wav_format.inc` | 40 | WAV header, channel mask, shared sample buffer |
+| `wav_writer.inc`, `wav_reader.inc` | 48, 76 | *class* `WavWriter`, *class* `WavReader` |
+| `ac.inc` | 100 | *class* `AC`: arithmetic coder, bit models, cost categories |
+| `uint_model.inc` | 45 | integer coding (`UModel`, `code_uint`, `code_sint`) |
+| `byte_cm.inc` | 107 | *class* `ByteCM`: CM byte model and its table pool |
+| `code_bytes.inc` | 64 | byte strings, CM-coded or stored |
+| `embedded.inc` | 80 | embedded files: types, JPEG/PNG lengths |
+| `base64.inc` | 241 | base64 layout, generation, strict parsing, detection |
+| `tag_spans.inc` | 149 | ID3v2 / APEv2 parsing (exact value spans) |
+| `regions.inc` | 231 | cuts in byte regions (`find_cuts`, `code_cut`, `code_region`) |
+| `det_math.inc` | 103 | deterministic `cos`, glibc `cosf` emulation, `log2` |
+| `estimators.inc` | 98 | fixed order guess, rice estimators, expected bits, k0 |
+| `res_stats.inc` | 148 | *class* `ResStats` |
+| `windows.inc` | 91 | apodization windows |
+| `win_cache.inc` | 40 | *class* `WinCache` |
+| `lpc_analysis.inc` | 206 | libFLAC autocorrelation variants, Levinson-Durbin, best order, quantization |
+| `ff_lpc.inc` | 107 | ffmpeg LPC analysis |
+| `lpc_predictor.inc` | 261 | *class* `LpcPredictor` |
+| `meta_model.inc` | 195 | bit models, frame/channel state, learning thresholds, `Ctx`, `reset_run_state` |
+| `model_residual.inc` | 135 | partition order, rice parameters |
+| `lpc_order.inc` | 188 | LPC order prediction and learning |
+| `model_lpc.inc` | 201 | LPC parameters in three prediction stages |
+| `encoder_sim.inc` | 201 | libFLAC subframe/stereo simulation, ffmpeg stereo estimate |
+| `model_frame.inc` | 207 | FRAME segments: header, channel mode, subframes |
+| `container.inc` | 32 | segments, metadata blocks, layout, `.meta` magic |
+| `frame_stats.inc` | 61 | *class* `FrameStats` |
+| `sink.inc` | 21 | *class* `Sink` |
+| `vorbis.inc` | 172 | VORBIS_COMMENT: vendors, validation, encoder hint, structured coding |
+| `seektable.inc` | 148 | SEEKTABLE coding |
+| `metadata.inc` | 209 | stream parameters, layout (part A), derived fields (part C) |
+| `decompress.inc` | 104 | `d` mode |
+| `compress.inc` | 296 | `c` mode: options, pass 1 (scan), pass 2 (model), verification |
+
+Commits: `a71016a` (phase 1, binary-identical), `b41ad4e` (phase 2 with the
+reordering of phase 3 item 4), `eef75e9` (phase 3 items 1-3 and 6), and the
+function splits of phase 3 item 5. Every commit after phase 1 produces the
+same `.meta`, `.wav` and embedded files on the test corpus as before the
+refactoring, and every file round-trips; `-x` and `-vv` output is unchanged.
 
 Line numbers refer to `flacdump.cpp` at commit `08dc76d` (5186 lines, one
 translation unit), i.e. before phase 1.
@@ -85,7 +145,7 @@ Close to the limit, so they stay in place for now: `find_cuts` (exactly 100), `p
 (85), `code_layout` (84), `decompress_core` (78). Rule for the future: a
 function that grows beyond 100 lines gets its own `.inc`.
 
-### 2.4 Findings (not structural, handled in phase 3)
+### 2.4 Findings (not structural; all fixed in phase 3)
 
 1. **State carried from one run to the next.** `c` runs the restore in the same
    process to verify its output, so every static object must start each run
@@ -125,15 +185,17 @@ function that grows beyond 100 lines gets its own `.inc`.
    (segmentation, re-encode check, WAV), pass 2 (modelling), `-x` side dump,
    verification. Each is a natural function of its own.
 
-### 2.5 Static memory (BSS 126,650,848 bytes = 120.8 MiB, limit 128 MB)
+### 2.5 Static memory (BSS 126,650,504 bytes = 120.8 MiB after phase 3, limit 128 MB)
+
+(Names as after phase 3; the total is unchanged.)
 
 | object | MiB | | object | MiB |
 |---|---:|---|---|---:|
-| `g_b64narrow` | 23.3 | | `s_sig` | 4.0 |
-| `g_b64scan`, `g_b64dec_v`, `g_b64dec_r` | 3 × 16 | | `s_pcm`, `g_wavbuf`, `sim_stereo::sig` | 3 × 2 |
-| `g_blockbuf` | 16 | | nine 0.5 MiB work arrays | 4.5 |
-| `g_framebuf` | 8 | | models, predictor, rest | 0.9 |
-| `WinCache::s_win` | 5.5 | | | |
+| `g_b64narrow` | 23.3 | | `g_sig` | 4.0 |
+| `g_b64scan`, `g_b64dec_v`, `g_b64dec_r` | 3 × 16 | | `s_pcm`, `g_wavbuf`, `g_stsig` | 3 × 2 |
+| `g_blockbuf` | 16 | | eight 0.5 MiB work arrays | 4.0 |
+| `g_framebuf` | 8 | | models, `g_x32`, rest | 0.6 |
+| `g_lpred` (incl. windows 5.5) | 6.8 | | | |
 | `g_cmpool` | 4.5 | | | |
 
 Pages are only touched as needed (peak RSS of `c` on an 86 MB FLAC: 88 MB,
@@ -221,7 +283,18 @@ No include guards, no `#include`s inside `.inc` files, nothing defined twice.
 Outcome: stripped binaries byte-identical to `0533242` (the commit before the
 move) with g++ and clang++, no warnings, round trips OK.
 
-## 4. Phase 2 (optional): group the rest of `flacdump.cpp` by topic
+## 4. Phase 2: group the rest of `flacdump.cpp` by topic (done)
+
+Done in one step with the reordering of phase 3 item 4, so the check was
+identical output on the corpus rather than an identical binary. The final file
+names differ from the table below: deterministic `cos`/`cosf`/`log2` went to
+`det_math.inc` (ahead of all their users); `order_learn.inc` became
+`lpc_order.inc`, `stereo_sim.inc` became `encoder_sim.inc` (now also with
+`sim_subframe`), `wav_common.inc` became `wav_format.inc` (`wav_read` was
+removed: `WavReader` is complete before the meta model), `compress_util.inc`
+became `compress.inc` (now also with `do_compress`); `vorbis.inc` and
+`seektable.inc` were split off `metadata.inc`. The byte-order helpers stay
+in the prologue of `flacdump.cpp`.
 
 After phase 1, `flacdump.cpp` is still ~3100 lines of small functions. The
 same in-place technique (also binary-identical) could leave it with only the
@@ -262,7 +335,31 @@ files, or the definitions are reordered. Reordering changes the function
 order in the binary, so it belongs in phase 3, where the check is identical
 `.meta` output.
 
-## 5. Phase 3 (optional): cleanups from the review
+## 5. Phase 3: cleanups from the review (done)
+
+As implemented: (1) `reset_run_state()` in `meta_model.inc`, called at the start of
+compression pass 2 and of every restore; `code_layout` resets nothing any more.
+(2) `bool ln2sq` parameter, taken from `FrameState`. (3) `WinCache` and the
+`LpcPredictor` work buffers became members (their only instance is the static
+`g_lpred`); `ResStats` sums and the stereo signals are file-scope arrays; the
+work buffers are arrays, `init_work()` only sets up the `s32**` view of the PCM.
+(5) The functions are split as listed, with these names:
+`lpc_stage0`, `lpc_find_guess`, `lpc_find_at_order`, `lpc_accept`,
+`lpc_debug_miss`, `lpc_code_explicit`; `model_frame_header`, `model_chmode`,
+`model_subframe`, `subframe_prediction`, `model_fixed_order` (the state update
+stays in `model_frame`); `compress_scan`, `write_side_dump`, `compress_model`,
+`print_compress_stats`, `verify_meta`; `seek_detect_spacing`, `seek_point`;
+`vc_vendor`, `vc_b64_detect`, `vc_comment` (the lambdas became `vc_put32`,
+`vc_text` on a plain `VcCursor`); `model_porder`, `model_rice_param`,
+`model_escape_bits`; `sim_fixed`, `sim_lpc`, `sim_rice_bits`. The split
+functions' files `sim_subframe.inc`, `code_vorbis.inc`, `code_seektable.inc` and
+`do_compress.inc` were merged into `encoder_sim.inc`, `vorbis.inc`,
+`seektable.inc` and `compress.inc`; `model_lpc.inc`, `model_frame.inc` and
+`model_residual.inc` kept their names. (6) `VOTE_MIN`, `RICE_VOTE_MIN`,
+`LEARN_FULL`, `LEARN_EVERY`, `EXH_LEAD_MIN`, `EXH_LEAD_DIV`, `FF_SWITCH`,
+`SEARCH_FULL`, `SEARCH_MISS_RATIO`, `SEARCH_EVERY` in `meta_model.inc`.
+
+The plan as written:
 
 Separate commits after phase 1. These change the code, so the check is no
 longer the binary but **identical `.meta` files on the test corpus** (plus

@@ -42,9 +42,9 @@ make            # g++ -std=c++20 -fno-exceptions -fno-rtti -ffp-contract=off -O2
 ```
 
 The program is one translation unit: `flacdump.cpp` includes the `*.inc` files
-next to it (one per class and per large function) at fixed positions, so only
-`flacdump.cpp` is passed to the compiler. `REFACTORING.md` describes the layout
-and further planned cleanups.
+next to it (one per topic, and one per class with member functions) in
+dependency order, so only `flacdump.cpp` is passed to the compiler.
+`REFACTORING.md` describes the layout and how it was arrived at.
 
 `-ffp-contract=off` matters: the model replays floating point computations of
 the original encoders and both directions must compute bit-identical values.

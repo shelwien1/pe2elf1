@@ -2,8 +2,8 @@
 // Part of the flacdump.cpp translation unit (included at a fixed position);
 // relies on the definitions before that point; not a standalone header.
 
-// Model one FRAME segment (enc: f/pcm filled; dec: fills f, reads pcm via src)
-static bool model_frame(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st, WavReader* src, u64 samples_done) {
+// frame header: blocking strategy, block size (d: then reads the PCM), codes, frame number
+static bool model_frame_header(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st, WavReader* src, u64 samples_done) {
     AC& ac = *cx.ac;
     Models& M = *cx.m;
     ac.cat = C_HDR;
@@ -26,7 +26,6 @@ static bool model_frame(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st, WavRea
         f.bps = cx.sp.bps;
         if (!src->read(pcm, f.nch, f.bs)) return false;
     }
-    int bs = (int)f.bs;
     ac.cat = C_HDR;
     int cb = canon_bscode(f.bs);
     if (ac.bit(M.bscode_eq[cb], f.bscode == cb))
@@ -55,6 +54,14 @@ static bool model_frame(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st, WavRea
         f.number = pnum;
     else
         f.number = ac.raw(f.number, 36);
+    return true;
+}
+
+// channel assignment: predicted by the libFLAC stereo simulation and ffmpeg's estimate
+static bool model_chmode(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st) {
+    AC& ac = *cx.ac;
+    Models& M = *cx.m;
+    int bs = (int)f.bs;
     ac.cat = C_CH;
     if (cx.sp.nch == 2) {
         int pf = ff_stereo_guess(pcm, bs, cx.sp.bps > 16 ? 30 : 14);
@@ -83,84 +90,107 @@ static bool model_frame(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st, WavRea
     f.nch = f.chcode < 8 ? f.chcode + 1 : 2;
     if (f.nch != cx.sp.nch) return false;
     f.bps = cx.sp.bps;
-    for (int ch = 0; ch < f.nch; ch++) {
-        SubInfo& s = f.sub[ch];
-        ChState& cs = st.ch[ch];
-        int sbps = f.bps + side_channel(f.chcode, ch);
-        s64* x = g_x;
-        subframe_signal(f.chcode, ch, pcm, bs, x);
-        SimOut sim = {0, 4, 0, -1};
-        if (st.sim_on) {
-            if (cx.sp.nch == 2) {
-                static const int sig_of[11][2] = {{0, 1}, {0, 1}, {0, 1}, {0, 1}, {0, 1}, {0, 1},
-                                                  {0, 1}, {0, 1}, {0, 3}, {3, 1}, {2, 3}};
-                sim = g_sim4[sig_of[f.chcode][ch]];
-                if (f.chcode < 8 && f.chcode != 1) sim.type = 4;
-            } else {
-                int wids[16];
-                int nw = sim_windows(*cx.lp, wids);
-                sim = sim_subframe(cx, st, x, bs, sbps, wids, nw);
-            }
-        }
-        // wasted bits
-        ac.cat = C_WASTED;
-        u64 o = 0;
-        for (int i = 0; i < bs; i++) o |= (u64)x[i];
-        int pw = o ? ctz64(o) : 0;
-        if (pw >= sbps) pw = sbps - 1;
-        if (ac.bit(M.w_eq[pw ? 1 : 0][Min(ch, 3)], s.wasted == pw))
-            s.wasted = pw;
-        else
-            s.wasted = (int)code_uint(ac, M.w_val, s.wasted);
-        if (s.wasted >= sbps) return false;
-        if (s.wasted)
-            for (int i = 0; i < bs; i++) x[i] >>= s.wasted;
-        // type
-        ac.cat = C_TYPE;
-        int isconst = 1;
-        for (int i = 1; i < bs; i++)
-            if (x[i] != x[0]) {
-                isconst = 0;
-                break;
-            }
-        s.type = ac.tree(M.type_t[isconst][sim.type][cs.ptype], 2, s.type);
-        cs.ptype = s.type;
-        if (s.type == ST_CONST) {
-            if (!isconst) return false;
-            s.order = 0;
-            continue;
-        }
-        if (s.type == ST_VERB) {
-            s.order = 0;
-            continue;
-        }
-        int k0 = -1;
-        ac.cat = C_ORDER;
-        if (s.type == ST_FIXED) {
-            int gn, go;
-            u64 esum[5];
-            fixed_guess(x, bs, gn, go, esum);
-            int gs = sim.type == ST_FIXED ? sim.order : 5;
-            s.order = ac.tree(M.forder_t[gn][gn == go][gs], 3, s.order);
-            if (s.order > 4 || s.order > bs) return false;
-            if (gn != go) {
-                if (s.order == gn) st.fvote[1]++;
-                if (s.order == go) st.fvote[0]++;
-                if (st.fvote[0] + st.fvote[1] >= VOTE_MIN) st.fix_le = st.fvote[1] > st.fvote[0];
-            }
-            cs.pfixed = s.order;
-            fixed_residual(x, bs, s.order, g_res);
-            if (bs > 4) k0 = k0_from_bps(fixed_rbps(esum[s.order], bs - 4), cx.sp.bps > 16 ? 30 : 14);
-        } else {
-            ac.cat = C_PREC;
-            s.prec = ac.tree(M.prec_t[cs.pprec], 4, s.prec - 1) + 1;
-            if (s.prec > 15) return false;
-            cs.pprec = s.prec - 1;
-            if (!model_lpc(cx, s, cs, st, x, bs, sbps - s.wasted, sim, k0)) return false;
-            lpc_residual(x, bs, s.coef, s.order, s.shift, g_res);
-        }
-        if (!model_residual(cx, s, cs, st, g_res, bs, k0)) return false;
+    return true;
+}
+
+// the libFLAC simulation's choice for channel ch (type 4: no prediction)
+static SimOut subframe_prediction(Ctx& cx, const FrameInfo& f, FrameState& st, int ch, const s64* x, int bs,
+                                  int sbps) {
+    SimOut sim = {0, 4, 0, -1};
+    if (!st.sim_on) return sim;
+    if (cx.sp.nch == 2) {
+        static const int sig_of[11][2] = {{0, 1}, {0, 1}, {0, 1}, {0, 1}, {0, 1}, {0, 1},
+                                          {0, 1}, {0, 1}, {0, 3}, {3, 1}, {2, 3}};
+        sim = g_sim4[sig_of[f.chcode][ch]];
+        if (f.chcode < 8 && f.chcode != 1) sim.type = 4;
+    } else {
+        int wids[16];
+        int nw = sim_windows(*cx.lp, wids);
+        sim = sim_subframe(cx, st, x, bs, sbps, wids, nw);
     }
+    return sim;
+}
+
+// fixed predictor order (libFLAC's guess in both tie-rule variants); computes the residual
+static bool model_fixed_order(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s64* x, int bs,
+                              const SimOut& sim, int& k0) {
+    AC& ac = *cx.ac;
+    int gn, go;
+    u64 esum[5];
+    fixed_guess(x, bs, gn, go, esum);
+    int gs = sim.type == ST_FIXED ? sim.order : 5;
+    s.order = ac.tree(cx.m->forder_t[gn][gn == go][gs], 3, s.order);
+    if (s.order > 4 || s.order > bs) return false;
+    if (gn != go) {
+        if (s.order == gn) st.fvote[1]++;
+        if (s.order == go) st.fvote[0]++;
+        if (st.fvote[0] + st.fvote[1] >= VOTE_MIN) st.fix_le = st.fvote[1] > st.fvote[0];
+    }
+    cs.pfixed = s.order;
+    fixed_residual(x, bs, s.order, g_res);
+    if (bs > 4) k0 = k0_from_bps(fixed_rbps(esum[s.order], bs - 4), cx.sp.bps > 16 ? 30 : 14);
+    return true;
+}
+
+// subframe of channel ch: wasted bits, type, fixed order or LPC parameters, residual
+static bool model_subframe(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st, int ch) {
+    AC& ac = *cx.ac;
+    Models& M = *cx.m;
+    int bs = (int)f.bs;
+    SubInfo& s = f.sub[ch];
+    ChState& cs = st.ch[ch];
+    int sbps = f.bps + side_channel(f.chcode, ch);
+    s64* x = g_x;
+    subframe_signal(f.chcode, ch, pcm, bs, x);
+    SimOut sim = subframe_prediction(cx, f, st, ch, x, bs, sbps);
+    // wasted bits
+    ac.cat = C_WASTED;
+    u64 o = 0;
+    for (int i = 0; i < bs; i++) o |= (u64)x[i];
+    int pw = o ? ctz64(o) : 0;
+    if (pw >= sbps) pw = sbps - 1;
+    if (ac.bit(M.w_eq[pw ? 1 : 0][Min(ch, 3)], s.wasted == pw))
+        s.wasted = pw;
+    else
+        s.wasted = (int)code_uint(ac, M.w_val, s.wasted);
+    if (s.wasted >= sbps) return false;
+    if (s.wasted)
+        for (int i = 0; i < bs; i++) x[i] >>= s.wasted;
+    // type
+    ac.cat = C_TYPE;
+    int isconst = 1;
+    for (int i = 1; i < bs; i++)
+        if (x[i] != x[0]) {
+            isconst = 0;
+            break;
+        }
+    s.type = ac.tree(M.type_t[isconst][sim.type][cs.ptype], 2, s.type);
+    cs.ptype = s.type;
+    if (s.type == ST_CONST || s.type == ST_VERB) {
+        s.order = 0;
+        return s.type == ST_VERB || isconst;
+    }
+    int k0 = -1;
+    ac.cat = C_ORDER;
+    if (s.type == ST_FIXED) {
+        if (!model_fixed_order(cx, s, cs, st, x, bs, sim, k0)) return false;
+    } else {
+        ac.cat = C_PREC;
+        s.prec = ac.tree(M.prec_t[cs.pprec], 4, s.prec - 1) + 1;
+        if (s.prec > 15) return false;
+        cs.pprec = s.prec - 1;
+        if (!model_lpc(cx, s, cs, st, x, bs, sbps - s.wasted, sim, k0)) return false;
+        lpc_residual(x, bs, s.coef, s.order, s.shift, g_res);
+    }
+    return model_residual(cx, s, cs, st, g_res, bs, k0);
+}
+
+// Model one FRAME segment (enc: f/pcm filled; dec: fills f, reads pcm via src)
+static bool model_frame(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st, WavReader* src, u64 samples_done) {
+    if (!model_frame_header(cx, f, pcm, st, src, samples_done)) return false;
+    if (!model_chmode(cx, f, pcm, st)) return false;
+    for (int ch = 0; ch < f.nch; ch++)
+        if (!model_subframe(cx, f, pcm, st, ch)) return false;
     // update state
     st.first = 0;
     st.pblocking = f.blocking;
