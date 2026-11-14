@@ -777,6 +777,45 @@ static INLINE U128 hf_stair2(S64 x) {
   const int e = 64 - __builtin_clzll((U64)(x < 0 ? -x : x));  // (|x| within 2^50)
   return (U128)1 << (2 * e - 1);
 }
+// e^x for x <= 0 in IEEE's basic arithmetic (as the model's other doubles, the same everywhere):
+// 2^k e^r, |r| <= ln 2 / 2, e^r by its series to r^12 (within 1e-14)
+static double det_exp_neg(double x) {
+  if (!(x > -700)) return 0;
+  const double t = x * 1.4426950408889634;
+  const int k = (int)(t - 0.5);
+  const double r = x - (double)k * 0.6931471805599453;
+  static const double C[12] = {1.0 / 39916800.0, 1.0 / 3628800.0, 1.0 / 362880.0, 1.0 / 40320.0, 1.0 / 5040.0, 1.0 / 720.0,
+                               1.0 / 120.0,      1.0 / 24.0,      1.0 / 6.0,      0.5,           1.0,          1.0};
+  double p = 1.0 / 479001600.0;
+  for (int i = 0; i < 12; i++) p = p * r + C[i];
+  return ldexp(p, k);
+}
+// the standard normal's density at z, and its tail beyond z >= 0 (Abramowitz and Stegun 26.2.17,
+// within 7.5e-8)
+static double det_phi(double z) { return z > 38 || z < -38 ? 0.0 : det_exp_neg(-0.5 * z * z) * 0.3989422804014327; }
+static double det_q(double z) {
+  const double t = 1.0 / (1.0 + 0.2316419 * z);
+  return det_phi(z) * t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+}
+// A standard normal variable given it lies in a..b (b >= a; b 1e30 for no end): its mean, and its
+// variance (*v, 0-1); the probability between from the tails on either side of 0, and from 6 out
+// as the exponential's (rate the near end's distance)
+static double det_trunc(double a, double b, double* v) {
+  if (a >= 6 || b <= -6) {
+    const bool up = a >= 6;
+    const double l = up ? a : -b, w = b >= 1e30 ? 1e30 : b - a;
+    const double e = w >= 1e30 ? 0.0 : det_exp_neg(-l * w), q = e > 0 ? w * e / (1.0 - e) : 0.0;
+    const double s = 1.0 / (l * l) - q * w / (1.0 - e);
+    *v = s < 0 ? 0 : s > 1 ? 1 : s;
+    return up ? a + 1.0 / l - q : b - 1.0 / l + q;
+  }
+  const double pa = det_phi(a), pb = b >= 1e30 ? 0.0 : det_phi(b), qb = b >= 1e30 ? 0.0 : det_q(b);
+  const double den = a >= 0 ? det_q(a) - qb : b <= 0 ? det_q(-b) - det_q(-a) : 1.0 - det_q(-a) - qb;
+  if (!(den > 1e-280)) return *v = 0, a >= 0 ? a : b;
+  const double m = (pa - pb) / den, s = 1.0 + (a * pa - (b >= 1e30 ? 0.0 : b * pb)) / den - m * m;
+  *v = s < 0 ? 0 : s > 1 ? 1 : s;
+  return m < a ? a : m > b ? b : m;
+}
 // The weights (in 2^-16) of 16 values against another subband's x0 at their samples:
 // T^2 / (T^2 + x0^2), x0^2 hf_stair2()'s, T^2 sc^2 2^t2 (within 2^120: sc under 2^23, t2 to 74),
 // their sum into *s
@@ -1027,8 +1066,17 @@ static void hf_key_order(const S128* k, int* idx) {
 // two entries is the noise's spread across their boundary, the root of their squared differences
 // weighed by it: the encoder's values are these and the noise, so its choice flips from one to the
 // other where the noise along their difference crosses the boundary; else pd's distances, the
-// group's entries' with each other's (hf_pair_dists())
-static void hf_bound_vec_m(const S128* k, int g, const double* r, const double (*pd)[32], int M, S128* o) {
+// group's entries' with each other's (hf_pair_dists()). Since format 87, where u is given, the
+// noise known to lie in a slab across direction x (u_j = x_j r_j, ku = (1 - its variance's share
+// left) / (u x)): the spread's square less ku (e u)^2 for a difference e (hf_less_along())
+// The noise's squared spread s2 along a difference e, less the part along u a constraint has
+// taken (s1 = e u, ku as above); at least 1/64 of it
+static INLINE double hf_less_along(double s2, double s1, double ku) {
+  const double c = s2 - ku * s1 * s1;
+  return c > s2 * (1.0 / 64) ? c : s2 * (1.0 / 64);
+}
+static void hf_bound_vec_m(const S128* k, int g, const double* r, const double (*pd)[32], int M, S128* o,
+                           const double* u = nullptr, double ku = 0) {
   int idx[32];
   hf_key_order(k, idx);
   for (int a = 0; a < 32; a++) {
@@ -1042,11 +1090,13 @@ static void hf_bound_vec_m(const S128* k, int g, const double* r, const double (
       if (!r) {
         d = pd[i][f];
       } else {
-        double s2 = 0;
+        double s2 = 0, s1 = 0;
         for (int j = 0; j < 16; j++) {
           const double e = vi[j] - vf[j];
           s2 += e * e * r[j];
+          if (u) s1 += e * u[j];
         }
+        if (u) s2 = hf_less_along(s2, s1, ku);
         d = sqrt(s2);
       }
       if (d == 0) continue;
@@ -1079,7 +1129,7 @@ static void hf_bound_grp(const S128* k, const T* W, int w, int n, bool p15, S128
 // (am, where given: the group each one's largest key is against, the one whose boundary with it
 // binds; the first's itself)
 static void hf_bound_grp_m(const S128* k, const S32 (*W)[16], const double* r, const double (*D)[32], int M, S128* o,
-                           int* am = nullptr) {
+                           int* am = nullptr, const double* u = nullptr, double ku = 0) {
   int idx[32];
   hf_key_order(k, idx);
   for (int a = 0; a < 32; a++) {
@@ -1093,11 +1143,13 @@ static void hf_bound_grp_m(const S128* k, const S32 (*W)[16], const double* r, c
       if (!r) {
         dd = D[g][f];
       } else {
-        double s2 = 0;
+        double s2 = 0, s1 = 0;
         for (int j = 0; j < 16; j++) {
           const double e = (double)W[g][j] - (double)W[f][j];
           s2 += e * e * r[j];
+          if (u) s1 += e * u[j];
         }
+        if (u) s2 = hf_less_along(s2, s1, ku);
         const double d = sqrt(s2);
         dd = d * sqrt(d);
       }

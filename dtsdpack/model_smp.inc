@@ -522,12 +522,20 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // of those that share the bin's first FFT stage, its first two, its first three, and its own, into
   // plev (for the indexes' nearness, against the level of all of them: `s.2.dts`'s core 0.14%
   // smaller; weighted 1, 2, 4, 8 by stage 0.1% bigger, 1, 4, 16, 64 0.6%)
+  // (since format 87 bin 0's in the stages it shares with the other even bins as hf_stair2() has
+  // its bottom subband's value, the binade's: those stages' sums are its value's halves, quarters
+  // and eighths, their rounding in units of its last place, where the first stage's, the FFT's
+  // inputs, is the twiddled values': `s.2.dts`'s core 0.13% smaller, its even bins' subbands'
+  // indexes; in the first stage too 0.1% less, the odd bins' bigger; each bin's own last stage by
+  // its own binades, or the first stage's weight doubled or halved, bigger)
   void path_levels(int ch, int j) {
     U128 E[16], S1[2] = {0, 0}, S2[4] = {0, 0, 0, 0}, S3[8] = {0, 0, 0, 0, 0, 0, 0, 0}, T = 0;
     for (int k = 0; k < 16; k++) {
       const S64 a = X[ch][2 * k][j], c = X[ch][31 - 2 * k][j];
       E[k] = (U128)((S128)a * a) + (U128)((S128)c * c);
-      T += E[k], S1[k & 1] += E[k], S2[k & 3] += E[k], S3[k & 7] += E[k];
+      T += E[k];
+      if (!k) E[0] = hf_stair2(a) + (U128)((S128)c * c);
+      S1[k & 1] += E[k], S2[k & 3] += E[k], S3[k & 7] += E[k];
     }
     for (int b = 0; b < NSUB; b++) {
       const int k = b & 1 ? (31 - b) / 2 : b / 2;
@@ -1802,8 +1810,21 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // than the values as they are: `s.2.dts`'s top subband's group the first 64.3% of the time there
     // from 62.7%, its vector the nearest 59.8% from 58.3%, its core 0.5% smaller, a quarter of the way
     // in; a sixteenth of the way, just past the edge, 0.1% more)
+    // (since format 87 the top subband's, at the core's rate, go by the mean of the encoder's values
+    // given that their RMS lies in that region, the noise's mean there: the RMS's square errs by
+    // D = 2/16 x n (and n n / 16, its mean the rule's noise), a normal variable of variance
+    // 4/256 sum x_j^2 s_j (s_j the noise power at sample j, hf_stair2()'s at twice the RMS rule's,
+    // 1.5 2^-40), so given D in the region, the noise at sample j has the mean 2/16 x_j s_j / that
+    // variance times D's mean there (det_trunc()), and the values as they are are never taken:
+    // `s.2.dts`'s core 0.66% smaller; at the RMS rule's power 0.04% less, 4 times it 0.02%; where
+    // the RMS lies outside the region alone 0.07% less. And the noise's variance left along x is
+    // less, its share D's given the region: the boundary orders' spreads less that much of it,
+    // hf_less_along() (0.02%). Subbands 28-30's the same, the noise 2^-44 of the power along their
+    // FFT path, 0.03%, but the short streams 0.06% bigger; subband 28's by the bottom subband's
+    // binade nothing)
     S64 xr[NSMP];
-    bool resc = false;
+    bool resc = false, tg = false;
+    double tgv = 1;  // (D's variance's share left)
     if (bound[ch] && !ss_rule() && !x96a && nsmp == 16) {
       const U32* tab = r.shuff[ch] == 6 ? SF7 : SF6;
       const int nt = sf_entries(r.shuff[ch]);
@@ -1824,7 +1845,24 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         const S64 lo = si != r0 ? vv : r0 > 0 ? ((S64)tab[r0 - 1] + V) << (AQ_F - 1) : 0;
         const S64 hi = si != r1 ? vv : r1 + 1 < nt ? ((S64)V + tab[r1 + 1]) << (AQ_F - 1) : -1;
         const S64 rr = isqrt128((U128)(ms + nz));
-        if (ms > 0 && hi > lo && (rr < lo || rr >= hi)) {
+        double sp[16], sv = 0;  // (in doubles, IEEE's arithmetic, in the samples' order)
+        if (b == NSUB - 1 && cpl_on(r, ch, b) && bind.up == 1 && ms > 0 && (hi > lo || (hi < 0 && lo > 0)))
+          for (int j = 0; j < nsmp; j++) {
+            sp[j] = ldexp((double)hf_stair2(X[ch][0][j]), -40) * 1.5;
+            sv += (double)x[j] * (double)x[j] * sp[j];
+          }
+        if (sv > 0) {
+          const double vd = sv * (4.0 / 256), sd = sqrt(vd), m = (double)(ms + nz);
+          const double a = ((double)lo * (double)lo - m) / sd, e = hi < 0 ? 1e30 : ((double)hi * (double)hi - m) / sd;
+          const double md = det_trunc(a, e, &tgv) * sd;
+          resc = tg = true;
+          for (int j = 0; j < nsmp && resc; j++) {
+            const double y = (double)x[j] * (1.0 + (2.0 / 16) * sp[j] * md / vd);
+            if (y > 1e12 || y < -1e12) resc = false;  // (within 2^40: hf_dist()'s)
+            else xr[j] = (S64)llround(y);
+          }
+          if (!resc) tg = false, tgv = 1;
+        } else if (ms > 0 && hi > lo && (rr < lo || rr >= hi)) {
           const S64 t = rr < lo ? lo + (hi - lo) / 16 : hi - (hi - lo) / 16;
           const double t2 = (double)t * (double)t - (double)nz;
           if (t2 > 0) {
@@ -1839,7 +1877,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         }
       }
     }
-    const bool ur = resc && hrs[1] > hrs[0] + 64 + hrs[0] / 32;
+    const bool ur = resc && (tg || hrs[1] > hrs[0] + 64 + hrs[0] / 32);
     S128 gm[32], go[32], md[32], en = 0;  // (the scores of the values taken, and of the others)
     int f0 = 0;
     // (a lossless WAV's top subband at the core's rate: the scores' squares weighed as its vectors'
@@ -1848,6 +1886,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // 0.04% bigger, 2^28 0.03%, 2^25 0.7%)
     U32 gw[16], gs = 0;
     const bool gwo = b == NSUB - 1 && bound[ch] && !ss_rule() && !x96a && bind.up == 1 && nsmp == 16;
+    // (and since format 87 subband 28's boundary orders, FFT bin 14's, by that noise too, the bottom
+    // subband's binade's at a quarter of the top one's power (T twice as large): bin 14 shares the
+    // FFT's first stage with bin 0, whose sums go by that value: `s.2.dts`'s core 0.04% smaller; at
+    // the top one's power or 1/16 of it 0.02% less; the distances' and scores' weights nothing;
+    // subbands 29 and 30's, odd bins', by the bottom subband's power nothing)
+    const bool gwn = gwo || (b == 28 && bound[ch] && !ss_rule() && !x96a && bind.up == 1 && nsmp == 16);
+    const int gt = gwo ? 0 : 2;  // (T^2's exponent over the top subband's)
     if (gwo) hf_weights(X[ch][0], sc, 74, gw, &gs);
     auto gscore = [&](int g, const S64* xx) {
       return gwo && gs ? hf_group_score_w(hgw, hge, g, xx, sc, gw, gs) : hf_group_score(hgw, hge, g, xx, nsmp, sc);
@@ -1898,11 +1943,17 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // smaller; 2^24.5 0.12% bigger than that, 2^22.5 0.05%; to the power 1.5 as the W's, 1.25 or
     // 1.75 0.5% and 0.3% bigger)
     double rg[16];
-    if (gwo) hf_noise(X[ch][0], sc, 66, rg);
+    if (gwn) hf_noise(X[ch][0], sc, 66 + gt, rg);
     // (each group's boundary key the largest against the 8 nearest of those nearer, hf_bound_grp_m(),
     // the vectors' against 4; in every subband of 16 values, the others' by the distances unweighed:
     // `s.2.dts`'s core 0.03% smaller than in its top subband alone, the short streams 14 bytes)
-    auto bgrp = [&](const S128* k, S128* o, int* am) { hf_bound_grp_m(k, hgw, gwo ? rg : nullptr, hgd, 8, o, am); };
+    double ug[16], kg = 0;  // (the noise's variance left along x, above)
+    if (gwo && tg && tgv < 1) {
+      double sx = 0;
+      for (int j = 0; j < 16; j++) ug[j] = (double)X[ch][b][j] * rg[j], sx += (double)X[ch][b][j] * ug[j];
+      kg = sx > 0 ? (1 - tgv) / sx : 0;
+    }
+    auto bgrp = [&](const S128* k, S128* o, int* am) { hf_bound_grp_m(k, hgw, gwn ? rg : nullptr, hgd, 8, o, am, kg > 0 ? ug : nullptr, kg); };
     S128 og[32];
     int am[32];
     for (int i = 0; i < 32; i++) am[i] = f0;
@@ -1936,16 +1987,30 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // of the code book's unit, `s.2.dts`'s core 0.17% smaller; from 2^17 to 2^22 within 0.02%. Since
     // format 85 onto its boundary with the group its largest key is against, hf_bound_grp_m()'s,
     // the one that binds, rather than with the first: 0.02%)
+    // (since format 87 the top subband's, at the core's rate, by the mean of the noise given that
+    // the encoder's group won: a normal variable along the gradient past the boundary, as above (the
+    // values' noise sc 2^10 in these units), its mean there, det_trunc(), rather than the boundary
+    // itself: `s.2.dts`'s core 0.11% smaller; sc 2^8.5 or 2^11.5 0.04-0.06% less. And where the
+    // group was the scores' first too, given it won against the next: 0.06%)
     S64 xs[NSMP];
     bool pushed = false;
-    if (!mn && nsmp == 16 && g != f0) {
-      const int fk = am[g] != g ? am[g] : f0;
+    int f1 = -1;  // (the next, where the group was the first)
+    if (gwo && !mn && nsmp == 16 && g == f0)
+      for (int q = 0; q < 32; q++)
+        if (q != g && (f1 < 0 || gm[q] < gm[f1])) f1 = q;
+    if (!mn && nsmp == 16 && (g != f0 || f1 >= 0)) {
+      const int fk = g == f0 ? f1 : am[g] != g ? am[g] : f0;
       double g2 = 0, gx[16], rp[16];
       for (int j = 0; j < 16; j++) rp[j] = 1;
-      if (gwo) hf_noise(X[ch][0], sc, 59, rp);
+      if (gwn) hf_noise(X[ch][0], sc, 59 + gt, rp);
       for (int j = 0; j < 16; j++) gx[j] = 2.0 * (double)(hgw[fk][j] - hgw[g][j]) * (double)sc * 65536.0, g2 += gx[j] * gx[j] * rp[j];
       if (g2 > 0) {
-        const double lam = (double)(gm[g] - gm[fk]) / g2 / 8192.0;  // (hf_group_score()'s units: x 8192)
+        double lam = (double)(gm[g] - gm[fk]) / g2 / 8192.0;  // (hf_group_score()'s units: x 8192)
+        if (gwo) {
+          double vq;
+          const double tau = ldexp((double)sc, 10), sg = sqrt(g2);
+          lam = det_trunc(lam * sg / tau, 1e30, &vq) * tau / sg;
+        }
         pushed = true;
         for (int j = 0; j < 16 && pushed; j++) {
           const double d = lam * gx[j] * rp[j];
@@ -1973,7 +2038,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // power 1.25 or 0.75 0.1% bigger; the boundary keys of the distances unweighed, from their own
     // first, 0.2% bigger)
     double rv[16];
-    if (gwo) hf_noise(X[ch][0], sc, 65, rv);
+    if (gwn) hf_noise(X[ch][0], sc, 65 + gt, rv);
     if (gwo) {
       hf_dists_w(g, x, sc, X[ch][0], d0);
       if (pushed) hf_dists_w(g, xs, sc, X[ch][0], d1);
@@ -1986,11 +2051,17 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       cand[i].k = kv[i] = up ? k1 : k0, cand[i].i = i;
       ko[i] = up ? k0 : k1;
     }
-    if (nsmp == 16 && !gwo && !(hpd_on >> g & 1)) hf_pair_dists(g, hpd[g]), hpd_on |= 1u << g;
-    if (nsmp == 16) hf_bound_vec_m(kv, g, gwo ? rv : nullptr, hpd[g], 4, ov);
+    if (nsmp == 16 && !gwn && !(hpd_on >> g & 1)) hf_pair_dists(g, hpd[g]), hpd_on |= 1u << g;
+    double uv[16], kq = 0;  // (the noise's variance left along x, above)
+    if (gwo && tg && tgv < 1) {
+      double sx = 0;
+      for (int j = 0; j < 16; j++) uv[j] = (double)X[ch][b][j] * rv[j], sx += (double)X[ch][b][j] * uv[j];
+      kq = sx > 0 ? (1 - tgv) / sx : 0;
+    }
+    if (nsmp == 16) hf_bound_vec_m(kv, g, gwn ? rv : nullptr, hpd[g], 4, ov, kq > 0 ? uv : nullptr, kq);
     else hf_bound_vec(kv, g, nsmp, ov);
     if (pushed) {
-      if (nsmp == 16) hf_bound_vec_m(ko, g, gwo ? rv : nullptr, hpd[g], 4, oo);
+      if (nsmp == 16) hf_bound_vec_m(ko, g, gwn ? rv : nullptr, hpd[g], 4, oo, kq > 0 ? uv : nullptr, kq);
       else hf_bound_vec(ko, g, nsmp, oo);
       for (int i = 0; i < 32; i++) cc[i].k = ov[i], cc[i].i = i, oc[i].k = oo[i], oc[i].i = i;
     }
@@ -2525,10 +2596,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // (add: a power the RMS's square has in it too, the top subband's leak's noise: the nearness then
   // against the root of the level's unit squared and 2^48 times it, the noise's as the level's is,
   // `s.2.dts`'s core 0.13% smaller)
-  int scale_near_lev(int ch, int b, const S64* v, int n, const U32* tab, int nt, int p, S128 add = 0) const {
+  // (lv: the level instead of the channel's, where 0 or more)
+  int scale_near_lev(int ch, int b, const S64* v, int n, const U32* tab, int nt, int p, S128 add = 0, S64 lv = -1) const {
     S128 ms = 0;
     for (int i = 0; i < n; i++) ms += (S128)v[i] * v[i];
-    const S64 rr = isqrt128((U128)(ms / n + add)), lev = tlvl[ch], e = (S64)tab[p] << AQ_F;
+    const S64 rr = isqrt128((U128)(ms / n + add)), lev = lv >= 0 ? lv : tlvl[ch], e = (S64)tab[p] << AQ_F;
     S64 bd = -1;
     if (rr > e && p + 1 < nt) bd = ((S64)tab[p] + tab[p + 1]) << (AQ_F - 1);
     else if (rr <= e && p > 0) bd = ((S64)tab[p - 1] + tab[p]) << (AQ_F - 1);
@@ -2603,8 +2675,24 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           p = scale_pred(v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
           // (a lossless WAV's: pn's outside the VQ subbands, whose contexts want the RMS's nearness
           // as it was: `s.2.dts`'s core 1.1% smaller, `3-1.dts`'s 0.1%; and pl's)
+          // (since format 87 at the core's rate against the level along the subband's FFT path,
+          // the indexes' (path_levels()), at each sample weighed by the value's power there, as
+          // the encoder's RMS errs by twice the value times the noise, times 2^(3/4): `s.2.dts`'s
+          // core 0.16% smaller, the subbands 15-30's; as it is 0.16% less, times 2^(1/2) or 2 0.03%
+          // and 0.04% less, the power's mean bigger than the channel's level)
+          S64 lv = -1;
+          if (!ss_rule() && !x96a && bind.up == 1 && p >= 0) {  // (in doubles, IEEE's arithmetic, in the samples' order)
+            const int j0 = tm && j ? tm * 8 : 0;
+            double nu = 0, de = 0, pm = 0;
+            int c = 0;
+            for (int i = 0; i < n && j0 + i < nsmp; i++, c++) {
+              const double a = (double)v_[i] * (double)v_[i], l = (double)plev[ch][b][j0 + i] * (double)plev[ch][b][j0 + i];
+              nu += a * l, de += a, pm += l;
+            }
+            if (c) lv = (S64)hc_unit((S128)sqrt(de > 0 ? nu / de : pm / c), 3);
+          }
           if (!ss_rule() && !x96a && p >= 0)
-            nlev = scale_near_lev(ch, b, v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p);
+            nlev = scale_near_lev(ch, b, v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p, 0, lv);
         }
         pc = scale_ceil(v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]));
         if (search_on()) ps = scale_search(r, s, ch, b, hfb, v_, n, p, &conf), tried = 1;
