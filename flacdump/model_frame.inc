@@ -25,7 +25,7 @@ static bool model_frame(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st, WavRea
     if (ac.dec) {
         f.nch = cx.sp.nch;
         f.bps = cx.sp.bps;
-        if (!wav_read(src, pcm, f.nch, f.bs)) return false;
+        if (!src->read(pcm, f.nch, f.bs)) return false;
     }
     int bs = (int)f.bs;
     ac.cat = C_HDR;
