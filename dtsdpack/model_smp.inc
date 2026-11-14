@@ -555,6 +555,39 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   int twin[NCH];   // (the earlier channel: -1 none)
   int dtwin[NCH];  // (else the subframe's: an earlier one of the pass whose analysis is this one's)
   U16 tw_n[6][2];  // (by field, twin_field()'s k: how often the twin's value wasn't (0) and was (1))
+  // A lossless WAV's scale factors (code_scale()): the encoder's RMS rule (scale_pred_ms()) on the
+  // values with the FFT's noise in them, its power at each sample SP_K of the bottom subband's
+  // binade's (hf_stair2()) in the top subband, else SP_K2 (the HF VQ subbands 28-30) or SP_K3 (the
+  // rest) of the square of the subband's FFT path's level (path_levels()); their mean square taken
+  // as a normal variable, the mean and variance theirs: each entry's cell's probability
+  // (sf_post()). Where the likeliest's is under SP_PT, coded by rank, each "this one?" at its share
+  // of what those before left, mixed at SP_A with the hits so far at that share (by rank: the first,
+  // the second, the rest; SP_NB buckets of its logit, -8 to 8, halved past SP_LIM), past SP_R as
+  // f_scl's difference from the likeliest (sf_post_code()); surer than that, the RMS rule's hit flag
+  // as before. And only where the stream's indexes have been the audio's at least SP_HPM thousandths
+  // of the time, after SP_HN of them (sp_on()): the noise is the analysis's where the WAV is the
+  // encoder's input to the bit, its indexes then the audio's 99.66-99.92% of the time (the lossless
+  // WAVs' streams at hand), and a WAV that isn't (FATE's clipped decodes, 79-83%) or another
+  // encoder's (FFmpeg's 7-frame DTS-HD MA samples, 97.5-99.2%) has noise of its own: without the
+  // switch, their cores 1-7% bigger (the counts learning from nothing what f_scl's tuned hit flag
+  // knows), FATE's XXCH samples 3.0-5.3%. `s.2.dts`'s core 5.7% smaller, its scale factors 24% (the
+  // top subband's 12188 bytes to 9409, subbands 28-30's 4539 to 3275, the rest's 4042 to 3157; the
+  // top subband's alone 2.9%; at the RMS rule's own noise there, 3/4 of 2^-40, `s.2.dts`'s first 3
+  // MB and 3 MB of its middle 0.7% bigger than at 2.4 2^-40); the other lossless WAVs' 0.1-2.9%
+  // (`mid.dtsc`'s most), the short samples' up to 2.3% bigger. Every scale factor this way, the
+  // lossless WAVs' short streams 1.2-1.8% bigger; behind a switch by whether the likeliest or the
+  // RMS rule's guess has been the encoder's more often, `s.2.dts`'s core 2.3% bigger; the noise's
+  // power adapted to each stream (a step toward the likelier of 2^(1/4) times it and 2^(-1/4), by
+  // how much), 12 bytes less in all; the switch at 99% the same in all, at 98% 23 bytes more
+  static constexpr int SP_R = 6, SP_NB = 24, SP_W = 8, SP_A = 16, SP_LIM = 1023;
+  static constexpr double SP_K = 2.4 / 1099511627776.0;   // (2.4 2^-40; 3 2^-40 0.4% bigger)
+  static constexpr double SP_K2 = 1.0 / 8796093022208.0;  // (2^-43)
+  static constexpr double SP_K3 = 1.0 / 4398046511104.0;  // (2^-42)
+  static constexpr double SP_PT = 0.999;
+  U16 sp_n[3][3][SP_NB][2];  // (the top subband's, subbands 28-30's, the rest's: by rank, bucket, hit)
+  static constexpr U64 SP_HN = 2560, SP_HPM = 995;  // (a 5.1 frame's indexes)
+  bool sp_on() const { return n_smp >= SP_HN && n_hit * 1000 >= n_smp * SP_HPM; }
+  double sp_t[SP_NB - 1];    // (the buckets' edges)
   S32 tw_pr[NCH][NSUB][8];  // (each channel's ADPCM predictions in the subsubframe, and its decoded
   S32 tw_y[NCH][NSUB][8];   // values: its twins' after it)
   U32 tw_t[2];  // (how often the audio's index was a twin's where the earlier channel's decoded value's
@@ -581,6 +614,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     for (int k = 0; k < 6; k++) tw_n[k][0] = 1, tw_n[k][1] = 7;
     tw_t[0] = tw_t[1] = 0;
+    memset(sp_n, 0, sizeof sp_n);
+    for (int k = 1; k < SP_NB; k++) {  // (det_exp_neg(): the same everywhere)
+      const double z = -8.0 + 16.0 * k / SP_NB;
+      sp_t[k - 1] = z < 0 ? det_exp_neg(z) / (1.0 + det_exp_neg(z)) : 1.0 / (1.0 + det_exp_neg(-z));
+    }
     tnext = 0;
     memcpy(hgw, HF_GW, sizeof hgw);
     memcpy(hge, HF_GE, sizeof hge);
@@ -2792,6 +2830,58 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     return imin(a, near_bucket((S128)dd, (S128)rr, 16));
   }
 
+  // (sf_post(): the n values v (2^-AQ_F) with noise of power s2 at each: the entries of tab (nt)
+  // within SP_W of c0, the probability of each one's cell of the RMS (the run of equal entries'
+  // first takes up to its value, its last from it on, those between none: scale_pred_ms()'s), into
+  // ci and pv, the likelier first (the lower where equal): their number, 0 where there's no noise;
+  // in doubles, IEEE's arithmetic, in the samples' order)
+  static int sf_post(const S64* v, const double* s2, int n, const U32* tab, int nt, int c0, int* ci, double* pv) {
+    double sx = 0, sn = 0, sxn = 0, snn = 0;
+    for (int i = 0; i < n; i++) {
+      const double a = (double)v[i] * (double)v[i];
+      sx += a, sn += s2[i], sxn += a * s2[i], snn += s2[i] * s2[i];
+    }
+    const double vr = (4 * sxn + 2 * snn) / ((double)n * n);
+    if (!(vr > 0)) return 0;
+    const double m = (sx + sn) / n, sd = sqrt(vr), U = 65536.0;
+    int k = 0;
+    for (int i = imax(c0 - SP_W, 0); i <= imin(c0 + SP_W, nt - 1); i++) {
+      const bool rl = i > 0 && tab[i - 1] == tab[i], rh = i + 1 < nt && tab[i + 1] == tab[i];
+      if (rl && rh) continue;
+      const double lo = rl ? (double)tab[i] * U : i ? ((double)tab[i - 1] + tab[i]) * (U / 2) : 0.0;
+      const bool top = i + 1 >= nt;
+      const double hi = rh ? (double)tab[i] * U : top ? 0.0 : ((double)tab[i] + tab[i + 1]) * (U / 2);
+      const double za = (lo * lo - m) / sd, zb = top ? 1e30 : (hi * hi - m) / sd;
+      const double qb = top ? 0.0 : zb >= 0 ? det_q(zb) : 0.0;
+      double pp = za >= 0 ? det_q(za) - qb : zb <= 0 ? det_q(-zb) - det_q(-za) : 1.0 - det_q(-za) - qb;
+      if (!(pp > 0)) pp = 0;
+      int at = k++;
+      while (at > 0 && pv[at - 1] < pp) ci[at] = ci[at - 1], pv[at] = pv[at - 1], at--;
+      ci[at] = i, pv[at] = pp;
+    }
+    return k;
+  }
+  // (the scale factor v by sf_post()'s k entries ci, pv, of class g (the top subband, 28-30, the
+  // rest); past the first SP_R, f_scl's difference from the likeliest)
+  int sf_post_code(int g, const int* ci, const double* pv, int k, S64 v, tcx& X_, u32 kd, int max) {
+    double rem = 1.0;
+    for (int r = 0; r < k && r < SP_R; r++) {
+      double pc = rem > 1e-12 ? pv[r] / rem : 0.0;
+      pc = pc < 1e-4 ? 1e-4 : pc > 1 - 1e-4 ? 1 - 1e-4 : pc;
+      int bk = 0;
+      while (bk < SP_NB - 1 && pc >= sp_t[bk]) bk++;
+      U16* const nn = sp_n[g][r < 2 ? r : 2][bk];
+      const double ph = (nn[1] + SP_A * pc) / (nn[0] + nn[1] + SP_A);
+      U32 q = (U32)((1.0 - ph) * CO_ONE);
+      q = q < 16 ? 16 : q > CO_ONE - 16 ? CO_ONE - 16 : q;
+      const int hit = c->code_bit(q, ENC && v == ci[r]);
+      if (++nn[hit] + nn[1 - hit] > SP_LIM) nn[0] >>= 1, nn[1] >>= 1;
+      if (hit) return ci[r];
+      rem -= pv[r];
+    }
+    return (int)checked(ci[0] + f_scl.codes(X_, ENC ? v - ci[0] : 0, kd), 0, max - 1);
+  }
+
   // Scale factor j (0 the first, 1 the second, after a transient) of channel ch's subband b, v in
   // 0..max-1: against the one the audio makes, where the channel is bound, else the last. Three
   // rules make it from the audio's values, the one right clearly more often taken: the RMS rule; the
@@ -2804,6 +2894,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     M_scl_v D;
     tcx X_;
     int p = -1, pc = -1, ps = -1, near = SB_N - 1, conf = 0, tried = 0, nlev = -1;
+    const int sg = b == NSUB - 1 ? 0 : hfb ? 1 : 2;  // (the posterior's: sf_post(), its class)
+    int spc[2 * SP_W + 1], spk = 0;
+    double spp[2 * SP_W + 1];
     if (bound[ch]) {
       S64 v_[NSMP];
       int n = tm ? (j ? scale_values(s, ch, b, tm, s.nssc, v_) : scale_values(s, ch, b, 0, tm, v_))
@@ -2843,6 +2936,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
               if (de > 0) nz = (S128)(ldexp(nu / de * 3, -42) + q4 / de * ldexp(9.0, -84));
             }
             nlev = scale_near_lev(ch, b, v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p, nz);
+            if (n == nsmp) {
+              double s2[NSMP];
+              for (int i = 0; i < n; i++) s2[i] = (double)hf_stair2(X[ch][0][i]) * SP_K;
+              spk = sf_post(v_, s2, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p, spc, spp);
+              if (spk && (spp[0] >= SP_PT || !sp_on())) spk = 0;
+            }
           }
         } else {
           p = scale_pred(v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
@@ -2866,6 +2965,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           }
           if (!ss_rule() && !x96a && p >= 0)
             nlev = scale_near_lev(ch, b, v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p, 0, lv);
+          if ((!hfb || (b >= NSUB - 4 && n == nsmp)) && !ss_rule() && !x96a && bind.up == 1 && p >= 0) {
+            const int j0 = tm && j ? tm * 8 : 0;
+            if (j0 + n <= nsmp) {
+              double s2[NSMP];
+              for (int i = 0; i < n; i++) s2[i] = (double)plev[ch][b][j0 + i] * (double)plev[ch][b][j0 + i] * (hfb ? SP_K2 : SP_K3);
+              spk = sf_post(v_, s2, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p, spc, spp);
+              if (spk && (spp[0] >= SP_PT || !sp_on())) spk = 0;
+            }
+          }
         }
         pc = scale_ceil(v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]));
         if (search_on()) ps = scale_search(r, s, ch, b, hfb, v_, n, p, &conf), tried = 1;
@@ -2948,7 +3056,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (cpl_leak(r, ch, b, 24, 8) >= 0) D.nb = cpl_leak(r, ch, b, 24, 8);
     f_scl.make(D, X_);
     f_scl.select(X_);
-    if (p >= 0) {
+    const int spu = spk && p >= 0 && p == pr;
+    if (spu) {
+      v = sf_post_code(sg, spc, spp, spk, v, X_, (u32)D.kd, max);
+      p = spc[0];
+      hm[ch] = v == p ? 1 : 2;
+      n_sfhit += v == p;
+    } else if (p >= 0) {
       if (f_scl.bit(CN_HIT, ENC && v == p)) v = p;
       else v = checked(p + f_scl.codes(X_, ENC ? v - p : 0, (u32)D.kd), 0, max - 1);
       hm[ch] = v == p ? 1 : 2;
