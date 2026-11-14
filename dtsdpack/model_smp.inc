@@ -1822,8 +1822,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // hf_less_along() (0.02%). Subbands 28-30's the same, the noise 2^-44 of the power along their
     // FFT path, 0.03%, but the short streams 0.06% bigger; subband 28's by the bottom subband's
     // binade nothing)
+    // (since format 88 subbands 28-30's the same, their noise 2^-44 of the power along their FFT
+    // path, plev's, where the switch below, which the top subband's comparisons keep, takes the
+    // values moved, the scores of the values taken alone: 0.04%; taken always, 0.03% with the short
+    // streams 0.06% bigger; by their own comparisons 0.01% less, and slower)
     S64 xr[NSMP];
-    bool resc = false, tg = false;
+    bool resc = false, tg = false, tgo = false;  // (tgo: the values moved by the noise's mean)
     double tgv = 1;  // (D's variance's share left)
     if (bound[ch] && !ss_rule() && !x96a && nsmp == 16) {
       const U32* tab = r.shuff[ch] == 6 ? SF7 : SF6;
@@ -1846,22 +1850,29 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         const S64 hi = si != r1 ? vv : r1 + 1 < nt ? ((S64)V + tab[r1 + 1]) << (AQ_F - 1) : -1;
         const S64 rr = isqrt128((U128)(ms + nz));
         double sp[16], sv = 0;  // (in doubles, IEEE's arithmetic, in the samples' order)
-        if (b == NSUB - 1 && cpl_on(r, ch, b) && bind.up == 1 && ms > 0 && (hi > lo || (hi < 0 && lo > 0)))
+        const bool t31 = b == NSUB - 1 && cpl_on(r, ch, b);
+        if ((t31 || (b >= 28 && b < NSUB - 1)) && bind.up == 1 && ms > 0 && (hi > lo || (hi < 0 && lo > 0)))
           for (int j = 0; j < nsmp; j++) {
-            sp[j] = ldexp((double)hf_stair2(X[ch][0][j]), -40) * 1.5;
+            if (t31) {
+              sp[j] = ldexp((double)hf_stair2(X[ch][0][j]), -40) * 1.5;
+            } else {
+              const double l = ldexp((double)plev[ch][b][j], -22);
+              sp[j] = l * l;
+            }
             sv += (double)x[j] * (double)x[j] * sp[j];
           }
         if (sv > 0) {
           const double vd = sv * (4.0 / 256), sd = sqrt(vd), m = (double)(ms + nz);
           const double a = ((double)lo * (double)lo - m) / sd, e = hi < 0 ? 1e30 : ((double)hi * (double)hi - m) / sd;
           const double md = det_trunc(a, e, &tgv) * sd;
-          resc = tg = true;
+          resc = tgo = true, tg = t31;
           for (int j = 0; j < nsmp && resc; j++) {
             const double y = (double)x[j] * (1.0 + (2.0 / 16) * sp[j] * md / vd);
             if (y > 1e12 || y < -1e12) resc = false;  // (within 2^40: hf_dist()'s)
             else xr[j] = (S64)llround(y);
           }
-          if (!resc) tg = false, tgv = 1;
+          if (!resc) tg = tgo = false;
+          if (!tg) tgv = 1;
         } else if (ms > 0 && hi > lo && (rr < lo || rr >= hi)) {
           const S64 t = rr < lo ? lo + (hi - lo) / 16 : hi - (hi - lo) / 16;
           const double t2 = (double)t * (double)t - (double)nz;
@@ -1898,7 +1909,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       return gwo && gs ? hf_group_score_w(hgw, hge, g, xx, sc, gw, gs) : hf_group_score(hgw, hge, g, xx, nsmp, sc);
     };
     for (int g = 0; g < 32; g++) {
-      const S128 k0 = gscore(g, x), k1 = resc ? gscore(g, xr) : k0;
+      const bool one = tgo && !tg;  // (subbands 28-30: the scores of the values taken alone)
+      const S128 k0 = one && ur ? 0 : gscore(g, x), k1 = resc && !(one && !ur) ? gscore(g, xr) : k0;
       gm[g] = ur ? k1 : k0, go[g] = ur ? k0 : k1;
       f0 = gm[g] < gm[f0] ? g : f0;
     }
@@ -1962,7 +1974,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       else hf_bound_grp(gm, &HF_GC[0][0], 32, nsmp, false, og);
     }
     const int g = code_cand(32, 5, (int)v >> 5, VK_HFG, ch, b, gn, 0, mu << 19, mn ? nullptr : og);
-    if (resc && !mn) {  // (which ranked the encoder's group higher, in the boundary orders)
+    if (resc && !mn && !(tgo && !tg)) {  // (which ranked the encoder's group higher, in the boundary orders)
       int rc = 0, ro = 0;
       S128 oo[32];
       bgrp(go, oo, nullptr);
@@ -2016,6 +2028,33 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           const double d = lam * gx[j] * rp[j];
           if (d > 1e12 || d < -1e12) pushed = false;  // (the values within 2^40: hf_dist()'s)
           else xs[j] = x[j] - (S64)llround(d);
+        }
+        // (since format 88 the top subband's, then given that the group won against the one the
+        // scores of the values pushed rank first of the rest too, the same way: 0.05%; against
+        // two more, or the first again, less)
+        if (gwo && pushed) {
+          S128 s2[32];
+          int f2 = -1;
+          for (int q = 0; q < 32; q++) {
+            s2[q] = gscore(q, xs);
+            if (q != g && q != fk && (f2 < 0 || s2[q] < s2[f2])) f2 = q;
+          }
+          double h2 = 0, hx[16];
+          for (int j = 0; j < 16; j++) hx[j] = 2.0 * (double)(hgw[f2][j] - hgw[g][j]) * (double)sc * 65536.0, h2 += hx[j] * hx[j] * rp[j];
+          if (h2 > 0) {
+            double vq;
+            const double tau = ldexp((double)sc, 10), sh = sqrt(h2);
+            const double mu = det_trunc((double)(s2[g] - s2[f2]) / h2 / 8192.0 * sh / tau, 1e30, &vq) * tau / sh;
+            S64 xt[16];
+            bool ok = true;
+            for (int j = 0; j < 16 && ok; j++) {
+              const double dd = mu * hx[j] * rp[j];
+              if (dd > 1e12 || dd < -1e12) ok = false;
+              else xt[j] = xs[j] - (S64)llround(dd);
+            }
+            if (ok)
+              for (int j = 0; j < 16; j++) xs[j] = xt[j];
+          }
         }
       }
     }

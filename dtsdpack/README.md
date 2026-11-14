@@ -9,7 +9,7 @@ to code is where the encoder chose otherwise. Decompression, with the same WAV, 
 stream byte for byte.
 
 The core of `s.2.dts` (4 minutes 25 seconds of 5.1 at 1509 kbps; 50008260 bytes) compresses to
-86957 bytes (0.17%); without its audio, dtsdpack's model gets 71.85% and `xz -9e` 88.21%.
+86877 bytes (0.17%); without its audio, dtsdpack's model gets 71.85% and `xz -9e` 88.21%.
 
 The core substream's extensions are coded too: XCH (6.1's back centre) and XXCH (7.1's other
 channels) as more channels, X96 (DTS 96/24's 24-48 kHz band and the core's residuals) as subbands
@@ -52,20 +52,20 @@ WAV is the one `c` had: its format, its size and the CRC of its first 64 KB are 
 
 ```
 $ dtsdpack c -s s2.dtsc s2_full.wav s2.dtsd
-s2.dtsc: 50008260 -> 86957 bytes (0.17%, -9); 24855 frames, 24855 packed; 0 bytes between frames; 5 channels and the LFE against the WAV (offset 512, correlation 1.0000)
+s2.dtsc: 50008260 -> 86877 bytes (0.17%, -9); 24855 frames, 24855 packed; 0 bytes between frames; 5 channels and the LFE against the WAV (offset 512, correlation 1.0000)
   bytes                             input     packed
   bytes kept as bytes                   0          3    0.00%
   headers, container              1059444        150    0.01%
-  side information                2521040      38596    1.53%
+  side information                2521040      38518    1.53%
   bit allocations                 2174812       6474    0.30%
   scale factors                   3512740      20768    0.59%
   subband samples                40631706      22802    0.06%
   bits after the subframes         108518          1    0.00%
-  total                          50008260      88795    0.18%
+  total                          50008260      88717    0.18%
   the audio's indexes: 99.92% of the samples; the audio's scale factors: 99.07%
   the bit allocations' staircases: 95.53% of the ABITS, right in 99.50% of them
   the encoders' allocation table: 94.75% of the ABITS, right in 99.51% of them
-  the encoder's searches on the audio: 99.76% of the ADPCM predictors; HF VQ: 92.35% of the groups, 93.02% of the vectors in them
+  the encoder's searches on the audio: 99.76% of the ADPCM predictors; HF VQ: 92.36% of the groups, 93.04% of the vectors in them
   the binding: core channel 0 = WAV 2; core channel 1 = WAV 0; core channel 2 = WAV 1; core channel 3 = WAV 4; core channel 4 = WAV 5; LFE = WAV 3
 ```
 
@@ -88,12 +88,12 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 86957 (0.17%) | 71.85% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 86877 (0.17%) | 71.85% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3812 (0.30%) | | |
-| 3 MB from its middle (5.7 s) | 1068372 | 5610 (0.53%) | | |
+| 3 MB from its middle (5.7 s) | 1068372 | 5607 (0.52%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 3011 (0.13%) | | |
 
-Compressing the whole of `s.2.dts`'s core takes 36 seconds (1.4 MB of core a second) and 42 MB of
+Compressing the whole of `s.2.dts`'s core takes 38 seconds (1.3 MB of core a second) and 42 MB of
 memory, decompressing it 37 seconds and 34 MB, on one thread of a 2.1 GHz Xeon (a virtual machine;
 each figure here the median of runs one at a time; from one set of runs to the next, 10% either
 way, and the host's own speed wanders by a third; on an earlier 2.3 GHz host, before format 84,
@@ -539,7 +539,14 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   orders' spreads lose that much of their part along x (0.02%). In all, with scl and vqr tuned
   again on format 87's dumps, `s.2.dts`'s core 1.28% smaller (88088 bytes to 86957), 3 MB of its
   middle 0.8%, the short streams 50933 bytes to 50892, the others within 2 bytes; the regression
-  set 161130 to 159952, the calibration set 170186 to 169010.
+  set 161130 to 159952, the calibration set 170186 to 169010. Since format 88 subbands 28-30 go
+  by that mean too (their noise 2^-44 of the power along their FFT path), where the switch, which
+  the top subband's comparisons keep, takes the values moved, with the scores of the values taken
+  alone (0.04%; by their own comparisons 0.01% less, and slower), and a group's push in the top
+  subband goes on, given that the group won against the one the scores of the pushed values rank
+  first of the rest too (0.05%; against two more, or the first again, less; the variance left
+  along the push's gradient too, 0.01% bigger): `s.2.dts`'s core 86957 bytes to 86877, the others
+  within 3 bytes, 3.6% slower to compress.
   A decoded WAV isn't the encoder's input, and its RMS makes the encoder's scale factors less often
   (58% of `open bitrate.dts`'s, 0.7% of its HF VQ subbands'); but its values are the decoder's,
   the indexes dequantized at the step and scale factor, or a VQ vector scaled. So the scale factor
@@ -1181,7 +1188,7 @@ files.
 
 ### The format
 
-"dtsdpack", the format's version (87), the level, the WAV's binding (the offset; each core channel's
+"dtsdpack", the format's version (88), the level, the WAV's binding (the offset; each core channel's
 WAV channel, the second of its mix and their gains, Q23; the LFE's channel; the WAV's samples to
 the core's, 1, 2 or 4 (its lower band, then 2), and the lower band's resolution; the WAV's format,
 size and the CRC-32 of its first 64 KB), then the
