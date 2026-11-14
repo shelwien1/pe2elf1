@@ -15,8 +15,7 @@ static int lpc_accept(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s6
     if (st.ffh > FF_SWITCH && st.ffh > st.lfh) st.sim_on = 0;
     cs.prank = r == 0 ? 0 : r < 4 ? 1 : 2;
     cs.plorder = s.order - 1;
-    cs.pshift = s.shift;
-    int k0 = P.k0_hint(id, s.order, bs, cx.sp.bps > 16 ? 30 : 14, st.ln2sq);
+    int k0 = P.k0_hint(id, s.order, bs, rice_limit(cx), st.ln2sq);
     lpc_learn(cx, st, id, s.order, bs, ebps, s.prec, x);
     return k0;
 }
@@ -47,9 +46,8 @@ static int lpc_stage0(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s6
     if (r < P.ncand) mru_hit(P, r);
     st.lfh++;
     cs.plorder = s.order - 1;
-    cs.pshift = s.shift;
     cs.prank = 0;
-    k0 = P.k0_hint(id, s.order, bs, cx.sp.bps > 16 ? 30 : 14, st.ln2sq);
+    k0 = P.k0_hint(id, s.order, bs, rice_limit(cx), st.ln2sq);
     lpc_learn(cx, st, id, s.order, bs, ebps, s.prec, x);
     return 1;
 }
@@ -145,7 +143,6 @@ static bool lpc_code_explicit(Ctx& cx, SubInfo& s, ChState& cs) {
         if (v < -lim || v >= lim) return false;
         s.coef[i] = (s32)v;
     }
-    cs.pshift = s.shift;
     return true;
 }
 

@@ -108,11 +108,7 @@ static int vc_b64_detect(const u8* c, u32 l, u32& klen, B64Fmt& fmt, size_t& dn,
     klen++;
     const u8* v = c + klen;
     u32 vn = l - klen;
-    bool hex = true;
-    for (u32 j = 0; j < vn && hex; j++)
-        hex = (v[j] >= '0' && v[j] <= '9') || (v[j] >= 'a' && v[j] <= 'f') || (v[j] >= 'A' && v[j] <= 'F') ||
-              v[j] == '\r' || v[j] == '\n';
-    if (hex || !b64f_parse(v, vn, g_b64dec_v, B64MAX, dn, fmt)) return 0;
+    if (is_hex_text(v, vn) || !b64f_parse(v, vn, g_b64dec_v, B64MAX, dn, fmt)) return 0;
     return b64_worth(g_b64dec_v, dn, fmt, g_ext.prefix && !g_ext.keep_inline, kind);
 }
 
@@ -133,12 +129,7 @@ static bool vc_comment(VcCursor& v, Models& M) {
     klen = (u32)code_uint(ac, M.len_m, klen);
     if (klen > l) return false;
     bool good = vc_text(v, klen);
-    fmt.pad = ac.bit(M.mflag[4], fmt.pad);
-    fmt.line = (u32)code_uint(ac, M.len_m, fmt.line);
-    if (fmt.line) {
-        fmt.crlf = ac.bit(M.mflag[6], fmt.crlf);
-        fmt.final_eol = ac.bit(M.mflag[7], fmt.final_eol);
-    }
+    code_b64fmt(ac, fmt, M.mflag[4], M.len_m, M.mflag[5], M.mflag[6]);
     kind = (int)ac.tree(M.b64kind, 2, (u32)kind);
     dn = (size_t)code_uint(ac, M.len_m, dn);
     if (!good || kind == 0 || dn > B64MAX || b64f_len(dn, fmt) != l - klen) return false;

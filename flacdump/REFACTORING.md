@@ -8,7 +8,7 @@ implementation differs.
 
 `flacdump.cpp` (232 lines) holds the prologue (includes, integer types,
 platform macros, `die`, `Min`/`Max`, bit and byte-order helpers), the ordered
-include list and `main`. All other code is in 42 `.inc` files next to it, one
+include list and `main`. All other code is in 43 `.inc` files next to it, one
 translation unit. Except for the two mutually recursive pairs (`find_cuts`,
 `code_region`), every function and type is defined before its first use, so
 the include order below is also the dependency order. No function is longer
@@ -17,11 +17,11 @@ each have their own file (marked *class*).
 
 | file | lines | contents |
 |------|------:|----------|
-| `buf.inc`, `vec.inc` | 29, 23 | *class* `Buf`, *class* `Vec<T>` (the only heap users) |
+| `vec.inc` | 32 | *class* `Vec<T>`, `Buf` = `Vec<u8>` (the only heap users) |
 | `file_crc.inc` | 46 | `read_file`, CRC-8 / CRC-16 |
 | `md5.inc` | 91 | *class* `MD5` |
 | `bit_reader.inc`, `fix_out.inc`, `bit_writer.inc` | 55, 24, 51 | *class* `BitReader`, *class* `FixOut`, *class* `BitWriter` |
-| `flac_defs.inc` | 166 | FLAC structures, work buffers, header code tables, fixed/LPC residuals |
+| `flac_defs.inc` | 162 | FLAC structures, work buffers, header code tables, fixed/LPC residuals |
 | `lpc_res_fast.inc` | 43 | *class* `LpcResInit<O>`: order-specialised LPC residual kernels |
 | `flac_frame.inc` | 303 | frame parser/decoder and encoder |
 | `wav_format.inc` | 40 | WAV header, channel mask, shared sample buffer |
@@ -31,35 +31,41 @@ each have their own file (marked *class*).
 | `byte_cm.inc` | 107 | *class* `ByteCM`: CM byte model and its table pool |
 | `code_bytes.inc` | 64 | byte strings, CM-coded or stored |
 | `embedded.inc` | 80 | embedded files: types, JPEG/PNG lengths |
-| `base64.inc` | 241 | base64 layout, generation, strict parsing, detection |
-| `tag_spans.inc` | 149 | ID3v2 / APEv2 parsing (exact value spans) |
-| `regions.inc` | 231 | cuts in byte regions (`find_cuts`, `code_cut`, `code_region`) |
+| `base64.inc` | 255 | base64 layout, generation, strict parsing, detection |
+| `tag_spans.inc` | 137 | ID3v2 / APEv2 parsing (exact value spans) |
+| `regions.inc` | 225 | cuts in byte regions (`find_cuts`, `code_cut`, `code_region`) |
 | `det_math.inc` | 103 | deterministic `cos`, glibc `cosf` emulation, `log2` |
 | `estimators.inc` | 98 | fixed order guess, rice estimators, expected bits, k0 |
-| `res_stats.inc` | 148 | *class* `ResStats` |
+| `res_stats.inc` | 130 | *class* `ResStats` |
 | `windows.inc` | 91 | apodization windows |
-| `win_cache.inc` | 40 | *class* `WinCache` |
-| `lpc_analysis.inc` | 206 | libFLAC autocorrelation variants, Levinson-Durbin, best order, quantization |
+| `win_cache.inc` | 29 | *class* `WinCache` |
+| `lpc_analysis.inc` | 169 | libFLAC autocorrelation variants, Levinson-Durbin, best order, quantization |
 | `ff_lpc.inc` | 107 | ffmpeg LPC analysis |
-| `lpc_predictor.inc` | 261 | *class* `LpcPredictor` |
-| `meta_model.inc` | 195 | bit models, frame/channel state, learning thresholds, `Ctx`, `reset_run_state` |
-| `model_residual.inc` | 135 | partition order, rice parameters |
-| `lpc_order.inc` | 188 | LPC order prediction and learning |
-| `model_lpc.inc` | 201 | LPC parameters in three prediction stages |
-| `encoder_sim.inc` | 201 | libFLAC subframe/stereo simulation, ffmpeg stereo estimate |
-| `model_frame.inc` | 207 | FRAME segments: header, channel mode, subframes |
+| `lpc_predictor.inc` | 245 | *class* `LpcPredictor` |
+| `meta_model.inc` | 202 | bit models, frame/channel state, learning thresholds, `Ctx`, `reset_run_state` |
+| `model_residual.inc` | 134 | partition order, rice parameters |
+| `lpc_order.inc` | 201 | LPC order prediction and learning |
+| `model_lpc.inc` | 198 | LPC parameters in three prediction stages |
+| `encoder_sim.inc` | 161 | libFLAC subframe/stereo simulation, ffmpeg stereo estimate |
+| `model_frame.inc` | 205 | FRAME segments: header, channel mode, subframes |
 | `container.inc` | 32 | segments, metadata blocks, layout, `.meta` magic |
 | `frame_stats.inc` | 61 | *class* `FrameStats` |
 | `sink.inc` | 21 | *class* `Sink` |
-| `vorbis.inc` | 172 | VORBIS_COMMENT: vendors, validation, encoder hint, structured coding |
+| `vorbis.inc` | 163 | VORBIS_COMMENT: vendors, validation, encoder hint, structured coding |
 | `seektable.inc` | 148 | SEEKTABLE coding |
 | `metadata.inc` | 209 | stream parameters, layout (part A), derived fields (part C) |
-| `decompress.inc` | 104 | `d` mode |
-| `compress.inc` | 296 | `c` mode: options, pass 1 (scan), pass 2 (model), verification |
+| `segments.inc` | 125 | the audio segments (FRAME, raw frame, junk), coded in both directions |
+| `decompress.inc` | 50 | `d` mode |
+| `compress.inc` | 250 | `c` mode: options, pass 1 (scan), pass 2 (model), verification |
 
 Commits: `a71016a` (phase 1, binary-identical), `b41ad4e` (phase 2 with the
 reordering of phase 3 item 4), `eef75e9` (phase 3 items 1-3 and 6), and the
-function splits of phase 3 item 5. Every commit after phase 1 produces the
+function splits of phase 3 item 5, then a cleanup that removed unused fields and
+duplicated code (`Buf` became `Vec<u8>`; one bidirectional segment loop in
+`segments.inc`; shared helpers for the rice parameter limit, the partition order
+range, libFLAC's per-order LPC cost and rice bit estimates, quantization,
+autocorrelation sums, LPC prediction, base64 layout coding, the stereo pairing
+choice; table-driven candidate and window setup). Every commit after phase 1 produces the
 same `.meta`, `.wav` and embedded files on the test corpus as before the
 refactoring, and every file round-trips; `-x` and `-vv` output is unchanged.
 

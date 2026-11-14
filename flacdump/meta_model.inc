@@ -3,9 +3,7 @@
 // relies on the definitions before that point; not a standalone header.
 
 struct ChState {
-    int ptype, pfixed, plorder, pprec, pshift, pmethod, pporder, prank, psim;
-    int pcoef_n;
-    s32 pcoef[32];
+    int ptype, plorder, pprec, pmethod, prank, psim;  // previous subframe's choices (contexts)
 };
 
 struct Models {
@@ -52,7 +50,7 @@ struct Models {
     UModel clen_m;
     BM vendor_t[32];
     BM b64kind[4];
-    BM mflag[16];
+    BM mflag[7];
     BM mtype[8][128];
 };
 
@@ -82,8 +80,8 @@ static void models_init(Models& M) {
     PRIOR(M.lpc_sim, HI);
     PRIOR(M.mflag, HI);
     M.mflag[3].p = LO;  // base64 value in a comment: rare
-    M.mflag[6].p = LO;  // CR LF line breaks
-    M.mflag[7].p = 32768;
+    M.mflag[5].p = LO;  // CR LF line breaks
+    M.mflag[6].p = 32768;
     for (int k = 0; k < 4; k++) {
         M.cand_g[0][k].p = HI;
         M.cand_g[0][k].n = 2;
@@ -118,7 +116,7 @@ enum {
 struct FrameState {
     int first;
     u32 ffh, lfh;
-    int pblocking, pbscode, psrcode, pchcode, pbpscode;
+    int pblocking, psrcode, pchcode, pbpscode;
     u32 psrval, pbs;
     u64 frame_counter, sample_counter;
     int minpo, maxpo;
@@ -129,7 +127,7 @@ struct FrameState {
     u32 exscore[2];
     int ff_method;  // ffmpeg order selection method
     u32 ffscore[4];
-    int sim_on, sim_newv;  // libFLAC simulation enabled / 1.4 estimator variants
+    int sim_on;  // libFLAC simulation enabled
     u32 simstat[2];
     int rice_new, fix_le;  // libFLAC >= 1.4.3 rice estimate / >= 1.4.0 fixed-order tie rule
     int k0mode;            // libFLAC <= 1.3 suggested rice parameter for partition order 0
@@ -137,7 +135,7 @@ struct FrameState {
     int ln2sq;  // libFLAC <= 1.3.1 error scaling
     u32 esvote[2];
     u32 rvote[2], fvote[2];
-    u32 dbg[8];
+    u32 dbg[4];  // -v: LPC stage 0 / stage 1 misses and hits
     ChState ch[MAXCH];
 };
 
@@ -158,10 +156,8 @@ static void fstate_init(FrameState& s, const StreamParams& sp, int vendor) {
     s.ln2sq = vendor > 0 && vendor <= 131;
     for (int c = 0; c < MAXCH; c++) {
         s.ch[c].ptype = 4;
-        s.ch[c].pfixed = 2;
         s.ch[c].plorder = 32;
         s.ch[c].pprec = 15;
-        s.ch[c].pshift = 32;
         s.ch[c].pmethod = 2;
     }
 }
@@ -174,6 +170,17 @@ struct Ctx {
     LpcPredictor* lp;
     u64 total_samples;  // total PCM samples (per channel) in wav
 };
+
+// largest rice parameter of the encoders: 14 (4-bit parameters) up to 16 bits per sample, 30 above
+static inline int rice_limit(const Ctx& cx) { return cx.sp.bps > 16 ? 30 : 14; }
+
+// partition orders libFLAC searches for n residual samples after a predictor of the given order:
+// the learned range, reduced while the first partition would not be longer than the order
+static void porder_range(const FrameState& st, const ResStats& rs, int n, int order, int& lo, int& hi) {
+    hi = Min(st.maxpo, rs.maxpo);
+    while (hi > 0 && ((u32)n >> hi) <= (u32)order) hi--;
+    lo = Min(st.minpo, hi);
+}
 
 struct SimOut {
     u64 bits;

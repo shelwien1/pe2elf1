@@ -2,6 +2,37 @@
 // Part of the flacdump.cpp translation unit (included at a fixed position);
 // relies on the definitions before that point; not a standalone header.
 
+// residual bits of g_res2 (predictor order 'order', n samples) as libFLAC's rice parameter
+// search over the learned partition order range estimates them; bps: expected bits per sample
+// (gives the libFLAC <= 1.3 parameter hint for partition order 0)
+static u64 lf_rice_bits(Ctx& cx, FrameState& st, int n, int order, double bps) {
+    ResStats& rs = cx.rs;
+    int lim = rice_limit(cx);
+    int lo, hi;
+    rs.compute(g_res2, n, order, false);
+    porder_range(st, rs, n, order, lo, hi);
+    rs.k0 = st.k0mode ? k0_from_bps(bps, lim) : -1;
+    u64 b = rs.bits_lf(lo, hi, lim, st.rice_new);
+    rs.k0 = -1;
+    return b;
+}
+
+// libFLAC's estimate of an LPC subframe of order o for x (x32: 32-bit copy or null, eb bits per
+// sample): coefficients and residual, without the subframe header; uses the candidate last
+// evaluated by P. ~0 if libFLAC does not try the order or cannot quantize it.
+static u64 lpc_order_bits(Ctx& cx, FrameState& st, const s64* x, const s32* x32, int n, int o, int eb) {
+    LpcPredictor& P = *cx.lp;
+    double ebs = lpc_expected_bps(P.lerr[o - 1], n - o, st.ln2sq);
+    if (ebs >= (double)eb) return ~0ull;  // "don't even try"
+    int prec = st.maxprec;
+    if (eb <= (st.fix_le ? 17 : 16)) prec = Min(prec, 32 - eb - ilog2_64(o));
+    s32 q[32];
+    int sh;
+    if (!lpc_quantize(P.lpall + (o - 1) * 32, o, prec, q, &sh)) return ~0ull;
+    lpc_residual_fast(x, x32, n, q, o, sh, g_res2);
+    return (u64)o * (prec + eb) + lf_rice_bits(cx, st, n, o, ebs);
+}
+
 // libFLAC exhaustive model search: order with minimal estimated subframe bits.
 // Leaves P.lpall valid for the candidate (evaluated up to maxo).
 static int lpc_exh_guess(Ctx& cx, FrameState& st, int id, int maxo, const s64* x, int bs, int ebps) {
@@ -9,28 +40,10 @@ static int lpc_exh_guess(Ctx& cx, FrameState& st, int id, int maxo, const s64* x
     int mo = P.eval(id, Min(maxo, bs - 1));
     if (!mo) return 0;
     const s32* x32 = to32(x, bs);
-    bool newv = st.rice_new;
-    int lim = cx.sp.bps > 16 ? 30 : 14;
     int best = 0;
     u64 bb = ~0ull;
-    s32 q[32];
     for (int o = 1; o <= mo; o++) {
-        // "don't even try"
-        double ebs = lpc_expected_bps(P.lerr[o - 1], bs - o, st.ln2sq);
-        if (ebs >= (double)ebps) continue;
-        int prec = st.maxprec;
-        if (ebps <= (st.fix_le ? 17 : 16)) prec = Min(prec, 32 - ebps - ilog2_64(o));
-        int sh;
-        if (!lpc_quantize(P.lpall + (o - 1) * 32, o, prec, q, &sh)) continue;
-        lpc_residual_fast(x, x32, bs, q, o, sh, g_res2);
-        ResStats& rs = cx.rs;
-        rs.compute(g_res2, bs, o, false);
-        int hi = Min(st.maxpo, rs.maxpo);
-        while (hi > 0 && ((u32)bs >> hi) <= (u32)o) hi--;
-        int lo = Min(st.minpo, hi);
-        rs.k0 = st.k0mode ? k0_from_bps(ebs, lim) : -1;
-        u64 bits = (u64)o * (prec + ebps) + rs.bits_lf(lo, hi, lim, newv);
-        rs.k0 = -1;
+        u64 bits = lpc_order_bits(cx, st, x, x32, bs, o, ebps);
         if (bits < bb) {
             bb = bits;
             best = o;
@@ -54,7 +67,7 @@ static int ff_order_guess(Ctx& cx, FrameState& st, int id, int method, int maxo,
     if (!mo) return 0;
     const int min_order = 1;
     if (method == 0) return ff_est_order(P.lpd, min_order, mo);
-    int lim = cx.sp.bps > 16 ? 30 : 14;
+    int lim = rice_limit(cx);
     u64 bits[33];
     for (int i = 0; i <= 32; i++) bits[i] = ~0ull;
     auto eval_order = [&](int o) -> u64 {  // o is 1-based

@@ -141,13 +141,7 @@ static bool code_cut(AC& ac, u8* data, Cut& c) {
             B64Fmt f2;
             if (!b64f_parse(t, tl, g_b64dec_r, B64MAX, dn, f2) || dn != c.dn) die("internal: base64 cut");
         }
-        c.fmt.pad = ac.bit(g_extm.pad, c.fmt.pad);
-        c.fmt.line = (u32)code_uint(ac, g_extm.line, c.fmt.line);
-        if (c.fmt.line) {
-            c.fmt.crlf = ac.bit(g_extm.crlf, c.fmt.crlf);
-            c.fmt.final_eol = ac.bit(g_extm.fin, c.fmt.final_eol);
-        } else
-            c.fmt.crlf = c.fmt.final_eol = 0;
+        code_b64fmt(ac, c.fmt, g_extm.pad, g_extm.line, g_extm.crlf, g_extm.fin);
         c.kind = (int)ac.tree(g_extm.kind, 2, (u32)c.kind);
         c.wide = (int)ac.tree(g_extm.wide, 2, (u32)c.wide);
         dn = (size_t)code_uint(ac, g_extm.dlen, dn);

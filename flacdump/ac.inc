@@ -69,7 +69,7 @@ struct AC {
             x1 = xmid + 1;
         while (((x1 ^ x2) & 0xFF000000) == 0) {
             if (!dec)
-                out->put((u8)(x2 >> 24));
+                out->push((u8)(x2 >> 24));
             else
                 x = (x << 8) | byte();
             x1 <<= 8;
@@ -78,7 +78,7 @@ struct AC {
         return bit;
     }
     void flush() {
-        if (!dec) out->put((u8)(x1 >> 24));
+        if (!dec) out->push((u8)(x1 >> 24));
     }
     inline int bit(BM& m, int b) {
         b = code(b, m.p);

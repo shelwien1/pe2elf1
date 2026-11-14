@@ -19,6 +19,16 @@ static u8 g_b64dec_v[B64MAX];  // decoded VORBIS_COMMENT value being coded
 static u8 g_b64dec_r[B64MAX];  // decoded value of a cut in a raw region being coded
 static u8 g_b64narrow[B64TEXTMAX];  // UTF-16 text narrowed to bytes
 
+// layout of a base64 text: padding, line length; line break type and final line break if wrapped
+static void code_b64fmt(AC& ac, B64Fmt& f, BM& pad, UModel& line, BM& crlf, BM& fin) {
+    f.pad = ac.bit(pad, f.pad);
+    f.line = (u32)code_uint(ac, line, f.line);
+    if (f.line) {
+        f.crlf = ac.bit(crlf, f.crlf);
+        f.final_eol = ac.bit(fin, f.final_eol);
+    } else
+        f.crlf = f.final_eol = 0;
+}
 static size_t b64f_len(size_t n, const B64Fmt& f) {
     size_t t = b64_len(n, f.pad);
     if (!f.line || !t) return t;
@@ -170,6 +180,14 @@ static bool b64_worth(const u8* dec, size_t dn, const B64Fmt& f, bool extract, i
     return cm_cost(dec, dn) + 24 < 6.0 * (double)b64_len(dn, f.pad);
 }
 
+// hex digits (and line breaks) only: such values stay text
+static bool is_hex_text(const u8* v, size_t n) {
+    for (size_t k = 0; k < n; k++)
+        if (!((v[k] >= '0' && v[k] <= '9') || (v[k] >= 'a' && v[k] <= 'f') || (v[k] >= 'A' && v[k] <= 'F') ||
+              v[k] == '\r' || v[k] == '\n'))
+            return false;
+    return true;
+}
 static inline bool is_b64c(u8 c) {
     return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '+' || c == '/';
 }
@@ -188,11 +206,7 @@ static bool b64_try(const u8* d, size_t s, size_t e, bool extract, Cut& c) {
             st = k;
         }
         if (e - st < 64) continue;
-        bool hex = true;
-        for (size_t k = st; k < e && hex; k++)
-            hex = (d[k] >= '0' && d[k] <= '9') || (d[k] >= 'a' && d[k] <= 'f') || (d[k] >= 'A' && d[k] <= 'F') ||
-                  d[k] == '\r' || d[k] == '\n';
-        if (hex) continue;
+        if (is_hex_text(d + st, e - st)) continue;
         for (int t = 0; t < 3; t++) {
             size_t en = e;
             for (int u = 0; u < t && en > st && (d[en - 1] == '\r' || d[en - 1] == '\n'); u++) en--;

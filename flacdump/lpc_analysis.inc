@@ -3,38 +3,28 @@
 // relies on the definitions before that point; not a standalone header.
 
 // autocorrelation variants
-enum { AC_DBL = 0, AC_FASC, AC_FNEW8, AC_FNEW12, AC_FNEW16, AC_X87, AC_FFMA, AC_DDESC, NAC };
+enum { AC_DBL = 0, AC_FASC, AC_FNEW8, AC_FNEW12, AC_FNEW16, AC_X87, AC_FFMA, AC_DDESC };
 
+// sums of products in type T, samples in ascending or descending order
+template <class T, bool DESC> static void autoc_plain(const float* d, int n, int lags, double* out) {
+    T ac[33];
+    for (int c = 0; c < lags; c++) ac[c] = 0;
+    for (int j = 0; j < n; j++) {
+        int i = DESC ? n - 1 - j : j;
+        T di = d[i];
+        int m = Min(lags, n - i);
+        for (int c = 0; c < m; c++) ac[c] += di * (T)d[i + c];
+    }
+    for (int c = 0; c < lags; c++) out[c] = ac[c];
+}
 static void autoc_compute(const float* d, int n, int lags, int mode, double* out) {
-    if (mode == AC_DDESC) {
-        // libFLAC 1.4 SSE2 / NEON intrinsics: samples processed from the end
-        double ac[33];
-        for (int c = 0; c < lags; c++) ac[c] = 0.0;
-        for (int i = n - 1; i >= 0; i--) {
-            double di = d[i];
-            int m = Min(lags, n - i);
-            for (int c = 0; c < m; c++) ac[c] += di * (double)d[i + c];
-        }
-        for (int c = 0; c < lags; c++) out[c] = ac[c];
-    } else if (mode == AC_DBL) {
-        double ac[33];
-        for (int c = 0; c < lags; c++) ac[c] = 0.0;
-        for (int i = 0; i < n; i++) {
-            double di = d[i];
-            int m = Min(lags, n - i);
-            for (int c = 0; c < m; c++) ac[c] += di * (double)d[i + c];
-        }
-        for (int c = 0; c < lags; c++) out[c] = ac[c];
-    } else if (mode == AC_FASC) {
-        float ac[33];
-        for (int c = 0; c < lags; c++) ac[c] = 0.0f;
-        for (int i = 0; i < n; i++) {
-            float di = d[i];
-            int m = Min(lags, n - i);
-            for (int c = 0; c < m; c++) ac[c] += di * d[i + c];
-        }
-        for (int c = 0; c < lags; c++) out[c] = ac[c];
-    } else if (mode == AC_FFMA) {
+    if (mode == AC_DDESC)  // libFLAC 1.4 SSE2 / NEON intrinsics: samples processed from the end
+        autoc_plain<double, true>(d, n, lags, out);
+    else if (mode == AC_DBL)
+        autoc_plain<double, false>(d, n, lags, out);
+    else if (mode == AC_FASC)
+        autoc_plain<float, false>(d, n, lags, out);
+    else if (mode == AC_FFMA) {
         // generic C code compiled with fused multiply-add (e.g. arm64)
         float ac[33];
         for (int c = 0; c < lags; c++) ac[c] = 0.0f;
@@ -138,63 +128,14 @@ static int lpc_best_order(const double* lpc_error, int max_order, int total_samp
     return best + 1;
 }
 
-// libFLAC FLAC__lpc_quantize_coefficients
-static bool lpc_quantize(const float* lp, int order, int precision, s32* q, int* shift) {
-    precision--;
-    s32 qmax = 1 << precision, qmin = -qmax;
-    qmax--;
-    double cmax = 0.0;
-    for (int i = 0; i < order; i++) {
-        double d = fabs((double)lp[i]);
-        if (d > cmax) cmax = d;
-    }
-    if (cmax <= 0.0) return false;
-    int log2cmax;
-    (void)frexp(cmax, &log2cmax);
-    log2cmax--;
-    int sh = precision - log2cmax - 1;
-    if (sh > 15)
-        sh = 15;
-    else if (sh < -16)
-        return false;
-    double error = 0.0;
-    if (sh >= 0) {
-        float mul = (float)(1 << sh);
-        for (int i = 0; i < order; i++) {
-            error += (double)(lp[i] * mul);
-            s32 v = (s32)lround(error);
-            if (v > qmax)
-                v = qmax;
-            else if (v < qmin)
-                v = qmin;
-            error -= v;
-            q[i] = v;
-        }
-    } else {
-        float div = (float)(1 << -sh);
-        for (int i = 0; i < order; i++) {
-            error += (double)(lp[i] / div);
-            s32 v = (s32)lround(error);
-            if (v > qmax)
-                v = qmax;
-            else if (v < qmin)
-                v = qmin;
-            error -= v;
-            q[i] = v;
-        }
-        sh = 0;
-    }
-    *shift = sh;
-    return true;
-}
-
-// quantize at a given shift (used as a guess when no candidate matches)
+// quantize at shift sh with libFLAC's error feedback (sh < 0: divided by 2^-sh; also used
+// as the guess at a given shift when no candidate matches)
 static void lpc_quantize_at(const float* lp, int order, int precision, int sh, s32* q) {
     s32 qmax = (1 << (precision - 1)) - 1, qmin = -(1 << (precision - 1));
+    float scale = (float)(1 << (sh >= 0 ? sh : -sh));
     double error = 0.0;
-    float mul = (float)(1 << sh);
     for (int i = 0; i < order; i++) {
-        error += (double)(lp[i] * mul);
+        error += (double)(sh >= 0 ? lp[i] * scale : lp[i] / scale);
         s32 v = (s32)lround(error);
         if (v > qmax)
             v = qmax;
@@ -204,3 +145,25 @@ static void lpc_quantize_at(const float* lp, int order, int precision, int sh, s
         q[i] = v;
     }
 }
+
+// libFLAC FLAC__lpc_quantize_coefficients
+static bool lpc_quantize(const float* lp, int order, int precision, s32* q, int* shift) {
+    double cmax = 0.0;
+    for (int i = 0; i < order; i++) {
+        double d = fabs((double)lp[i]);
+        if (d > cmax) cmax = d;
+    }
+    if (cmax <= 0.0) return false;
+    int log2cmax;
+    (void)frexp(cmax, &log2cmax);
+    log2cmax--;
+    int sh = precision - 1 - log2cmax - 1;
+    if (sh > 15)
+        sh = 15;
+    else if (sh < -16)
+        return false;
+    lpc_quantize_at(lp, order, precision, sh, q);
+    *shift = sh < 0 ? 0 : sh;
+    return true;
+}
+

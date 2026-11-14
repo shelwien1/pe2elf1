@@ -50,6 +50,31 @@ struct LpcPredictor {
         hits[ncand] = 0;
         ncand++;
     }
+    // partial_tukey(2) windows pt, pt + 1 / punchout_tukey(3) windows po .. po + 2
+    void add_pt2(int pt, int acm, int fm = 0) {
+        for (int k = 0; k < 2; k++) add(0, pt + k, 0, 0, 0, acm, fm);
+    }
+    void add_po3(int po, int acm, int fm = 0) {
+        for (int k = 0; k < 3; k++) add(0, po + k, 0, 0, 0, acm, fm);
+    }
+    void add_parts(int pt, int po, int acm, int fm = 0) {
+        add_pt2(pt, acm, fm);
+        add_po3(po, acm, fm);
+    }
+    // libFLAC 1.4 subdivide_tukey(2): the whole block and both halves (window w)
+    void add_sub2(int w, int acm, int fm = 0) {
+        add(0, w, 0, 0, 0, acm, fm);
+        add(1, w, 2, 0, 0, acm, fm);
+        add(1, w, 2, 2, 0, acm, fm);
+    }
+    // subdivide_tukey(3): also the thirds and the windows between them; quirk: also the punchout
+    // parts (odd c) with the highest lag taken from the partial window (see eval)
+    void add_sub3(int w, int acm, int fm, bool quirk) {
+        add_sub2(w, acm, fm);
+        for (int c = 0; c < 6; c++) add(c & 1 ? 2 : 1, w, 3, c, 0, acm, fm);
+        if (quirk)
+            for (int c = 1; c < 6; c += 2) add(2, w, 3, c, 1, acm, fm);
+    }
     void init() {
         wc.init();
         memset(ffwbuf, 0, sizeof(ffwbuf));
@@ -68,89 +93,48 @@ struct LpcPredictor {
         add(0, W_T50, 0, 0, 0, AC_FASC);        // libFLAC 1.3.4 generic
         add(0, W_T50_12, 0, 0, 0, AC_X87);      // libFLAC 1.2 ia32 -7/-8
         add(0, W_T50_12, 0, 0, 0, AC_FNEW16);   // libFLAC <= 1.3.3 -7/-8
-        add(0, W_PT2C_0, 0, 0, 0, AC_FNEW16);
-        add(0, W_PT2C_1, 0, 0, 0, AC_FNEW16);
-        add(0, W_PO3C_0, 0, 0, 0, AC_FNEW16);
-        add(0, W_PO3C_1, 0, 0, 0, AC_FNEW16);
-        add(0, W_PO3C_2, 0, 0, 0, AC_FNEW16);
-        add(0, W_PT2C_0, 0, 0, 0, AC_FASC);
-        add(0, W_PT2C_1, 0, 0, 0, AC_FASC);
-        add(0, W_PO3C_0, 0, 0, 0, AC_FASC);
-        add(0, W_PO3C_1, 0, 0, 0, AC_FASC);
-        add(0, W_PO3C_2, 0, 0, 0, AC_FASC);
-        add(0, W_PT2C_0, 0, 0, 0, AC_FNEW12);  // <= 1.3.3 -6
-        add(0, W_PT2C_1, 0, 0, 0, AC_FNEW12);
-        // libFLAC 1.4 subdivide_tukey(2)
-        add(0, W_T25, 0, 0, 0, AC_DBL);
-        add(1, W_T25, 2, 0, 0, AC_DBL);
-        add(1, W_T25, 2, 2, 0, AC_DBL);
-        // libFLAC 1.4 subdivide_tukey(3)
-        add(0, W_T16, 0, 0, 0, AC_DBL);
-        add(1, W_T16, 2, 0, 0, AC_DBL);
-        add(1, W_T16, 2, 2, 0, AC_DBL);
-        for (int c = 0; c < 6; c++) add(c & 1 ? 2 : 1, W_T16, 3, c, 0, AC_DBL);
-        for (int c = 1; c < 6; c += 2) add(2, W_T16, 3, c, 1, AC_DBL);
+        add_parts(W_PT2C_0, W_PO3C_0, AC_FNEW16);
+        add_parts(W_PT2C_0, W_PO3C_0, AC_FASC);
+        add_pt2(W_PT2C_0, AC_FNEW12);            // <= 1.3.3 -6
+        add_sub2(W_T25, AC_DBL);                 // libFLAC 1.4 subdivide_tukey(2)
+        add_sub3(W_T16, AC_DBL, 0, true);        // libFLAC 1.4 subdivide_tukey(3)
         // libFLAC 1.3.4 -6..-8
         add(0, W_T50, 0, 0, 0, AC_FNEW16);
-        for (int k = 0; k < 2; k++) add(0, W_PT2_0 + k, 0, 0, 0, AC_FNEW16);
-        for (int k = 0; k < 3; k++) add(0, W_PO3_0 + k, 0, 0, 0, AC_FNEW16);
-        for (int k = 0; k < 2; k++) add(0, W_PT2_0 + k, 0, 0, 0, AC_FNEW12);
-        for (int k = 0; k < 2; k++) add(0, W_PT2_0 + k, 0, 0, 0, AC_FASC);
-        for (int k = 0; k < 3; k++) add(0, W_PO3_0 + k, 0, 0, 0, AC_FASC);
+        add_parts(W_PT2_0, W_PO3_0, AC_FNEW16);
+        add_pt2(W_PT2_0, AC_FNEW12);
+        add_parts(W_PT2_0, W_PO3_0, AC_FASC);
         // misc
         add(0, W_T50, 0, 0, 0, AC_FNEW8);
         add(0, W_T50_12, 0, 0, 0, AC_FNEW8);
-        for (int k = 0; k < 2; k++) add(0, W_PT2_0 + k, 0, 0, 0, AC_DBL);
-        for (int k = 0; k < 3; k++) add(0, W_PO3_0 + k, 0, 0, 0, AC_DBL);
+        add_parts(W_PT2_0, W_PO3_0, AC_DBL);
         add(0, W_T50_12, 0, 0, 0, AC_DBL);
         add(0, W_T50, 0, 0, 0, AC_X87);
         // builds with fma contraction (arm64 etc.)
         add(0, W_T50, 0, 0, 0, AC_DBL, 1);
-        add(0, W_T25, 0, 0, 0, AC_DBL, 1);
-        add(1, W_T25, 2, 0, 0, AC_DBL, 1);
-        add(1, W_T25, 2, 2, 0, AC_DBL, 1);
-        add(0, W_T16, 0, 0, 0, AC_DBL, 1);
-        add(1, W_T16, 2, 0, 0, AC_DBL, 1);
-        add(1, W_T16, 2, 2, 0, AC_DBL, 1);
-        for (int c = 0; c < 6; c++) add(c & 1 ? 2 : 1, W_T16, 3, c, 0, AC_DBL, 1);
+        add_sub2(W_T25, AC_DBL, 1);
+        add_sub3(W_T16, AC_DBL, 1, false);
         add(0, W_T50_12, 0, 0, 0, AC_FFMA, 1);
         add(0, W_T50, 0, 0, 0, AC_FFMA, 1);
-        for (int k = 0; k < 2; k++) add(0, W_PT2_0 + k, 0, 0, 0, AC_FFMA, 1);
-        for (int k = 0; k < 3; k++) add(0, W_PO3_0 + k, 0, 0, 0, AC_FFMA, 1);
-        for (int k = 0; k < 2; k++) add(0, W_PT2C_0 + k, 0, 0, 0, AC_FFMA, 1);
-        for (int k = 0; k < 3; k++) add(0, W_PO3C_0 + k, 0, 0, 0, AC_FFMA, 1);
-        for (int k = 0; k < 3; k++) add(0, W_PO3_0 + k, 0, 0, 0, AC_X87);
-        for (int k = 0; k < 2; k++) add(0, W_PT2_0 + k, 0, 0, 0, AC_X87);
+        add_parts(W_PT2_0, W_PO3_0, AC_FFMA, 1);
+        add_parts(W_PT2C_0, W_PO3C_0, AC_FFMA, 1);
+        add_po3(W_PO3_0, AC_X87);
+        add_pt2(W_PT2_0, AC_X87);
         // libFLAC >= 1.3.4 linked against glibc (its cosf is not correctly rounded)
         for (int ac2 = 0; ac2 < 2; ac2++) {
             int am = ac2 ? AC_DDESC : AC_DBL;
             add(0, W_T50G, 0, 0, 0, am);
-            add(0, W_T25G, 0, 0, 0, am);
-            add(1, W_T25G, 2, 0, 0, am);
-            add(1, W_T25G, 2, 2, 0, am);
-            add(0, W_T16G, 0, 0, 0, am);
-            add(1, W_T16G, 2, 0, 0, am);
-            add(1, W_T16G, 2, 2, 0, am);
-            for (int c = 0; c < 6; c++) add(c & 1 ? 2 : 1, W_T16G, 3, c, 0, am);
-            for (int c = 1; c < 6; c += 2) add(2, W_T16G, 3, c, 1, am);
-            for (int k = 0; k < 2; k++) add(0, W_PT2G_0 + k, 0, 0, 0, am);
-            for (int k = 0; k < 3; k++) add(0, W_PO3G_0 + k, 0, 0, 0, am);
+            add_sub2(W_T25G, am);
+            add_sub3(W_T16G, am, 0, true);
+            add_parts(W_PT2G_0, W_PO3G_0, am);
         }
         add(0, W_T50G, 0, 0, 0, AC_FNEW12);  // 1.3.4 Linux
         add(0, W_T50G, 0, 0, 0, AC_FNEW16);
-        for (int k = 0; k < 2; k++) add(0, W_PT2G_0 + k, 0, 0, 0, AC_FNEW16);
-        for (int k = 0; k < 3; k++) add(0, W_PO3G_0 + k, 0, 0, 0, AC_FNEW16);
+        add_parts(W_PT2G_0, W_PO3G_0, AC_FNEW16);
         // libFLAC 1.4 on CPUs without FMA (SSE2) and on arm64 (NEON): descending sums
         for (int fm = 0; fm < 2; fm++) {
             add(0, W_T50, 0, 0, 0, AC_DDESC, fm);
-            add(0, W_T25, 0, 0, 0, AC_DDESC, fm);
-            add(1, W_T25, 2, 0, 0, AC_DDESC, fm);
-            add(1, W_T25, 2, 2, 0, AC_DDESC, fm);
-            add(0, W_T16, 0, 0, 0, AC_DDESC, fm);
-            add(1, W_T16, 2, 0, 0, AC_DDESC, fm);
-            add(1, W_T16, 2, 2, 0, AC_DDESC, fm);
-            for (int c = 0; c < 6; c++) add(c & 1 ? 2 : 1, W_T16, 3, c, 0, AC_DDESC, fm);
-            for (int c = 1; c < 6; c += 2) add(2, W_T16, 3, c, 1, AC_DDESC, fm);
+            add_sub2(W_T25, AC_DDESC, fm);
+            add_sub3(W_T16, AC_DDESC, fm, true);
         }
     }
     void begin(const s64* x_, int n_) {

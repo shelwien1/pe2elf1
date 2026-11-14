@@ -47,24 +47,12 @@ static size_t id3_spans(const u8* d, size_t n, size_t p, SpanList& L) {
     while (q + (ver == 2 ? 6 : 10) <= end) {
         const u8* h = d + q;
         if (!h[0]) break;  // padding
-        size_t fs, hl;
-        int fflags = 0;
-        bool txxx, text, comm;
-        if (ver == 2) {
-            fs = rd_be24(h + 3);
-            hl = 6;
-            txxx = !memcmp(h, "TXX", 3);
-            comm = !memcmp(h, "COM", 3);
-        } else {
-            fs = ver == 4 ? syncsafe32(h + 4) : rd_be32(h + 4);
-            fflags = (h[8] << 8) | h[9];
-            hl = 10;
-            txxx = !memcmp(h, "TXXX", 4);
-            comm = !memcmp(h, "COMM", 4);
-        }
-        text = h[0] == 'T';
-        bool geob = ver == 2 ? !memcmp(h, "GEO", 3) : !memcmp(h, "GEOB", 4);
-        bool apic = ver == 2 ? !memcmp(h, "PIC", 3) : !memcmp(h, "APIC", 4);
+        size_t fs = ver == 2 ? rd_be24(h + 3) : ver == 4 ? syncsafe32(h + 4) : rd_be32(h + 4);
+        size_t hl = ver == 2 ? 6 : 10;
+        int fflags = ver == 2 ? 0 : (h[8] << 8) | h[9];
+        auto id = [&](const char* id22, const char* id23) { return ver == 2 ? !memcmp(h, id22, 3) : !memcmp(h, id23, 4); };
+        bool text = h[0] == 'T', txxx = id("TXX", "TXXX"), comm = id("COM", "COMM");
+        bool geob = id("GEO", "GEOB"), apic = id("PIC", "APIC");
         if (q + hl + fs > end) break;
         size_t v = q + hl, ve = q + hl + fs;
         bool plain = ver == 2 || !(ver == 3 ? (fflags & 0xC0) : (fflags & 0x0F));

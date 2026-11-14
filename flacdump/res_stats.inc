@@ -77,72 +77,54 @@ struct ResStats {
         if (ps == 0) return 0;
         return rice_est_ff(zsum[off[po] + i], ps, lim);
     }
-    // best partition order libFLAC style in [lo,hi] (hi already limited)
-    // minimal libFLAC-estimated residual bits over partition orders [lo,hi]
-    u64 bits_lf(int lo, int hi, int lim, bool newv) const {
-        u64 bb = ~0ull;
-        for (int po = hi; po >= lo; po--) {
-            if (((u32)bs >> po) <= (u32)order && po > 0) continue;
-            u64 bits = 6;
-            for (int i = 0; i < (1 << po); i++) {
-                u32 ps = psamples(po, i);
-                int k = (po == 0 && k0 >= 0) ? k0 : est_lf(po, i, lim, newv);
-                bits += lf_bits(k, ps, asum[off[po] + i]);
-            }
-            if (bits < bb) bb = bits;
+    // libFLAC's estimate of the residual bits at partition order po (~0: order not allowed)
+    u64 po_bits_lf(int po, int lim, bool newv) const {
+        if (((u32)bs >> po) <= (u32)order && po > 0) return ~0ull;
+        u64 bits = 6;
+        for (int i = 0; i < (1 << po); i++) {
+            u32 ps = psamples(po, i);
+            int k = (po == 0 && k0 >= 0) ? k0 : est_lf(po, i, lim, newv);
+            bits += lf_bits(k, ps, asum[off[po] + i]);
         }
-        return bb;
+        return bits;
     }
-    int best_lf(int lo, int hi, int lim, bool newv) const {
+    // ffmpeg's estimate of the residual bits at partition order po (~0: order not allowed)
+    u64 po_bits_ff(int po, int lim) const {
+        if (((u32)bs >> po) < (u32)order) return ~0ull;
+        u64 bits = 4ull << po;
+        for (int i = 0; i < (1 << po); i++) {
+            u32 n = psamples(po, i);
+            int k = est_ff(po, i, lim);
+            u64 s = zsum[off[po] + i];
+            bits += (u64)n * (k + 1) + ((s - (n >> 1)) >> k);
+        }
+        return bits;
+    }
+    // partition order search over [lo,hi] (hi already limited), from the highest order down:
+    // the first order with the fewest bits (hi if none is allowed); *bits = their number
+    int search(int lo, int hi, int lim, int est, bool newv, u64* bits) const {
         int best = hi;
         u64 bb = ~0ull;
         for (int po = hi; po >= lo; po--) {
-            if (((u32)bs >> po) <= (u32)order && po > 0) continue;
-            u64 bits = 6;
-            for (int i = 0; i < (1 << po); i++) {
-                u32 ps = psamples(po, i);
-                int k = (po == 0 && k0 >= 0) ? k0 : est_lf(po, i, lim, newv);
-                bits += lf_bits(k, ps, asum[off[po] + i]);
-            }
-            if (bits < bb) {
-                bb = bits;
+            u64 b = est ? po_bits_ff(po, lim) : po_bits_lf(po, lim, newv);
+            if (b < bb) {
+                bb = b;
                 best = po;
             }
         }
+        if (bits) *bits = bb;
         return best;
+    }
+    int best_lf(int lo, int hi, int lim, bool newv) const { return search(lo, hi, lim, 0, newv, nullptr); }
+    int best_ff(int lo, int hi, int lim) const { return search(lo, hi, lim, 1, false, nullptr); }
+    u64 bits_lf(int lo, int hi, int lim, bool newv) const {
+        u64 b;
+        search(lo, hi, lim, 0, newv, &b);
+        return b;
     }
     u64 bits_ff(int lo, int hi, int lim) const {
-        u64 bb = ~0ull;
-        for (int po = hi; po >= lo; po--) {
-            if (((u32)bs >> po) < (u32)order) continue;
-            u64 bits = 4ull << po;
-            for (int i = 0; i < (1 << po); i++) {
-                u32 n = psamples(po, i);
-                int k = est_ff(po, i, lim);
-                u64 s = zsum[off[po] + i];
-                bits += (u64)n * (k + 1) + ((s - (n >> 1)) >> k);
-            }
-            if (bits < bb || po == hi) bb = Min(bb, bits);
-        }
-        return bb;
-    }
-    int best_ff(int lo, int hi, int lim) const {
-        int best = hi;
-        u64 bb = ~0ull;
-        for (int po = hi; po >= lo; po--) {
-            if (((u32)bs >> po) < (u32)order) continue;
-            u64 bits = 4ull << po;
-            for (int i = 0; i < (1 << po); i++) {
-                u32 n = psamples(po, i);
-                int k = est_ff(po, i, lim);
-                u64 s = zsum[off[po] + i];
-                bits += (u64)n * (k + 1) + ((s - (n >> 1)) >> k);
-            }
-            if (bits < bb) {
-                bb = bits;
-                best = po;
-            }
-        }
-        return best;
+        u64 b;
+        search(lo, hi, lim, 1, false, &b);
+        return b;
     }
 };

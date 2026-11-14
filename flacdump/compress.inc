@@ -12,21 +12,21 @@ static void dump_frame_side(Buf& o, const u8* frame, size_t hl, const FrameInfo&
     o.append(frame, hl - 1);  // header without CRC-8
     for (int ch = 0; ch < f.nch; ch++) {
         const SubInfo& s = f.sub[ch];
-        o.put((u8)(s.type * 64 + s.order));
-        o.put((u8)s.wasted);
+        o.push((u8)(s.type * 64 + s.order));
+        o.push((u8)s.wasted);
         if (s.type < ST_FIXED) continue;
         if (s.type == ST_LPC) {
-            o.put((u8)s.prec);
-            o.put((u8)s.shift);
+            o.push((u8)s.prec);
+            o.push((u8)s.shift);
             for (int i = 0; i < s.order; i++) {
-                o.put((u8)s.coef[i]);
-                o.put((u8)(s.coef[i] >> 8));
+                o.push((u8)s.coef[i]);
+                o.push((u8)(s.coef[i] >> 8));
             }
         }
-        o.put((u8)(s.method * 16 + s.porder));
+        o.push((u8)(s.method * 16 + s.porder));
         for (int i = 0; i < (1 << s.porder); i++) {
-            o.put(s.param[i]);
-            if (s.param[i] == (s.method ? 31 : 15)) o.put(s.raw[i]);
+            o.push(s.param[i]);
+            if (s.param[i] == (s.method ? 31 : 15)) o.push(s.raw[i]);
         }
     }
 }
@@ -183,69 +183,23 @@ static void print_compress_stats(const Scan& sc, AC& ac, size_t meta_n, const Fr
 // pass 2: code the layout, every segment and the derived fields; writes the .meta
 static void compress_model(const Buf& in, FlacLayout& L, u64 audio_start, const Scan& sc, const char* mname,
                            Buf& meta) {
-    const StreamParams& sp = L.sp;
     meta.append(k_magic, 2);
     AC ac;
     ac.enc_init(&meta);
     reset_run_state();
-    Models* M = &g_models;
-    if (!code_layout(ac, *M, L, nullptr)) die("internal: layout");
-    Ctx cx;
-    cx.ac = &ac;
-    cx.m = M;
-    cx.sp = sp;
-    cx.rs.init();
-    cx.lp = &g_lpred;
-    cx.total_samples = sc.total_samples;
-    FrameState st;
-    fstate_init(st, sp, L.vendor);
-    FrameStats fs;
-    fs.init();
-    fs.audio_start = audio_start;
-    FrameInfo fi;
-    frameinfo_init(fi);
-    u64 done = 0;
-    int pk = 4;
-    for (size_t i = 0; i <= sc.segs.n; i++) {
-        int kind = i < sc.segs.n ? sc.segs[i].kind : SEG_END;
-        ac.cat = C_HDR;
-        ac.tree(M->seg[pk], 2, kind);
-        pk = kind;
-        if (kind == SEG_END) break;
-        const Segment& s = sc.segs[i];
-        if (kind == SEG_FRAME) {
-            size_t len = parse_frame(in.p + s.off, (size_t)(in.n - s.off), sp, fi, g_pcm);
-            if (len != s.len) die("internal: reparse");
-            if (!model_frame(cx, fi, g_pcm, st, nullptr, done)) die("internal: model_frame");
-            fs.add_frame(s.off, (u32)s.len, fi.bs);
-            fs.add_pcm(g_pcm, sp.nch, sp.bps, fi.bs);
-            done += fi.bs;
-        } else if (kind == SEG_RAWFRAME) {
-            size_t len = parse_frame(in.p + s.off, (size_t)(in.n - s.off), sp, fi, g_pcm);
-            if (len != s.len) die("internal: reparse");
-            ac.cat = C_RAW;
-            code_uint(ac, M->len_m, s.nsamp - 1);
-            code_uint(ac, M->len_m, s.len);
-            for (u64 j = 0; j < s.len; j++) ac.raw(in.p[s.off + j], 8);
-            fs.add_frame(s.off, (u32)s.len, s.nsamp);
-            fs.add_pcm(g_pcm, sp.nch, sp.bps, s.nsamp);
-            done += s.nsamp;
-            st.frame_counter++;
-            st.sample_counter += s.nsamp;
-        } else {
-            ac.cat = C_RAW;
-            code_uint(ac, M->len_m, s.len - 1);
-            if (!code_region(ac, in.p + s.off, (size_t)s.len, 0, false)) die("internal: region");
-        }
-    }
-    fs.md5.final(fs.md5sum);
-    code_derived(ac, L, fs, nullptr);
+    if (!code_layout(ac, g_models, L, nullptr)) die("internal: layout");
+    Run r;
+    run_init(r, ac, L, sc.total_samples, audio_start);
+    u64 pos = audio_start;
+    code_segments(r, &sc.segs, &in, nullptr, nullptr, pos);
+    r.fs.md5.final(r.fs.md5sum);
+    code_derived(ac, L, r.fs, nullptr);
     ac.flush();
     FILE* mf = fopen(mname, "wb");
     if (!mf) die("cannot create meta");
     fwrite(meta.p, 1, meta.n, mf);
     if (fclose(mf)) die("error writing meta");
-    if (g_verbose) print_compress_stats(sc, ac, meta.n, st, *cx.lp);
+    if (g_verbose) print_compress_stats(sc, ac, meta.n, r.st, *r.cx.lp);
 }
 
 // restore from (wav, meta) in memory and compare with the input

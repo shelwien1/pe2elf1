@@ -123,21 +123,17 @@ static void fixed_restore(s64* x, int n, int order, const s64* r) {
             break;
     }
 }
+// LPC prediction of h[0] from h[-1..-order] (sums wrap around like libFLAC's 64-bit ones)
+static inline s64 lpc_pred(const s64* h, const s32* c, int order, int shift) {
+    u64 s = 0;
+    for (int j = 0; j < order; j++) s += (u64)((s64)c[j] * h[-1 - j]);
+    return (s64)s >> shift;
+}
 static void lpc_residual(const s64* x, int n, const s32* c, int order, int shift, s64* r) {
-    for (int i = order; i < n; i++) {
-        u64 s = 0;
-        const s64* h = x + i;
-        for (int j = 0; j < order; j++) s += (u64)((s64)c[j] * h[-1 - j]);
-        r[i - order] = x[i] - ((s64)s >> shift);
-    }
+    for (int i = order; i < n; i++) r[i - order] = x[i] - lpc_pred(x + i, c, order, shift);
 }
 static void lpc_restore(s64* x, int n, const s32* c, int order, int shift, const s64* r) {
-    for (int i = order; i < n; i++) {
-        u64 s = 0;
-        const s64* h = x + i;
-        for (int j = 0; j < order; j++) s += (u64)((s64)c[j] * h[-1 - j]);
-        x[i] = (s64)((u64)r[i - order] + (u64)((s64)s >> shift));
-    }
+    for (int i = order; i < n; i++) x[i] = (s64)((u64)r[i - order] + (u64)lpc_pred(x + i, c, order, shift));
 }
 
 // subframe signal of channel ch from PCM

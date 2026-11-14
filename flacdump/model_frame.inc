@@ -64,9 +64,8 @@ static bool model_chmode(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st) {
     int bs = (int)f.bs;
     ac.cat = C_CH;
     if (cx.sp.nch == 2) {
-        int pf = ff_stereo_guess(pcm, bs, cx.sp.bps > 16 ? 30 : 14);
-        static const int map[4] = {1, 8, 9, 10};
-        int cf = map[pf];
+        int pf = ff_stereo_guess(pcm, bs, rice_limit(cx));
+        int cf = k_pair_chcode[pf];
         int cl = st.sim_on ? sim_stereo(cx, st, pcm, bs) : -1;
         int done = 0;
         if (cl >= 0) {
@@ -126,9 +125,8 @@ static bool model_fixed_order(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, 
         if (s.order == go) st.fvote[0]++;
         if (st.fvote[0] + st.fvote[1] >= VOTE_MIN) st.fix_le = st.fvote[1] > st.fvote[0];
     }
-    cs.pfixed = s.order;
     fixed_residual(x, bs, s.order, g_res);
-    if (bs > 4) k0 = k0_from_bps(fixed_rbps(esum[s.order], bs - 4), cx.sp.bps > 16 ? 30 : 14);
+    if (bs > 4) k0 = k0_from_bps(fixed_rbps(esum[s.order], bs - 4), rice_limit(cx));
     return true;
 }
 

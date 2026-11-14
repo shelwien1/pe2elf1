@@ -90,7 +90,6 @@ static inline void wr_be64(u8* p, u64 v) { wr_be32(p, (u32)(v >> 32)); wr_be32(p
 // ---------------------------------------------------------------------------
 // Basic containers, files, checksums
 
-#include "buf.inc"
 #include "vec.inc"
 #include "file_crc.inc"
 #include "md5.inc"
@@ -170,6 +169,7 @@ static inline void wr_be64(u8* p, u64 v) { wr_be32(p, (u32)(v >> 32)); wr_be32(p
 // ---------------------------------------------------------------------------
 // Decompression (wav + meta -> flac), compression (flac -> wav + meta)
 
+#include "segments.inc"
 #include "decompress.inc"
 #include "compress.inc"
 
