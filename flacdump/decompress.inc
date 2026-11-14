@@ -12,10 +12,10 @@ static bool decompress_core(const u8* meta, size_t meta_n, WavReader& wav, Sink&
     const StreamParams& sp = L.sp;
     wav.bps = sp.bps;
     if (wav.nch != sp.nch || wav.cb != (sp.bps + 7) / 8) return false;
-    u64 pos = header_size(L);
-    Run r;
-    run_init(r, ac, L, wav.nsamples, pos);
-    if (!code_segments(r, nullptr, nullptr, &wav, &out, pos)) return false;
+    u64 pos = L.header_size();
+    SegmentCoder r;
+    r.init(ac, L, wav.nsamples, pos);
+    if (!r.code(nullptr, nullptr, &wav, &out, pos)) return false;
     r.fs.md5.final(r.fs.md5sum);
     if (!code_derived(ac, L, r.fs, &out)) {
         fprintf(stderr, "flacdump: the .wav does not match the .meta\n");

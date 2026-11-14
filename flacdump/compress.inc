@@ -31,61 +31,7 @@ static void dump_frame_side(Buf& o, const u8* frame, size_t hl, const FrameInfo&
     }
 }
 
-// blocks and prefix point into the input buffer (no copies)
-static bool parse_layout(Buf& in, FlacLayout& L, u64& audio_start) {
-    size_t pos = 0;
-    // skip ID3v2 tags
-    while (pos + 10 <= in.n && !memcmp(in.p + pos, "ID3", 3)) {
-        const u8* h = in.p + pos;
-        u32 sz = ((h[6] & 0x7F) << 21) | ((h[7] & 0x7F) << 14) | ((h[8] & 0x7F) << 7) | (h[9] & 0x7F);
-        pos += 10 + sz + ((h[5] & 0x10) ? 10 : 0);
-    }
-    if (pos + 4 > in.n || memcmp(in.p + pos, "fLaC", 4)) {
-        // search a bit
-        size_t lim = Min(in.n, (size_t)(1 << 26));
-        size_t q = 0;
-        for (; q + 8 <= lim; q++)
-            if (!memcmp(in.p + q, "fLaC", 4) && (in.p[q + 4] & 0x7F) == 0 && rd_be24(in.p + q + 5) == 34) break;
-        if (q + 8 > lim) return false;
-        pos = q;
-    }
-    L.prefix = in.p;
-    L.prefix_n = pos;
-    pos += 4;
-    L.blocks.n = 0;
-    for (;;) {
-        if (pos + 4 > in.n) return false;
-        const u8* h = in.p + pos;
-        MBlock b;
-        b.type = h[0] & 0x7F;
-        b.len = rd_be24(h + 1);
-        b.structured = 0;
-        int last = h[0] >> 7;
-        pos += 4;
-        if (pos + b.len > in.n) return false;
-        b.off = pos - 4;
-        b.data = in.p + pos;
-        pos += b.len;
-        L.blocks.push(b);
-        if (last) break;
-    }
-    if (L.blocks[0].type != 0 || L.blocks[0].len != 34) return false;
-    const u8* d = L.blocks[0].data;
-    L.sp.rate = (d[10] << 12) | (d[11] << 4) | (d[12] >> 4);
-    L.sp.nch = ((d[12] >> 1) & 7) + 1;
-    L.sp.bps = (((d[12] & 1) << 4) | (d[13] >> 4)) + 1;
-    audio_start = pos;
-    return true;
-}
 
-static void print_stats(AC& ac, size_t total) {
-    double sum = 0;
-    for (int i = 0; i < NCAT; i++) sum += ac.cost[i];
-    fprintf(stderr, "meta breakdown (bytes):\n");
-    for (int i = 0; i < NCAT; i++)
-        if (ac.cost[i] > 0) fprintf(stderr, "  %-10s %10.1f\n", k_catname[i], ac.cost[i] / 8);
-    fprintf(stderr, "  %-10s %10.1f (actual %zu)\n", "total", sum / 8, total);
-}
 
 // result of pass 1
 struct Scan {
@@ -110,7 +56,7 @@ static void compress_scan(const Buf& in, const FlacLayout& L, u64 audio_start, c
     WavWriter ww;
     if (!ww.open(wname, sp.nch, sp.rate, sp.bps)) die("cannot create wav");
     FrameInfo fi;
-    frameinfo_init(fi);
+    fi.init();
     Buf side;
     if (opt.dump) side.append(in.p, (size_t)audio_start);
     u64 pos = audio_start;
@@ -118,7 +64,7 @@ static void compress_scan(const Buf& in, const FlacLayout& L, u64 audio_start, c
         size_t len = parse_frame(in.p + pos, (size_t)(in.n - pos), sp, fi, g_pcm);
         if (len && opt.dump) {
             FrameInfo fh;
-            frameinfo_init(fh);
+            fh.init();
             size_t hl = parse_header(in.p + pos, (size_t)(in.n - pos), sp, fh);
             dump_frame_side(side, in.p + pos, hl, fi);
         }
@@ -169,7 +115,7 @@ static void compress_scan(const Buf& in, const FlacLayout& L, u64 audio_start, c
 static void print_compress_stats(const Scan& sc, AC& ac, size_t meta_n, const FrameState& st, const LpcPredictor& P) {
     fprintf(stderr, "frames: %llu modelled, %llu raw, %llu junk bytes; %llu samples\n", (unsigned long long)sc.nframes,
             (unsigned long long)sc.nraw, (unsigned long long)sc.njunk, (unsigned long long)sc.total_samples);
-    print_stats(ac, meta_n);
+    ac.print_stats(meta_n);
     fprintf(stderr, "lpc model: stage0 %u/%u, stage1 %u/%u (hit/miss)\n", st.dbg[1], st.dbg[0], st.dbg[3],
             st.dbg[2]);
     fprintf(stderr, "stereo sim: %u hit, %u miss; rice_new=%d fix_le=%d exh=%d maxo=%d\n", st.simstat[1], st.simstat[0],
@@ -188,10 +134,10 @@ static void compress_model(const Buf& in, FlacLayout& L, u64 audio_start, const 
     ac.enc_init(&meta);
     reset_run_state();
     if (!code_layout(ac, g_models, L, nullptr)) die("internal: layout");
-    Run r;
-    run_init(r, ac, L, sc.total_samples, audio_start);
+    SegmentCoder r;
+    r.init(ac, L, sc.total_samples, audio_start);
     u64 pos = audio_start;
-    code_segments(r, &sc.segs, &in, nullptr, nullptr, pos);
+    r.code(&sc.segs, &in, nullptr, nullptr, pos);
     r.fs.md5.final(r.fs.md5sum);
     code_derived(ac, L, r.fs, nullptr);
     ac.flush();
@@ -227,7 +173,7 @@ static int do_compress(const char* inname, const char* prefix, const Options& op
     if (!read_file(inname, in, 64)) die("cannot read input");
     FlacLayout L = {};
     u64 audio_start = 0;
-    if (!parse_layout(in, L, audio_start)) die("not a FLAC file (or broken metadata)");
+    if (!L.parse(in, audio_start)) die("not a FLAC file (or broken metadata)");
     char wname[4096], mname[4096];
     snprintf(wname, sizeof(wname), "%s.wav", prefix);
     snprintf(mname, sizeof(mname), "%s.meta", prefix);

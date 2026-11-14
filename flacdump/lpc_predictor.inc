@@ -242,4 +242,73 @@ struct LpcPredictor {
         if (mo < order) return false;
         return quant(id, order, prec, q, sh);
     }
+    // candidate at MRU rank r reproduced a subframe: count it and move it to the front
+    void mru_hit(int r) {
+        int id = mru[r];
+        hits[id]++;
+        for (int k = r; k > 0; k--) mru[k] = mru[k - 1];
+        mru[0] = id;
+    }
+    // windows the encoder appears to use (libFLAC candidates with hits); for windows that exist
+    // in several numeric variants (autocorrelation flavour etc.) only the most used variant is kept
+    int sim_windows(int* ids) const {
+        u32 mx = 0;
+        for (int i = 0; i < ncand; i++)
+            if (cand[i].kind != 3) mx = Max(mx, hits[i]);
+        int n = 0;
+        if (!mx) return 0;
+        for (int i = 0; i < ncand && n < 16; i++) {
+            const CandDef& a = cand[i];
+            if (a.kind == 3 || !hits[i] || hits[i] * 32 < mx) continue;
+            bool dominated = false;
+            for (int j = 0; j < ncand; j++) {
+                const CandDef& b = cand[j];
+                if (j == i || b.kind != a.kind || b.b != a.b || b.c != a.c) continue;
+                bool samewin = base_win(b.win) == base_win(a.win);
+                if (!samewin) continue;
+                if (hits[j] > hits[i] || (hits[j] == hits[i] && j < i)) dominated = true;
+            }
+            if (!dominated) ids[n++] = i;
+        }
+        return n;
+    }
+    // encoder, stage 2: MRU rank of the first candidate that reproduces the subframe at its order
+    int find_at_order(const SubInfo& s, bool try_unhit) {
+        s32 q[32];
+        int sh;
+        for (int pass = 0; pass < 2; pass++) {
+            if (pass && !try_unhit) break;
+            for (int k = 0; k < ncand; k++) {
+                int id = mru[k];
+                if ((hits[id] == 0) != (pass == 1)) continue;
+                if (!at_order(id, s.order, s.prec, q, &sh)) continue;
+                if (sh != s.shift || memcmp(q, s.coef, sizeof(s32) * s.order)) continue;
+                return k;
+            }
+        }
+        return -1;
+    }
+    // -vvv: the candidates closest to an LPC subframe that none of them reproduces
+    void debug_miss(const SubInfo& s, int bs) {
+        s32 q[32];
+        int sh;
+        fprintf(stderr, "miss: n=%d order=%d prec=%d shift=%d coefs:", bs, s.order, s.prec, s.shift);
+        for (int i = 0; i < s.order; i++) fprintf(stderr, " %d", s.coef[i]);
+        fprintf(stderr, "\n");
+        for (int id = 0; id < ncand; id++) {
+            if (!at_order(id, s.order, s.prec, q, &sh)) continue;
+            int nd = 0, md = 0;
+            for (int i = 0; i < s.order; i++) {
+                int d = q[i] - s.coef[i];
+                if (d) nd++;
+                if (d < 0) d = -d;
+                if (d > md) md = d;
+            }
+            if (sh == s.shift && md < 50) {
+                fprintf(stderr, "   cand %2d sh=%d ndiff=%d maxd=%d:", id, sh, nd, md);
+                for (int i = 0; i < s.order; i++) fprintf(stderr, " %d", q[i]);
+                fprintf(stderr, "\n");
+            }
+        }
+    }
 };

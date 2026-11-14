@@ -7,9 +7,6 @@ struct BM {
     u16 n;
 };
 static int g_rate[256];
-static void init_rates() {
-    for (int i = 0; i < 256; i++) g_rate[i] = (int)(65536.0 / (i + 1.6));
-}
 static inline void bm_init(BM* m, size_t cnt) {
     for (size_t i = 0; i < cnt; i++) {
         m[i].p = 32768;
@@ -96,5 +93,18 @@ struct AC {
         u32 c = 1;
         for (int i = n - 1; i >= 0; i--) c = (c << 1) | (u32)bit(t[c], (int)((v >> i) & 1));
         return c - (1u << n);
+    }
+    // -v: coded size per cost category
+    void print_stats(size_t total) const {
+        double sum = 0;
+        for (int i = 0; i < NCAT; i++) sum += cost[i];
+        fprintf(stderr, "meta breakdown (bytes):\n");
+        for (int i = 0; i < NCAT; i++)
+            if (cost[i] > 0) fprintf(stderr, "  %-10s %10.1f\n", k_catname[i], cost[i] / 8);
+        fprintf(stderr, "  %-10s %10.1f (actual %zu)\n", "total", sum / 8, total);
+    }
+    // adaptation rates g_rate of the bit models (once at start)
+    static void init_rates() {
+        for (int i = 0; i < 256; i++) g_rate[i] = (int)(65536.0 / (i + 1.6));
     }
 };

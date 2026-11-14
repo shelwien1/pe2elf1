@@ -9,7 +9,7 @@ static bool model_porder(Ctx& cx, SubInfo& s, FrameState& st, int bs, int lim) {
     ResStats& rs = cx.rs;
     ac.cat = C_PORDER;
     int lo, hi;
-    porder_range(st, rs, bs, s.order, lo, hi);
+    st.porder_range(rs, bs, s.order, lo, hi);
     int pL = rs.best_lf(lo, hi, lim, true);
     int pF = rs.best_ff(lo, Min(st.maxpo, rs.maxpo), lim);
     int po = s.porder;
@@ -104,7 +104,7 @@ static bool model_residual(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, con
     Models& M = *cx.m;
     ResStats& rs = cx.rs;
     rs.compute(res, bs, s.order);
-    int lim = rice_limit(cx);
+    int lim = cx.rice_limit();
     rs.k0 = st.k0mode ? k0 : -1;
     if (!model_porder(cx, s, st, bs, lim)) return false;
     // rice parameters (escape coded as 31)

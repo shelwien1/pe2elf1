@@ -39,13 +39,13 @@ static bool code_layout(AC& ac, Models& M, FlacLayout& L, Sink* out) {
     if (ac.dec) {  // unbounded size (e.g. an ID3v2 tag): temporary buffer, written out at once
         Buf pb;
         pb.reserve((size_t)plen + 1);
-        bool ok = code_region(ac, pb.p, (size_t)plen, 0, false);
+        bool ok = Regions::code_region(ac, pb.p, (size_t)plen, 0, false);
         if (ok) out->write_at(0, pb.p, (size_t)plen);
         pb.release();
         if (!ok) return false;
         L.prefix_n = (size_t)plen;
         out->write_at(plen, (const u8*)"fLaC", 4);
-    } else if (!code_region(ac, L.prefix, (size_t)plen, 0, false))
+    } else if (!Regions::code_region(ac, L.prefix, (size_t)plen, 0, false))
         return false;
     L.vendor = 0;
     ac.cat = C_META;
@@ -88,16 +88,16 @@ static bool code_layout(AC& ac, Models& M, FlacLayout& L, Sink* out) {
                     if (b.data[j]) z = 0;
             z = ac.bit(M.mflag[0], z);
             b.structured = z;
-            if (!z && !code_region(ac, b.data, b.len, 0, false)) return false;
+            if (!z && !Regions::code_region(ac, b.data, b.len, 0, false)) return false;
         } else if (b.type == 3) {  // SEEKTABLE
             int s = ac.bit(M.mflag[1], b.len % 18 == 0);
             b.structured = s;
             if (!s) code_bytes(ac, b.data, b.len, false);
         } else if (b.type == 4) {
-            if (!code_vorbis(ac, M, b)) return false;
+            if (!VorbisCoder::code(ac, M, b)) return false;
             if (!L.vendor) L.vendor = vendor_hint(b.data, b.len);
         } else {
-            if (!code_region(ac, b.data, b.len, b.type == 6 ? 1 : 0, false)) return false;
+            if (!Regions::code_region(ac, b.data, b.len, b.type == 6 ? 1 : 0, false)) return false;
         }
         if (ac.dec) {  // seek tables are filled in later (code_derived)
             if (!(b.type == 3 && b.structured)) out->write_at(b.off + 4, b.data, b.len);
@@ -202,8 +202,3 @@ static bool code_derived(AC& ac, FlacLayout& L, FrameStats& fs, Sink* out) {
     return got == chk;
 }
 
-static u64 header_size(const FlacLayout& L) {
-    u64 s = L.prefix_n + 4;
-    for (size_t i = 0; i < L.blocks.n; i++) s += 4 + L.blocks[i].len;
-    return s;
-}

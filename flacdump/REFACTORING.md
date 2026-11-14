@@ -6,57 +6,72 @@ implementation differs.
 
 ## 0. Result: source layout
 
-`flacdump.cpp` (232 lines) holds the prologue (includes, integer types,
+`flacdump.cpp` (242 lines) holds the prologue (includes, integer types,
 platform macros, `die`, `Min`/`Max`, bit and byte-order helpers), the ordered
-include list and `main`. All other code is in 43 `.inc` files next to it, one
-translation unit. Except for the two mutually recursive pairs (`find_cuts`,
-`code_region`), every function and type is defined before its first use, so
-the include order below is also the dependency order. No function is longer
+include list and `main`. All other code is in 53 `.inc` files next to it, one
+translation unit. Every function and type is defined before its first use, so the
+include order below is also the dependency order; there are no forward declarations
+(the mutually recursive functions are static members of `CutFinder` and `Regions`).
+Member functions are always defined in their class, and functions that operate on
+one struct are its members (`FrameInfo::init`, `FlacLayout::parse`, ...). No function is longer
 than 100 lines (`find_cuts` is exactly 100); classes with member functions
 each have their own file (marked *class*).
 
 | file | lines | contents |
 |------|------:|----------|
-| `vec.inc` | 32 | *class* `Vec<T>`, `Buf` = `Vec<u8>` (the only heap users) |
-| `file_crc.inc` | 46 | `read_file`, CRC-8 / CRC-16 |
-| `md5.inc` | 91 | *class* `MD5` |
-| `bit_reader.inc`, `fix_out.inc`, `bit_writer.inc` | 55, 24, 51 | *class* `BitReader`, *class* `FixOut`, *class* `BitWriter` |
-| `flac_defs.inc` | 162 | FLAC structures, work buffers, header code tables, fixed/LPC residuals |
-| `lpc_res_fast.inc` | 43 | *class* `LpcResInit<O>`: order-specialised LPC residual kernels |
-| `flac_frame.inc` | 303 | frame parser/decoder and encoder |
-| `wav_format.inc` | 40 | WAV header, channel mask, shared sample buffer |
-| `wav_writer.inc`, `wav_reader.inc` | 48, 76 | *class* `WavWriter`, *class* `WavReader` |
-| `ac.inc` | 100 | *class* `AC`: arithmetic coder, bit models, cost categories |
-| `uint_model.inc` | 45 | integer coding (`UModel`, `code_uint`, `code_sint`) |
-| `byte_cm.inc` | 107 | *class* `ByteCM`: CM byte model and its table pool |
-| `code_bytes.inc` | 64 | byte strings, CM-coded or stored |
-| `embedded.inc` | 80 | embedded files: types, JPEG/PNG lengths |
-| `base64.inc` | 255 | base64 layout, generation, strict parsing, detection |
-| `tag_spans.inc` | 137 | ID3v2 / APEv2 parsing (exact value spans) |
-| `regions.inc` | 225 | cuts in byte regions (`find_cuts`, `code_cut`, `code_region`) |
-| `det_math.inc` | 103 | deterministic `cos`, glibc `cosf` emulation, `log2` |
-| `estimators.inc` | 98 | fixed order guess, rice estimators, expected bits, k0 |
-| `res_stats.inc` | 130 | *class* `ResStats` |
-| `windows.inc` | 91 | apodization windows |
-| `win_cache.inc` | 29 | *class* `WinCache` |
-| `lpc_analysis.inc` | 169 | libFLAC autocorrelation variants, Levinson-Durbin, best order, quantization |
-| `ff_lpc.inc` | 107 | ffmpeg LPC analysis |
-| `lpc_predictor.inc` | 245 | *class* `LpcPredictor` |
-| `meta_model.inc` | 202 | bit models, frame/channel state, learning thresholds, `Ctx`, `reset_run_state` |
-| `model_residual.inc` | 134 | partition order, rice parameters |
-| `lpc_order.inc` | 201 | LPC order prediction and learning |
-| `model_lpc.inc` | 198 | LPC parameters in three prediction stages |
-| `encoder_sim.inc` | 161 | libFLAC subframe/stereo simulation, ffmpeg stereo estimate |
-| `model_frame.inc` | 205 | FRAME segments: header, channel mode, subframes |
-| `container.inc` | 32 | segments, metadata blocks, layout, `.meta` magic |
-| `frame_stats.inc` | 61 | *class* `FrameStats` |
-| `sink.inc` | 21 | *class* `Sink` |
-| `vorbis.inc` | 163 | VORBIS_COMMENT: vendors, validation, encoder hint, structured coding |
-| `seektable.inc` | 148 | SEEKTABLE coding |
-| `metadata.inc` | 209 | stream parameters, layout (part A), derived fields (part C) |
-| `segments.inc` | 125 | the audio segments (FRAME, raw frame, junk), coded in both directions |
-| `decompress.inc` | 50 | `d` mode |
-| `compress.inc` | 250 | `c` mode: options, pass 1 (scan), pass 2 (model), verification |
+| `vec.inc` | 32 | *class* Vec<T> - growable array of plain structs (heap); Buf = Vec<u8> |
+| `file_crc.inc` | 46 | file reading, CRC-8 / CRC-16 as used by FLAC |
+| `md5.inc` | 91 | *class* MD5 (RFC 1321), for the STREAMINFO signature |
+| `bit_reader.inc` | 55 | *class* BitReader - MSB-first bit reader for FLAC frames |
+| `fix_out.inc` | 24 | *class* FixOut - output into fixed storage; overflow is remembered |
+| `bit_writer.inc` | 51 | *class* BitWriter - MSB-first bit writer into a FixOut |
+| `flac_defs.inc` | 142 | FLAC structures, work buffers, header code tables, fixed/LPC residuals |
+| `frame_info.inc` | 26 | *class* FrameInfo - header fields and subframe parameters of one FLAC frame |
+| `lpc_res_fast.inc` | 40 | *class* LpcFast - fast LPC residual for 32-bit-safe signals (analysis only): order-specialised kernels |
+| `flac_frame.inc` | 303 | FLAC frame parser/decoder and encoder (inverse of parse_frame given FrameInfo + PCM) |
+| `wav_format.inc` | 40 | WAV header and channel mask; sample buffer shared by WavWriter and WavReader |
+| `wav_writer.inc` | 48 | *class* WavWriter - writes the PCM as a WAV file |
+| `wav_reader.inc` | 76 | *class* WavReader - reads the PCM back from a WAV file |
+| `ac.inc` | 110 | *class* AC - binary arithmetic coder, adaptive bit models (BM), cost categories |
+| `uint_model.inc` | 45 | UModel - adaptive Elias-gamma style integer coding |
+| `byte_cm.inc` | 117 | *class* ByteCM - order-0..3 context mixing byte model and its table pool |
+| `code_bytes.inc` | 64 | byte strings, coded with the CM model or stored |
+| `embedded.inc` | 73 | embedded files (cover art etc.) written as <prefix>.<n>.<ext>: types, image lengths |
+| `ext_files.inc` | 15 | *class* ExtFiles - numbering and naming of the embedded files <prefix>.<n>.<ext> |
+| `base64.inc` | 163 | base64 text (pictures/binary in comments and APE/ID3 tags): layout, generation, parsing, detection |
+| `span_list.inc` | 28 | *class* SpanList - value spans and tag extents found while parsing ID3v2 / APEv2 tags |
+| `tag_spans.inc` | 118 | ID3v2 / APEv2 tag parsing: exact spans of text values, objects and pictures |
+| `cut_finder.inc` | 200 | *class* CutFinder - finds the parts of a byte region that are cut out: embedded files (pictures, images, objects in tags) and base64 text that is decoded (encoder only) |
+| `ext_models.inc` | 18 | *class* ExtModels - bit models for cut lists and embedded files in byte regions |
+| `regions.inc` | 106 | *class* Regions - coding byte regions with their cuts (embedded files, decoded base64) |
+| `det_math.inc` | 103 | deterministic cos / cosf / log2 (basic IEEE operations only: identical results on any platform) |
+| `estimators.inc` | 98 | libFLAC/ffmpeg estimators: fixed order guess, rice parameters, expected bits |
+| `res_stats.inc` | 130 | *class* ResStats - residual statistics for partition order / rice parameter prediction |
+| `windows.inc` | 91 | apodization windows (libFLAC tukey / partial_tukey / punchout_tukey variants) |
+| `win_cache.inc` | 29 | *class* WinCache - apodization windows for the current block size |
+| `lpc_analysis.inc` | 169 | libFLAC LPC analysis replica: autocorrelation variants, Levinson-Durbin, best order, quantization |
+| `ff_lpc.inc` | 107 | ffmpeg flacenc LPC analysis replica (welch window, autocorrelation, Levinson, quantizer) |
+| `lpc_predictor.inc` | 314 | *class* LpcPredictor - candidate LPC analyses (libFLAC/ffmpeg variants) in MRU order |
+| `models.inc` | 92 | *class* Models - the bit models of the meta model and their priors |
+| `frame_state.inc` | 76 | *class* FrameState - learned encoder hypotheses and previous-frame contexts |
+| `ctx.inc` | 14 | *class* Ctx - the coding context of the meta model (coder, models, stream, predictors) |
+| `meta_model.inc` | 25 | the meta model instances, simulation results, run-state reset |
+| `model_residual.inc` | 134 | model_residual - partition order and rice parameters of a subframe |
+| `lpc_order.inc` | 195 | LPC order prediction (libFLAC guess / exhaustive search, ffmpeg methods) and learning |
+| `model_lpc.inc` | 159 | model_lpc - LPC order, shift and coefficients, predicted from candidate analyses |
+| `encoder_sim.inc` | 138 | libFLAC subframe/stereo cost simulation (process_subframe_ estimates), ffmpeg stereo estimate |
+| `model_frame.inc` | 205 | model_frame - codes one FRAME segment (header, channel mode, subframes) |
+| `container.inc` | 17 | container structures: audio segments, metadata blocks, layout, .meta magic |
+| `flac_layout.inc` | 71 | *class* FlacLayout - prefix, metadata blocks and stream parameters of a FLAC file |
+| `frame_stats.inc` | 75 | *class* FrameStats - frame list and MD5 gathered while streaming frames |
+| `sink.inc` | 21 | *class* Sink - output of the restored FLAC (file, or compare against the original) |
+| `vorbis.inc` | 55 | VORBIS_COMMENT: vendor dictionary, validation, encoder hint, structured coding |
+| `vorbis_coder.inc` | 104 | *class* VorbisCoder - structured VORBIS_COMMENT coding: vendor from a dictionary, lengths as numbers, text with a shared CM model, base64 values decoded |
+| `seektable.inc` | 135 | SEEKTABLE coding, points predicted from the frame list |
+| `metadata.inc` | 204 | metadata coding: stream parameters, layout (part A), STREAMINFO derived fields (part C) |
+| `segment_coder.inc` | 125 | *class* SegmentCoder - the audio region: FRAME, raw frame and junk segments, coded in both directions (compression pass 2, or a restore) |
+| `decompress.inc` | 50 | d mode: wav + meta (+ embedded files) -> flac |
+| `compress.inc` | 196 | c mode: flac -> wav + meta (+ embedded files): scan, model, verification |
 
 Commits: `a71016a` (phase 1, binary-identical), `b41ad4e` (phase 2 with the
 reordering of phase 3 item 4), `eef75e9` (phase 3 items 1-3 and 6), and the

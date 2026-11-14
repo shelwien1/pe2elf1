@@ -9,19 +9,6 @@ struct SeekModels {
     UModel dk;
 };
 
-static u64 frame_containing(const FrameStats& fs, u64 sample) {
-    // binary search last frame with fsamp <= sample
-    if (fs.fsamp.n == 0) return 0;
-    size_t lo = 0, hi = fs.fsamp.n - 1;
-    while (lo < hi) {
-        size_t mid = (lo + hi + 1) / 2;
-        if (fs.fsamp[mid] <= sample)
-            lo = mid;
-        else
-            hi = mid - 1;
-    }
-    return lo;
-}
 
 // encoder: the rule the seek points follow (0 = fixed spacing in samples, 1 = total*j/np,
 // 2 = none), used when it reproduces more than a quarter of the points
@@ -39,7 +26,7 @@ static int seek_detect_spacing(const u8* d, u32 np, const FrameStats& fs, const 
         for (u32 j = 0; j < np; j++) {
             u64 target = c < 2 ? cs[c] * j : (np ? T * j / np : 0);
             if (c < 2 && cs[c] == 0) break;
-            u64 k = frame_containing(fs, target);
+            u64 k = fs.frame_containing(target);
             if (k < fs.fsamp.n && rd_be64(d + 18 * j) == fs.fsamp[k]) cnt++;
         }
         if (cnt > bestc) {
@@ -68,7 +55,7 @@ static void seek_point(AC& ac, SeekModels& S, u8* p, const FrameStats& fs, int m
         if (sn == ~0ull && off == 0 && fsm == 0)
             kind = 0;
         else {
-            u64 kk = frame_containing(fs, sn);
+            u64 kk = fs.frame_containing(sn);
             if (kk < fs.fsamp.n && fs.fsamp[kk] == sn && fs.foff[kk] == off && fs.fbs[kk] == fsm) {
                 kind = 1;
                 k = kk;
@@ -85,10 +72,10 @@ static void seek_point(AC& ac, SeekModels& S, u8* p, const FrameStats& fs, int m
         u64 pk = prevk;
         int have = 0;
         if (mode == 0) {
-            pk = frame_containing(fs, spacing * j);
+            pk = fs.frame_containing(spacing * j);
             have = 1;
         } else if (mode == 1) {
-            pk = frame_containing(fs, np ? T * j / np : 0);
+            pk = fs.frame_containing(np ? T * j / np : 0);
             have = 1;
         }
         int mt = have ? ac.bit(S.match[mode], k == pk) : 0;

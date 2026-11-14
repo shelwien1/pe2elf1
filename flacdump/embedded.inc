@@ -6,13 +6,6 @@
 // instead of inside the .meta. The .meta keeps their position, size, type and
 // a 16-bit CRC; the bytes around them are coded normally.
 
-struct ExtFiles {
-    const char* prefix;  // file name prefix (out_prefix / inp_prefix)
-    int count;           // files referenced so far (numbering, same order in c and d)
-    int keep_inline;     // -i: do not extract
-    u64 bytes;           // total extracted bytes
-};
-static ExtFiles g_ext = {nullptr, 0, 0, 0};
 
 static const char* k_ext_name[16] = {"bin", "jpg", "png", "gif", "bmp", "webp", "tif", "pdf",
                                      "zip", "gz",  "xz",  "7z",  "ogg", "flac", "txt",  "bin"};

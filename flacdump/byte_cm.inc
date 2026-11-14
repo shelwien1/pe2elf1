@@ -4,26 +4,6 @@
 
 static int g_stretch[4096];
 static int g_squash[4096];
-static void init_squash() {
-    for (int i = 0; i < 4096; i++) {
-        double x = (i - 2048) / 256.0;
-        g_squash[i] = (int)(4096.0 / (1.0 + exp(-x)));
-        if (g_squash[i] > 4095) g_squash[i] = 4095;
-        if (g_squash[i] < 1) g_squash[i] = 1;
-    }
-    int pi = 0;
-    for (int x = -2047; x <= 2047; x++) {
-        int v = g_squash[x + 2048];
-        for (int j = pi; j <= v; j++) g_stretch[j] = x;
-        pi = v + 1;
-    }
-    for (int j = pi; j < 4096; j++) g_stretch[j] = 2047;
-}
-static inline int squash(int x) {
-    if (x > 2047) x = 2047;
-    if (x < -2047) x = -2047;
-    return g_squash[x + 2048];
-}
 
 // tables of the byte models come from a small static pool (models nest at most a few levels:
 // a VORBIS_COMMENT model, plus code_bytes' model and its trial copy, plus a cost estimate)
@@ -103,5 +83,35 @@ struct ByteCM {
         c2 = c1;
         c1 = (u32)c;
         return c;
+    }
+    // estimated cost (bits) of a byte string with a fresh model
+    static double cost(const u8* d, size_t n) {
+        ByteCM t;
+        t.init();
+        double c = 0;
+        for (size_t i = 0; i < n; i++) t.byte(nullptr, d[i], &c);
+        t.release();
+        return c;
+    }
+    // logistic tables g_squash / g_stretch (once at start)
+    static void init_tables() {
+        for (int i = 0; i < 4096; i++) {
+            double x = (i - 2048) / 256.0;
+            g_squash[i] = (int)(4096.0 / (1.0 + exp(-x)));
+            if (g_squash[i] > 4095) g_squash[i] = 4095;
+            if (g_squash[i] < 1) g_squash[i] = 1;
+        }
+        int pi = 0;
+        for (int x = -2047; x <= 2047; x++) {
+            int v = g_squash[x + 2048];
+            for (int j = pi; j <= v; j++) g_stretch[j] = x;
+            pi = v + 1;
+        }
+        for (int j = pi; j < 4096; j++) g_stretch[j] = 2047;
+    }
+    static int squash(int x) {
+        if (x > 2047) x = 2047;
+        if (x < -2047) x = -2047;
+        return g_squash[x + 2048];
     }
 };

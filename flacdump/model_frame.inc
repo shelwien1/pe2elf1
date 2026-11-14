@@ -64,7 +64,7 @@ static bool model_chmode(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st) {
     int bs = (int)f.bs;
     ac.cat = C_CH;
     if (cx.sp.nch == 2) {
-        int pf = ff_stereo_guess(pcm, bs, rice_limit(cx));
+        int pf = ff_stereo_guess(pcm, bs, cx.rice_limit());
         int cf = k_pair_chcode[pf];
         int cl = st.sim_on ? sim_stereo(cx, st, pcm, bs) : -1;
         int done = 0;
@@ -104,7 +104,7 @@ static SimOut subframe_prediction(Ctx& cx, const FrameInfo& f, FrameState& st, i
         if (f.chcode < 8 && f.chcode != 1) sim.type = 4;
     } else {
         int wids[16];
-        int nw = sim_windows(*cx.lp, wids);
+        int nw = cx.lp->sim_windows(wids);
         sim = sim_subframe(cx, st, x, bs, sbps, wids, nw);
     }
     return sim;
@@ -126,7 +126,7 @@ static bool model_fixed_order(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, 
         if (st.fvote[0] + st.fvote[1] >= VOTE_MIN) st.fix_le = st.fvote[1] > st.fvote[0];
     }
     fixed_residual(x, bs, s.order, g_res);
-    if (bs > 4) k0 = k0_from_bps(fixed_rbps(esum[s.order], bs - 4), rice_limit(cx));
+    if (bs > 4) k0 = k0_from_bps(fixed_rbps(esum[s.order], bs - 4), cx.rice_limit());
     return true;
 }
 

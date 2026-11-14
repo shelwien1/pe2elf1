@@ -2,20 +2,6 @@
 // Part of the flacdump.cpp translation unit (included at a fixed position);
 // relies on the definitions before that point; not a standalone header.
 
-// ---- tag structures: exact spans of text values (ID3v2 text/comment frames, APEv2 text items) ----
-struct Span {
-    size_t off, len;
-    int type;  // 0 text, 1 UTF-16LE text, 2 UTF-16BE text, 3 binary object
-};
-struct SpanList {
-    Span s[512];
-    int n;
-    Span tag[16];  // parsed tag structures (no raw base64 scanning inside)
-    int nt;
-};
-static void add_span(SpanList& L, size_t off, size_t len, int type = 0) {
-    if (L.n < 512 && len >= (type == 3 ? 16u : 64u)) L.s[L.n++] = {off, len, type};
-}
 static inline u32 syncsafe32(const u8* p) { return ((p[0] & 0x7F) << 21) | ((p[1] & 0x7F) << 14) | ((p[2] & 0x7F) << 7) | (p[3] & 0x7F); }
 
 // position after an ID3 string terminated by 0 (encodings 0, 3) or 00 00 (UTF-16, encodings 1, 2)
@@ -74,21 +60,21 @@ static size_t id3_spans(const u8* d, size_t n, size_t p, SpanList& L) {
                     }
                     if ((ve - v) & 1) ve--;
                 }
-                if (v < ve) add_span(L, v, ve - v, type);
+                if (v < ve) L.add(v, ve - v, type);
             } else if (geob) {  // MIME, filename, description, object
                 v = id3_skip_str(d, v, ve, 0);
                 v = id3_skip_str(d, v, ve, enc);
                 v = id3_skip_str(d, v, ve, enc);
-                if (v < ve) add_span(L, v, ve - v, 3);
+                if (v < ve) L.add(v, ve - v, 3);
             } else if (apic) {  // MIME (v2.2: 3 char format), picture type, description, data
                 v = ver == 2 ? v + 3 : id3_skip_str(d, v, ve, 0);
                 v = id3_skip_str(d, v + 1, ve, enc);
-                if (v < ve) add_span(L, v, ve - v, 3);
+                if (v < ve) L.add(v, ve - v, 3);
             }
         }
         q = ve;
     }
-    if (L.nt < 16) L.tag[L.nt++] = {p, size};
+    L.add_tag(p, size);
     return size;
 }
 
@@ -115,23 +101,18 @@ static bool ape_spans(const u8* d, size_t n, size_t p, SpanList& L) {
         if (v + vl > end) break;
         int it = (ifl >> 1) & 3;
         if (it == 0)
-            add_span(L, v, vl);  // UTF-8 text item
+            L.add(v, vl);  // UTF-8 text item
         else if (it == 1) {      // binary item, by convention "filename\0data"
             size_t z = v;
             while (z < v + vl && z < v + 256 && d[z]) z++;
             if (z < v + vl && z < v + 256 && !d[z])
-                add_span(L, z + 1, v + vl - z - 1, 3);
+                L.add(z + 1, v + vl - z - 1, 3);
             else
-                add_span(L, v, vl, 3);
+                L.add(v, vl, 3);
         }
         q = v + vl;
     }
-    if (L.nt < 16) L.tag[L.nt++] = {items, end - items};
+    L.add_tag(items, end - items);
     return true;
 }
 
-static bool in_tag(const SpanList& L, size_t i) {
-    for (int k = 0; k < L.nt; k++)
-        if (i >= L.tag[k].off && i < L.tag[k].off + L.tag[k].len) return true;
-    return false;
-}

@@ -7,10 +7,10 @@
 // (gives the libFLAC <= 1.3 parameter hint for partition order 0)
 static u64 lf_rice_bits(Ctx& cx, FrameState& st, int n, int order, double bps) {
     ResStats& rs = cx.rs;
-    int lim = rice_limit(cx);
+    int lim = cx.rice_limit();
     int lo, hi;
     rs.compute(g_res2, n, order, false);
-    porder_range(st, rs, n, order, lo, hi);
+    st.porder_range(rs, n, order, lo, hi);
     rs.k0 = st.k0mode ? k0_from_bps(bps, lim) : -1;
     u64 b = rs.bits_lf(lo, hi, lim, st.rice_new);
     rs.k0 = -1;
@@ -29,7 +29,7 @@ static u64 lpc_order_bits(Ctx& cx, FrameState& st, const s64* x, const s32* x32,
     s32 q[32];
     int sh;
     if (!lpc_quantize(P.lpall + (o - 1) * 32, o, prec, q, &sh)) return ~0ull;
-    lpc_residual_fast(x, x32, n, q, o, sh, g_res2);
+    LpcFast::residual(x, x32, n, q, o, sh, g_res2);
     return (u64)o * (prec + eb) + lf_rice_bits(cx, st, n, o, ebs);
 }
 
@@ -39,7 +39,7 @@ static int lpc_exh_guess(Ctx& cx, FrameState& st, int id, int maxo, const s64* x
     LpcPredictor& P = *cx.lp;
     int mo = P.eval(id, Min(maxo, bs - 1));
     if (!mo) return 0;
-    const s32* x32 = to32(x, bs);
+    const s32* x32 = LpcFast::to32(x, bs);
     int best = 0;
     u64 bb = ~0ull;
     for (int o = 1; o <= mo; o++) {
@@ -67,7 +67,7 @@ static int ff_order_guess(Ctx& cx, FrameState& st, int id, int method, int maxo,
     if (!mo) return 0;
     const int min_order = 1;
     if (method == 0) return ff_est_order(P.lpd, min_order, mo);
-    int lim = rice_limit(cx);
+    int lim = cx.rice_limit();
     u64 bits[33];
     for (int i = 0; i <= 32; i++) bits[i] = ~0ull;
     auto eval_order = [&](int o) -> u64 {  // o is 1-based
@@ -193,9 +193,3 @@ static void lpc_learn(Ctx& cx, FrameState& st, int id, int order, int bs, int eb
             }
 }
 
-static void mru_hit(LpcPredictor& P, int r) {
-    int id = P.mru[r];
-    P.hits[id]++;
-    for (int k = r; k > 0; k--) P.mru[k] = P.mru[k - 1];
-    P.mru[0] = id;
-}

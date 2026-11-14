@@ -11,21 +11,6 @@ struct Segment {
     u32 nsamp;  // samples (frames)
 };
 
-struct MBlock {
-    int type;
-    u32 len;
-    u8* data;  // c: points into the input file; d: only valid while the block is decoded
-    int structured;
-    u64 off;  // file offset of the block header
-};
-struct FlacLayout {
-    u8* prefix;  // c: bytes before "fLaC" (in the input buffer)
-    size_t prefix_n;
-    Vec<MBlock> blocks;
-    StreamParams sp;
-    int vendor;  // encoder hint from the vendor string
-    u8 si[34];   // d: STREAMINFO contents
-};
 enum { BLOCKMAX = 1 << 24 };  // metadata block length is a 24-bit field
 static u8 g_blockbuf[BLOCKMAX];  // d: contents of the metadata block being decoded
 

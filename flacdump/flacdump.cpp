@@ -105,6 +105,7 @@ static inline void wr_be64(u8* p, u64 v) { wr_be32(p, (u32)(v >> 32)); wr_be32(p
 // FLAC frames
 
 #include "flac_defs.inc"
+#include "frame_info.inc"
 #include "lpc_res_fast.inc"
 #include "flac_frame.inc"
 
@@ -127,8 +128,12 @@ static inline void wr_be64(u8* p, u64 v) { wr_be32(p, (u32)(v >> 32)); wr_be32(p
 // Embedded files, base64 text, ID3/APE tags
 
 #include "embedded.inc"
+#include "ext_files.inc"
 #include "base64.inc"
+#include "span_list.inc"
 #include "tag_spans.inc"
+#include "cut_finder.inc"
+#include "ext_models.inc"
 #include "regions.inc"
 
 // ---------------------------------------------------------------------------
@@ -149,6 +154,9 @@ static inline void wr_be64(u8* p, u64 v) { wr_be32(p, (u32)(v >> 32)); wr_be32(p
 // ---------------------------------------------------------------------------
 // The meta model: FRAME segments
 
+#include "models.inc"
+#include "frame_state.inc"
+#include "ctx.inc"
 #include "meta_model.inc"
 #include "model_residual.inc"
 #include "lpc_order.inc"
@@ -160,16 +168,18 @@ static inline void wr_be64(u8* p, u64 v) { wr_be32(p, (u32)(v >> 32)); wr_be32(p
 // Container and metadata blocks
 
 #include "container.inc"
+#include "flac_layout.inc"
 #include "frame_stats.inc"
 #include "sink.inc"
 #include "vorbis.inc"
+#include "vorbis_coder.inc"
 #include "seektable.inc"
 #include "metadata.inc"
 
 // ---------------------------------------------------------------------------
 // Decompression (wav + meta -> flac), compression (flac -> wav + meta)
 
-#include "segments.inc"
+#include "segment_coder.inc"
 #include "decompress.inc"
 #include "compress.inc"
 
@@ -195,10 +205,10 @@ static void usage() {
 int main(int argc, char** argv) {
     if (argc < 2) usage();
     init_crc();
-    init_rates();
-    init_squash();
+    AC::init_rates();
+    ByteCM::init_tables();
     init_work();
-    init_fast();
+    LpcFast::init();
     Options opt;
     opt.verify = 1;
     opt.dump = 0;

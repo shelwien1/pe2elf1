@@ -10,12 +10,12 @@ static int lpc_accept(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s6
     int id = P.mru[r];
     s.shift = sh;
     memcpy(s.coef, q, sizeof(s32) * s.order);
-    mru_hit(P, r);
+    P.mru_hit(r);
     if (P.cand[id].kind == 3) st.ffh++; else st.lfh++;
     if (st.ffh > FF_SWITCH && st.ffh > st.lfh) st.sim_on = 0;
     cs.prank = r == 0 ? 0 : r < 4 ? 1 : 2;
     cs.plorder = s.order - 1;
-    int k0 = P.k0_hint(id, s.order, bs, rice_limit(cx), st.ln2sq);
+    int k0 = P.k0_hint(id, s.order, bs, cx.rice_limit(), st.ln2sq);
     lpc_learn(cx, st, id, s.order, bs, ebps, s.prec, x);
     return k0;
 }
@@ -43,11 +43,11 @@ static int lpc_stage0(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s6
     memcpy(s.coef, q, sizeof(s32) * s.order);
     int r = 0;
     while (r < P.ncand && P.mru[r] != id) r++;
-    if (r < P.ncand) mru_hit(P, r);
+    if (r < P.ncand) P.mru_hit(r);
     st.lfh++;
     cs.plorder = s.order - 1;
     cs.prank = 0;
-    k0 = P.k0_hint(id, s.order, bs, rice_limit(cx), st.ln2sq);
+    k0 = P.k0_hint(id, s.order, bs, cx.rice_limit(), st.ln2sq);
     lpc_learn(cx, st, id, s.order, bs, ebps, s.prec, x);
     return 1;
 }
@@ -74,46 +74,7 @@ static int lpc_find_guess(Ctx& cx, const SubInfo& s, FrameState& st, const s64* 
     return -1;
 }
 
-// encoder, stage 2: MRU rank of the first candidate that reproduces the subframe at its order
-static int lpc_find_at_order(LpcPredictor& P, const SubInfo& s, bool try_unhit) {
-    s32 q[32];
-    int sh;
-    for (int pass = 0; pass < 2; pass++) {
-        if (pass && !try_unhit) break;
-        for (int k = 0; k < P.ncand; k++) {
-            int id = P.mru[k];
-            if ((P.hits[id] == 0) != (pass == 1)) continue;
-            if (!P.at_order(id, s.order, s.prec, q, &sh)) continue;
-            if (sh != s.shift || memcmp(q, s.coef, sizeof(s32) * s.order)) continue;
-            return k;
-        }
-    }
-    return -1;
-}
 
-// -vvv: the candidates closest to an LPC subframe that none of them reproduces
-static void lpc_debug_miss(LpcPredictor& P, const SubInfo& s, int bs) {
-    s32 q[32];
-    int sh;
-    fprintf(stderr, "miss: n=%d order=%d prec=%d shift=%d coefs:", bs, s.order, s.prec, s.shift);
-    for (int i = 0; i < s.order; i++) fprintf(stderr, " %d", s.coef[i]);
-    fprintf(stderr, "\n");
-    for (int id = 0; id < P.ncand; id++) {
-        if (!P.at_order(id, s.order, s.prec, q, &sh)) continue;
-        int nd = 0, md = 0;
-        for (int i = 0; i < s.order; i++) {
-            int d = q[i] - s.coef[i];
-            if (d) nd++;
-            if (d < 0) d = -d;
-            if (d > md) md = d;
-        }
-        if (sh == s.shift && md < 50) {
-            fprintf(stderr, "   cand %2d sh=%d ndiff=%d maxd=%d:", id, sh, nd, md);
-            for (int i = 0; i < s.order; i++) fprintf(stderr, " %d", q[i]);
-            fprintf(stderr, "\n");
-        }
-    }
-}
 
 // no candidate reproduces the subframe: code the shift and the deltas against the best guess
 static bool lpc_code_explicit(Ctx& cx, SubInfo& s, ChState& cs) {
@@ -185,8 +146,8 @@ static bool model_lpc(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s6
     if (s.order > bs) return false;
     cs.plorder = s.order - 1;
     ac.cat = C_COEF;
-    found = ac.dec ? -1 : lpc_find_at_order(P, s, try_unhit);
-    if (!ac.dec && found < 0 && g_verbose >= 3) lpc_debug_miss(P, s, bs);
+    found = ac.dec ? -1 : P.find_at_order(s, try_unhit);
+    if (!ac.dec && found < 0 && g_verbose >= 3) P.debug_miss(s, bs);
     for (r = 0; r < P.ncand; r++)
         if (ac.bit(M.cand_f[Min(r, 23)][cs.prank], r == found)) break;
     if (r < P.ncand) {

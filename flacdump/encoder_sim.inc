@@ -2,29 +2,6 @@
 // Part of the flacdump.cpp translation unit (included at a fixed position);
 // relies on the definitions before that point; not a standalone header.
 
-// windows the encoder appears to use (libFLAC candidates with hits); for windows that exist
-// in several numeric variants (autocorrelation flavour etc.) only the most used variant is kept
-static int sim_windows(LpcPredictor& P, int* ids) {
-    u32 mx = 0;
-    for (int i = 0; i < P.ncand; i++)
-        if (P.cand[i].kind != 3) mx = Max(mx, P.hits[i]);
-    int n = 0;
-    if (!mx) return 0;
-    for (int i = 0; i < P.ncand && n < 16; i++) {
-        const CandDef& a = P.cand[i];
-        if (a.kind == 3 || !P.hits[i] || P.hits[i] * 32 < mx) continue;
-        bool dominated = false;
-        for (int j = 0; j < P.ncand; j++) {
-            const CandDef& b = P.cand[j];
-            if (j == i || b.kind != a.kind || b.b != a.b || b.c != a.c) continue;
-            bool samewin = base_win(b.win) == base_win(a.win);
-            if (!samewin) continue;
-            if (P.hits[j] > P.hits[i] || (P.hits[j] == P.hits[i] && j < i)) dominated = true;
-        }
-        if (!dominated) ids[n++] = i;
-    }
-    return n;
-}
 
 // fixed predictor candidates for xs (w wasted bits, eb bits per sample): libFLAC's order guess,
 // or all orders with exhaustive search; returns true if the signal is constant (best is final)
@@ -66,7 +43,7 @@ static void sim_lpc(Ctx& cx, FrameState& st, const s64* xs, int n, int w, int eb
                     SimOut& best) {
     LpcPredictor& P = *cx.lp;
     P.begin(xs, n);
-    const s32* x32 = to32(xs, n);
+    const s32* x32 = LpcFast::to32(xs, n);
     int maxo = Min(st.lpc_exh ? st.lpc_maxseen : st.lpc_maxo, n - 1);
     if (maxo < 1) return;
     for (int wi = 0; wi < nw; wi++) {
@@ -123,7 +100,7 @@ static s64 g_stsig[4][MAXBS];  // L, R, M, S signals (2 MiB)
 static int sim_stereo(Ctx& cx, FrameState& st, s32** pcm, int n) {
     LpcPredictor& P = *cx.lp;
     int wids[16];
-    int nw = sim_windows(P, wids);
+    int nw = P.sim_windows(wids);
     for (int i = 0; i < n; i++) {
         s64 l = pcm[0][i], r = pcm[1][i];
         g_stsig[0][i] = l;

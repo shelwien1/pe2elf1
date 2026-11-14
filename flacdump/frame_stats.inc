@@ -58,4 +58,18 @@ struct FrameStats {
             }
         if (k) md5.update(tmp, k);
     }
+    // index of the last frame starting at or before 'sample' (0 if there are no frames)
+    u64 frame_containing(u64 sample) const {
+        // binary search last frame with fsamp <= sample
+        if (fsamp.n == 0) return 0;
+        size_t lo = 0, hi = fsamp.n - 1;
+        while (lo < hi) {
+            size_t mid = (lo + hi + 1) / 2;
+            if (fsamp[mid] <= sample)
+                lo = mid;
+            else
+                hi = mid - 1;
+        }
+        return lo;
+    }
 };

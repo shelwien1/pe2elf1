@@ -5,20 +5,7 @@
 enum { MAXCH = 8, MAXBS = 65536, MAXPART = 1 << 15 };
 enum { ST_CONST = 0, ST_VERB = 1, ST_FIXED = 2, ST_LPC = 3 };
 
-struct SubInfo {
-    int type, wasted, order, prec, shift, method, porder;
-    s32 coef[32];
-    u8* param;  // rice parameter per partition (escape code = 15 / 31)
-    u8* raw;    // raw bits for escaped partitions
-};
 
-struct FrameInfo {
-    int blocking, bscode, srcode, chcode, bpscode;
-    u32 bs, srval;
-    u64 number;
-    int nch, bps;
-    SubInfo sub[MAXCH];
-};
 
 struct StreamParams {
     u32 rate;
@@ -39,13 +26,6 @@ static void init_work() {
     for (int c = 0; c < MAXCH; c++) g_pcm[c] = s_pcm[c];
 }
 
-static void frameinfo_init(FrameInfo& f) {
-    memset(&f, 0, sizeof(f));
-    for (int c = 0; c < MAXCH; c++) {
-        f.sub[c].param = g_parambuf + (size_t)c * MAXPART * 2;
-        f.sub[c].raw = f.sub[c].param + MAXPART;
-    }
-}
 
 static const int k_bps_tab[8] = {0, 8, 12, 0, 16, 20, 24, 32};
 static const u32 k_sr_tab[12] = {0, 88200, 176400, 192000, 8000, 16000, 22050, 24000, 32000, 44100, 48000, 96000};
