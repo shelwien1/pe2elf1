@@ -34,11 +34,12 @@ static u64 code_uint(AC& ac, UModel& m, u64 v) {
 }
 static s64 code_sint(AC& ac, UModel& m, BM& sign, s64 v) {
     // zero/sign/magnitude
-    u64 mag = ac.dec ? 0 : (u64)(v < 0 ? -v : v);
+    u64 mag = ac.dec ? 0 : v < 0 ? 0 - (u64)v : (u64)v;
     int neg = v < 0;
     u64 r = code_uint(ac, m, mag);
     if (r) {
         neg = ac.bit(sign, neg);
+        if (r > (u64)INT64_MAX) r = (u64)INT64_MAX;  // only from a corrupt .meta
         return neg ? -(s64)r : (s64)r;
     }
     return 0;

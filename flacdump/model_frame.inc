@@ -37,6 +37,7 @@ static bool model_frame_header(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st,
         f.srcode = st.psrcode;
     else
         f.srcode = ac.tree(M.sr_t, 4, f.srcode);
+    if (f.srcode == 15) return false;  // invalid (only from a corrupt .meta, like the checks below)
     if (f.srcode >= 12 && f.srcode <= 14) {
         int nb = f.srcode == 12 ? 8 : 16;
         if (ac.bit(M.srv_eq[0], f.srval == st.psrval))
@@ -49,6 +50,7 @@ static bool model_frame_header(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st,
         f.bpscode = st.pbpscode;
     else
         f.bpscode = ac.tree(M.bpsc_t, 3, f.bpscode);
+    if (f.bpscode == 3 || (f.bpscode && k_bps_tab[f.bpscode] != cx.sp.bps)) return false;  // as parse_header
     u64 pnum = f.blocking ? st.sample_counter : st.frame_counter;
     if (ac.bit(M.num_eq[f.blocking], f.number == pnum))
         f.number = pnum;

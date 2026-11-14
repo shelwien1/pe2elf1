@@ -41,6 +41,11 @@ C++20, no STL, no exceptions, no RTTI; only the C runtime is used.
 make            # g++ -std=c++20 -fno-exceptions -fno-rtti -ffp-contract=off -O2
 ```
 
+`make test` runs `tests/regress.sh`: crafted inputs that once crashed, hung or
+did not round-trip (garbage and truncated frames in the FLAC, corrupt `.meta`
+files); valid ones must round-trip, corrupt ones must fail cleanly.
+`tests/roundtrip.sh file.flac ...` checks the round trip of any FLAC files.
+
 The program is one translation unit: `flacdump.cpp` includes the `*.inc` files
 next to it (one per topic, and one per class with member functions) in
 dependency order, so only `flacdump.cpp` is passed to the compiler.

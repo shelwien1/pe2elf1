@@ -8,5 +8,10 @@ FLAGS = -std=c++20 -fno-exceptions -fno-rtti -ffp-contract=off -Wall
 flacdump: flacdump.cpp $(wildcard *.inc)
 	$(CXX) $(FLAGS) $(CXXFLAGS) -o $@ $<
 
+# crafted regression inputs (robustness against garbage FLAC and corrupt .meta)
+test: flacdump
+	tests/regress.sh
+
+.PHONY: test clean
 clean:
 	rm -f flacdump

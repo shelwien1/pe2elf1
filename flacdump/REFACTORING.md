@@ -24,18 +24,18 @@ each have their own file (marked *class*).
 | `md5.inc` | 91 | *class* MD5 (RFC 1321), for the STREAMINFO signature |
 | `bit_reader.inc` | 55 | *class* BitReader - MSB-first bit reader for FLAC frames |
 | `fix_out.inc` | 24 | *class* FixOut - output into fixed storage; overflow is remembered |
-| `bit_writer.inc` | 51 | *class* BitWriter - MSB-first bit writer into a FixOut |
-| `flac_defs.inc` | 142 | FLAC structures, work buffers, header code tables, fixed/LPC residuals |
+| `bit_writer.inc` | 55 | *class* BitWriter - MSB-first bit writer into a FixOut |
+| `flac_defs.inc` | 145 | FLAC structures, work buffers, header code tables, fixed/LPC residuals |
 | `frame_info.inc` | 26 | *class* FrameInfo - header fields and subframe parameters of one FLAC frame |
 | `lpc_res_fast.inc` | 40 | *class* LpcFast - fast LPC residual for 32-bit-safe signals (analysis only): order-specialised kernels |
 | `flac_frame.inc` | 303 | FLAC frame parser/decoder and encoder (inverse of parse_frame given FrameInfo + PCM) |
 | `wav_format.inc` | 40 | WAV header and channel mask; sample buffer shared by WavWriter and WavReader |
 | `wav_writer.inc` | 48 | *class* WavWriter - writes the PCM as a WAV file |
-| `wav_reader.inc` | 76 | *class* WavReader - reads the PCM back from a WAV file |
-| `ac.inc` | 110 | *class* AC - binary arithmetic coder, adaptive bit models (BM), cost categories |
-| `uint_model.inc` | 45 | UModel - adaptive Elias-gamma style integer coding |
-| `byte_cm.inc` | 117 | *class* ByteCM - order-0..3 context mixing byte model and its table pool |
-| `code_bytes.inc` | 64 | byte strings, coded with the CM model or stored |
+| `wav_reader.inc` | 77 | *class* WavReader - reads the PCM back from a WAV file |
+| `ac.inc` | 120 | *class* AC - binary arithmetic coder, adaptive bit models (BM), cost categories |
+| `uint_model.inc` | 46 | UModel - adaptive Elias-gamma style integer coding |
+| `byte_cm.inc` | 120 | *class* ByteCM - order-0..3 context mixing byte model and its table pool |
+| `code_bytes.inc` | 67 | byte strings, coded with the CM model or stored |
 | `embedded.inc` | 73 | embedded files (cover art etc.) written as <prefix>.<n>.<ext>: types, image lengths |
 | `ext_files.inc` | 15 | *class* ExtFiles - numbering and naming of the embedded files <prefix>.<n>.<ext> |
 | `base64.inc` | 163 | base64 text (pictures/binary in comments and APE/ID3 tags): layout, generation, parsing, detection |
@@ -43,7 +43,7 @@ each have their own file (marked *class*).
 | `tag_spans.inc` | 118 | ID3v2 / APEv2 tag parsing: exact spans of text values, objects and pictures |
 | `cut_finder.inc` | 200 | *class* CutFinder - finds the parts of a byte region that are cut out: embedded files (pictures, images, objects in tags) and base64 text that is decoded (encoder only) |
 | `ext_models.inc` | 18 | *class* ExtModels - bit models for cut lists and embedded files in byte regions |
-| `regions.inc` | 106 | *class* Regions - coding byte regions with their cuts (embedded files, decoded base64) |
+| `regions.inc` | 111 | *class* Regions - coding byte regions with their cuts (embedded files, decoded base64) |
 | `det_math.inc` | 103 | deterministic cos / cosf / log2 (basic IEEE operations only: identical results on any platform) |
 | `estimators.inc` | 98 | libFLAC/ffmpeg estimators: fixed order guess, rice parameters, expected bits |
 | `res_stats.inc` | 130 | *class* ResStats - residual statistics for partition order / rice parameter prediction |
@@ -56,22 +56,22 @@ each have their own file (marked *class*).
 | `frame_state.inc` | 76 | *class* FrameState - learned encoder hypotheses and previous-frame contexts |
 | `ctx.inc` | 14 | *class* Ctx - the coding context of the meta model (coder, models, stream, predictors) |
 | `meta_model.inc` | 25 | the meta model instances, simulation results, run-state reset |
-| `model_residual.inc` | 134 | model_residual - partition order and rice parameters of a subframe |
+| `model_residual.inc` | 135 | model_residual - partition order and rice parameters of a subframe |
 | `lpc_order.inc` | 195 | LPC order prediction (libFLAC guess / exhaustive search, ffmpeg methods) and learning |
-| `model_lpc.inc` | 159 | model_lpc - LPC order, shift and coefficients, predicted from candidate analyses |
+| `model_lpc.inc` | 160 | model_lpc - LPC order, shift and coefficients, predicted from candidate analyses |
 | `encoder_sim.inc` | 138 | libFLAC subframe/stereo cost simulation (process_subframe_ estimates), ffmpeg stereo estimate |
-| `model_frame.inc` | 205 | model_frame - codes one FRAME segment (header, channel mode, subframes) |
-| `container.inc` | 17 | container structures: audio segments, metadata blocks, layout, .meta magic |
-| `flac_layout.inc` | 71 | *class* FlacLayout - prefix, metadata blocks and stream parameters of a FLAC file |
+| `model_frame.inc` | 210 | model_frame - codes one FRAME segment (header, channel mode, subframes) |
+| `container.inc` | 18 | container structures: audio segments, metadata blocks, layout, .meta magic |
+| `flac_layout.inc` | 73 | *class* FlacLayout - prefix, metadata blocks and stream parameters of a FLAC file |
 | `frame_stats.inc` | 75 | *class* FrameStats - frame list and MD5 gathered while streaming frames |
-| `sink.inc` | 21 | *class* Sink - output of the restored FLAC (file, or compare against the original) |
+| `sink.inc` | 22 | *class* Sink - output of the restored FLAC (file, or compare against the original) |
 | `vorbis.inc` | 55 | VORBIS_COMMENT: vendor dictionary, validation, encoder hint, structured coding |
-| `vorbis_coder.inc` | 104 | *class* VorbisCoder - structured VORBIS_COMMENT coding: vendor from a dictionary, lengths as numbers, text with a shared CM model, base64 values decoded |
+| `vorbis_coder.inc` | 107 | *class* VorbisCoder - structured VORBIS_COMMENT coding: vendor from a dictionary, lengths as numbers, text with a shared CM model, base64 values decoded |
 | `seektable.inc` | 135 | SEEKTABLE coding, points predicted from the frame list |
-| `metadata.inc` | 204 | metadata coding: stream parameters, layout (part A), STREAMINFO derived fields (part C) |
-| `segment_coder.inc` | 125 | *class* SegmentCoder - the audio region: FRAME, raw frame and junk segments, coded in both directions (compression pass 2, or a restore) |
-| `decompress.inc` | 50 | d mode: wav + meta (+ embedded files) -> flac |
-| `compress.inc` | 196 | c mode: flac -> wav + meta (+ embedded files): scan, model, verification |
+| `metadata.inc` | 205 | metadata coding: stream parameters, layout (part A), STREAMINFO derived fields (part C) |
+| `segment_coder.inc` | 129 | *class* SegmentCoder - the audio region: FRAME, raw frame and junk segments, coded in both directions (compression pass 2, or a restore) |
+| `decompress.inc` | 56 | d mode: wav + meta (+ embedded files) -> flac |
+| `compress.inc` | 197 | c mode: flac -> wav + meta (+ embedded files): scan, model, verification |
 
 Commits: `a71016a` (phase 1, binary-identical), `b41ad4e` (phase 2 with the
 reordering of phase 3 item 4), `eef75e9` (phase 3 items 1-3 and 6), and the

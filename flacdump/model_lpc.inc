@@ -100,6 +100,7 @@ static bool lpc_code_explicit(Ctx& cx, SubInfo& s, ChState& cs) {
     s32 lim = 1 << (s.prec - 1);
     for (int i = 0; i < s.order; i++) {
         s64 d = code_sint(ac, M.coef_m[i], M.coef_s[i], (s64)s.coef[i] - q[i]);
+        if (d < -2 * (s64)lim || d > 2 * (s64)lim) return false;  // only from a corrupt .meta
         s64 v = q[i] + d;
         if (v < -lim || v >= lim) return false;
         s.coef[i] = (s32)v;
