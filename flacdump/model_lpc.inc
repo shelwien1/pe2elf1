@@ -14,7 +14,7 @@ static bool model_lpc(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s6
     int sh = 0;
     // encoder-side search budget: candidates that never matched are only tried when
     // exact matches are common (or occasionally), to bound the time spent on unknown encoders
-    int try_unhit = P.nsub < 64 || P.nmiss * 4 < P.nsub || (P.nsub & 15) == 0;
+    int try_unhit = P.nsub < SEARCH_FULL || P.nmiss * SEARCH_MISS_RATIO < P.nsub || P.nsub % SEARCH_EVERY == 0;
     P.nsub++;
     // stage 0: the simulated encoder's choice (window + order)
     if (sim.type == ST_LPC && sim.wid >= 0 && sim.order <= bs - 1) {
@@ -40,7 +40,7 @@ static bool model_lpc(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s6
             cs.plorder = s.order - 1;
             cs.pshift = s.shift;
             cs.prank = 0;
-            k0 = P.k0_hint(id, s.order, bs, klim);
+            k0 = P.k0_hint(id, s.order, bs, klim, st.ln2sq);
         lpc_learn(cx, st, id, s.order, bs, ebps, s.prec, x);
             return true;
         }
@@ -77,11 +77,11 @@ static bool model_lpc(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s6
         memcpy(s.coef, q, sizeof(s32) * g);
         mru_hit(P, r);
         if (P.cand[id].kind == 3) st.ffh++; else st.lfh++;
-        if (st.ffh > 8 && st.ffh > st.lfh) st.sim_on = 0;
+        if (st.ffh > FF_SWITCH && st.ffh > st.lfh) st.sim_on = 0;
         cs.prank = r == 0 ? 0 : r < 4 ? 1 : 2;
         cs.plorder = s.order - 1;
         cs.pshift = s.shift;
-        k0 = P.k0_hint(id, s.order, bs, klim);
+        k0 = P.k0_hint(id, s.order, bs, klim, st.ln2sq);
         lpc_learn(cx, st, id, s.order, bs, ebps, s.prec, x);
         return true;
     }
@@ -133,9 +133,9 @@ static bool model_lpc(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s6
         memcpy(s.coef, q, sizeof(s32) * s.order);
         mru_hit(P, r);
         if (P.cand[id].kind == 3) st.ffh++; else st.lfh++;
-        if (st.ffh > 8 && st.ffh > st.lfh) st.sim_on = 0;
+        if (st.ffh > FF_SWITCH && st.ffh > st.lfh) st.sim_on = 0;
         cs.prank = r == 0 ? 0 : r < 4 ? 1 : 2;
-        k0 = P.k0_hint(id, s.order, bs, klim);
+        k0 = P.k0_hint(id, s.order, bs, klim, st.ln2sq);
         lpc_learn(cx, st, id, s.order, bs, ebps, s.prec, x);
     } else {
         cs.prank = 3;

@@ -115,8 +115,8 @@ static int levinson_all(const double* autoc, int max_order, float* lp, double* e
 }
 
 // FLAC__lpc_compute_best_order
-static int lpc_best_order(const double* lpc_error, int max_order, int total_samples, int overhead) {
-    double error_scale = err_scale(total_samples);
+static int lpc_best_order(const double* lpc_error, int max_order, int total_samples, int overhead, bool ln2sq) {
+    double error_scale = err_scale(total_samples, ln2sq);
     int best = 0;
     double best_bits = 4294967295.0;
     for (int i = 0; i < max_order; i++) {

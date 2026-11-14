@@ -101,6 +101,20 @@ static void models_init(Models& M) {
 static Models g_models;       // the meta model (re-initialized for every run)
 static LpcPredictor g_lpred;  // LPC candidate predictor
 
+// learning thresholds (changing a value changes the .meta format)
+enum {
+    VOTE_MIN = 4,           // votes needed before a variant flag (ln2sq, fix_le, k0mode) may switch
+    RICE_VOTE_MIN = 8,      // the same for the rice estimator variant (rice_new)
+    LEARN_FULL = 64,        // LPC subframes that always update the order hypotheses,
+    LEARN_EVERY = 16,       // afterwards only every 16th
+    EXH_LEAD_MIN = 4,       // exhaustive search is assumed when it reproduces more orders than the
+    EXH_LEAD_DIV = 4,       // order guess: by at least EXH_LEAD_MIN + 1/EXH_LEAD_DIV of its hits
+    FF_SWITCH = 8,          // ffmpeg candidate hits after which the libFLAC simulation may be turned off
+    SEARCH_FULL = 64,       // LPC candidates that never matched are tried in the first 64 subframes,
+    SEARCH_MISS_RATIO = 4,  // while fewer than 1 in 4 subframes has no exact candidate,
+    SEARCH_EVERY = 16,      // and in every 16th subframe
+};
+
 struct FrameState {
     int first;
     u32 ffh, lfh;
@@ -165,3 +179,17 @@ struct SimOut {
     u64 bits;
     int type, order, wid;
 };
+static SimOut g_sim4[4];  // simulated subframes of the L, R, M, S signals of the current frame
+
+// Everything a run (compression pass 2, or a restore) changes, back to its initial
+// state, so that the in-process verification behaves exactly like a fresh process.
+static void reset_run_state() {
+    models_init(g_models);
+    g_lpred.init();
+    extm_init();
+    g_ext.count = 0;
+    g_ext.bytes = 0;
+    g_cutdepth = 0;
+    memset(g_cmbusy, 0, sizeof(g_cmbusy));
+    memset((void*)g_sim4, 0, sizeof(g_sim4));
+}

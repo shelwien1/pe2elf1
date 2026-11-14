@@ -117,6 +117,11 @@ struct ExtModels {
     BM wide[4];
 };
 static ExtModels g_extm;
+static void extm_init() {
+    model_init(g_extm);
+    g_extm.n.len[0].p = 3000;  // most regions contain no embedded files
+    g_extm.n.len[0].n = 4;
+}
 
 static bool code_region(AC& ac, u8* data, size_t len, int kind, bool prime);
 

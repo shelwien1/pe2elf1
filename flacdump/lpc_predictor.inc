@@ -21,7 +21,9 @@ struct LpcPredictor {
     u32 hits[MAXCAND];
     u32 nsub;   // LPC subframes seen
     u32 nmiss;  // LPC subframes without exact candidate
-    float* wd;
+    float wd[MAXBS + 64];       // windowed signal
+    double ffwbuf[MAXBS + 80];  // ffmpeg welch-windowed signal (zero padded)
+    s64 xhalf[MAXBS];           // x >> 1 for the ffmpeg analysis of 33-bit side channels
     // per-subframe memo of autocorrelations
     struct Memo {
         u8 kind, win, b, c, ac, nl;
@@ -33,7 +35,6 @@ struct LpcPredictor {
     float lpall[32 * 32];
     double lerr[32];
     double lpd[32 * 32];  // ffmpeg coefficients (double)
-    double* ffwbuf;
 
     void add(int kind, int win, int b, int c, int quirk, int acm, int fm = 0) {
         if (ncand >= MAXCAND) die("internal: too many candidates");
@@ -51,11 +52,7 @@ struct LpcPredictor {
     }
     void init() {
         wc.init();
-        static float s_wd[MAXBS + 64];
-        static double s_ffw[MAXBS + 80];
-        wd = s_wd;
-        ffwbuf = s_ffw;
-        memset(s_ffw, 0, sizeof(s_ffw));
+        memset(ffwbuf, 0, sizeof(ffwbuf));
         memset(lpall, 0, sizeof(lpall));
         memset(lerr, 0, sizeof(lerr));
         memset(lpd, 0, sizeof(lpd));
@@ -213,9 +210,8 @@ struct LpcPredictor {
             double* w = ffwbuf + 40;
             int sh33 = d.b;  // analysis on x>>1 for 33-bit side channels
             if (sh33) {
-                static s64 tmp[MAXBS];
-                for (int i = 0; i < n; i++) tmp[i] = x[i] >> 1;
-                ff_welch(tmp, n, w);
+                for (int i = 0; i < n; i++) xhalf[i] = x[i] >> 1;
+                ff_welch(xhalf, n, w);
             } else
                 ff_welch(x, n, w);
             w[-1] = 0.0;
@@ -239,9 +235,9 @@ struct LpcPredictor {
         return levinson_all(a, mo, lpall, lerr, d.fma);
     }
     // libFLAC <= 1.3 suggested rice parameter for partition order 0 after eval(id); none for ffmpeg
-    int k0_hint(int id, int order, int bs, int klim) const {
+    int k0_hint(int id, int order, int bs, int klim, bool ln2sq) const {
         if (cand[id].kind == 3) return -1;
-        return k0_from_bps(lpc_expected_bps(lerr[order - 1], bs - order), klim);
+        return k0_from_bps(lpc_expected_bps(lerr[order - 1], bs - order, ln2sq), klim);
     }
     // quantized coefficients of the last eval()ed candidate id at an order (forced_sh >= 0: at that shift)
     bool quant(int id, int order, int prec, s32* q, int* sh, int forced_sh = -1) {

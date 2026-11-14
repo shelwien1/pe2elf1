@@ -3,6 +3,8 @@
 // relies on the definitions before that point; not a standalone header.
 
 // Per-subframe residual statistics for porder / rice parameter prediction
+static u64 g_rs_asum[2 * MAXPART + 8], g_rs_zsum[2 * MAXPART + 8];  // sums per partition order (1 MiB)
+
 struct ResStats {
     int bs, order, maxpo;
     int k0;  // libFLAC <= 1.3: rice parameter used for partition order 0 (-1: mean based)
@@ -10,11 +12,10 @@ struct ResStats {
     u64* asum;
     u64* zsum;
     int off[16];
-    void alloc() {
+    void init() {
         k0 = -1;
-        static u64 s_asum[2 * MAXPART + 8], s_zsum[2 * MAXPART + 8];
-        asum = s_asum;
-        zsum = s_zsum;
+        asum = g_rs_asum;
+        zsum = g_rs_zsum;
     }
     void compute(const s64* r, int bs_, int order_, bool withz = true) {
         bs = bs_;

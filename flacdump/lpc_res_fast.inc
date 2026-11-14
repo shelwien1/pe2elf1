@@ -22,7 +22,7 @@ template <int O> struct LpcResInit {
 template <> struct LpcResInit<0> {
     static void run() {}
 };
-static s32* g_x32;
+static s32 g_x32[MAXBS];
 // residual using a 32-bit copy of x when possible (x32 = nullptr: generic)
 static void lpc_residual_fast(const s64* x, const s32* x32, int n, const s32* c, int order, int shift, s64* r) {
     if (x32 && order <= 32)
@@ -40,8 +40,4 @@ static const s32* to32(const s64* x, int n) {
     return g_x32;
 }
 
-static s32 s_x32[MAXBS];
-static void init_fast() {
-    g_x32 = s_x32;
-    LpcResInit<32>::run();
-}
+static void init_fast() { LpcResInit<32>::run(); }

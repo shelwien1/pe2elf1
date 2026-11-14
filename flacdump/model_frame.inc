@@ -6,7 +6,6 @@
 static bool model_frame(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st, WavReader* src, u64 samples_done) {
     AC& ac = *cx.ac;
     Models& M = *cx.m;
-    g_ln2sq = st.ln2sq;
     ac.cat = C_HDR;
     f.blocking = ac.bit(M.blocking[st.pblocking], f.blocking);
     // block size
@@ -147,7 +146,7 @@ static bool model_frame(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st, WavRea
             if (gn != go) {
                 if (s.order == gn) st.fvote[1]++;
                 if (s.order == go) st.fvote[0]++;
-                if (st.fvote[0] + st.fvote[1] >= 4) st.fix_le = st.fvote[1] > st.fvote[0];
+                if (st.fvote[0] + st.fvote[1] >= VOTE_MIN) st.fix_le = st.fvote[1] > st.fvote[0];
             }
             cs.pfixed = s.order;
             fixed_residual(x, bs, s.order, g_res);

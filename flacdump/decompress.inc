@@ -6,8 +6,8 @@ static bool decompress_core(const u8* meta, size_t meta_n, WavReader& wav, Sink&
     if (meta_n < 2 || memcmp(meta, k_magic, 2)) return false;
     AC ac;
     ac.dec_init(meta + 2, meta_n - 2);
+    reset_run_state();
     Models* M = &g_models;
-    models_init(*M);
     FlacLayout L = {};
     if (!code_layout(ac, *M, L, &out)) return false;
     const StreamParams& sp = L.sp;
@@ -18,9 +18,8 @@ static bool decompress_core(const u8* meta, size_t meta_n, WavReader& wav, Sink&
     cx.ac = &ac;
     cx.m = M;
     cx.sp = sp;
-    cx.rs.alloc();
+    cx.rs.init();
     cx.lp = &g_lpred;
-    cx.lp->init();
     cx.total_samples = wav.nsamples;
     FrameState st;
     fstate_init(st, sp, L.vendor);

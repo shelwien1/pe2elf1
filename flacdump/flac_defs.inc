@@ -25,30 +25,18 @@ struct StreamParams {
     int nch, bps;
 };
 
-static s64* g_sig[MAXCH];  // subframe signals (full, with wasted bits)
-static s64* g_x;           // shifted subframe signal workspace
-static s64* g_res;         // residual workspace
-static s64* g_res2;
-static s64* g_simx;
-static s32* g_pcm[MAXCH];  // PCM of current frame
-static u8* g_parambuf;
-
 // fixed size work buffers (static storage, 8.5 MiB)
-static s64 s_sig[MAXCH][MAXBS];
+static s64 g_sig[MAXCH][MAXBS];  // subframe signals (full, with wasted bits)
+static s64 g_x[MAXBS];           // shifted subframe signal workspace
+static s64 g_res[MAXBS];         // residual workspace
+static s64 g_res2[MAXBS];
+static s64 g_simx[MAXBS];
+static u8 g_parambuf[(size_t)MAXCH * MAXPART * 2];
 static s32 s_pcm[MAXCH][MAXBS];
-static s64 s_x[MAXBS], s_res[MAXBS], s_res2[MAXBS], s_simx[MAXBS];
-static u8 s_parambuf[(size_t)MAXCH * MAXPART * 2];
+static s32* g_pcm[MAXCH];  // PCM of current frame (as s32** for the frame and WAV functions)
 
-static void alloc_work() {
-    for (int c = 0; c < MAXCH; c++) {
-        g_sig[c] = s_sig[c];
-        g_pcm[c] = s_pcm[c];
-    }
-    g_x = s_x;
-    g_res = s_res;
-    g_res2 = s_res2;
-    g_simx = s_simx;
-    g_parambuf = s_parambuf;
+static void init_work() {
+    for (int c = 0; c < MAXCH; c++) g_pcm[c] = s_pcm[c];
 }
 
 static void frameinfo_init(FrameInfo& f) {

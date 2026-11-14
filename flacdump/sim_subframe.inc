@@ -86,10 +86,10 @@ static SimOut sim_subframe(Ctx& cx, FrameState& st, const s64* xin, int n, int s
             o0 = 1;
             o1 = mo;
         } else {
-            o0 = o1 = lpc_best_order(P.lerr, mo, n, eb + (st.lpc_ov ? 5 : st.maxprec));
+            o0 = o1 = lpc_best_order(P.lerr, mo, n, eb + (st.lpc_ov ? 5 : st.maxprec), st.ln2sq);
         }
         for (int ord = o0; ord <= o1; ord++) {
-            double ebs = lpc_expected_bps(P.lerr[ord - 1], n - ord);
+            double ebs = lpc_expected_bps(P.lerr[ord - 1], n - ord, st.ln2sq);
             if (ebs >= (double)eb) continue;
             int prec = st.maxprec;
             if (eb <= (st.fix_le ? 17 : 16)) prec = Min(prec, 32 - eb - ilog2_64(ord));

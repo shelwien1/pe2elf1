@@ -54,7 +54,7 @@ static bool model_residual(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, con
         if (use0 && k0 != (st.rice_new ? kn : ko)) {
             if (k == k0) st.k0vote[1]++;
             else if (k == (st.rice_new ? kn : ko)) st.k0vote[0]++;
-            if (st.k0vote[0] + st.k0vote[1] >= 4) st.k0mode = st.k0vote[1] > st.k0vote[0];
+            if (st.k0vote[0] + st.k0vote[1] >= VOTE_MIN) st.k0mode = st.k0vote[1] > st.k0vote[0];
         }
         if (use0 && st.k0mode && ac.bit(M.k_eq0[k0 == kn], k == k0))
             k = k0;
@@ -108,7 +108,7 @@ static bool model_residual(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, con
     if (!s.method)
         for (int i = 0; i < np; i++)
             if (s.param[i] == 31) s.param[i] = 15;
-    if (st.rvote[0] + st.rvote[1] >= 8) st.rice_new = st.rvote[1] > st.rvote[0];
+    if (st.rvote[0] + st.rvote[1] >= RICE_VOTE_MIN) st.rice_new = st.rvote[1] > st.rvote[0];
     rs.k0 = -1;
     return true;
 }

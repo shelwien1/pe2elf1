@@ -82,14 +82,13 @@ static int k0_from_bps(double bps, int lim) {
     int k = (bps > 0.0 ? (int)(u32)(bps + 0.5) : 0) + 1;
     return k > lim ? lim : k;
 }
-// libFLAC <= 1.3.1 scaled the LPC error by ln(2)^2 when estimating bits
-static int g_ln2sq = 0;
-static inline double err_scale(int total) {
-    return g_ln2sq ? 0.5 * 0.69314718055994530942 * 0.69314718055994530942 / (double)total : 0.5 / (double)total;
+// libFLAC <= 1.3.1 scaled the LPC error by ln(2)^2 when estimating bits (ln2sq)
+static inline double err_scale(int total, bool ln2sq) {
+    return ln2sq ? 0.5 * 0.69314718055994530942 * 0.69314718055994530942 / (double)total : 0.5 / (double)total;
 }
-static double lpc_expected_bps(double err, int total) {
+static double lpc_expected_bps(double err, int total, bool ln2sq) {
     if (err > 0.0) {
-        double b = 0.5 * det_log2(err_scale(total) * err);
+        double b = 0.5 * det_log2(err_scale(total, ln2sq) * err);
         return b >= 0.0 ? b : 0.0;
     }
     return err < 0.0 ? 1e32 : 0.0;

@@ -35,10 +35,6 @@ static void code_stream_params(AC& ac, StreamParams& sp) {
 // d: everything except STREAMINFO and seek table contents is written to 'out' right away.
 static bool code_layout(AC& ac, Models& M, FlacLayout& L, Sink* out) {
     ac.cat = C_META;
-    g_ext.count = 0;
-    model_init(g_extm);
-    g_extm.n.len[0].p = 3000;  // most regions contain no embedded files
-    g_extm.n.len[0].n = 4;
     u64 plen = code_uint(ac, M.len_m, L.prefix_n);
     if (ac.dec) {  // unbounded size (e.g. an ID3v2 tag): temporary buffer, written out at once
         Buf pb;

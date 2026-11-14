@@ -27,22 +27,21 @@ static int sim_windows(LpcPredictor& P, int* ids) {
 }
 
 // libFLAC's channel assignment decision (-m); returns chcode or -1
-static SimOut g_sim4[4];
+static s64 g_stsig[4][MAXBS];  // L, R, M, S signals (2 MiB)
 static int sim_stereo(Ctx& cx, FrameState& st, s32** pcm, int n) {
     LpcPredictor& P = *cx.lp;
     int wids[16];
     int nw = sim_windows(P, wids);
-    static s64 sig[4][MAXBS];
     for (int i = 0; i < n; i++) {
         s64 l = pcm[0][i], r = pcm[1][i];
-        sig[0][i] = l;
-        sig[1][i] = r;
-        sig[2][i] = (l + r) >> 1;
-        sig[3][i] = l - r;
+        g_stsig[0][i] = l;
+        g_stsig[1][i] = r;
+        g_stsig[2][i] = (l + r) >> 1;
+        g_stsig[3][i] = l - r;
     }
     u64 b[4];
     for (int k = 0; k < 4; k++) {
-        g_sim4[k] = sim_subframe(cx, st, sig[k], n, cx.sp.bps + (k == 3), wids, nw);
+        g_sim4[k] = sim_subframe(cx, st, g_stsig[k], n, cx.sp.bps + (k == 3), wids, nw);
         b[k] = g_sim4[k].bits;
     }
     u64 t[4] = {b[0] + b[1], b[0] + b[3], b[1] + b[3], b[2] + b[3]};

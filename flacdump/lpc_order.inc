@@ -16,7 +16,7 @@ static int lpc_exh_guess(Ctx& cx, FrameState& st, int id, int maxo, const s64* x
     s32 q[32];
     for (int o = 1; o <= mo; o++) {
         // "don't even try"
-        double ebs = lpc_expected_bps(P.lerr[o - 1], bs - o);
+        double ebs = lpc_expected_bps(P.lerr[o - 1], bs - o, st.ln2sq);
         if (ebs >= (double)ebps) continue;
         int prec = st.maxprec;
         if (ebps <= (st.fix_le ? 17 : 16)) prec = Min(prec, 32 - ebps - ilog2_64(o));
@@ -121,7 +121,7 @@ static int order_guess(Ctx& cx, FrameState& st, int id, const s64* x, int bs, in
     if (mx < 1) return 0;
     int mo = P.eval(id, mx);
     if (!mo) return 0;
-    return lpc_best_order(P.lerr, mo, bs, ebps + (st.lpc_ov ? 5 : prec));
+    return lpc_best_order(P.lerr, mo, bs, ebps + (st.lpc_ov ? 5 : prec), st.ln2sq);
 }
 
 // learn which hypotheses reproduce the encoder's order choice
@@ -129,7 +129,7 @@ static void lpc_learn(Ctx& cx, FrameState& st, int id, int order, int bs, int eb
     LpcPredictor& P = *cx.lp;
     if (order > st.lpc_maxseen) st.lpc_maxseen = order;
     if (prec > st.maxprec) st.maxprec = prec;
-    if (st.nlearn >= 64 && (st.nlearn & 15)) {
+    if (st.nlearn >= LEARN_FULL && st.nlearn % LEARN_EVERY) {
         st.nlearn++;
         return;
     }
@@ -147,15 +147,13 @@ static void lpc_learn(Ctx& cx, FrameState& st, int id, int order, int bs, int eb
     {
         int mo = P.eval(id, Min(st.lpc_maxo, bs - 1));
         if (mo) {
-            gn = lpc_best_order(P.lerr, mo, bs, ebps + (st.lpc_ov ? 5 : prec));
-            g_ln2sq = !g_ln2sq;
-            int gn2 = lpc_best_order(P.lerr, mo, bs, ebps + (st.lpc_ov ? 5 : prec));
-            g_ln2sq = !g_ln2sq;
+            int ovh = ebps + (st.lpc_ov ? 5 : prec);
+            gn = lpc_best_order(P.lerr, mo, bs, ovh, st.ln2sq);
+            int gn2 = lpc_best_order(P.lerr, mo, bs, ovh, !st.ln2sq);  // the other error scaling
             if (gn != gn2) {
                 st.esvote[st.ln2sq] += gn == order;
                 st.esvote[!st.ln2sq] += gn2 == order;
-                if (st.esvote[0] + st.esvote[1] >= 4) st.ln2sq = st.esvote[1] > st.esvote[0];
-                g_ln2sq = st.ln2sq;
+                if (st.esvote[0] + st.esvote[1] >= VOTE_MIN) st.ln2sq = st.esvote[1] > st.esvote[0];
             }
         }
     }
@@ -163,12 +161,12 @@ static void lpc_learn(Ctx& cx, FrameState& st, int id, int order, int bs, int eb
     st.exscore[0] += gn == order;
     st.exscore[1] += ge == order;
     // exhaustive search is expensive to simulate: require clear evidence
-    st.lpc_exh = st.exscore[1] > st.exscore[0] + st.exscore[0] / 4 + 4;
+    st.lpc_exh = st.exscore[1] > st.exscore[0] + st.exscore[0] / EXH_LEAD_DIV + EXH_LEAD_MIN;
     int mo = P.eval(id, Min(32, bs - 1));
     for (int v = 0; v < 2; v++) {
         int ov = ebps + (v ? 5 : prec);
         for (int m = order; m <= mo; m++)
-            if (lpc_best_order(P.lerr, m, bs, ov) == order) st.oscore[v][m]++;
+            if (lpc_best_order(P.lerr, m, bs, ov, st.ln2sq) == order) st.oscore[v][m]++;
     }
     // the encoder's max order is at least the largest order seen
     if (st.lpc_maxo < st.lpc_maxseen) st.lpc_maxo = st.lpc_maxseen;

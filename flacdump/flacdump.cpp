@@ -201,7 +201,7 @@ int main(int argc, char** argv) {
     init_crc();
     init_rates();
     init_squash();
-    alloc_work();
+    init_work();
     init_fast();
     Options opt;
     opt.verify = 1;

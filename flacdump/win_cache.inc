@@ -4,12 +4,8 @@
 
 struct WinCache {
     int bs;
-    float* w[NWIN];
-    void init() {
-        bs = 0;
-        static float s_win[NWIN][MAXBS];  // ~5.8 MB
-        for (int i = 0; i < NWIN; i++) w[i] = s_win[i];
-    }
+    float w[NWIN][MAXBS];  // 5.5 MiB (the only instance is part of the static g_lpred)
+    void init() { bs = 0; }
     void ensure(int L) {
         if (L == bs) return;
         bs = L;

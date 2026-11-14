@@ -85,16 +85,15 @@ static int do_compress(const char* inname, const char* prefix, const Options& op
     meta.append(k_magic, 2);
     AC ac;
     ac.enc_init(&meta);
+    reset_run_state();
     Models* M = &g_models;
-    models_init(*M);
     if (!code_layout(ac, *M, L, nullptr)) die("internal: layout");
     Ctx cx;
     cx.ac = &ac;
     cx.m = M;
     cx.sp = sp;
-    cx.rs.alloc();
+    cx.rs.init();
     cx.lp = &g_lpred;
-    cx.lp->init();
     cx.total_samples = total_samples;
     FrameState st;
     fstate_init(st, sp, L.vendor);
