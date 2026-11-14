@@ -150,9 +150,11 @@ static bool model_subframe(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st, int
     if (pw >= sbps) pw = sbps - 1;
     if (ac.bit(M.w_eq[pw ? 1 : 0][Min(ch, 3)], s.wasted == pw))
         s.wasted = pw;
-    else
-        s.wasted = (int)code_uint(ac, M.w_val, s.wasted);
-    if (s.wasted >= sbps) return false;
+    else {
+        u64 w = code_uint(ac, M.w_val, (u64)s.wasted);
+        if (w >= (u64)sbps) return false;  // only from a corrupt .meta
+        s.wasted = (int)w;
+    }
     if (s.wasted)
         for (int i = 0; i < bs; i++) x[i] >>= s.wasted;
     // type

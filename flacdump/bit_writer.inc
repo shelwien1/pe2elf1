@@ -30,6 +30,10 @@ struct BitWriter {
     }
     inline void puts(s64 v, int n) { put64((u64)v, n); }
     inline void zeros(u64 q) {
+        if (q / 8 > b->cap - b->n) {  // cannot fit: only from a corrupt .meta / wrong wav
+            b->over = true;
+            return;
+        }
         while (q >= 32) {
             put(0, 32);
             q -= 32;

@@ -90,23 +90,26 @@ static void fixed_restore(s64* x, int n, int order, const s64* r) {
             for (int i = 0; i < n; i++) x[i] = r[i];
             break;
         case 1:
-            for (int i = 1; i < n; i++) x[i] = r[i - 1] + x[i - 1];
+            for (int i = 1; i < n; i++) x[i] = (s64)((u64)r[i - 1] + (u64)x[i - 1]);
             break;
         case 2:
-            for (int i = 2; i < n; i++) x[i] = r[i - 2] + 2 * x[i - 1] - x[i - 2];
+            for (int i = 2; i < n; i++) x[i] = (s64)((u64)r[i - 2] + 2 * (u64)x[i - 1] - (u64)x[i - 2]);
             break;
         case 3:
-            for (int i = 3; i < n; i++) x[i] = r[i - 3] + 3 * x[i - 1] - 3 * x[i - 2] + x[i - 3];
+            for (int i = 3; i < n; i++)
+                x[i] = (s64)((u64)r[i - 3] + 3 * (u64)x[i - 1] - 3 * (u64)x[i - 2] + (u64)x[i - 3]);
             break;
-        default:
-            for (int i = 4; i < n; i++) x[i] = r[i - 4] + 4 * x[i - 1] - 6 * x[i - 2] + 4 * x[i - 3] - x[i - 4];
+        default:  // (wrapping arithmetic: garbage frames may overflow)
+            for (int i = 4; i < n; i++)
+                x[i] = (s64)((u64)r[i - 4] + 4 * (u64)x[i - 1] - 6 * (u64)x[i - 2] + 4 * (u64)x[i - 3] - (u64)x[i - 4]);
             break;
     }
 }
-// LPC prediction of h[0] from h[-1..-order] (sums wrap around like libFLAC's 64-bit ones)
+// LPC prediction of h[0] from h[-1..-order] (products and sums wrap around: on garbage frames
+// only; valid ones never overflow)
 static inline s64 lpc_pred(const s64* h, const s32* c, int order, int shift) {
     u64 s = 0;
-    for (int j = 0; j < order; j++) s += (u64)((s64)c[j] * h[-1 - j]);
+    for (int j = 0; j < order; j++) s += (u64)(s64)c[j] * (u64)h[-1 - j];
     return (s64)s >> shift;
 }
 static void lpc_residual(const s64* x, int n, const s32* c, int order, int shift, s64* r) {

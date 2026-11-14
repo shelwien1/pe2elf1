@@ -7,11 +7,12 @@ struct Sink {
     const u8* ref;
     u64 ref_n;
     bool mismatch;
+    bool error;  // writing the file failed
     u64 pos;
     void write_at(u64 off, const u8* p, size_t n) {
         if (f) {
-            if (off != pos) fseek64(f, (s64)off, SEEK_SET);
-            fwrite(p, 1, n, f);
+            if (off != pos && fseek64(f, (s64)off, SEEK_SET)) error = true;
+            if (fwrite(p, 1, n, f) != n) error = true;
             pos = off + n;
         } else {
             if (off + n > ref_n || memcmp(ref + off, p, n)) mismatch = true;

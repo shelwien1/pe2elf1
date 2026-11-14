@@ -11,18 +11,18 @@ struct VorbisCoder {
     u32 p;  // position in the block (d: being filled)
 
     bool put32(u32 x) {
-        if (p + 4 > b.len) return false;
+        if ((u64)p + 4 > b.len) return false;
         wr_le32(b.data + p, x);
         p += 4;
         return true;
     }
     // n bytes of text with the shared CM model (its order-1..3 contexts restart for each string)
-    bool text(u32 n) {
+    bool text(u64 n) {
         if (p + n > b.len) return false;
         u8* d = b.data + p;
         cm.c1 = cm.c2 = cm.c3 = 0;
-        for (u32 i = 0; i < n; i++) d[i] = (u8)cm.byte(&ac, d[i], nullptr);
-        p += n;
+        for (u64 i = 0; i < n; i++) d[i] = (u8)cm.byte(&ac, d[i], nullptr);
+        p += (u32)n;
         return true;
     }
     // vendor string: an index into k_vendors, or its length and text
@@ -35,13 +35,13 @@ struct VorbisCoder {
         vi = ac.tree(M.vendor_t, 5, vi);
         if (vi < NVENDORS) {
             vl = (u32)strlen(k_vendors[vi]);
-            if (!put32(vl) || p + vl > b.len) return false;
+            if (!put32(vl) || (u64)p + vl > b.len) return false;
             memcpy(b.data + p, k_vendors[vi], vl);
             p += vl;
             return true;
         }
-        vl = (u32)code_uint(ac, M.len_m, vl);
-        return put32(vl) && text(vl);
+        u64 v64 = code_uint(ac, M.len_m, vl);
+        return v64 <= b.len && put32((u32)v64) && text(v64);
     }
     // encoder: is the value of the comment c[0..l) ("KEY=value") base64 that is worth decoding?
     // Sets the key length (with '='), the text layout, the decoded data (g_b64dec_v, dn) and its kind.
@@ -59,16 +59,18 @@ struct VorbisCoder {
     // decoded data instead (coded as a region: pictures and large blobs become external files,
     // small blobs are coded as binary if that is cheaper)
     bool comment() {
-        u32 l = (u32)code_uint(ac, M.clen_m, ac.dec ? 0 : rd_le32(b.data + p));
-        if (!put32(l) || p + l > b.len) return false;
+        u64 l64 = code_uint(ac, M.clen_m, ac.dec ? 0 : rd_le32(b.data + p));
+        if (l64 > b.len || !put32((u32)l64) || p + l64 > b.len) return false;
+        u32 l = (u32)l64;
         int kind = 0;
         B64Fmt fmt = {0, 0, 0, 0};
         u32 klen = 0;
         size_t dn = 0;
         int b64 = ac.dec ? 0 : b64_detect(b.data + p, l, klen, fmt, dn, kind);
         if (!ac.bit(M.mflag[3], b64)) return text(l);
-        klen = (u32)code_uint(ac, M.len_m, klen);
-        if (klen > l) return false;
+        u64 k64 = code_uint(ac, M.len_m, klen);
+        if (k64 > l) return false;
+        klen = (u32)k64;
         bool good = text(klen);
         code_b64fmt(ac, fmt, M.mflag[4], M.len_m, M.mflag[5], M.mflag[6]);
         kind = (int)ac.tree(M.b64kind, 2, (u32)kind);
@@ -94,10 +96,11 @@ struct VorbisCoder {
         bool good = v.vendor();
         u32 cnt = 0;
         if (good) {
-            cnt = (u32)code_uint(ac, M.num_m, ac.dec ? 0 : rd_le32(b.data + v.p));
-            good = v.put32(cnt);
+            u64 c64 = code_uint(ac, M.num_m, ac.dec ? 0 : rd_le32(b.data + v.p));
+            good = c64 <= b.len / 4 && v.put32((u32)c64);  // each comment takes 4+ bytes
+            cnt = (u32)c64;
         }
-        for (u32 i = 0; i < cnt && good; i++) good = v.comment();
+        for (u32 i = 0; i < cnt && good && !ac.exhausted(); i++) good = v.comment();
         cm.release();
         return good && v.p == b.len;
     }

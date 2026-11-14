@@ -18,6 +18,7 @@ struct WavReader {
             if (fread(ch, 1, 8, f) != 8) return false;
             u32 sz = rd_le32(ch + 4);
             if (!memcmp(ch, "fmt ", 4)) {
+                if (sz < 16) return false;
                 u8 fm[64];
                 u32 k = Min(sz, (u32)64);
                 if (fread(fm, 1, k, f) != k) return false;

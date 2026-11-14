@@ -143,8 +143,8 @@ static void compress_model(const Buf& in, FlacLayout& L, u64 audio_start, const 
     ac.flush();
     FILE* mf = fopen(mname, "wb");
     if (!mf) die("cannot create meta");
-    fwrite(meta.p, 1, meta.n, mf);
-    if (fclose(mf)) die("error writing meta");
+    bool werr = fwrite(meta.p, 1, meta.n, mf) != meta.n;
+    if (fclose(mf) || werr) die("error writing meta");
     if (g_verbose) print_compress_stats(sc, ac, meta.n, r.st, *r.cx.lp);
 }
 
@@ -177,6 +177,7 @@ static int do_compress(const char* inname, const char* prefix, const Options& op
     char wname[4096], mname[4096];
     snprintf(wname, sizeof(wname), "%s.wav", prefix);
     snprintf(mname, sizeof(mname), "%s.meta", prefix);
+    if (!strcmp(inname, wname) || !strcmp(inname, mname)) die("an output file would overwrite the input");
     Scan sc = {};
     compress_scan(in, L, audio_start, prefix, wname, opt, sc);
     Buf meta;

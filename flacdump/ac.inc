@@ -27,6 +27,7 @@ struct AC {
     Buf* out;
     const u8* in;
     size_t ip, in_n;
+    u32 past;  // d: bytes read past the end of the input (a few at the very end are normal)
     int cat;
     double cost[NCAT];
     int limit;  // adaptation count limit
@@ -46,12 +47,21 @@ struct AC {
         in = p;
         in_n = n;
         ip = 0;
+        past = 0;
         x = 0;
         cat = 0;
         limit = 30;
         for (int i = 0; i < 4; i++) x = (x << 8) | byte();
     }
-    inline u32 byte() { return ip < in_n ? in[ip++] : 255; }
+    inline u32 byte() {
+        if (ip < in_n) return in[ip++];
+        past++;
+        return 255;
+    }
+    // d: the .meta is used up (corrupt or truncated): stop decoding
+    bool exhausted() const { return dec && past > 16; }
+    // d: undecoded bytes of the .meta (equiprobable bits cost one byte per byte)
+    size_t left() const { return in_n - ip; }
     inline int code(int bit, u32 p16) {
         if (p16 < 16) p16 = 16;
         if (p16 > 65520) p16 = 65520;

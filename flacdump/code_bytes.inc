@@ -53,7 +53,10 @@ static void code_pieces(AC& ac, const Piece* pc, int np, bool prime) {
     if (stored) ac.cat = C_RAW;
     for (int k = 0; k < np; k++) {
         u8* d = pc[k].p;
-        for (size_t i = 0; i < pc[k].n; i++) d[i] = stored ? (u8)ac.raw(d[i], 8) : (u8)cm.byte(&ac, d[i], nullptr);
+        for (size_t i = 0; i < pc[k].n; i++) {
+            if ((i & 4095) == 0 && ac.exhausted()) break;  // corrupt .meta: callers fail
+            d[i] = stored ? (u8)ac.raw(d[i], 8) : (u8)cm.byte(&ac, d[i], nullptr);
+        }
     }
     cm.release();
     ac.cat = savecat;

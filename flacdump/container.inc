@@ -12,6 +12,7 @@ struct Segment {
 };
 
 enum { BLOCKMAX = 1 << 24 };  // metadata block length is a 24-bit field
+enum { MAXBLOCKS = 100000 };  // metadata blocks per file (both directions)
 static u8 g_blockbuf[BLOCKMAX];  // d: contents of the metadata block being decoded
 
 static const u8 k_magic[2] = {'F', 0xD1};

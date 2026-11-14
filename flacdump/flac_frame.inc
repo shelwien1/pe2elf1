@@ -144,19 +144,19 @@ static size_t parse_frame(const u8* d, size_t avail, const StreamParams& sp, Fra
         } else if (t >= 8 && t <= 12) {
             s.type = ST_FIXED;
             s.order = t - 8;
-            if (s.order > bs) return 0;
+            if (s.order > bs || br.pos + (u64)eb * s.order > br.nbits) return 0;
             for (int i = 0; i < s.order; i++) x[i] = br.gets(eb);
             if (!decode_residual(br, bs, s.order, s, g_res)) return 0;
             fixed_restore(x, bs, s.order, g_res);
         } else if (t >= 32) {
             s.type = ST_LPC;
             s.order = t - 31;
-            if (s.order > bs) return 0;
+            if (s.order > bs || br.pos + (u64)eb * s.order + 9 > br.nbits) return 0;
             for (int i = 0; i < s.order; i++) x[i] = br.gets(eb);
             s.prec = br.get(4) + 1;
             if (s.prec == 16) return 0;
             s.shift = (int)br.gets(5);
-            if (s.shift < 0) return 0;
+            if (s.shift < 0 || br.pos + (u64)s.prec * s.order > br.nbits) return 0;
             for (int i = 0; i < s.order; i++) s.coef[i] = (s32)br.gets(s.prec);
             if (!decode_residual(br, bs, s.order, s, g_res)) return 0;
             lpc_restore(x, bs, s.coef, s.order, s.shift, g_res);
@@ -182,12 +182,12 @@ static size_t parse_frame(const u8* d, size_t avail, const StreamParams& sp, Fra
             if (f.chcode < 8)
                 v = g_sig[ch][i];
             else if (f.chcode == 8)
-                v = ch == 0 ? a[i] : a[i] - b[i];
+                v = ch == 0 ? a[i] : (s64)((u64)a[i] - (u64)b[i]);
             else if (f.chcode == 9)
-                v = ch == 0 ? a[i] + b[i] : b[i];
+                v = ch == 0 ? (s64)((u64)a[i] + (u64)b[i]) : b[i];
             else {
-                s64 m = (s64)((u64)a[i] << 1) | (b[i] & 1);
-                v = ch == 0 ? (m + b[i]) >> 1 : (m - b[i]) >> 1;
+                u64 m = ((u64)a[i] << 1) | (u64)(b[i] & 1);
+                v = (s64)(ch == 0 ? m + (u64)b[i] : m - (u64)b[i]) >> 1;
             }
             if (v < lo || v > hi) return 0;
             o[i] = (s32)v;

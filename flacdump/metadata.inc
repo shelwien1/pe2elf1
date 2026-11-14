@@ -54,7 +54,7 @@ static bool code_layout(AC& ac, Models& M, FlacLayout& L, Sink* out) {
     // block 0 is STREAMINFO
     u64 nb = code_uint(ac, M.num_m, L.blocks.n);
     if (ac.dec) {
-        if (nb == 0 || nb > 100000) return false;
+        if (nb == 0 || nb > MAXBLOCKS) return false;
         L.blocks.n = 0;
         for (u64 i = 0; i < nb; i++) {
             MBlock b;
@@ -70,6 +70,7 @@ static bool code_layout(AC& ac, Models& M, FlacLayout& L, Sink* out) {
     boff += 4 + 34;
     int pt = 0;
     for (size_t i = 1; i < L.blocks.n; i++) {
+        if (ac.exhausted()) return false;
         MBlock& b = L.blocks[i];
         b.type = (int)ac.tree(M.mtype[Min(pt, 7)], 7, b.type);
         pt = b.type;

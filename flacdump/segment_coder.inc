@@ -61,6 +61,7 @@ struct SegmentCoder {
         u64 ns64 = code_uint(ac, M.len_m, ac.dec ? 0 : s->nsamp - 1) + 1;
         u64 len = code_uint(ac, M.len_m, ac.dec ? 0 : s->len);
         if (ns64 > MAXBS || len > FRAMEMAX) return false;  // no FLAC frame is that large
+        if (ac.dec && len > ac.left() + 16) return false;  // each raw byte costs a .meta byte
         u32 ns = (u32)ns64;
         if (!ac.dec)
             for (u64 j = 0; j < len; j++) ac.raw(in->p[pos + j], 8);
@@ -108,6 +109,7 @@ struct SegmentCoder {
         bool ok = true;
         int pk = 4;
         for (size_t i = 0; ok; i++) {
+            if (ac.exhausted()) return false;
             const Segment* s = !ac.dec && i < segs->n ? &(*segs)[i] : nullptr;
             ac.cat = C_HDR;
             int kind = ac.tree(cx.m->seg[pk], 2, ac.dec ? 0 : s ? s->kind : SEG_END);

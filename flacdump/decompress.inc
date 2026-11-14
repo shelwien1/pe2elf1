@@ -31,6 +31,7 @@ static int do_decompress(const char* prefix, const char* outname) {
     char wname[4096], mname[4096];
     snprintf(wname, sizeof(wname), "%s.wav", prefix);
     snprintf(mname, sizeof(mname), "%s.meta", prefix);
+    if (!strcmp(outname, wname) || !strcmp(outname, mname)) die("the output would overwrite an input file");
     Buf meta;
     if (!read_file(mname, meta, 16)) die("cannot read meta");
     WavReader wr;
@@ -42,7 +43,12 @@ static int do_decompress(const char* prefix, const char* outname) {
     if (!sk.f) die("cannot create output");
     bool ok = decompress_core(meta.p, meta.n, wr, sk);
     wr.close();
-    if (fclose(sk.f) || !ok) {
+    bool werr = sk.error || ferror(sk.f);
+    if (fclose(sk.f) || werr) {
+        remove(outname);
+        die("error writing output");
+    }
+    if (!ok) {
         remove(outname);
         die("restore failed (corrupt or mismatched meta/wav)");
     }

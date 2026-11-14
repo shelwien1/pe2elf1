@@ -211,5 +211,6 @@ the same.
   format bound: the input FLAC, the `.meta`, per-frame bookkeeping, the list of
   metadata blocks and (in `d`) raw byte regions.
 * base64 values that would decode to more than 16 MB are kept as text.
+* At most 100000 metadata blocks per file.
 * WAV files above 4 GB use 0xFFFFFFFF size fields (sample count is then taken
   from the file size).

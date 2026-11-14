@@ -15,7 +15,7 @@ static ByteCMTables g_cmpool[CM_POOL];  // ~4.7 MB
 static bool g_cmbusy[CM_POOL];
 
 struct ByteCM {
-    enum { N = 4, H2 = CM_H2, H3 = CM_H3 };
+    enum { N = 4, H2 = CM_H2, H3 = CM_H3, WMAX = 1 << 22 };
     u16* t0;
     u16* t1;
     u16* t2;
@@ -68,8 +68,11 @@ struct ByteCM {
             else if (cost)
                 *cost -= log2(bit ? p / 4096.0 : 1.0 - p / 4096.0);
             int err = ((bit << 12) - p) * 6;
-            for (int j = 0; j < N; j++) ww[j] += (st[j] * err) >> 10;
-            ww[N] += (256 * err) >> 10;
+            for (int j = 0; j <= N; j++) {  // weights stay within +-2^22: products fit
+                ww[j] += ((j < N ? st[j] : 256) * err) >> 10;
+                if (ww[j] > WMAX) ww[j] = WMAX;
+                if (ww[j] < -WMAX) ww[j] = -WMAX;
+            }
             for (int j = 0; j < N; j++) {
                 int t = *e[j];
                 *e[j] = (u16)(t + ((((bit << 12) - t) * (j == 0 ? 24 : 40)) >> 8));

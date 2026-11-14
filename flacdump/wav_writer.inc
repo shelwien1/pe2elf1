@@ -42,7 +42,7 @@ struct WavWriter {
         fseek64(f, 0, SEEK_SET);
         fwrite(h, 1, hl, f);
         bool ok = !ferror(f);
-        fclose(f);
+        if (fclose(f)) ok = false;
         return ok;
     }
 };

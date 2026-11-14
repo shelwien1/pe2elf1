@@ -51,6 +51,7 @@ struct FlacLayout {
             b.off = pos - 4;
             b.data = in.p + pos;
             pos += b.len;
+            if (blocks.n == MAXBLOCKS) die("more than 100000 metadata blocks");
             blocks.push(b);
             if (last) break;
         }
@@ -59,6 +60,7 @@ struct FlacLayout {
         sp.rate = (d[10] << 12) | (d[11] << 4) | (d[12] >> 4);
         sp.nch = ((d[12] >> 1) & 7) + 1;
         sp.bps = (((d[12] & 1) << 4) | (d[13] >> 4)) + 1;
+        if (sp.bps < 4) return false;  // FLAC: 4..32 bits per sample
         audio_start = pos;
         return true;
     }
