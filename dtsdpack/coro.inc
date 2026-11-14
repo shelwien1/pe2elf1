@@ -8,7 +8,7 @@
 enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND };  // the header's fixed part
 enum { DP_BIND_MAX = 3 + 10 + 4 + 5 + 3 + 12 * NCH };                     // (and the binding's bytes at most)
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
-constexpr int DP_VERSION = 92;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
+constexpr int DP_VERSION = 93;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
                                // extension as records; 4: a WAV at twice the core's rate, X96 and XXCH; 5: the
                                // scale factor search; 6: the bit allocation search; 7: the bits after the
                                // subframes as the bytes they end in, the energy's quarter of its bucket, the
@@ -155,7 +155,9 @@ constexpr int DP_VERSION = 92;  // the format's (2: a core channel's binding a m
                                // 90: the header's binding in bytes of their own lengths; 91: a
                                // lossless WAV's scale factors the RMS rule isn't sure of by the
                                // FFT's noise's posterior over the table's cells, sf_post()); 92:
-                               // that noise in the ADPCM subbands by their index error scales
+                               // that noise in the ADPCM subbands by their index error scales;
+                               // 93: a lossless WAV's HF VQ groups and entries by a Monte Carlo
+                               // posterior of the encoder's noisy values too, hf_mc(); scl retuned
 
 static void put_le(U8* p, U64 v, int n) {
   for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));

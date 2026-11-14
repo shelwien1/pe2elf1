@@ -627,6 +627,19 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int k = 0; k < 6; k++) tw_n[k][0] = 1, tw_n[k][1] = 7;
     tw_t[0] = tw_t[1] = 0;
     memset(sp_n, 0, sizeof sp_n);
+    {  // (MC's samples: the quantiles in an order of each value's own, by an LCG's Fisher-Yates)
+      U64 rs = 0x243F6A8885A308D3ull;
+      for (int j = 0; j < 16; j++) {
+        int pm[MC_N];
+        for (int t = 0; t < MC_N; t++) pm[t] = t;
+        for (int t = MC_N - 1; t > 0; t--) {
+          rs = rs * 6364136223846793005ull + 1442695040888963407ull;
+          const int u = (int)((rs >> 33) % (U64)(t + 1)), w = pm[t];
+          pm[t] = pm[u], pm[u] = w;
+        }
+        for (int t = 0; t < MC_N; t++) mcz[t][j] = MC_Q[pm[t]];
+      }
+    }
     for (int k = 1; k < SP_NB; k++) {  // (det_exp_neg(): the same everywhere)
       const double z = -8.0 + 16.0 * k / SP_NB;
       sp_t[k - 1] = z < 0 ? det_exp_neg(z) / (1.0 + det_exp_neg(z)) : 1.0 / (1.0 + det_exp_neg(-z));
@@ -1601,7 +1614,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // by their keys) lies from the best against this one's (gr, the contexts selected again): where
   // the encoder's arithmetic makes another its choice, the nearer ones are likelier, and how many
   // lie near goes by where the keys jump (`s.2.dts`'s core 0.7% smaller)
-  int code_rank(int r, int nb, M_vqr_v& D, const KeyIx* c, int n) {
+  int code_rank(int r, int nb, M_vqr_v& D, const KeyIx* c, int n, const double* qr = nullptr) {
+    // (qr: each rank's probability, the outside prediction of each decision, its stretch doubled)
+    auto setp = [&](int lo, int mid, int hi) {
+      if (!qr) return;
+      double a = 0, t = 0;
+      for (int i = lo; i < hi && i < n; i++) t += qr[i], a += i >= mid ? qr[i] : 0;
+      const int p0 = t > 0 ? clip((int)((1.0 - a / t) * CM_PONE + 0.5), 1, CM_PONE - 1) : CM_PHALF;
+      f_vqr.prp = cm_pclip(cm_squash(2 * cm_stretch(p0)));
+    };
     const int bk = ENC ? bit_len((U64)r) : 0;
     int t = 0;
     S128 sk[64];  // (the keys, sorted, once past the first bucket)
@@ -1623,12 +1644,21 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         }
         B::sel(f_vqr, D);
       }
+      setp(t ? 1 << (t - 1) : 0, 1 << t, n);
       if (!f_vqr.bit(VN_BKT + t, ENC && bk > t)) break;
       t++;
     }
-    if (t < 2) return t;
+    if (t < 2) {
+      f_vqr.prp = -1;
+      return t;
+    }
     int m = 1;
-    for (int p = 0; p < t - 1; p++) m = 2 * m + f_vqr.bit(VN_BIT + 3 * t + imin(p, 2), ENC && ((r >> (t - 2 - p)) & 1));
+    for (int p = 0; p < t - 1; p++) {
+      const int sh = t - 2 - p;
+      setp(m << (sh + 1), (2 * m + 1) << sh, (m + 1) << (sh + 1));
+      m = 2 * m + f_vqr.bit(VN_BIT + 3 * t + imin(p, 2), ENC && ((r >> sh) & 1));
+    }
+    f_vqr.prp = -1;
     return m;
   }
   // the rank of index v among the n candidates (c), or the index of the rank coded (d); kind kd, the
@@ -1639,13 +1669,117 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   U32 hvs[2];  // (the misses where each was sure: against the best, against mu)
   U32 hrs[2];  // (code_hfvq(): which ranked the encoder's group higher, the values as they are or scaled into its scale factor's region)
   U32 hpw[2];  // (code_hfvq(): where a group wasn't the first, the vectors' order that ranked the encoder's higher, the values as they are or moved)
+  // A lossless WAV's HF VQ subbands at the core's rate (code_hfvq()): the groups and the entries by
+  // a Monte Carlo posterior too, the encoder's choice made on samples of its noisy values. The noise
+  // is drawn about each value at its deviation (in the top subband 3 2^-40 of the bottom subband's
+  // binade's square, hf_stair2()'s, in subbands 28-30 2^-40 of the square of the level along the
+  // subband's FFT path, plev's), the samples whose mean square the scale factor's region doesn't hold
+  // (the RMS rule's, code_scale()'s) left out; each sample's group the scores' rule's
+  // (hf_group_score()'s, the scores as the model has learned them), its entry the group's nearest.
+  // The counts, with a prior of MC_A to each per MC_N kept, give each candidate's probability, and
+  // each decision of its rank (code_rank()) the probability of its outcome as vqr's outside
+  // prediction, its stretch doubled; the entry's probabilities are those of the samples that took
+  // the encoder's group, or where fewer than MC_NG did, the group's nearest entries of all the
+  // samples. Taken alone, the posterior codes about as the model does (3 MB of `s.2.dts`'s middle:
+  // its top subband's groups 407 bytes against the model's 420, the entries 457 against 459), and
+  // the two differ: mixed at a fixed weight, 6% less than either. As the outside prediction,
+  // `s.2.dts`'s core 0.72% smaller (the top subband's alone, the stretch as it is, the prior 1/4);
+  // doubled, the prior 1/20, 0.25% more (by 3 0.01% less, by 4 0.04%); more passes where the region
+  // leaves few, 0.18%; subbands 28-30 too, 0.27% (their noise at 2^-38 0.11% less; at format 88's
+  // 2^-44, the short streams 0.17% bigger): 81703 bytes to 80550, 3 MB of its middle 0.9% smaller,
+  // its first 3 MB 0.2%, the rest as they were. The top subband's noise at 2 or 4 2^-40, 0.14% and
+  // 0.02% bigger; with heavier tails (Laplace's, Student's t with 5 or 3 degrees of freedom, at the
+  // same variance), the short streams 1-5 bytes bigger; the samples' groups by the scores weighed
+  // as the model's are (gw), the same; the posterior's first as the near-tie count's context, bigger.
+  // A stop once MC_B samples agree on both, 5 bytes more; with it and the scores' sums in AVX2,
+  // `s.2.dts`'s core compresses in 61 seconds where format 92's took 38 (100 without them). The
+  // samples: MC_Q's 256 quantiles in an order of each value's own, a pass taking them in another
+  // pairing (all in IEEE's basic arithmetic, the scores' products and sums in the same order in the
+  // AVX2 build and the plain one)
+  static constexpr int MC_N = 256, MC_B = 32, MC_P = 4, MC_T = 128, MC_NG = 16;
+  static constexpr double MC_A = 0.05;
+  double mcz[MC_N][16];      // (the noise's samples)
+  S64 mcy[MC_N][16];         // (the samples kept, the encoder's group and entry for each)
+  int mcg[MC_N], mce[MC_N];
+  // (the entry of group g nearest y)
+  static int hf_near(int g, const S64* y, S64 sc) {
+    S128 dd[32];
+    hf_dists(g, y, 16, sc, dd);
+    int be = 0;
+    for (int i = 1; i < 32; i++) be = dd[i] < dd[be] ? i : be;
+    return be;
+  }
+  // hf_mc(): the encoder's values sampled about x, the noise's deviation sg at each, those whose mean
+  // square lies in lo2..hi2 kept (to MC_N), each one's group by the scores' rule (hf_group_score()'s,
+  // in doubles) and its entry there; a block of MC_B at a time, of MC_N in a pass, a pass taking the
+  // values' samples in another pairing, until MC_B kept agree, or after a pass MC_T are kept, or MC_P
+  // passes; how many were kept
+  int hf_mc(const S64* x, const double* sg, double lo2, double hi2, S64 sc) {
+    alignas(32) double kq[32], wt[16][32];
+    for (int q = 0; q < 32; q++) {
+      double w2 = 0;
+      for (int j = 0; j < 16; j++) w2 += (double)hgw[q][j] * (double)hgw[q][j], wt[j][q] = (double)hgw[q][j];
+      kq[q] = (double)sc * (ldexp(w2, AQ_F) + ldexp((double)hge[q], 32 - AQ_F)) / 16384.0;
+    }
+    int mk = 0;
+    bool same = true;
+    for (int pass = 0; pass < MC_P; pass++) {
+      for (int t0 = 0; t0 < MC_N; t0 += MC_B) {
+        for (int t = t0; t < t0 + MC_B && mk < MC_N; t++) {
+          S64* y = mcy[mk];
+          double ms = 0;
+          for (int j = 0; j < 16; j++) {
+            const double e = sg[j] * mcz[(t + pass * (53 * j + 1)) & (MC_N - 1)][j];
+            y[j] = x[j] + (S64)(e + (e >= 0 ? 0.5 : -0.5));
+            ms += (double)y[j] * (double)y[j];
+          }
+          ms /= 16;
+          if (ms < lo2 || ms >= hi2) continue;
+          alignas(32) double dt[32];  // (kq - y.W of each group: the products and sums in order, as the plain C++'s)
+#ifdef DTSD_AVX2
+          __m256d a0 = _mm256_setzero_pd(), a1 = a0, a2 = a0, a3 = a0, a4 = a0, a5 = a0, a6 = a0, a7 = a0;
+          for (int j = 0; j < 16; j++) {
+            const __m256d v = _mm256_set1_pd((double)y[j]);
+            const double* const w = wt[j];
+            a0 = _mm256_add_pd(a0, _mm256_mul_pd(v, _mm256_load_pd(w))), a1 = _mm256_add_pd(a1, _mm256_mul_pd(v, _mm256_load_pd(w + 4)));
+            a2 = _mm256_add_pd(a2, _mm256_mul_pd(v, _mm256_load_pd(w + 8))), a3 = _mm256_add_pd(a3, _mm256_mul_pd(v, _mm256_load_pd(w + 12)));
+            a4 = _mm256_add_pd(a4, _mm256_mul_pd(v, _mm256_load_pd(w + 16))), a5 = _mm256_add_pd(a5, _mm256_mul_pd(v, _mm256_load_pd(w + 20)));
+            a6 = _mm256_add_pd(a6, _mm256_mul_pd(v, _mm256_load_pd(w + 24))), a7 = _mm256_add_pd(a7, _mm256_mul_pd(v, _mm256_load_pd(w + 28)));
+          }
+          _mm256_store_pd(dt, _mm256_sub_pd(_mm256_load_pd(kq), a0)), _mm256_store_pd(dt + 4, _mm256_sub_pd(_mm256_load_pd(kq + 4), a1));
+          _mm256_store_pd(dt + 8, _mm256_sub_pd(_mm256_load_pd(kq + 8), a2)), _mm256_store_pd(dt + 12, _mm256_sub_pd(_mm256_load_pd(kq + 12), a3));
+          _mm256_store_pd(dt + 16, _mm256_sub_pd(_mm256_load_pd(kq + 16), a4)), _mm256_store_pd(dt + 20, _mm256_sub_pd(_mm256_load_pd(kq + 20), a5));
+          _mm256_store_pd(dt + 24, _mm256_sub_pd(_mm256_load_pd(kq + 24), a6)), _mm256_store_pd(dt + 28, _mm256_sub_pd(_mm256_load_pd(kq + 28), a7));
+#else
+          for (int q = 0; q < 32; q++) {
+            double a = 0;
+            for (int j = 0; j < 16; j++) a += (double)y[j] * wt[j][q];
+            dt[q] = kq[q] - a;
+          }
+#endif
+          int bq = 0;
+          for (int q = 1; q < 32; q++)
+            if (dt[q] < dt[bq]) bq = q;
+          const int be = hf_near(bq, y, sc);
+          mcg[mk] = bq, mce[mk] = be;
+          same = same && (!mk || (bq == mcg[0] && be == mce[0]));
+          mk++;
+        }
+        if (mk >= MC_N || (same && mk >= MC_B)) return mk;
+      }
+      if (mk >= MC_T) return mk;
+    }
+    return mk;
+  }
   // (mlu > 0: ml's unit)
   // (ord: where given, the ranks' order instead of the keys', which the margins go by: each
   // candidate's, by its index)
-  int code_cand(int n, int nb, int v, int kd, int ch, int b, int gn, S128 mu = 0, S128 mlu = 0, const S128* ord = nullptr) {
-    return code_cand(n, nb, v, kd, ch, b, gn, lrank[ch][b][kd], mu, mlu, ord);
+  int code_cand(int n, int nb, int v, int kd, int ch, int b, int gn, S128 mu = 0, S128 mlu = 0, const S128* ord = nullptr,
+                const double* pq = nullptr) {
+    return code_cand(n, nb, v, kd, ch, b, gn, lrank[ch][b][kd], mu, mlu, ord, pq);
   }
-  int code_cand(int n, int nb, int v, int kd, int ch, int b, int gn, U8& lh, S128 mu = 0, S128 mlu = 0, const S128* ord = nullptr) {
+  int code_cand(int n, int nb, int v, int kd, int ch, int b, int gn, U8& lh, S128 mu = 0, S128 mlu = 0, const S128* ord = nullptr,
+                const double* pq = nullptr) {
     M_vqr_v D;
     D.kd = kd;
     D.cc = chan_class(ch);
@@ -1687,7 +1821,17 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     int at = 0;
     if (ENC)
       while (cand[at].i != v) at++;
-    const int r = code_rank(ENC ? rank_of(cand, n, at) : 0, nb, D, cand, n);
+    double qr[64];  // (pq, each candidate's probability, by rank)
+    if (pq) {
+      int ix[64];
+      for (int a = 0; a < n; a++) {
+        int k = a;
+        for (; k > 0 && key_less(cand[a], cand[ix[k - 1]]); k--) ix[k] = ix[k - 1];
+        ix[k] = a;
+      }
+      for (int k = 0; k < n; k++) qr[k] = pq[cand[ix[k]].i];
+    }
+    const int r = code_rank(ENC ? rank_of(cand, n, at) : 0, nb, D, cand, n, pq ? qr : nullptr);
     if (!ENC) v = select_rank(cand, n, r);
     if (mu > 0 && r) {
       hvs[0] += mr >= 8, hvs[1] += ml >= 8;
@@ -2075,7 +2219,31 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (nsmp == 16) bgrp(gm, og, am);
       else hf_bound_grp(gm, &HF_GC[0][0], 32, nsmp, false, og);
     }
-    const int g = code_cand(32, 5, (int)v >> 5, VK_HFG, ch, b, gn, 0, mu << 19, mn ? nullptr : og);
+    double mpg[32];  // (a lossless WAV's: the groups' probabilities by hf_mc(), above)
+    int mk = 0;
+    const bool m28 = b >= 28 && b < NSUB - 1 && bound[ch] && !ss_rule() && !x96a && bind.up == 1 && nsmp == 16;
+    if (!mn && ((gwo && cpl_on(r, ch, b)) || m28) && sp_on()) {
+      const U32* tab = r.shuff[ch] == 6 ? SF7 : SF6;
+      const int nt = sf_entries(r.shuff[ch]);
+      if (si < nt) {
+        const U32 V = tab[si];
+        int r0 = si, r1 = si;
+        while (r0 > 0 && tab[r0 - 1] == V) r0--;
+        while (r1 + 1 < nt && tab[r1 + 1] == V) r1++;
+        const S64 vv = (S64)V << AQ_F;
+        const S64 lo = si != r0 ? vv : r0 > 0 ? ((S64)tab[r0 - 1] + V) << (AQ_F - 1) : 0;
+        const S64 hi = si != r1 ? vv : r1 + 1 < nt ? ((S64)V + tab[r1 + 1]) << (AQ_F - 1) : -1;
+        double sg[16];
+        for (int j = 0; j < 16; j++)
+          sg[j] = m28 ? ldexp((double)plev[ch][b][j], -20) : sqrt(ldexp((double)hf_stair2(X[ch][0][j]), -40) * 3.0);
+        mk = hf_mc(X[ch][b], sg, (double)lo * (double)lo, hi < 0 ? 1e300 : (double)hi * (double)hi, sc);
+        int cg[32] = {0};
+        for (int t = 0; t < mk; t++) cg[mcg[t]]++;
+        const double al = MC_A * mk / MC_N;
+        for (int q = 0; q < 32; q++) mpg[q] = (cg[q] + al) / (mk + 32 * al);
+      }
+    }
+    const int g = code_cand(32, 5, (int)v >> 5, VK_HFG, ch, b, gn, 0, mu << 19, mn ? nullptr : og, mk ? mpg : nullptr);
     if (resc && !mn && !(tgo && !tg)) {  // (which ranked the encoder's group higher, in the boundary orders)
       int rc = 0, ro = 0;
       S128 oo[32];
@@ -2211,7 +2379,20 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // encoder took the nearest of subband 28's 97% of the time within 2^-19 of that, 85% within
     // 2^-20, 49% within 2^-24; by the nearest's distance, 63% within 1/256 of it, 99% by 2^4 times
     // it or more)
-    v = g * 32 + code_cand(32, 5, (int)v & 31, VK_HFV, ch, b, gn, mu, mu, ov);
+    double mpv[32];
+    if (mk) {  // (the entry's: of the samples of the encoder's group, or where fewer than MC_NG, of all)
+      int ce[32] = {0}, ng = 0;
+      for (int t = 0; t < mk; t++)
+        if (mcg[t] == g) ce[mce[t]]++, ng++;
+      if (ng < MC_NG) {
+        ng = mk;
+        for (int t = 0; t < mk; t++)
+          if (mcg[t] != g) ce[hf_near(g, mcy[t], sc)]++;
+      }
+      const double al = MC_A * ng / MC_N;
+      for (int i = 0; i < 32; i++) mpv[i] = (ce[i] + al) / (ng + 32 * al);
+    }
+    v = g * 32 + code_cand(32, 5, (int)v & 31, VK_HFV, ch, b, gn, mu, mu, ov, mk ? mpv : nullptr);
     if (pushed) {  // (which order ranked the encoder's vector higher, in the boundary orders)
       const int at = (int)v & 31, rc = rank_of(cc, 32, at), ro = rank_of(oc, 32, at);
       const int rp = up ? rc : ro, r0 = up ? ro : rc;
