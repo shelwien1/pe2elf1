@@ -137,7 +137,7 @@ static void compress_model(const Buf& in, FlacLayout& L, u64 audio_start, const 
     SegmentCoder r;
     r.init(ac, L, sc.total_samples, audio_start);
     u64 pos = audio_start;
-    r.code(&sc.segs, &in, nullptr, nullptr, pos);
+    if (!r.code(&sc.segs, &in, nullptr, nullptr, pos)) die("internal: segments");
     r.fs.md5.final(r.fs.md5sum);
     code_derived(ac, L, r.fs, nullptr);
     ac.flush();

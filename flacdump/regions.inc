@@ -70,7 +70,10 @@ struct Regions {
     // Code a byte region whose length is known on both sides, extracting embedded files
     // and decoding base64 text.
     static bool code_region(AC& ac, u8* data, size_t len, int kind, bool prime) {
-        if (g_cutdepth >= CUT_DEPTH) die("internal: regions nested too deep");
+        if (g_cutdepth >= CUT_DEPTH) {  // only a corrupt .meta nests deeper
+            if (!ac.dec) die("internal: regions nested too deep");
+            return false;
+        }
         Cut* cuts = g_cutpool[g_cutdepth++];
         memset(cuts, 0, sizeof(Cut) * MAXCUTS);
         int nc = 0;
@@ -78,15 +81,17 @@ struct Regions {
         if (!ac.dec && (extract || kind == 0)) nc = CutFinder::find_cuts(data, len, kind, cuts, extract);
         int savecat = ac.cat;
         ac.cat = C_META;
-        nc = (int)code_uint(ac, g_extm.n, (u64)nc);
-        bool ok = nc <= MAXCUTS;
-        u64 pos = 0;
+        u64 n64 = code_uint(ac, g_extm.n, (u64)nc);
+        bool ok = n64 <= MAXCUTS;
+        nc = ok ? (int)n64 : 0;
+        u64 pos = 0;  // <= len
         for (int i = 0; i < nc && ok; i++) {
             Cut& c = cuts[i];
             u64 gap = code_uint(ac, g_extm.off, ac.dec ? 0 : c.off - pos);
             c.off = pos + gap;
             c.len = code_uint(ac, g_extm.len, c.len);
-            if (c.off + c.len > len || !code_cut(ac, data, c)) ok = false;
+            // (each bound separately: off + len could wrap around)
+            if (gap > len - pos || c.len > len - c.off || !code_cut(ac, data, c)) ok = false;
             pos = c.off + c.len;
         }
         ac.cat = savecat;

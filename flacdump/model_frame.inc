@@ -86,6 +86,7 @@ static bool model_chmode(Ctx& cx, FrameInfo& f, s32** pcm, FrameState& st) {
     }
     else
         f.chcode = cx.sp.nch - 1;
+    if (f.chcode > 10) return false;  // reserved (only from a corrupt .meta)
     f.nch = f.chcode < 8 ? f.chcode + 1 : 2;
     if (f.nch != cx.sp.nch) return false;
     f.bps = cx.sp.bps;

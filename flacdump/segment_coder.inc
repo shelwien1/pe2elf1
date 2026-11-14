@@ -58,12 +58,14 @@ struct SegmentCoder {
         if (!ac.dec && parse_frame(in->p + pos, (size_t)(in->n - pos), sp, fi, g_pcm) != s->len)
             die("internal: reparse");
         ac.cat = C_RAW;
-        u32 ns = (u32)code_uint(ac, M.len_m, ac.dec ? 0 : s->nsamp - 1) + 1;
+        u64 ns64 = code_uint(ac, M.len_m, ac.dec ? 0 : s->nsamp - 1) + 1;
         u64 len = code_uint(ac, M.len_m, ac.dec ? 0 : s->len);
+        if (ns64 > MAXBS || len > FRAMEMAX) return false;  // no FLAC frame is that large
+        u32 ns = (u32)ns64;
         if (!ac.dec)
             for (u64 j = 0; j < len; j++) ac.raw(in->p[pos + j], 8);
         else {
-            if (ns > MAXBS || !wav->read(g_pcm, sp.nch, ns)) return false;
+            if (!wav->read(g_pcm, sp.nch, ns)) return false;
             for (u64 j = 0; j < len;) {  // stream through the frame buffer
                 size_t k = (size_t)Min(len - j, (u64)FRAMEMAX);
                 for (size_t q = 0; q < k; q++) g_framebuf[q] = (u8)ac.raw(0, 8);
