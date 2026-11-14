@@ -761,21 +761,38 @@ static INLINE S128 hf_group_score(const S32 (*W)[16], const S64* E, int g, const
   }
   return d + shl128((S128)E[g] * sc * sc, 32);
 }
+// The square of x's size as a binary floating point number has it, its binade's: 2^(2e - 1) where
+// 2^(e - 1) <= |x| < 2^e (0 where x is 0). Since format 85 the encoder's noise in the top subband
+// goes with it rather than with x's own square: the noise of floating point arithmetic, its
+// rounding errors in units of the last place of values the size of the bottom subband's (steps
+// at the powers of 2 of the analysis's units exactly: a quarter, a half or three quarters of a
+// doubling off them, `s.2.dts`'s core 0.3-0.4% bigger than with none): its core 0.19% smaller in
+// the HF VQ boundary orders' noise, 0.02% in the distances' and scores' weights, 0.04% in the
+// RMS rule's noise and its nearness's, 0.03% in the margins' unit (the binade's top instead, or
+// its bottom, 0.01-0.05% bigger; the rounding error of x0 itself, as a 32-bit float, added to the
+// top subband's values, at any scale, bigger; nor do the leak and the bias of format 82, which
+// go with x0 itself: as its binade they were 0.06-2% bigger)
+static INLINE U128 hf_stair2(S64 x) {
+  if (!x) return 0;
+  const int e = 64 - __builtin_clzll((U64)(x < 0 ? -x : x));  // (|x| within 2^50)
+  return (U128)1 << (2 * e - 1);
+}
 // The weights (in 2^-16) of 16 values against another subband's x0 at their samples:
-// T^2 / (T^2 + x0^2), T^2 sc^2 2^t2 (within 2^120: sc under 2^23, t2 to 74), their sum into *s
+// T^2 / (T^2 + x0^2), x0^2 hf_stair2()'s, T^2 sc^2 2^t2 (within 2^120: sc under 2^23, t2 to 74),
+// their sum into *s
 static INLINE void hf_weights(const S64* x0, S64 sc, int t2s, U32* w, U32* s) {
   const U128 t2 = (U128)((S128)sc * sc) << t2s;
   *s = 0;
   for (int j = 0; j < 16; j++) {
-    const U128 a2 = (U128)((S128)x0[j] * x0[j]);
+    const U128 a2 = hf_stair2(x0[j]);
     w[j] = t2 + a2 ? 65536 - (U32)((a2 << 16) / (t2 + a2)) : 65536, *s += w[j];
   }
 }
-// The same values' noise powers, against the quiet one's: 1 + x0^2 / T^2, T^2 sc^2 2^t2 (in
-// doubles, IEEE's arithmetic: sc^2 exact, its power of 2 too)
+// The same values' noise powers, against the quiet one's: 1 + x0^2 / T^2, x0^2 hf_stair2()'s,
+// T^2 sc^2 2^t2 (in doubles, IEEE's arithmetic: sc^2 exact, its power of 2 too, and x0^2)
 static INLINE void hf_noise(const S64* x0, S64 sc, int t2s, double* r) {
   const double t2 = ldexp((double)sc * (double)sc, t2s);
-  for (int j = 0; j < 16; j++) r[j] = 1.0 + (double)x0[j] * (double)x0[j] / t2;
+  for (int j = 0; j < 16; j++) r[j] = 1.0 + (double)hf_stair2(x0[j]) / t2;
 }
 // hf_group_score() with its 16 squared differences weighed by w (sum s), at a mean of 1: the
 // squares in 2^16 (within 2^96, each term 2^112), their weighed sum t over s, then times 2^20 (t / s
@@ -1059,13 +1076,17 @@ static void hf_bound_grp(const S128* k, const T* W, int w, int n, bool p15, S128
 // groups' W to the power 1.5: D's, each group's with each other's, or where r is given, of the
 // learned W, 16 values a group, weighed by r, d sqrt(d); a group whose W is a nearer one's but whose
 // score isn't, last; `s.2.dts`'s core 0.43% smaller at M 8, 2 0.28%, 4 0.41%, 32 as 8)
-static void hf_bound_grp_m(const S128* k, const S32 (*W)[16], const double* r, const double (*D)[32], int M, S128* o) {
+// (am, where given: the group each one's largest key is against, the one whose boundary with it
+// binds; the first's itself)
+static void hf_bound_grp_m(const S128* k, const S32 (*W)[16], const double* r, const double (*D)[32], int M, S128* o,
+                           int* am = nullptr) {
   int idx[32];
   hf_key_order(k, idx);
   for (int a = 0; a < 32; a++) {
     const int g = idx[a];
     double best = -2;
     bool last = false;
+    if (am) am[g] = a ? idx[0] : g;
     for (int c = 0; c < a && c < M; c++) {
       const int f = idx[c];
       double dd;
@@ -1085,7 +1106,10 @@ static void hf_bound_grp_m(const S128* k, const S32 (*W)[16], const double* r, c
         continue;
       }
       const double z = (double)(k[g] - k[f]) / dd;
-      if (z > best) best = z;
+      if (z > best) {
+        best = z;
+        if (am) am[g] = f;
+      }
     }
     o[g] = last ? (S128)1 << 120 : best < 0 ? -1 : (S128)best;
   }
