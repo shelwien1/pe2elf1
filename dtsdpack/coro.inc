@@ -1,21 +1,14 @@
 // coro.inc -- the compressor and the decompressor, as coroutines (Lib3's, as m4vpack's and
 // ac3pack's): a run, on the buffers of its input and output, at a level.
 
-// The stream: "dtsdpack", the format's version, the model's level; the WAV's binding (bind_put()):
-// how the core lines up with it (the offset, 4 bytes; each channel's WAV channel, 8 bytes, the
-// second WAV channel of its mix, 8, and their gains, 8 and 8 of 4 bytes; the LFE's channel, 1; the
-// WAV's samples to the core's, 1, 2 or 4: its lower band, then 2; and in its upper 4 bits, the
-// lower band's resolution),
-// what the WAV was (whether it was one, its channels, its bytes a sample, its size, 8 bytes, and
-// the CRC-32 of its first 64 KB, 4); then the arithmetic coded data: the chunks (kind, then the
-// records of a frame, or a length and the bytes of bytes kept as bytes), the end, and the CRC-32
-// of the stream (32 bits at 1/2 each).
-enum { BO_OFF = 0, BO_MAP = 4, BO_MAP2 = BO_MAP + NCH, BO_G1 = BO_MAP2 + NCH, BO_G2 = BO_G1 + 4 * NCH,
-       BO_LFE = BO_G2 + 4 * NCH, BO_UP, BO_OK, BO_NCH, BO_BPS, BO_SIZE, BO_CRC = BO_SIZE + 8,
-       DP_BIND = BO_CRC + 4 };  // (the binding's bytes)
-enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND, DP_HEAD = DP_AT_BIND + DP_BIND };  // the header's
+// The stream: "dtsdpack", the format's version, the model's level; then what the WAV was and how
+// the core lines up with it (bind_put()), in bytes of their own lengths; then the arithmetic coded
+// data: the chunks (kind, then the records of a frame, or a length and the bytes of bytes kept as
+// bytes), the end, and the CRC-32 of the stream (32 bits at 1/2 each).
+enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND };  // the header's fixed part
+enum { DP_BIND_MAX = 3 + 10 + 4 + 5 + 3 + 12 * NCH };                     // (and the binding's bytes at most)
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
-constexpr int DP_VERSION = 89;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
+constexpr int DP_VERSION = 90;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
                                // extension as records; 4: a WAV at twice the core's rate, X96 and XXCH; 5: the
                                // scale factor search; 6: the bit allocation search; 7: the bits after the
                                // subframes as the bytes they end in, the energy's quarter of its bucket, the
@@ -158,53 +151,141 @@ constexpr int DP_VERSION = 89;  // the format's (2: a core channel's binding a m
                                // subbands 28-30's HF VQ values by that mean too, behind the
                                // switch, a second group bound for the top subband's push; 89: a
                                // twin's (a channel bound as an earlier one, or in a subframe
-                               // analysed as one) side fields and indexes by the earlier one's)
+                               // analysed as one) side fields and indexes by the earlier one's;
+                               // 90: the header's binding in bytes of their own lengths)
 
 static void put_le(U8* p, U64 v, int n) {
   for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));
 }
-static U64 get_le(const U8* p, int n) {
-  U64 v = 0;
-  for (int i = 0; i < n; i++) v |= (U64)p[i] << (8 * i);
-  return v;
+// a number in 7-bit groups, the lowest first, each but the last with its top bit set (put_uv(): its
+// bytes); a signed one as twice its magnitude, less 1 where negative (zz())
+static int put_uv(U8* p, U64 v) {
+  int n = 0;
+  for (; v > 127; v >>= 7) p[n++] = (U8)(v | 128);
+  p[n++] = (U8)v;
+  return n;
 }
-// the binding into p (DP_BIND bytes), and back: the WAV as it was (got) and as it is (w), the same?
-static void bind_put(U8* p, const Bind& b, const WavIn& w) {
-  put_le(p + BO_OFF, (U32)b.off, 4);
-  for (int ch = 0; ch < NCH; ch++) {
-    p[BO_MAP + ch] = (U8)b.map[ch];
-    p[BO_MAP2 + ch] = (U8)b.map2[ch];
-    put_le(p + BO_G1 + 4 * ch, (U32)b.g1[ch], 4);
-    put_le(p + BO_G2 + 4 * ch, (U32)b.g2[ch], 4);
+static U64 zz(S64 v) { return v < 0 ? (U64)(-(v + 1)) << 1 | 1 : (U64)v << 1; }
+static S64 unzz(U64 u) { return u & 1 ? -(S64)(u >> 1) - 1 : (S64)(u >> 1); }
+// a binding's gain (Q23) as a number: 0 for 0; the downmix table's entries, from 1 down, each then
+// its negative, 1-482; any other, 483 on (zz())
+static U64 gain_code(S32 g) {
+  const U64 a = g < 0 ? (U64)(-(S64)g) : (U64)g;
+  if (!g) return 0;
+  if (!(a & 255))
+    for (int k = 241; k >= 1; k--)
+      if (DMIX[k] == a >> 8) return 1 + 2 * (U64)(241 - k) + (g < 0);
+  return 483 + zz(g);
+}
+static bool gain_uncode(U64 u, S32& g) {
+  if (u < 483) {
+    const S32 m = u ? (S32)DMIX[241 - (int)((u - 1) >> 1)] << 8 : 0;
+    g = (u - 1) & 1 ? -m : m;
+    return true;
   }
-  p[BO_LFE] = (U8)b.lfe;
-  p[BO_UP] = (U8)(b.up * b.dec + 16 * b.dsh);
-  p[BO_OK] = (U8)w.ok;
-  p[BO_NCH] = (U8)w.nch;
-  p[BO_BPS] = (U8)w.bps;
-  put_le(p + BO_SIZE, w.size, 8);
-  put_le(p + BO_CRC, w.crc, 4);
+  const S64 x = unzz(u - 483);
+  if (x < INT32_MIN || x > INT32_MAX) return false;
+  g = (S32)x;
+  return true;
 }
-static Bind bind_get(const U8* p) {
-  Bind b;
-  b.off = (S32)(U32)get_le(p + BO_OFF, 4);
-  for (int ch = 0; ch < NCH; ch++) {
-    b.map[ch] = (S8)p[BO_MAP + ch];
-    b.map2[ch] = (S8)p[BO_MAP2 + ch];
-    b.g1[ch] = (S32)(U32)get_le(p + BO_G1 + 4 * ch, 4);
-    b.g2[ch] = (S32)(U32)get_le(p + BO_G2 + 4 * ch, 4);
+// What the WAV was (whether it was one, its channels, its bytes a sample, a byte each; its size; the
+// CRC-32 of its first 64 KB, 4 bytes) and the binding (the offset, signed; the WAV's samples to the
+// core's, 1, 2 or 4: its lower band, then 2, and in the upper 4 bits the lower band's resolution, a
+// byte; the LFE's channel, plus 1: 0 none; how many core channels follow, a byte, to the last
+// bound one; each one's WAV channel, plus 1, plus 128 where it is that channel as it is, else where
+// bound, the second of its mix, plus 1, and the gains, gain_code()'s, the second's where it has
+// one), into p: its bytes (DP_BIND_MAX at most)
+static int bind_put(U8* p, const Bind& b, const WavIn& w) {
+  int n = 0, nb = 0;
+  p[n++] = (U8)w.ok;
+  p[n++] = (U8)w.nch;
+  p[n++] = (U8)w.bps;
+  n += put_uv(p + n, w.size);
+  put_le(p + n, w.crc, 4);
+  n += 4;
+  n += put_uv(p + n, zz(b.off));
+  p[n++] = (U8)(b.up * b.dec + 16 * b.dsh);
+  p[n++] = (U8)(b.lfe + 1);
+  for (int ch = 0; ch < NCH; ch++)
+    if (b.map[ch] >= 0) nb = ch + 1;
+  p[n++] = (U8)nb;
+  for (int ch = 0; ch < nb; ch++) {
+    const int plain = b.map[ch] >= 0 && b.map[ch] < 127 && b.map2[ch] < 0 && b.g1[ch] == BIND_ONE;
+    p[n++] = (U8)(b.map[ch] + 1 + 128 * plain);
+    if (b.map[ch] < 0 || plain) continue;
+    p[n++] = (U8)(b.map2[ch] + 1);
+    n += put_uv(p + n, gain_code(b.g1[ch]));
+    if (b.map2[ch] >= 0) n += put_uv(p + n, gain_code(b.g2[ch]));
   }
-  b.lfe = (S8)p[BO_LFE];
-  b.up = (p[BO_UP] & 15) == 2 || (p[BO_UP] & 15) == 4 ? 2 : 1;
-  b.dec = (p[BO_UP] & 15) == 4 ? 2 : 1;
-  b.dsh = (S8)(p[BO_UP] >> 4);
-  return b;
+  return n;
 }
-static const char* bind_differs(const U8* p, const WavIn& w) {
-  if (p[BO_OK] != (U8)w.ok || p[BO_NCH] != (U8)w.nch || p[BO_BPS] != (U8)w.bps) return "its format";
-  if (get_le(p + BO_CRC, 4) != w.crc) return "its first 64 KB";
-  const U64 sz = get_le(p + BO_SIZE, 8);
-  if (sz && w.size && sz != w.size) return "its size";
+// what the WAV was (BindWav) and the binding, back from the bytes get() gives (-1: none left): whether
+// they are whole and in range (the channels not there unbound)
+struct BindWav {
+  U8 ok, nch, bps;
+  U64 size;
+  U32 crc;
+};
+template <class G>
+static bool bind_read(G get, Bind& b, BindWav& w) {
+  U64 u = 0;
+  int c[3];
+  auto uv = [&](U64& v) {  // (at most 10 bytes, the last with the 64th bit at most)
+    v = 0;
+    for (int s = 0; s < 70; s += 7) {
+      const int x = get();
+      if (x < 0 || (s == 63 && x > 1)) return false;
+      v |= (U64)(x & 127) << s;
+      if (!(x & 128)) return true;
+    }
+    return false;
+  };
+  auto s32 = [&](S32& v) {
+    if (!uv(u)) return false;
+    const S64 x = unzz(u);
+    if (x < INT32_MIN || x > INT32_MAX) return false;
+    v = (S32)x;
+    return true;
+  };
+  b.none();
+  for (int i = 0; i < 3; i++)
+    if ((c[i] = get()) < 0) return false;
+  w.ok = (U8)c[0], w.nch = (U8)c[1], w.bps = (U8)c[2];
+  if (!uv(w.size)) return false;
+  w.crc = 0;
+  for (int i = 0; i < 4; i++) {
+    const int x = get();
+    if (x < 0) return false;
+    w.crc |= (U32)x << (8 * i);
+  }
+  if (!s32(b.off)) return false;
+  const int up = get(), lfe = get(), nb = get();
+  if (up < 0 || lfe < 0 || lfe > 128 || nb < 0 || nb > NCH) return false;
+  b.up = (up & 15) == 2 || (up & 15) == 4 ? 2 : 1;
+  b.dec = (up & 15) == 4 ? 2 : 1;
+  b.dsh = (S8)(up >> 4);
+  b.lfe = (S8)(lfe - 1);
+  for (int ch = 0; ch < nb; ch++) {
+    const int m = get();
+    if (m < 0) return false;
+    if (!m) continue;
+    if (m > 128) {  // (one WAV channel as it is)
+      b.map[ch] = (S8)(m - 129);
+      continue;
+    }
+    const int m2 = get();
+    if (m2 < 0 || m2 > 128) return false;
+    b.map[ch] = (S8)(m - 1), b.map2[ch] = (S8)(m2 - 1);
+    if (!uv(u) || !gain_uncode(u, b.g1[ch])) return false;
+    if (m2 && (!uv(u) || !gain_uncode(u, b.g2[ch]))) return false;
+  }
+  return true;
+}
+// the WAV as it was (got) and as it is (w): the same?
+static const char* bind_differs(const BindWav& got, const WavIn& w) {
+  if (got.ok != (U8)w.ok || got.nch != (U8)w.nch || got.bps != (U8)w.bps) return "its format";
+  if (got.crc != w.crc) return "its first 64 KB";
+  if (got.size && w.size && got.size != w.size) return "its size";
   return 0;
 }
 

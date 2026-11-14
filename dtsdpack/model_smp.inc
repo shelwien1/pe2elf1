@@ -122,6 +122,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
   }
   void hg_learn(const S64* x, S64 sc, int t, int f) {
+    if (sc <= 0) return;  // (a scale factor of 0, the tables' padding: no encoder's, but it parses)
     S64 mx = 0;
     for (int j = 0; j < 16; j++) mx = x[j] > mx ? x[j] : -x[j] > mx ? -x[j] : mx;
     if (mx > ((S64)8 * HF_VQ_PEAK * sc << (AQ_F - 4))) return;  // (x: HF_VQ's values times sc / 16)

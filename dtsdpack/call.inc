@@ -228,11 +228,11 @@ struct Call {
   };
   // d of the call's input into its output: 0, or the exit status of an error (said)
   int decode_to() {
-    U8 head[DP_HEAD];
+    U8 head[DP_AT_BIND];
     const size_t got = fread(head, 1, sizeof head, in);
     int r;
     memset(&n, 0, sizeof n);
-    if (got < DP_HEAD || memcmp(head, magic, sizeof magic)) {
+    if (got < DP_AT_BIND || memcmp(head, magic, sizeof magic)) {
       if (ferror(in)) return run_end(0, "");
       pr.say("dtsdpack: %s: not a dtsdpack file\n", in_name);
       return E_DATA;

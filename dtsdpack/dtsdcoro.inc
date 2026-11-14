@@ -85,15 +85,22 @@ struct DtsCoro : CoIo<Coder<f_DEC> > {
   int run_c(void) {
     size_t pos, len;
     int t;
-    U8 head[DP_HEAD];
+    U8 head[DP_AT_BIND + DP_BIND_MAX];
     memset(&st, 0, sizeof st);
     crc = 0;
     if (!rd.init(&scratch)) return fail(E_INTERNAL, "out of memory");
     memcpy(head, magic, sizeof magic);
     head[DP_AT_VERSION] = DP_VERSION;
     head[DP_AT_LEVEL] = (U8)LV::id;
-    bind_put(head + DP_AT_BIND, bind, *wav);
-    write(head, sizeof head);
+    const int nb = bind_put(head + DP_AT_BIND, bind, *wav);
+    write(head, (size_t)(DP_AT_BIND + nb));
+    {  // (the model goes by the binding as d reads it)
+      int at = 0;
+      BindWav bw;
+      const pcU8 q = head + DP_AT_BIND;
+      if (!bind_read([&]() { return at < nb ? (int)q[at++] : -1; }, bind, bw))
+        return fail(E_INTERNAL, "internal error: a binding that doesn't read back");
+    }
     coder_start();
     k.start(this, wav, bind);
     while ((t = rd.next(*this, &pos, &len)) != RD_END) {
@@ -151,17 +158,25 @@ struct DtsCoro : CoIo<Coder<f_DEC> > {
   int damaged_data(void) { return fail(E_DATA, f_quit ? "damaged data: the stream is cut short" : "damaged data"); }
 
   int run_d(void) {
-    U8 h[DP_HEAD];
+    U8 h[DP_AT_BIND];
     int kind;
+    BindWav bw;
     crc = 0;
     if (read(h, sizeof h) != sizeof h || memcmp(h, magic, sizeof magic)) return fail(E_DATA, "not a dtsdpack file");
     if (h[DP_AT_VERSION] != DP_VERSION)
       return fail(E_DATA, "format version %d, which this dtsdpack (version %d) doesn't read", h[DP_AT_VERSION], DP_VERSION);
     if (h[DP_AT_LEVEL] != LV::id)
       return fail(E_INTERNAL, "internal error: a stream of level -%d run at level -%d", h[DP_AT_LEVEL], LV::id);
-    if (const char* why = bind_differs(h + DP_AT_BIND, *wav))
+    bool cut = false;
+    if (!bind_read([&]() {
+          U8 x;
+          if (read(&x, 1) == 1) return (int)x;
+          cut = true;
+          return -1;
+        }, bind, bw))
+      return fail(E_DATA, cut ? "damaged data: the stream is cut short" : "damaged data");
+    if (const char* why = bind_differs(bw, *wav))
       return fail(E_DATA, "the WAV isn't the one it was compressed with (%s differs)", why);
-    bind = bind_get(h + DP_AT_BIND);
     wav->set_dec(bind.dec, bind.dsh);
     coder_start();
     k.start(this, wav, bind);
