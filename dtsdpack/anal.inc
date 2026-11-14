@@ -1333,20 +1333,10 @@ static bool hf_dots(const S64* x, int n, const S64** dot, const double** dd) {
   memcpy(e.x, x, sizeof(S64) * n);
   return e.small;
 }
-// The distances (hf_dist()'s) of group g's 32 entries from the values x (n of them) at once,
-// exactly, into d: (16 x - 2^16 sc v)^2 summed is 256 x x - 2^21 sc x v + 2^32 sc^2 v v, the dot
-// products in doubles where |x| < 2^40 (a product within 2^47, the sums 2^52: integers a double
-// holds, whatever their order), a group at a time as hf_dots() makes them; else entry by entry
-static void hf_dists(int g, const S64* x, int n, S64 sc, S128* d) {
-  S64 mx = 0;
-  for (int j = 0; j < n; j++) mx |= x[j] < 0 ? -x[j] : x[j];
-  if (mx >= (S64)1 << 40) {
-    for (int i = 0; i < 32; i++) d[i] = hf_dist(g * 32 + i, x, n, sc);
-    return;
-  }
-  S128 en = 0;
-  for (int j = 0; j < n; j++) en += (S128)(x[j] * 16) * (x[j] * 16);
-  alignas(32) double a[32];
+// The dot products of x (n values, |x| < 2^40) with group g's 32 entries' first n, into a (aligned
+// to 32 bytes), exactly in doubles: a product within 2^47, the sums 2^52, integers a double holds
+// whatever their order
+static INLINE void hf_gdots(int g, const S64* x, int n, double* a) {
 #ifdef DTSD_AVX2
   __m256d a0 = _mm256_setzero_pd(), a1 = a0, a2 = a0, a3 = a0, a4 = a0, a5 = a0, a6 = a0, a7 = a0;
   for (int j = 0; j < n; j++) {
@@ -1366,6 +1356,22 @@ static void hf_dists(int g, const S64* x, int n, S64 sc, S128* d) {
     for (int i = 0; i < 32; i++) a[i] += xj * t[i];
   }
 #endif
+}
+// The distances (hf_dist()'s) of group g's 32 entries from the values x (n of them) at once,
+// exactly, into d: (16 x - 2^16 sc v)^2 summed is 256 x x - 2^21 sc x v + 2^32 sc^2 v v, the dot
+// products in doubles where |x| < 2^40 (a product within 2^47, the sums 2^52: integers a double
+// holds, whatever their order), a group at a time as hf_dots() makes them; else entry by entry
+static void hf_dists(int g, const S64* x, int n, S64 sc, S128* d) {
+  S64 mx = 0;
+  for (int j = 0; j < n; j++) mx |= x[j] < 0 ? -x[j] : x[j];
+  if (mx >= (S64)1 << 40) {
+    for (int i = 0; i < 32; i++) d[i] = hf_dist(g * 32 + i, x, n, sc);
+    return;
+  }
+  S128 en = 0;
+  for (int j = 0; j < n; j++) en += (S128)(x[j] * 16) * (x[j] * 16);
+  alignas(32) double a[32];
+  hf_gdots(g, x, n, a);
   const S32* const ee = (n & 7) ? nullptr : hf_energies.e[n / 8 - 1] + g * 32;
   for (int i = 0; i < 32; i++) {
     S32 e2 = 0;

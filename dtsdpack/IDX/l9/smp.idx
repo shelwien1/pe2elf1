@@ -13,7 +13,7 @@ Const 0
 Index a
  a_pk: pk, 1!0
  a_nr: nr, 1!100001101110111
- a_nl: nl, 1!000010110101001
+ a_nl: nl, 1!000000110101001
 
 Index b
  b_pk: pk, 1!1
@@ -22,7 +22,7 @@ Index b
 
 Index c
  c_pk: pk, 1!0
- c_nr: nr, 1!000010011111110
+ c_nr: nr, 1!100001011111110
  c_hm: hm, 1!11
 
 Index d
@@ -33,8 +33,8 @@ Index d
 Index e
  e_pk: pk, 1!1
  e_ab: ab, 1!010001010000000000000000000
- e_m1: m1, 1!1111111001000000001000
- e_m2: m2, 1!1111100011100101000000
+ e_m1: m1, 1!1111111001001110000000
+ e_m2: m2, 1!1111100011000101000000
 
 Index h
  h_pk: pk, 1!0
@@ -43,34 +43,34 @@ Index h
 
 Index i
  i_pk: pk, 1!0
- i_ab: ab, 1!011110100111001001101000000
+ i_ab: ab, 1!010110100111001001101000000
  i_hw: hw, 1!001
  i_pm: pm, 1!1
 
 Index j
  j_pk: pk, 1!0
  j_ab: ab, 1!010001010111010010100000000
- j_bd: bd, 1!0100101100001101000001000011111
+ j_bd: bd, 1!0100101100001101000001000001111
 
 Index k
  k_pk: pk, 1!0
- k_nr: nr, 1!000100100011101
+ k_nr: nr, 1!100100000010101
  k_pm: pm, 1!1
 
 Index l
  l_pk: pk, 1!1
- l_nl: nl, 1!100110100100110
+ l_nl: nl, 1!101110100100110
  l_ab: ab, 1!011111101111100110101100000
 
 Index s
  s_pk: pk, 1!0
- s_nr: nr, 1!000001000011111
- s_nl: nl, 1!110110110111001
+ s_nr: nr, 1!000000000001111
+ s_nl: nl, 1!111011110011001
 
 Index f
  f_pk: pk, 1!1
  f_nl: nl, 1!010001000000101
- f_nr: nr, 1!000000110100000
+ f_nr: nr, 1!000000101100000
 
 Index m
  m_pk: pk, 1!0
@@ -80,7 +80,7 @@ Index w
  w_nl: nl, 1!100000000010100
 
 Index t
- t_ab: ab, 1!000000101010110101000000010
+ t_ab: ab, 1!000000001010110101000000010
 
 Index n
 #  Frozen: the mantissa mixer it is for mixes only by a hint, and nothing gives this family one.
@@ -95,19 +95,19 @@ Number rB, 1, 0!11111100
 Number mwB, 1, 0!00000000
 Number rC, 1, 0!10110000
 Number mwC, 1, 0!11111101
-Number rD, 1, 0!01111011
+Number rD, 1, 0!10111101
 Number mwD, 1, 0!00011000
 Number rE, 1, 0!11110110
 Number mwE, 1, 0!00000100
 Number rH, 1, 0!11010110
 Number mwH, 1, 0!00000000
-Number rI, 1, 0!11110001
-Number mwI, 1, 0!11010001
-Number rJ, 1, 0!11011010
+Number rI, 1, 0!11011111
+Number mwI, 1, 0!11010011
+Number rJ, 1, 0!10111000
 Number mwJ, 1, 0!00000000
-Number rK, 1, 0!11100111
+Number rK, 1, 0!11001111
 Number mwK, 1, 0!11101100
-Number rL, 1, 0!11111111
+Number rL, 1, 0!11101010
 Number mwL, 1, 0!01000000
 Number lr, 1, 0!10100
 Number mb, 1, 0!00100000

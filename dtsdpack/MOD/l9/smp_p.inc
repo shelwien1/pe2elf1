@@ -17,7 +17,7 @@ void D9_smp_make( const M_smp_v & D, tcx & X ) {
 
   a = 0;
   a = a*10 + D9_smp_a_nr[__min(15,__max(0,(nr)-(1-1)))];
-  a = a*7 + D9_smp_a_nl[__min(15,__max(0,(nl)-(1-1)))];
+  a = a*6 + D9_smp_a_nl[__min(15,__max(0,(nl)-(1-1)))];
 
   b = 0;
   b = b*2 + (((pk)>0+(1-1)));
@@ -25,7 +25,7 @@ void D9_smp_make( const M_smp_v & D, tcx & X ) {
   b = b*12 + D9_smp_b_ql[__min(21,__max(0,(ql)-(1-1)))];
 
   c = 0;
-  c = c*9 + D9_smp_c_nr[__min(15,__max(0,(nr)-(1-1)))];
+  c = c*10 + D9_smp_c_nr[__min(15,__max(0,(nr)-(1-1)))];
   c = c*3 + (((hm)>0+(1-1))+((hm)>1+(1-1)));
 
   d = 0;
@@ -35,32 +35,32 @@ void D9_smp_make( const M_smp_v & D, tcx & X ) {
   e = 0;
   e = e*2 + (((pk)>0+(1-1)));
   e = e*4 + D9_smp_e_ab[__min(27,__max(0,(ab)-(1-1)))];
-  e = e*10 + D9_smp_e_m1[__min(22,__max(0,(m1)-(1-1)))];
-  e = e*11 + D9_smp_e_m2[__min(22,__max(0,(m2)-(1-1)))];
+  e = e*12 + D9_smp_e_m1[__min(22,__max(0,(m1)-(1-1)))];
+  e = e*10 + D9_smp_e_m2[__min(22,__max(0,(m2)-(1-1)))];
 
   h = 0;
   h = h*15 + D9_smp_h_ab[__min(27,__max(0,(ab)-(1-1)))];
 
   i = 0;
-  i = i*13 + D9_smp_i_ab[__min(27,__max(0,(ab)-(1-1)))];
+  i = i*12 + D9_smp_i_ab[__min(27,__max(0,(ab)-(1-1)))];
   i = i*2 + (((hw)>2+(1-1)));
   i = i*2 + (((pm)>0+(1-1)));
 
   j = 0;
   j = j*10 + D9_smp_j_ab[__min(27,__max(0,(ab)-(1-1)))];
-  j = j*14 + D9_smp_j_bd[__min(31,__max(0,(bd)-(1-1)))];
+  j = j*13 + D9_smp_j_bd[__min(31,__max(0,(bd)-(1-1)))];
 
   k = 0;
-  k = k*7 + D9_smp_k_nr[__min(15,__max(0,(nr)-(1-1)))];
+  k = k*6 + D9_smp_k_nr[__min(15,__max(0,(nr)-(1-1)))];
   k = k*2 + (((pm)>0+(1-1)));
 
   l = 0;
   l = l*2 + (((pk)>0+(1-1)));
-  l = l*8 + D9_smp_l_nl[__min(15,__max(0,(nl)-(1-1)))];
+  l = l*9 + D9_smp_l_nl[__min(15,__max(0,(nl)-(1-1)))];
   l = l*17 + D9_smp_l_ab[__min(27,__max(0,(ab)-(1-1)))];
 
   s = 0;
-  s = s*7 + D9_smp_s_nr[__min(15,__max(0,(nr)-(1-1)))];
+  s = s*5 + D9_smp_s_nr[__min(15,__max(0,(nr)-(1-1)))];
   s = s*11 + D9_smp_s_nl[__min(15,__max(0,(nl)-(1-1)))];
 
   f = 0;
@@ -74,7 +74,7 @@ void D9_smp_make( const M_smp_v & D, tcx & X ) {
   w = w*4 + D9_smp_w_nl[__min(15,__max(0,(nl)-(1-1)))];
 
   t = 0;
-  t = t*9 + D9_smp_t_ab[__min(27,__max(0,(ab)-(1-1)))];
+  t = t*8 + D9_smp_t_ab[__min(27,__max(0,(ab)-(1-1)))];
 
   n = 0;
   n = n*28 + D9_smp_n_ab[__min(27,__max(0,(ab)-(1-1)))];

@@ -638,6 +638,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           pm[t] = pm[u], pm[u] = w;
         }
         for (int t = 0; t < MC_N; t++) mcz[t][j] = MC_Q[pm[t]];
+        for (int t = 0; t < MC_N + 4; t++) mczt[j][t] = mcz[t & (MC_N - 1)][j];
       }
     }
     for (int k = 1; k < SP_NB; k++) {  // (det_exp_neg(): the same everywhere)
@@ -1694,8 +1695,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // the two differ: mixed at a fixed weight, 6% less than either. As the outside prediction,
   // `s.2.dts`'s core 0.72% smaller (the top subband's alone, the stretch as it is, the prior 1/4);
   // doubled, the prior 1/20, 0.25% more (by 3 0.01% less, by 4 0.04%); more passes where the region
-  // leaves few, 0.18% (since format 94 to MC_T kept, at most MC_K, 0.19% more; to 512, at most 1024,
-  // 0.16% more again, but 3 MB of its middle a third slower); subbands 28-30 too, 0.27% (their noise
+  // leaves few, 0.18% (format 94's to 256 kept, at most 512, 0.19% more; since format 96 to MC_T, at
+  // most MC_K, 0.20% more again, to MC_P passes rather than 8 0.10%, the prior 1/80 0.02%; 64 passes,
+  // 0.01% more); subbands 28-30 too, 0.27% (their noise
   // at 2^-38 0.11% less; at format 88's 2^-44, the short streams 0.17% bigger): 81703 bytes to 80550
   // in format 93, 3 MB of its middle 0.9% smaller, its first 3 MB 0.2%, the rest as they were. The
   // top subband's noise at 2 or 4 2^-40, 0.14% and 0.02% bigger; with heavier tails (Laplace's,
@@ -1704,28 +1706,69 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // bytes in the short streams); the samples' groups by the scores weighed
   // as the model's are (gw), the same; the posterior's first as the near-tie count's context, bigger.
   // A stop once MC_B samples agree on both, 5 bytes more; with it and the scores' sums in AVX2,
-  // `s.2.dts`'s core compresses in 61 seconds where format 92's took 38 (100 without them). The
-  // samples: MC_Q's 256 quantiles in an order of each value's own, a pass taking them in another
-  // pairing (all in IEEE's basic arithmetic, the scores' products and sums in the same order in the
-  // AVX2 build and the plain one)
-  static constexpr int MC_N = 256, MC_K = 512, MC_B = 32, MC_P = 8, MC_T = 256, MC_NG = 16;
-  static constexpr double MC_A = 0.05;
+  // `s.2.dts`'s core compresses in 61 seconds where format 92's took 38 (100 without them). Since
+  // format 96 the samples are made four at a time, the scores' least found in AVX2 and the entries'
+  // nearest by 64-bit keys (hf_near()), the same in a third less time (3 MB of `s.2.dts`'s middle in
+  // 1.27 seconds where format 95's took 1.93): four times the samples, about as fast. The samples:
+  // MC_Q's 256 quantiles in an order of each value's own, a pass taking them in another pairing (all
+  // in IEEE's basic arithmetic, the scores' products and sums in the same order in the AVX2 build and
+  // the plain one)
+  static constexpr int MC_N = 256, MC_K = 2048, MC_B = 32, MC_P = 32, MC_T = 1024, MC_NG = 16;
+  static constexpr double MC_A = 0.0125;
   double mcz[MC_N][16];      // (the noise's samples)
+  double mczt[16][MC_N + 4];  // (the same by value, the first 4 again at the end)
   S64 mcy[MC_K][16];         // (the samples kept, the encoder's group and entry for each)
   int mcg[MC_K], mce[MC_K];
-  // (the entry of group g nearest y)
-  static int hf_near(int g, const S64* y, S64 sc) {
-    S128 dd[32];
-    hf_dists(g, y, 16, sc, dd);
+  // (the entry of group g nearest y, hf_dists()'s least, the first of equals: as each distance is
+  // 256 y y + 2^21 sc (2^11 sc e - y v), e the entry's energy, by the latter in 64 bits where
+  // 0 < sc < 2^31 and |y| < 2^40 (sm: known to be), 2^11 sc e within 2^60 and y v 2^51)
+  static int hf_near(int g, const S64* y, S64 sc, bool sm = false) {
+    if (!sm) {
+      S64 mx = 0;
+      for (int j = 0; j < 16; j++) mx |= y[j] < 0 ? -y[j] : y[j];
+      sm = mx < (S64)1 << 40;
+    }
+    if (sc < 1 || sc >= (S64)1 << 31 || !sm) {
+      S128 dd[32];
+      hf_dists(g, y, 16, sc, dd);
+      int be = 0;
+      for (int i = 1; i < 32; i++) be = dd[i] < dd[be] ? i : be;
+      return be;
+    }
+    alignas(32) double a[32];
+    hf_gdots(g, y, 16, a);
+    const S32* const ee = hf_energies.e[1] + g * 32;
+#ifdef DTSD_AVX2  // (the keys in 64 bits, the dot products' by the magic number 1.5 2^52 as |y v| < 2^51; the least's first)
+    const __m256d mg = _mm256_set1_pd(6755399441055744.0);
+    const __m256i mgi = _mm256_castpd_si256(mg), sv = _mm256_set1_epi64x(sc);
+    __m256i k[8];
+    for (int i = 0; i < 8; i++)
+      k[i] = _mm256_sub_epi64(_mm256_slli_epi64(_mm256_mul_epu32(_mm256_cvtepu32_epi64(_mm_loadu_si128((const __m128i*)(ee + 4 * i))), sv), 11),
+                              _mm256_sub_epi64(_mm256_castpd_si256(_mm256_add_pd(_mm256_load_pd(a + 4 * i), mg)), mgi));
+    __m256i m = k[0];
+    for (int i = 1; i < 8; i++) m = _mm256_blendv_epi8(m, k[i], _mm256_cmpgt_epi64(m, k[i]));
+    __m256i w = _mm256_permute4x64_epi64(m, 0x4E);
+    m = _mm256_blendv_epi8(m, w, _mm256_cmpgt_epi64(m, w));
+    w = _mm256_permute4x64_epi64(m, 0xB1);
+    m = _mm256_blendv_epi8(m, w, _mm256_cmpgt_epi64(m, w));
+    U32 eq = 0;
+    for (int i = 0; i < 8; i++) eq |= (U32)_mm256_movemask_pd(_mm256_castsi256_pd(_mm256_cmpeq_epi64(k[i], m))) << (4 * i);
+    return __builtin_ctz(eq);
+#else
     int be = 0;
-    for (int i = 1; i < 32; i++) be = dd[i] < dd[be] ? i : be;
+    S64 bk = ((S64)ee[0] * sc << 11) - (S64)a[0];
+    for (int i = 1; i < 32; i++) {
+      const S64 k = ((S64)ee[i] * sc << 11) - (S64)a[i];
+      if (k < bk) be = i, bk = k;
+    }
     return be;
+#endif
   }
   // hf_mc(): the encoder's values sampled about x, the noise's deviation sg at each, those whose mean
   // square lies in lo2..hi2 kept (to MC_K), each one's group by the scores' rule (hf_group_score()'s,
   // in doubles) and its entry there; a block of MC_B at a time, of MC_N in a pass, a pass taking the
   // values' samples in another pairing, until MC_B kept agree, or after a pass MC_T are kept, or MC_P
-  // passes; how many were kept
+  // passes, or 8 with none kept; how many were kept
   int hf_mc(const S64* x, const double* sg, double lo2, double hi2, S64 sc) {
     alignas(32) double kq[32], wt[16][32];
     for (int q = 0; q < 32; q++) {
@@ -1735,11 +1778,43 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     int mk = 0;
     bool same = true;
+#ifdef DTSD_AVX2  // (four samples at a time, where each value lies within 2^51: x within 2^50, the noise 2^49)
+    S64 mx = 0;
+    double sm = 0;
+    for (int j = 0; j < 16; j++) mx |= x[j] < 0 ? -x[j] : x[j], sm = sm < fabs(sg[j]) ? fabs(sg[j]) : sm;
+    const bool v4 = mx < (S64)1 << 50 && sm < 70368744177664.0;  // (|MC_Q| < 3: 2^46)
+    const bool ys = mx < (S64)1 << 39 && sm < 68719476736.0;    // (and the samples within 2^40: 2^36)
+    alignas(32) S64 y4[16][4];
+    alignas(32) double ms4[4];
+#else
+    const bool ys = false;
+#endif
     for (int pass = 0; pass < MC_P; pass++) {
       for (int t0 = 0; t0 < MC_N; t0 += MC_B) {
         for (int t = t0; t < t0 + MC_B && mk < MC_K; t++) {
           S64* y = mcy[mk];
           double ms = 0;
+#ifdef DTSD_AVX2
+          if (v4) {
+            if (!(t & 3)) {  // (as below, the rounding by truncation, to 64 bits and back by the magic number 1.5 2^52)
+              const __m256d mg = _mm256_set1_pd(6755399441055744.0), hp = _mm256_set1_pd(0.5), hn = _mm256_set1_pd(-0.5);
+              const __m256i mgi = _mm256_castpd_si256(mg);
+              __m256d s = _mm256_setzero_pd();
+              for (int j = 0; j < 16; j++) {
+                const __m256d e = _mm256_mul_pd(_mm256_set1_pd(sg[j]), _mm256_loadu_pd(mczt[j] + ((t + pass * (53 * j + 1)) & (MC_N - 1))));
+                const __m256d r = _mm256_round_pd(_mm256_add_pd(e, _mm256_blendv_pd(hn, hp, _mm256_cmp_pd(e, _mm256_setzero_pd(), _CMP_GE_OQ))),
+                                                  _MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC);
+                const __m256i v = _mm256_add_epi64(_mm256_set1_epi64x(x[j]), _mm256_sub_epi64(_mm256_castpd_si256(_mm256_add_pd(r, mg)), mgi));
+                _mm256_store_si256((__m256i*)y4[j], v);
+                const __m256d vd = _mm256_sub_pd(_mm256_castsi256_pd(_mm256_add_epi64(v, mgi)), mg);
+                s = _mm256_add_pd(s, _mm256_mul_pd(vd, vd));
+              }
+              _mm256_store_pd(ms4, s);
+            }
+            for (int j = 0; j < 16; j++) y[j] = y4[j][t & 3];
+            ms = ms4[t & 3];
+          } else
+#endif
           for (int j = 0; j < 16; j++) {
             const double e = sg[j] * mcz[(t + pass * (53 * j + 1)) & (MC_N - 1)][j];
             y[j] = x[j] + (S64)(e + (e >= 0 ? 0.5 : -0.5));
@@ -1747,7 +1822,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           }
           ms /= 16;
           if (ms < lo2 || ms >= hi2) continue;
-          alignas(32) double dt[32];  // (kq - y.W of each group: the products and sums in order, as the plain C++'s)
+          int bq = 0;  // (the least of kq - y.W, the first of equals: the products and sums in order, as the plain C++'s)
 #ifdef DTSD_AVX2
           __m256d a0 = _mm256_setzero_pd(), a1 = a0, a2 = a0, a3 = a0, a4 = a0, a5 = a0, a6 = a0, a7 = a0;
           for (int j = 0; j < 16; j++) {
@@ -1758,28 +1833,35 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
             a4 = _mm256_add_pd(a4, _mm256_mul_pd(v, _mm256_load_pd(w + 16))), a5 = _mm256_add_pd(a5, _mm256_mul_pd(v, _mm256_load_pd(w + 20)));
             a6 = _mm256_add_pd(a6, _mm256_mul_pd(v, _mm256_load_pd(w + 24))), a7 = _mm256_add_pd(a7, _mm256_mul_pd(v, _mm256_load_pd(w + 28)));
           }
-          _mm256_store_pd(dt, _mm256_sub_pd(_mm256_load_pd(kq), a0)), _mm256_store_pd(dt + 4, _mm256_sub_pd(_mm256_load_pd(kq + 4), a1));
-          _mm256_store_pd(dt + 8, _mm256_sub_pd(_mm256_load_pd(kq + 8), a2)), _mm256_store_pd(dt + 12, _mm256_sub_pd(_mm256_load_pd(kq + 12), a3));
-          _mm256_store_pd(dt + 16, _mm256_sub_pd(_mm256_load_pd(kq + 16), a4)), _mm256_store_pd(dt + 20, _mm256_sub_pd(_mm256_load_pd(kq + 20), a5));
-          _mm256_store_pd(dt + 24, _mm256_sub_pd(_mm256_load_pd(kq + 24), a6)), _mm256_store_pd(dt + 28, _mm256_sub_pd(_mm256_load_pd(kq + 28), a7));
+          a0 = _mm256_sub_pd(_mm256_load_pd(kq), a0), a1 = _mm256_sub_pd(_mm256_load_pd(kq + 4), a1);
+          a2 = _mm256_sub_pd(_mm256_load_pd(kq + 8), a2), a3 = _mm256_sub_pd(_mm256_load_pd(kq + 12), a3);
+          a4 = _mm256_sub_pd(_mm256_load_pd(kq + 16), a4), a5 = _mm256_sub_pd(_mm256_load_pd(kq + 20), a5);
+          a6 = _mm256_sub_pd(_mm256_load_pd(kq + 24), a6), a7 = _mm256_sub_pd(_mm256_load_pd(kq + 28), a7);
+          __m256d m = _mm256_min_pd(_mm256_min_pd(_mm256_min_pd(a0, a1), _mm256_min_pd(a2, a3)), _mm256_min_pd(_mm256_min_pd(a4, a5), _mm256_min_pd(a6, a7)));
+          m = _mm256_min_pd(m, _mm256_permute2f128_pd(m, m, 1));
+          m = _mm256_min_pd(m, _mm256_permute_pd(m, 5));  // (the least in each lane; the first lane equal to it)
+          bq = __builtin_ctz((U32)_mm256_movemask_pd(_mm256_cmp_pd(a0, m, _CMP_EQ_OQ)) | (U32)_mm256_movemask_pd(_mm256_cmp_pd(a1, m, _CMP_EQ_OQ)) << 4 |
+                             (U32)_mm256_movemask_pd(_mm256_cmp_pd(a2, m, _CMP_EQ_OQ)) << 8 | (U32)_mm256_movemask_pd(_mm256_cmp_pd(a3, m, _CMP_EQ_OQ)) << 12 |
+                             (U32)_mm256_movemask_pd(_mm256_cmp_pd(a4, m, _CMP_EQ_OQ)) << 16 | (U32)_mm256_movemask_pd(_mm256_cmp_pd(a5, m, _CMP_EQ_OQ)) << 20 |
+                             (U32)_mm256_movemask_pd(_mm256_cmp_pd(a6, m, _CMP_EQ_OQ)) << 24 | (U32)_mm256_movemask_pd(_mm256_cmp_pd(a7, m, _CMP_EQ_OQ)) << 28);
 #else
+          double dt[32];
           for (int q = 0; q < 32; q++) {
             double a = 0;
             for (int j = 0; j < 16; j++) a += (double)y[j] * wt[j][q];
             dt[q] = kq[q] - a;
           }
-#endif
-          int bq = 0;
           for (int q = 1; q < 32; q++)
             if (dt[q] < dt[bq]) bq = q;
-          const int be = hf_near(bq, y, sc);
+#endif
+          const int be = hf_near(bq, y, sc, ys);
           mcg[mk] = bq, mce[mk] = be;
           same = same && (!mk || (bq == mcg[0] && be == mce[0]));
           mk++;
         }
         if (mk >= MC_K || (same && mk >= MC_B)) return mk;
       }
-      if (mk >= MC_T) return mk;
+      if (mk >= MC_T || (!mk && pass >= 7)) return mk;  // (none kept in 8 passes: none to be had)
     }
     return mk;
   }
@@ -3065,11 +3147,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     return k;
   }
   // (sf_mc(): sf_post()'s by sampling, n at most 16: the values with the noise drawn as hf_mc()'s
-  // (MC_N samples, MC_A of a sample to each cell), each sample's mean square counted in its cell.
+  // (SF_P passes of MC_N samples in its pairings, MC_A of a sample to each cell), each sample's mean
+  // square counted in its cell (since format 96 16 passes, 0.07% smaller than 1; 4, 0.05%).
   // The top subband's since format 94: where it is weak against the noise, its mean square's
   // distribution is skewed, where sf_post()'s normal one isn't: `s.2.dts`'s core 0.13% smaller,
   // the short streams 6 bytes; subbands 28-30's and the rest's, by any power of their noise from
-  // 1/2 to 8 of theirs, 0.1-1.4% bigger)
+  // 1/2 to 8 of theirs, 0.1-1.4% bigger, with 4096 samples the same)
+  static constexpr int SF_P = 16;  // (sf_mc()'s passes of MC_N samples)
   int sf_mc(const S64* v, const double* s2, int n, const U32* tab, int nt, int c0, int* ci, double* pv) {
     double clo[2 * SP_W + 1], chi[2 * SP_W + 1], sd[16];
     int cix[2 * SP_W + 1], k = 0;
@@ -3086,22 +3170,39 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int i = 0; i < n; i++) sd[i] = sqrt(s2[i]), any = any || sd[i] > 0;
     if (!any || !k) return 0;
     int cnt[2 * SP_W + 1] = {0};
-    for (int t = 0; t < MC_N; t++) {
-      double ms = 0;
-      for (int i = 0; i < n; i++) {
-        const double y = (double)v[i] + sd[i] * mcz[t][i];
-        ms += y * y;
-      }
-      ms /= n;
-      for (int c = 0; c < k; c++)
-        if (ms >= clo[c] && ms < chi[c]) {
-          cnt[c]++;
-          break;
+    double vd[16];
+    for (int i = 0; i < n; i++) vd[i] = (double)v[i];
+    for (int pass = 0; pass < SF_P; pass++)
+      for (int t = 0; t < MC_N; t += 4) {  // (four samples at a time, each one's sums in order, as the plain C++'s)
+        alignas(32) double ms[4];
+#ifdef DTSD_AVX2
+        __m256d a = _mm256_setzero_pd();
+        for (int i = 0; i < n; i++) {
+          const __m256d z = _mm256_loadu_pd(mczt[i] + ((t + pass * (53 * i + 1)) & (MC_N - 1)));
+          const __m256d y = _mm256_add_pd(_mm256_set1_pd(vd[i]), _mm256_mul_pd(_mm256_set1_pd(sd[i]), z));
+          a = _mm256_add_pd(a, _mm256_mul_pd(y, y));
         }
-    }
+        _mm256_store_pd(ms, _mm256_div_pd(a, _mm256_set1_pd((double)n)));
+#else
+        for (int u = 0; u < 4; u++) {
+          double a = 0;
+          for (int i = 0; i < n; i++) {
+            const double y = vd[i] + sd[i] * mczt[i][((t + pass * (53 * i + 1)) & (MC_N - 1)) + u];
+            a += y * y;
+          }
+          ms[u] = a / n;
+        }
+#endif
+        for (int u = 0; u < 4; u++)
+          for (int c = 0; c < k; c++)
+            if (ms[u] >= clo[c] && ms[u] < chi[c]) {
+              cnt[c]++;
+              break;
+            }
+      }
     int m = 0;
     for (int c = 0; c < k; c++) {
-      const double pp = (cnt[c] + MC_A) / (MC_N + k * MC_A);
+      const double pp = (cnt[c] + MC_A) / (MC_N * SF_P + k * MC_A);
       int at = m++;
       while (at > 0 && pv[at - 1] < pp) ci[at] = ci[at - 1], pv[at] = pv[at - 1], at--;
       ci[at] = cix[c], pv[at] = pp;

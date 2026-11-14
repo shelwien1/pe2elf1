@@ -29,13 +29,14 @@ struct mapping {
     for (i = 0, j = 0; i < MSize; i++) {
       pmap[i] = j;
       j += (S[i] & 1);
-      // Split to avoid Clang's -Wunsequenced error
-      value <<= 1;
-      value += (S[i] & 1);
+      // Split to avoid Clang's -Wunsequenced error (in unsigned: a pattern's 31 ones and more
+      // wrap, rather than overflow)
+      value = (int)((unsigned)value << 1);
+      value = (int)((unsigned)value + (unsigned)(S[i] & 1));
     }
     pmap[i] = j;
     Size = j + 1;
-    value += L;
+    value = (int)((unsigned)value + (unsigned)L);
   }
 
   int map(int x) { return pmap[clip(x - left, 0, MSize)]; }
