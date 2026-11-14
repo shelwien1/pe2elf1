@@ -1,7 +1,10 @@
 # flacdump refactoring plan
 
+**Status:** phase 1 (section 3) is done: the `.inc` files sit next to
+`flacdump.cpp`. Phases 2 and 3 are optional and not done.
+
 Line numbers refer to `flacdump.cpp` at commit `08dc76d` (5186 lines, one
-translation unit).
+translation unit), i.e. before phase 1.
 
 ## 1. Goal and approach
 
@@ -12,7 +15,7 @@ Move into its own `.inc` file:
 * every function longer than 100 lines (from signature to closing brace).
 
 The program stays a **single translation unit**. Each block is cut out
-unchanged and replaced by an `#include "inc/<name>.inc"` line **at the same
+unchanged and replaced by an `#include "<name>.inc"` line **at the same
 place**, so the order of definitions does not change and no declarations,
 `static` qualifiers or names need to change.
 
@@ -137,10 +140,10 @@ Pages are only touched as needed (peak RSS of `c` on an 86 MB FLAC: 88 MB,
 mostly the input file). Headroom to the 128 MB limit is ~7 MB; new large
 buffers must reuse existing ones.
 
-## 3. Phase 1: move classes and large functions (the requested change)
+## 3. Phase 1: move classes and large functions (done)
 
-Directory `flacdump/inc/`, file names are the class/function name in snake
-case. Each range includes the comment directly above the block. The blocks
+The files are placed next to `flacdump.cpp` (no subdirectory); file names are
+the class/function name in snake case. Each range includes the comment directly above the block. The blocks
 are cut **bottom-up** (highest line first) so the earlier ranges stay valid.
 
 | # | file | lines | size | contents | uses from earlier code |
@@ -176,7 +179,7 @@ What stays in `flacdump.cpp` when they share a helper: `default_mask`,
 banners (`// ---- // Title`) stay in `flacdump.cpp` above the `#include`
 lines, so the main file still reads as an outline.
 
-Result: 23 files with 2087 lines in total; `flacdump.cpp` goes from 5186 to about 3120 lines.
+Result: 23 files with 2087 lines in total; `flacdump.cpp` went from 5186 to 3122 lines.
 
 ### Format of a `.inc` file
 
@@ -198,9 +201,9 @@ No include guards, no `#include`s inside `.inc` files, nothing defined twice.
    it checks both texts, writes the `.inc`
    with its header, and replaces the range by the `#include` line, starting
    from the bottom. The checks on the first and last line text catch any off-by-one.
-2. `Makefile`: `flacdump: flacdump.cpp $(wildcard inc/*.inc)` so that edits
+2. `Makefile`: `flacdump: flacdump.cpp $(wildcard *.inc)` so that edits
    in `.inc` files trigger a rebuild. The documented one-line build
-   (`g++ ... flacdump.cpp`) keeps working because `#include "inc/..."` is
+   (`g++ ... flacdump.cpp`) keeps working because `#include "<name>.inc"` is
    resolved relative to `flacdump.cpp`.
 3. README: mention the source layout in the Build section.
 4. One commit for the whole move (purely mechanical, verified as below).
@@ -215,13 +218,19 @@ No include guards, no `#include`s inside `.inc` files, nothing defined twice.
 3. `tests/roundtrip.sh` on a few files (libFLAC, ffmpeg, a file with tags and a
    picture), and `c` with the built-in verify.
 
+Outcome: stripped binaries byte-identical to `0533242` (the commit before the
+move) with g++ and clang++, no warnings, round trips OK.
+
 ## 4. Phase 2 (optional): group the rest of `flacdump.cpp` by topic
 
 After phase 1, `flacdump.cpp` is still ~3100 lines of small functions. The
 same in-place technique (also binary-identical) could leave it with only the
 prologue, the ordered `#include` list and `main`:
 
-| file | current lines | contents |
+Files go next to `flacdump.cpp` as in phase 1. Line numbers are those before
+phase 1.
+
+| file | lines | contents |
 |------|---------------|----------|
 | `file_crc.inc` | 127-185 | `read_file`, CRC tables |
 | `flac_defs.inc` | 404-555, 600-623 | FLAC structs, work buffers, canonical codes, fixed/LPC residual, `subframe_signal` |
