@@ -103,11 +103,20 @@ which additionally has no container overhead).
   JPEG marker / PNG chunk structure, >= 256 bytes) become external files, the
   rest is coded with the CM byte model.
 * ID3v2 (2.2/2.3/2.4) and APEv2 tags in those regions are parsed to find the
-  exact text values (ID3 `T***`/`TXXX`/`COMM` frames in ISO-8859-1 or UTF-8,
-  APE text items). Values that are base64 - also line broken - are decoded
-  exactly as described for VORBIS_COMMENT below (pictures/blobs become files,
-  small blobs are coded as binary when cheaper). Outside parsed tags, runs of
-  base64 text are detected heuristically.
+  exact values:
+  * ID3 text and comment frames (`T***`, `TXXX`, `COMM`) in ISO-8859-1,
+    UTF-8 or UTF-16 (with BOM, or big endian), and APE text items: values that
+    are base64 - also line broken - are decoded exactly as described for
+    VORBIS_COMMENT below (pictures/blobs become files, small blobs are coded as
+    binary when cheaper). UTF-16 text is narrowed for decoding and widened
+    again on restore.
+  * ID3 `GEOB` objects: base64 text after a short binary header (as in Serato
+    tags) is decoded; otherwise objects of 256 bytes or more become files.
+  * ID3 `APIC`/`PIC` pictures and APE binary items (`filename\0data`): the
+    data becomes a file, whatever the image format.
+
+  Frames that are compressed, encrypted or unsynchronised are left alone.
+  Outside parsed tags, runs of base64 text are detected heuristically.
 * PICTURE blocks: the picture data becomes an external file (extension from
   its magic bytes: jpg, png, gif, bmp, webp, tif, otherwise bin); the block's
   other fields stay in the `.meta`.

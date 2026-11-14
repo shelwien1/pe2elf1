@@ -1415,6 +1415,7 @@ struct Cut {
     u64 off, len;
     int ext;
     int b64;     // region bytes are base64 text of 'dec'
+    int wide;    // for b64: text is UTF-16 (1 = little endian, 2 = big endian)
     int kind;    // for b64: 1 PICTURE structure, 2 image, 3 other binary
     B64Fmt fmt;
     Buf dec;
@@ -1467,6 +1468,7 @@ static bool b64_try(const u8* d, size_t s, size_t e, bool extract, Cut& c) {
             if (!b64f_parse(d + st, en - st, c.dec, c.fmt)) continue;
             if (!b64_worth(c.dec, c.fmt, extract, c.kind)) continue;
             c.b64 = 1;
+            c.wide = 0;
             c.off = st;
             c.len = en - st;
             c.ext = 0;
@@ -1474,6 +1476,37 @@ static bool b64_try(const u8* d, size_t s, size_t e, bool extract, Cut& c) {
         }
     }
     return false;
+}
+
+// same for UTF-16 text (wide = 1 little endian, 2 big endian): characters above 0xFF break the text
+static bool b64_try_wide(const u8* d, size_t s, size_t e, int wide, bool extract, Cut& c) {
+    size_t nch = (e - s) / 2;
+    c.b64 = 0;
+    if (nch < 64) return false;
+    Buf nb;
+    nb.reserve(nch + 16);
+    for (size_t k = 0; k < nch; k++) {
+        u8 lo = d[s + 2 * k + (wide == 2)], hi = d[s + 2 * k + (wide == 1)];
+        nb.p[k] = hi ? 0xFF : lo;
+    }
+    Cut t = {};
+    bool ok = b64_try(nb.p, 0, nch, extract, t);
+    if (ok) {
+        c.dec.release();
+        c.dec = t.dec;
+        t.dec.p = nullptr;
+        t.dec.n = t.dec.cap = 0;
+        c.b64 = 1;
+        c.wide = wide;
+        c.fmt = t.fmt;
+        c.kind = t.kind;
+        c.ext = 0;
+        c.off = s + 2 * t.off;
+        c.len = 2 * t.len;
+    }
+    t.dec.release();
+    nb.release();
+    return ok;
 }
 
 // base64 text run in an unparsed raw region starting at d[i]; returns run length to skip
@@ -1491,6 +1524,7 @@ static size_t find_b64_run(const u8* d, size_t n, size_t i, bool extract, Cut& c
 // ---- tag structures: exact spans of text values (ID3v2 text/comment frames, APEv2 text items) ----
 struct Span {
     size_t off, len;
+    int type;  // 0 text, 1 UTF-16LE text, 2 UTF-16BE text, 3 binary object
 };
 struct SpanList {
     Span s[512];
@@ -1498,12 +1532,25 @@ struct SpanList {
     Span tag[16];  // parsed tag structures (no raw base64 scanning inside)
     int nt;
 };
-static void add_span(SpanList& L, size_t off, size_t len) {
-    if (L.n < 512 && len >= 64) L.s[L.n++] = {off, len};
+static void add_span(SpanList& L, size_t off, size_t len, int type = 0) {
+    if (L.n < 512 && len >= (type == 3 ? 16u : 64u)) L.s[L.n++] = {off, len, type};
 }
 static inline u32 syncsafe32(const u8* p) { return ((p[0] & 0x7F) << 21) | ((p[1] & 0x7F) << 14) | ((p[2] & 0x7F) << 7) | (p[3] & 0x7F); }
 
-// ID3v2 tag at d[p]: collects ISO-8859-1 / UTF-8 text values; returns tag size (0 if not a tag)
+// position after an ID3 string terminated by 0 (encodings 0, 3) or 00 00 (UTF-16, encodings 1, 2)
+static size_t id3_skip_str(const u8* d, size_t v, size_t ve, int enc) {
+    if (v >= ve) return ve;
+    if (enc == 1 || enc == 2) {
+        size_t k = v;
+        while (k + 1 < ve && (d[k] || d[k + 1])) k += 2;
+        return Min(k + 2, ve);
+    }
+    while (v < ve && d[v]) v++;
+    return Min(v + 1, ve);
+}
+
+// ID3v2 tag at d[p]: collects text values (any encoding), GEOB objects and APIC pictures;
+// returns tag size (0 if not a tag)
 static size_t id3_spans(const u8* d, size_t n, size_t p, SpanList& L) {
     if (p + 10 > n || memcmp(d + p, "ID3", 3)) return 0;
     int ver = d[p + 3], fl = d[p + 5];
@@ -1535,17 +1582,40 @@ static size_t id3_spans(const u8* d, size_t n, size_t p, SpanList& L) {
             comm = !memcmp(h, "COMM", 4);
         }
         text = h[0] == 'T';
+        bool geob = ver == 2 ? !memcmp(h, "GEO", 3) : !memcmp(h, "GEOB", 4);
+        bool apic = ver == 2 ? !memcmp(h, "PIC", 3) : !memcmp(h, "APIC", 4);
         if (q + hl + fs > end) break;
         size_t v = q + hl, ve = q + hl + fs;
         bool plain = ver == 2 || !(ver == 3 ? (fflags & 0xC0) : (fflags & 0x0F));
-        if (plain && fs > 1 && (text || comm) && (d[v] == 0 || d[v] == 3)) {
+        int enc = fs > 1 ? d[v] : -1;
+        if (plain && enc >= 0 && enc <= 3) {
             v++;
-            if (comm) v += 3;
-            if (txxx || comm) {  // skip description
-                while (v < ve && d[v]) v++;
-                v++;
+            if (text || comm) {
+                if (comm) v += 3;
+                if (txxx || comm) v = id3_skip_str(d, v, ve, enc);  // description
+                int type = 0;
+                if (enc == 1 || enc == 2) {  // UTF-16: BOM decides the byte order (enc 2: big endian)
+                    type = enc == 2 ? 2 : 1;
+                    if (v + 2 <= ve && d[v] == 0xFF && d[v + 1] == 0xFE) {
+                        type = 1;
+                        v += 2;
+                    } else if (v + 2 <= ve && d[v] == 0xFE && d[v + 1] == 0xFF) {
+                        type = 2;
+                        v += 2;
+                    }
+                    if ((ve - v) & 1) ve--;
+                }
+                if (v < ve) add_span(L, v, ve - v, type);
+            } else if (geob) {  // MIME, filename, description, object
+                v = id3_skip_str(d, v, ve, 0);
+                v = id3_skip_str(d, v, ve, enc);
+                v = id3_skip_str(d, v, ve, enc);
+                if (v < ve) add_span(L, v, ve - v, 3);
+            } else if (apic) {  // MIME (v2.2: 3 char format), picture type, description, data
+                v = ver == 2 ? v + 3 : id3_skip_str(d, v, ve, 0);
+                v = id3_skip_str(d, v + 1, ve, enc);
+                if (v < ve) add_span(L, v, ve - v, 3);
             }
-            if (v < ve) add_span(L, v, ve - v);
         }
         q = ve;
     }
@@ -1574,7 +1644,17 @@ static bool ape_spans(const u8* d, size_t n, size_t p, SpanList& L) {
         while (k < end && d[k]) k++;
         size_t v = k + 1;
         if (v + vl > end) break;
-        if (((ifl >> 1) & 3) == 0) add_span(L, v, vl);  // UTF-8 text item
+        int it = (ifl >> 1) & 3;
+        if (it == 0)
+            add_span(L, v, vl);  // UTF-8 text item
+        else if (it == 1) {      // binary item, by convention "filename\0data"
+            size_t z = v;
+            while (z < v + vl && z < v + 256 && d[z]) z++;
+            if (z < v + vl && z < v + 256 && !d[z])
+                add_span(L, z + 1, v + vl - z - 1, 3);
+            else
+                add_span(L, v, vl, 3);
+        }
         q = v + vl;
     }
     if (L.nt < 16) L.tag[L.nt++] = {items, end - items};
@@ -1638,10 +1718,29 @@ static int find_cuts(const u8* d, size_t n, int kind, Cut* cuts, bool extract) {
     int si = 0;
     for (size_t i = 0; i + 8 <= n && nc < MAXCUTS;) {
         while (si < L.n && L.s[si].off < i) si++;
-        if (si < L.n && L.s[si].off == i) {  // a tag text value
+        if (si < L.n && L.s[si].off == i) {  // a tag value
             Span sp = L.s[si++];
-            if (b64_try(d, sp.off, sp.off + sp.len, extract, cuts[nc])) {
-                i = cuts[nc].off + cuts[nc].len;
+            Cut& c = cuts[nc];
+            bool done = false;
+            size_t se = sp.off + sp.len;
+            if (sp.type == 0)
+                done = b64_try(d, sp.off, se, extract, c);
+            else if (sp.type <= 2)
+                done = b64_try_wide(d, sp.off, se, sp.type, extract, c);
+            else {
+                // binary object: base64 text after a short binary header (e.g. Serato GEOB), else a file
+                for (size_t k = 0; k < 8 && !done && sp.off + k < se; k++)
+                    if (is_b64c(d[sp.off + k])) done = b64_try(d, sp.off + k, se, extract, c);
+                if (!done && extract && sp.len >= MINCUT) {
+                    c.off = sp.off;
+                    c.len = sp.len;
+                    c.ext = sniff_ext(d + sp.off, sp.len);
+                    c.b64 = 0;
+                    done = true;
+                }
+            }
+            if (done) {
+                i = c.off + c.len;
                 nc++;
                 continue;
             }
@@ -1680,6 +1779,7 @@ struct ExtModels {
     BM ext[16];
     BM isb64, pad, crlf, fin;
     BM kind[4];
+    BM wide[4];
 };
 static ExtModels g_extm;
 
@@ -1697,14 +1797,30 @@ static bool code_cut(AC& ac, u8* data, Cut& c) {
         } else
             c.fmt.crlf = c.fmt.final_eol = 0;
         c.kind = (int)ac.tree(g_extm.kind, 2, (u32)c.kind);
+        c.wide = (int)ac.tree(g_extm.wide, 2, (u32)c.wide);
         u64 dn = code_uint(ac, g_extm.dlen, c.dec.n);
-        if (c.kind == 0 || b64f_len((size_t)dn, c.fmt) != c.len) return false;
+        size_t tl = b64f_len((size_t)dn, c.fmt);
+        if (c.kind == 0 || c.wide == 3 || tl * (c.wide ? 2 : 1) != c.len) return false;
         if (ac.dec) {
             c.dec.reserve((size_t)dn + 1);
             c.dec.n = (size_t)dn;
         }
         if (!code_region(ac, c.dec.p, (size_t)dn, c.kind == 1 ? 1 : 2, false)) return false;
-        if (ac.dec) b64f_encode(c.dec.p, c.dec.n, c.fmt, data + c.off);
+        if (ac.dec) {
+            if (!c.wide)
+                b64f_encode(c.dec.p, c.dec.n, c.fmt, data + c.off);
+            else {
+                Buf t;
+                t.reserve(tl + 1);
+                b64f_encode(c.dec.p, c.dec.n, c.fmt, t.p);
+                u8* o = data + c.off;
+                for (size_t k = 0; k < tl; k++) {
+                    o[2 * k + (c.wide == 2)] = t.p[k];
+                    o[2 * k + (c.wide == 1)] = 0;
+                }
+                t.release();
+            }
+        }
         return true;
     }
     c.ext = (int)ac.tree(g_extm.ext, 4, (u32)c.ext);
