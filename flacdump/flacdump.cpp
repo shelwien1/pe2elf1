@@ -62,16 +62,6 @@ static void die(const char* msg) {
     exit(1);
 }
 
-static void* xmalloc(size_t n) {
-    void* p = malloc(n ? n : 1);
-    if (!p) die("out of memory");
-    return p;
-}
-static void* xcalloc(size_t n) {
-    void* p = calloc(n ? n : 1, 1);
-    if (!p) die("out of memory");
-    return p;
-}
 static void* xrealloc(void* q, size_t n) {
     void* p = realloc(q, n ? n : 1);
     if (!p) die("out of memory");
@@ -339,11 +329,34 @@ struct BitReader {
     bool ok() const { return pos <= nbits; }
 };
 
+// output into fixed storage; overflow is remembered instead of reallocating
+struct FixOut {
+    u8* p;
+    size_t n, cap;
+    bool over;
+    inline void put(u8 b) {
+        if (n < cap)
+            p[n++] = b;
+        else
+            over = true;
+    }
+    void append(const u8* s, size_t k) {
+        if (n + k > cap) {
+            over = true;
+            return;
+        }
+        memcpy(p + n, s, k);
+        n += k;
+    }
+};
+enum { FRAMEMAX = 8 << 20 };   // largest re-encoded frame (verbatim worst case is ~2.2 MB)
+static u8 g_framebuf[FRAMEMAX];
+
 struct BitWriter {
-    Buf* b;
+    FixOut* b;
     u64 acc;
     int na;
-    void init(Buf* buf) {
+    void init(FixOut* buf) {
         b = buf;
         acc = 0;
         na = 0;
@@ -421,17 +434,22 @@ static s64* g_simx;
 static s32* g_pcm[MAXCH];  // PCM of current frame
 static u8* g_parambuf;
 
+// fixed size work buffers (static storage, ~7.5 MB)
+static s64 s_sig[MAXCH][MAXBS];
+static s32 s_pcm[MAXCH][MAXBS];
+static s64 s_x[MAXBS], s_res[MAXBS], s_res2[MAXBS], s_simx[MAXBS];
+static u8 s_parambuf[(size_t)MAXCH * MAXPART * 2];
+
 static void alloc_work() {
     for (int c = 0; c < MAXCH; c++) {
-        g_sig[c] = (s64*)xmalloc(sizeof(s64) * MAXBS);
-        g_pcm[c] = (s32*)xmalloc(sizeof(s32) * MAXBS);
+        g_sig[c] = s_sig[c];
+        g_pcm[c] = s_pcm[c];
     }
-    g_x = (s64*)xmalloc(sizeof(s64) * MAXBS);
-    g_res = (s64*)xmalloc(sizeof(s64) * MAXBS);
-    g_res2 = (s64*)xmalloc(sizeof(s64) * MAXBS);
-
-    g_simx = (s64*)xmalloc(sizeof(s64) * MAXBS);
-    g_parambuf = (u8*)xcalloc((size_t)MAXCH * MAXPART * 2);
+    g_x = s_x;
+    g_res = s_res;
+    g_res2 = s_res2;
+    g_simx = s_simx;
+    g_parambuf = s_parambuf;
 }
 
 static void frameinfo_init(FrameInfo& f) {
@@ -573,8 +591,9 @@ static const s32* to32(const s64* x, int n) {
     return g_x32;
 }
 
+static s32 s_x32[MAXBS];
 static void init_fast() {
-    g_x32 = (s32*)xmalloc(sizeof(s32) * MAXBS);
+    g_x32 = s_x32;
     LpcResInit<32>::run();
 }
 
@@ -827,7 +846,8 @@ static void write_residual(BitWriter& bw, const SubInfo& s, const s64* r, int bs
     }
 }
 
-static void encode_frame(const FrameInfo& f, s32** pcm, Buf& out) {
+// returns false if the frame does not fit into the output storage
+static bool encode_frame(const FrameInfo& f, s32** pcm, FixOut& out) {
     size_t start = out.n;
     u8 h[16];
     int p = 0;
@@ -898,6 +918,7 @@ static void encode_frame(const FrameInfo& f, s32** pcm, Buf& out) {
     u16 c = crc16(out.p + start, out.n - start);
     out.put((u8)(c >> 8));
     out.put((u8)c);
+    return !out.over;
 }
 
 // ---------------------------------------------------------------------------
@@ -1068,19 +1089,34 @@ static inline int squash(int x) {
     return g_squash[x + 2048];
 }
 
+// tables of the byte models come from a small static pool (models nest at most a few levels:
+// a VORBIS_COMMENT model, plus code_bytes' model and its trial copy, plus a cost estimate)
+enum { CM_H2 = 1 << 16, CM_H3 = 1 << 18, CM_POOL = 6 };
+struct ByteCMTables {
+    u16 t0[256], t1[65536], t2[CM_H2], t3[CM_H3];
+};
+static ByteCMTables g_cmpool[CM_POOL];  // ~4.7 MB
+static bool g_cmbusy[CM_POOL];
+
 struct ByteCM {
-    enum { N = 4, H2 = 1 << 16, H3 = 1 << 18 };
+    enum { N = 4, H2 = CM_H2, H3 = CM_H3 };
     u16* t0;
     u16* t1;
     u16* t2;
     u16* t3;
+    int slot;
     int w[256][N + 1];
     u32 c1, c2, c3;
     void init() {
-        t0 = (u16*)xmalloc(256 * 2);
-        t1 = (u16*)xmalloc(65536 * 2);
-        t2 = (u16*)xmalloc(H2 * 2);
-        t3 = (u16*)xmalloc(H3 * 2);
+        slot = 0;
+        while (slot < CM_POOL && g_cmbusy[slot]) slot++;
+        if (slot == CM_POOL) die("internal: byte model pool exhausted");
+        g_cmbusy[slot] = true;
+        ByteCMTables& T = g_cmpool[slot];
+        t0 = T.t0;
+        t1 = T.t1;
+        t2 = T.t2;
+        t3 = T.t3;
         for (int i = 0; i < 256; i++) t0[i] = 2048;
         for (int i = 0; i < 65536; i++) t1[i] = 2048;
         for (int i = 0; i < H2; i++) t2[i] = 2048;
@@ -1089,12 +1125,7 @@ struct ByteCM {
             for (int j = 0; j <= N; j++) w[i][j] = j < N ? 20000 : 0;
         c1 = c2 = c3 = 0;
     }
-    void release() {
-        free(t0);
-        free(t1);
-        free(t2);
-        free(t3);
-    }
+    void release() { g_cmbusy[slot] = false; }
     // code one byte; if ac==null just measure cost (bits) and update
     int byte(AC* ac, int c, double* cost) {
         u32 cx = 1;
@@ -1148,8 +1179,15 @@ static const char* k_prime_text =
     "TITLE=ARTIST=ALBUM=DATE=TRACKNUMBER=TRACKTOTAL=DISCNUMBER=GENRE=COMMENT=ALBUMARTIST=COMPOSER="
     "ENCODER=REPLAYGAIN_TRACK_GAIN=REPLAYGAIN_TRACK_PEAK=REPLAYGAIN_ALBUM_GAIN=REPLAYGAIN_ALBUM_PEAK=";
 
-// Code a byte string (length known to both sides). Chooses CM or stored.
-static void code_bytes(AC& ac, u8* data, size_t len, bool prime) {
+// Code a byte string given as pieces (concatenation, total length known to both sides).
+// Chooses CM or stored. Pieces avoid copying the bytes around extracted parts of a region.
+struct Piece {
+    u8* p;
+    size_t n;
+};
+static void code_pieces(AC& ac, const Piece* pc, int np, bool prime) {
+    size_t len = 0;
+    for (int k = 0; k < np; k++) len += pc[k].n;
     if (len == 0) return;
     int savecat = ac.cat;
     int stored = 0;
@@ -1173,22 +1211,25 @@ static void code_bytes(AC& ac, u8* data, size_t len, bool prime) {
                 memcpy(t.w, cm.w, sizeof(cm.w));
             }
             double cost = 0;
-            for (size_t i = 0; i < len; i++) t.byte(nullptr, data[i], &cost);
+            for (int k = 0; k < np; k++)
+                for (size_t i = 0; i < pc[k].n; i++) t.byte(nullptr, pc[k].p[i], &cost);
             t.release();
             stored = cost > (double)len * 8;
         }
     }
     stored = ac.code(stored, 32768);
-    if (stored) {
-        ac.cat = C_RAW;
-        for (size_t i = 0; i < len; i++) data[i] = (u8)ac.raw(data[i], 8);
-    } else {
-        for (size_t i = 0; i < len; i++) data[i] = (u8)cm.byte(&ac, data[i], nullptr);
+    if (stored) ac.cat = C_RAW;
+    for (int k = 0; k < np; k++) {
+        u8* d = pc[k].p;
+        for (size_t i = 0; i < pc[k].n; i++) d[i] = stored ? (u8)ac.raw(d[i], 8) : (u8)cm.byte(&ac, d[i], nullptr);
     }
     cm.release();
     ac.cat = savecat;
 }
-
+static void code_bytes(AC& ac, u8* data, size_t len, bool prime) {
+    Piece pc = {data, len};
+    code_pieces(ac, &pc, 1, prime);
+}
 
 // ---------------------------------------------------------------------------
 // Embedded files (cover art etc.): stored as separate files <prefix>.<n>.<ext>
@@ -1271,67 +1312,6 @@ static size_t png_len(const u8* p, size_t n) {
 // ---- base64 (pictures/binary embedded as text: comments, APE/ID3 tags) ----
 static const char k_b64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 static size_t b64_len(size_t n, int pad) { return pad ? (n + 2) / 3 * 4 : (n * 4 + 2) / 3; }
-static void b64_encode(const u8* s, size_t n, int pad, u8* o) {
-    size_t i = 0;
-    for (; i + 3 <= n; i += 3) {
-        u32 v = (s[i] << 16) | (s[i + 1] << 8) | s[i + 2];
-        *o++ = k_b64[v >> 18];
-        *o++ = k_b64[(v >> 12) & 63];
-        *o++ = k_b64[(v >> 6) & 63];
-        *o++ = k_b64[v & 63];
-    }
-    if (n - i == 1) {
-        u32 v = s[i] << 16;
-        *o++ = k_b64[v >> 18];
-        *o++ = k_b64[(v >> 12) & 63];
-        if (pad) {
-            *o++ = '=';
-            *o++ = '=';
-        }
-    } else if (n - i == 2) {
-        u32 v = (s[i] << 16) | (s[i + 1] << 8);
-        *o++ = k_b64[v >> 18];
-        *o++ = k_b64[(v >> 12) & 63];
-        *o++ = k_b64[(v >> 6) & 63];
-        if (pad) *o++ = '=';
-    }
-}
-// strict decode; true only if re-encoding gives back exactly the same text
-static bool b64_decode(const u8* s, size_t m, Buf& out, int& pad) {
-    static s8 rev[256];
-    if (!rev['B']) {
-        for (int i = 0; i < 256; i++) rev[i] = -1;
-        for (int i = 0; i < 64; i++) rev[(u8)k_b64[i]] = (s8)i;
-    }
-    size_t np = 0;
-    while (np < 2 && np < m && s[m - 1 - np] == '=') np++;
-    pad = np > 0 || (m % 4) == 0;
-    size_t q = m - np;
-    if (np && (m % 4)) return false;
-    if ((q % 4) == 1) return false;
-    out.n = 0;
-    out.reserve(q * 3 / 4 + 4);
-    u32 acc = 0;
-    int bits = 0;
-    for (size_t i = 0; i < q; i++) {
-        int v = rev[s[i]];
-        if (v < 0) return false;
-        acc = (acc << 6) | (u32)v;
-        bits += 6;
-        if (bits >= 8) {
-            bits -= 8;
-            out.p[out.n++] = (u8)(acc >> bits);
-        }
-    }
-    if (b64_len(out.n, pad) != m) return false;
-    Buf chk;
-    chk.reserve(m + 4);
-    b64_encode(out.p, out.n, pad, chk.p);
-    bool same = !memcmp(chk.p, s, m);
-    chk.release();
-    return same;
-}
-
 // base64 text layout: padding, optional line wrapping
 struct B64Fmt {
     int pad;
@@ -1339,67 +1319,126 @@ struct B64Fmt {
     int crlf;       // line break is CR LF (else LF)
     int final_eol;  // text ends with a line break
 };
+// decoded values larger than this stay text (bounds the static buffers below)
+enum { B64MAX = 16 << 20, B64TEXTMAX = B64MAX / 3 * 4 + B64MAX / 8 };
+static u8 g_b64scan[B64MAX];   // encoder: candidate values while searching
+static u8 g_b64dec_v[B64MAX];  // decoded VORBIS_COMMENT value being coded
+static u8 g_b64dec_r[B64MAX];  // decoded value of a cut in a raw region being coded
+static u8 g_b64narrow[B64TEXTMAX];  // UTF-16 text narrowed to bytes
+
 static size_t b64f_len(size_t n, const B64Fmt& f) {
     size_t t = b64_len(n, f.pad);
     if (!f.line || !t) return t;
     size_t lines = (t + f.line - 1) / f.line;
     return t + (lines - 1 + f.final_eol) * (f.crlf ? 2 : 1);
 }
-static void b64f_encode(const u8* d, size_t n, const B64Fmt& f, u8* o) {
-    if (!f.line) {
-        b64_encode(d, n, f.pad, o);
-        return;
-    }
-    size_t t = b64_len(n, f.pad);
-    Buf tmp;
-    tmp.reserve(t + 4);
-    b64_encode(d, n, f.pad, tmp.p);
-    for (size_t i = 0; i < t; i += f.line) {
-        size_t k = Min((size_t)f.line, t - i);
-        memcpy(o, tmp.p + i, k);
-        o += k;
-        if (i + k < t || f.final_eol) {
-            if (f.crlf) *o++ = '\r';
-            *o++ = '\n';
+// generate the text of d[0..n) in layout f, one character at a time
+template <class F> static void b64f_gen(const u8* d, size_t n, const B64Fmt& f, F&& put) {
+    size_t t = b64_len(n, f.pad), col = 0, done = 0;
+    auto emit = [&](u8 c) {
+        put(c);
+        done++;
+        if (f.line && ++col == f.line && (done < t || f.final_eol)) {
+            col = 0;
+            if (f.crlf) put('\r');
+            put('\n');
         }
+    };
+    size_t i = 0;
+    for (; i + 3 <= n; i += 3) {
+        u32 v = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2];
+        emit(k_b64[v >> 18]);
+        emit(k_b64[(v >> 12) & 63]);
+        emit(k_b64[(v >> 6) & 63]);
+        emit(k_b64[v & 63]);
     }
-    tmp.release();
+    if (n - i == 1) {
+        u32 v = d[i] << 16;
+        emit(k_b64[v >> 18]);
+        emit(k_b64[(v >> 12) & 63]);
+        if (f.pad) {
+            emit('=');
+            emit('=');
+        }
+    } else if (n - i == 2) {
+        u32 v = (d[i] << 16) | (d[i + 1] << 8);
+        emit(k_b64[v >> 18]);
+        emit(k_b64[(v >> 12) & 63]);
+        emit(k_b64[(v >> 6) & 63]);
+        if (f.pad) emit('=');
+    }
+    if (f.line && f.final_eol && col) {  // last line shorter than f.line
+        if (f.crlf) put('\r');
+        put('\n');
+    }
 }
-// strict parse incl. line wrapping; true only if b64f_encode reproduces the text exactly
-static bool b64f_parse(const u8* s, size_t m, Buf& out, B64Fmt& f) {
+static void b64f_encode(const u8* d, size_t n, const B64Fmt& f, u8* o) {
+    b64f_gen(d, n, f, [&](u8 c) { *o++ = c; });
+}
+// UTF-16 text (wide = 1 little endian, 2 big endian)
+static void b64f_encode_wide(const u8* d, size_t n, const B64Fmt& f, u8* o, int wide) {
+    b64f_gen(d, n, f, [&](u8 c) {
+        o[wide == 2] = c;
+        o[wide == 1] = 0;
+        o += 2;
+    });
+}
+// strict parse incl. line wrapping into out[0..cap); true only if b64f_gen reproduces the text exactly
+static bool b64f_parse(const u8* s, size_t m, u8* out, size_t cap, size_t& on, B64Fmt& f) {
+    static s8 rev[256];
+    if (!rev['B']) {
+        for (int i = 0; i < 256; i++) rev[i] = -1;
+        for (int i = 0; i < 64; i++) rev[(u8)k_b64[i]] = (s8)i;
+    }
+    on = 0;
     f.line = 0;
     f.crlf = 0;
     f.final_eol = 0;
     size_t e = 0;
     while (e < m && s[e] != '\r' && s[e] != '\n') e++;
-    Buf flat;
-    const u8* src = s;
-    size_t sm = m;
     if (e < m) {
         if (e < 4) return false;
         f.line = (u32)e;
         f.crlf = s[e] == '\r';
-        flat.reserve(m);
-        flat.n = 0;
-        for (size_t i = 0; i < m; i++)
-            if (s[i] != '\r' && s[i] != '\n') flat.p[flat.n++] = s[i];
         f.final_eol = s[m - 1] == '\n';
-        src = flat.p;
-        sm = flat.n;
     }
-    bool ok = sm > 0 && b64_decode(src, sm, out, f.pad);
-    if (ok && f.line) {
-        ok = b64f_len(out.n, f) == m;
-        if (ok) {
-            Buf chk;
-            chk.reserve(m + 4);
-            b64f_encode(out.p, out.n, f, chk.p);
-            ok = !memcmp(chk.p, s, m);
-            chk.release();
+    // characters without line breaks, trailing padding
+    size_t chars = 0, np = 0;
+    for (size_t i = 0; i < m; i++)
+        if (s[i] != '\r' && s[i] != '\n') chars++;
+    for (size_t i = m; i > 0 && np < 2;) {
+        i--;
+        if (s[i] == '\r' || s[i] == '\n') continue;
+        if (s[i] != '=') break;
+        np++;
+    }
+    if (!chars) return false;
+    f.pad = np > 0 || (chars % 4) == 0;
+    size_t q = chars - np;
+    if ((np && (chars % 4)) || (q % 4) == 1 || q / 4 * 3 + 2 > cap) return false;
+    u32 acc = 0;
+    int bits = 0;
+    size_t seen = 0;
+    for (size_t i = 0; i < m && seen < q; i++) {
+        if (s[i] == '\r' || s[i] == '\n') continue;
+        int v = rev[s[i]];
+        if (v < 0) return false;
+        seen++;
+        acc = (acc << 6) | (u32)v;
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            out[on++] = (u8)(acc >> bits);
         }
     }
-    flat.release();
-    return ok;
+    if (b64f_len(on, f) != m) return false;
+    size_t k = 0;
+    bool same = true;
+    b64f_gen(out, on, f, [&](u8 c) {
+        if (same && (k >= m || s[k] != c)) same = false;
+        k++;
+    });
+    return same && k == m;
 }
 // estimated CM cost (bits) of a byte string with a fresh model
 static double cm_cost(const u8* d, size_t n) {
@@ -1414,28 +1453,28 @@ static double cm_cost(const u8* d, size_t n) {
 struct Cut {
     u64 off, len;
     int ext;
-    int b64;     // region bytes are base64 text of 'dec'
+    int b64;     // region bytes are base64 text of 'dn' decoded bytes
     int wide;    // for b64: text is UTF-16 (1 = little endian, 2 = big endian)
     int kind;    // for b64: 1 PICTURE structure, 2 image, 3 other binary
     B64Fmt fmt;
-    Buf dec;
+    size_t dn;
 };
 enum { MAXCUTS = 64, MINCUT = 256 };
 
 static int find_cuts(const u8* d, size_t n, int kind, Cut* cuts, bool extract);
 
 // should decoded base64 data replace its text? (sets kind)
-static bool b64_worth(const Buf& dec, const B64Fmt& f, bool extract, int& kind) {
+static bool b64_worth(const u8* dec, size_t dn, const B64Fmt& f, bool extract, int& kind) {
     static Cut tmp[MAXCUTS];
-    if (find_cuts(dec.p, dec.n, 1, tmp, false))
+    if (find_cuts(dec, dn, 1, tmp, false))
         kind = 1;
-    else if (ext_is_image(sniff_ext(dec.p, dec.n)) && dec.n >= MINCUT)
+    else if (ext_is_image(sniff_ext(dec, dn)) && dn >= MINCUT)
         kind = 2;
     else
         kind = 3;
-    if (extract && dec.n >= MINCUT) return true;
+    if (extract && dn >= MINCUT) return true;
     // the base64 text itself costs ~6 bits per character
-    return cm_cost(dec.p, dec.n) + 24 < 6.0 * (double)b64_len(dec.n, f.pad);
+    return cm_cost(dec, dn) + 24 < 6.0 * (double)b64_len(dn, f.pad);
 }
 
 static inline bool is_b64c(u8 c) {
@@ -1465,8 +1504,8 @@ static bool b64_try(const u8* d, size_t s, size_t e, bool extract, Cut& c) {
             size_t en = e;
             for (int u = 0; u < t && en > st && (d[en - 1] == '\r' || d[en - 1] == '\n'); u++) en--;
             if (t && en == e) break;
-            if (!b64f_parse(d + st, en - st, c.dec, c.fmt)) continue;
-            if (!b64_worth(c.dec, c.fmt, extract, c.kind)) continue;
+            if (!b64f_parse(d + st, en - st, g_b64scan, B64MAX, c.dn, c.fmt)) continue;
+            if (!b64_worth(g_b64scan, c.dn, c.fmt, extract, c.kind)) continue;
             c.b64 = 1;
             c.wide = 0;
             c.off = st;
@@ -1482,30 +1521,17 @@ static bool b64_try(const u8* d, size_t s, size_t e, bool extract, Cut& c) {
 static bool b64_try_wide(const u8* d, size_t s, size_t e, int wide, bool extract, Cut& c) {
     size_t nch = (e - s) / 2;
     c.b64 = 0;
-    if (nch < 64) return false;
-    Buf nb;
-    nb.reserve(nch + 16);
+    if (nch < 64 || nch > B64TEXTMAX) return false;
     for (size_t k = 0; k < nch; k++) {
         u8 lo = d[s + 2 * k + (wide == 2)], hi = d[s + 2 * k + (wide == 1)];
-        nb.p[k] = hi ? 0xFF : lo;
+        g_b64narrow[k] = hi ? 0xFF : lo;
     }
-    Cut t = {};
-    bool ok = b64_try(nb.p, 0, nch, extract, t);
+    bool ok = b64_try(g_b64narrow, 0, nch, extract, c);
     if (ok) {
-        c.dec.release();
-        c.dec = t.dec;
-        t.dec.p = nullptr;
-        t.dec.n = t.dec.cap = 0;
-        c.b64 = 1;
         c.wide = wide;
-        c.fmt = t.fmt;
-        c.kind = t.kind;
-        c.ext = 0;
-        c.off = s + 2 * t.off;
-        c.len = 2 * t.len;
+        c.off = s + 2 * c.off;
+        c.len = 2 * c.len;
     }
-    t.dec.release();
-    nb.release();
     return ok;
 }
 
@@ -1789,6 +1815,18 @@ static bool code_region(AC& ac, u8* data, size_t len, int kind, bool prime);
 static bool code_cut(AC& ac, u8* data, Cut& c) {
     c.b64 = ac.bit(g_extm.isb64, c.b64);
     if (c.b64) {
+        size_t dn = 0;
+        if (!ac.dec) {  // decode again (the search phase does not keep decoded data)
+            const u8* t = data + c.off;
+            size_t tl = (size_t)c.len;
+            if (c.wide) {
+                tl /= 2;
+                for (size_t k = 0; k < tl; k++) g_b64narrow[k] = data[c.off + 2 * k + (c.wide == 2)];
+                t = g_b64narrow;
+            }
+            B64Fmt f2;
+            if (!b64f_parse(t, tl, g_b64dec_r, B64MAX, dn, f2) || dn != c.dn) die("internal: base64 cut");
+        }
         c.fmt.pad = ac.bit(g_extm.pad, c.fmt.pad);
         c.fmt.line = (u32)code_uint(ac, g_extm.line, c.fmt.line);
         if (c.fmt.line) {
@@ -1798,28 +1836,15 @@ static bool code_cut(AC& ac, u8* data, Cut& c) {
             c.fmt.crlf = c.fmt.final_eol = 0;
         c.kind = (int)ac.tree(g_extm.kind, 2, (u32)c.kind);
         c.wide = (int)ac.tree(g_extm.wide, 2, (u32)c.wide);
-        u64 dn = code_uint(ac, g_extm.dlen, c.dec.n);
-        size_t tl = b64f_len((size_t)dn, c.fmt);
-        if (c.kind == 0 || c.wide == 3 || tl * (c.wide ? 2 : 1) != c.len) return false;
-        if (ac.dec) {
-            c.dec.reserve((size_t)dn + 1);
-            c.dec.n = (size_t)dn;
-        }
-        if (!code_region(ac, c.dec.p, (size_t)dn, c.kind == 1 ? 1 : 2, false)) return false;
+        dn = (size_t)code_uint(ac, g_extm.dlen, dn);
+        size_t tl = b64f_len(dn, c.fmt);
+        if (c.kind == 0 || c.wide == 3 || dn > B64MAX || tl * (c.wide ? 2 : 1) != c.len) return false;
+        if (!code_region(ac, g_b64dec_r, dn, c.kind == 1 ? 1 : 2, false)) return false;
         if (ac.dec) {
             if (!c.wide)
-                b64f_encode(c.dec.p, c.dec.n, c.fmt, data + c.off);
-            else {
-                Buf t;
-                t.reserve(tl + 1);
-                b64f_encode(c.dec.p, c.dec.n, c.fmt, t.p);
-                u8* o = data + c.off;
-                for (size_t k = 0; k < tl; k++) {
-                    o[2 * k + (c.wide == 2)] = t.p[k];
-                    o[2 * k + (c.wide == 1)] = 0;
-                }
-                t.release();
-            }
+                b64f_encode(g_b64dec_r, dn, c.fmt, data + c.off);
+            else
+                b64f_encode_wide(g_b64dec_r, dn, c.fmt, data + c.off, c.wide);
         }
         return true;
     }
@@ -1849,10 +1874,17 @@ static bool code_cut(AC& ac, u8* data, Cut& c) {
     return true;
 }
 
+// cut lists come from a static pool; regions nest at most twice (region -> decoded base64 value)
+enum { CUT_DEPTH = 3 };
+static Cut g_cutpool[CUT_DEPTH][MAXCUTS];
+static int g_cutdepth;
+
 // Code a byte region whose length is known on both sides, extracting embedded files
 // and decoding base64 text.
 static bool code_region(AC& ac, u8* data, size_t len, int kind, bool prime) {
-    Cut* cuts = (Cut*)xcalloc(sizeof(Cut) * MAXCUTS);  // zeroed: empty Bufs
+    if (g_cutdepth >= CUT_DEPTH) die("internal: regions nested too deep");
+    Cut* cuts = g_cutpool[g_cutdepth++];
+    memset(cuts, 0, sizeof(Cut) * MAXCUTS);
     int nc = 0;
     bool extract = !g_ext.keep_inline && g_ext.prefix;
     if (!ac.dec && (extract || kind == 0)) nc = find_cuts(data, len, kind, cuts, extract);
@@ -1860,54 +1892,28 @@ static bool code_region(AC& ac, u8* data, size_t len, int kind, bool prime) {
     ac.cat = C_META;
     nc = (int)code_uint(ac, g_extm.n, (u64)nc);
     bool ok = nc <= MAXCUTS;
-    u64 pos = 0, total = 0;
+    u64 pos = 0;
     for (int i = 0; i < nc && ok; i++) {
         Cut& c = cuts[i];
         u64 gap = code_uint(ac, g_extm.off, ac.dec ? 0 : c.off - pos);
         c.off = pos + gap;
         c.len = code_uint(ac, g_extm.len, c.len);
-        if (c.off + c.len > len || !code_cut(ac, data, c)) {
-            ok = false;
-            break;
-        }
-        total += c.len;
+        if (c.off + c.len > len || !code_cut(ac, data, c)) ok = false;
         pos = c.off + c.len;
     }
-    for (int i = 0; i < MAXCUTS; i++) cuts[i].dec.release();
-    if (!ok) {
-        free(cuts);
-        return false;
-    }
     ac.cat = savecat;
-    // the remaining bytes, concatenated
-    Buf rest;
-    size_t rn = (size_t)(len - total);
-    rest.reserve(rn + 1);
-    rest.n = rn;
-    if (!ac.dec) {
-        size_t q = 0;
+    if (ok) {  // the remaining bytes: the gaps between the cuts
+        Piece pc[MAXCUTS + 1];
         u64 p0 = 0;
         for (int i = 0; i < nc; i++) {
-            memcpy(rest.p + q, data + p0, (size_t)(cuts[i].off - p0));
-            q += (size_t)(cuts[i].off - p0);
+            pc[i] = {data + p0, (size_t)(cuts[i].off - p0)};
             p0 = cuts[i].off + cuts[i].len;
         }
-        memcpy(rest.p + q, data + p0, (size_t)(len - p0));
+        pc[nc] = {data + p0, (size_t)(len - p0)};
+        code_pieces(ac, pc, nc + 1, prime);
     }
-    code_bytes(ac, rest.p, rn, prime);
-    if (ac.dec) {
-        size_t q = 0;
-        u64 p0 = 0;
-        for (int i = 0; i < nc; i++) {
-            memcpy(data + p0, rest.p + q, (size_t)(cuts[i].off - p0));
-            q += (size_t)(cuts[i].off - p0);
-            p0 = cuts[i].off + cuts[i].len;
-        }
-        memcpy(data + p0, rest.p + q, (size_t)(len - p0));
-    }
-    rest.release();
-    free(cuts);
-    return true;
+    g_cutdepth--;
+    return ok;
 }
 
 // ---------------------------------------------------------------------------
@@ -2021,8 +2027,9 @@ struct ResStats {
     int off[16];
     void alloc() {
         k0 = -1;
-        asum = (u64*)xmalloc(sizeof(u64) * 2 * MAXPART + 64);
-        zsum = (u64*)xmalloc(sizeof(u64) * 2 * MAXPART + 64);
+        static u64 s_asum[2 * MAXPART + 8], s_zsum[2 * MAXPART + 8];
+        asum = s_asum;
+        zsum = s_zsum;
     }
     void compute(const s64* r, int bs_, int order_, bool withz = true) {
         bs = bs_;
@@ -2338,7 +2345,8 @@ struct WinCache {
     float* w[NWIN];
     void init() {
         bs = 0;
-        for (int i = 0; i < NWIN; i++) w[i] = (float*)xmalloc(sizeof(float) * MAXBS);
+        static float s_win[NWIN][MAXBS];  // ~5.8 MB
+        for (int i = 0; i < NWIN; i++) w[i] = s_win[i];
     }
     void ensure(int L) {
         if (L == bs) return;
@@ -2745,8 +2753,15 @@ struct LpcPredictor {
     }
     void init() {
         wc.init();
-        wd = (float*)xmalloc(sizeof(float) * (MAXBS + 64));
-        ffwbuf = (double*)xcalloc(sizeof(double) * (MAXBS + 80));
+        static float s_wd[MAXBS + 64];
+        static double s_ffw[MAXBS + 80];
+        wd = s_wd;
+        ffwbuf = s_ffw;
+        memset(s_ffw, 0, sizeof(s_ffw));
+        memset(lpall, 0, sizeof(lpall));
+        memset(lerr, 0, sizeof(lerr));
+        memset(lpd, 0, sizeof(lpd));
+        nmemo = 0;
         ncand = 0;
         nsub = 0;
         nmiss = 0;
@@ -2925,6 +2940,11 @@ struct LpcPredictor {
         if (a[0] == 0.0) return 0;
         return levinson_all(a, mo, lpall, lerr, d.fma);
     }
+    // libFLAC <= 1.3 suggested rice parameter for partition order 0 after eval(id); none for ffmpeg
+    int k0_hint(int id, int order, int bs, int klim) const {
+        if (cand[id].kind == 3) return -1;
+        return k0_from_bps(lpc_expected_bps(lerr[order - 1], bs - order), klim);
+    }
     // quantized coefficients of the last eval()ed candidate id at an order (forced_sh >= 0: at that shift)
     bool quant(int id, int order, int prec, s32* q, int* sh, int forced_sh = -1) {
         if (cand[id].kind == 3) {
@@ -3044,6 +3064,9 @@ static void models_init(Models& M) {
         M.seg[i][1].n = 4;
     }
 }
+
+static Models g_models;       // the meta model (re-initialized for every run)
+static LpcPredictor g_lpred;  // LPC candidate predictor
 
 struct FrameState {
     int first;
@@ -3450,7 +3473,7 @@ static bool model_lpc(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s6
             cs.plorder = s.order - 1;
             cs.pshift = s.shift;
             cs.prank = 0;
-            k0 = k0_from_bps(lpc_expected_bps(P.lerr[s.order - 1], bs - s.order), klim);
+            k0 = P.k0_hint(id, s.order, bs, klim);
         lpc_learn(cx, st, id, s.order, bs, ebps, s.prec, x);
             return true;
         }
@@ -3491,7 +3514,7 @@ static bool model_lpc(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s6
         cs.prank = r == 0 ? 0 : r < 4 ? 1 : 2;
         cs.plorder = s.order - 1;
         cs.pshift = s.shift;
-        k0 = k0_from_bps(lpc_expected_bps(P.lerr[s.order - 1], bs - s.order), klim);
+        k0 = P.k0_hint(id, s.order, bs, klim);
         lpc_learn(cx, st, id, s.order, bs, ebps, s.prec, x);
         return true;
     }
@@ -3545,7 +3568,7 @@ static bool model_lpc(Ctx& cx, SubInfo& s, ChState& cs, FrameState& st, const s6
         if (P.cand[id].kind == 3) st.ffh++; else st.lfh++;
         if (st.ffh > 8 && st.ffh > st.lfh) st.sim_on = 0;
         cs.prank = r == 0 ? 0 : r < 4 ? 1 : 2;
-        k0 = k0_from_bps(lpc_expected_bps(P.lerr[s.order - 1], bs - s.order), klim);
+        k0 = P.k0_hint(id, s.order, bs, klim);
         lpc_learn(cx, st, id, s.order, bs, ebps, s.prec, x);
     } else {
         cs.prank = 3;
@@ -3716,9 +3739,7 @@ static int sim_stereo(Ctx& cx, FrameState& st, s32** pcm, int n) {
     LpcPredictor& P = *cx.lp;
     int wids[16];
     int nw = sim_windows(P, wids);
-    static s64* sig[4];
-    if (!sig[0])
-        for (int k = 0; k < 4; k++) sig[k] = (s64*)xmalloc(sizeof(s64) * MAXBS);
+    static s64 sig[4][MAXBS];
     for (int i = 0; i < n; i++) {
         s64 l = pcm[0][i], r = pcm[1][i];
         sig[0][i] = l;
@@ -3954,15 +3975,20 @@ struct Segment {
 struct MBlock {
     int type;
     u32 len;
-    u8* data;  // owned copy
+    u8* data;  // c: points into the input file; d: only valid while the block is decoded
     int structured;
+    u64 off;  // file offset of the block header
 };
-
 struct FlacLayout {
-    Buf prefix;  // bytes before "fLaC"
+    u8* prefix;  // c: bytes before "fLaC" (in the input buffer)
+    size_t prefix_n;
     Vec<MBlock> blocks;
     StreamParams sp;
+    int vendor;  // encoder hint from the vendor string
+    u8 si[34];   // d: STREAMINFO contents
 };
+enum { BLOCKMAX = 1 << 24 };  // metadata block length is a 24-bit field
+static u8 g_blockbuf[BLOCKMAX];  // d: contents of the metadata block being decoded
 
 // Stats gathered while streaming frames (both directions)
 struct FrameStats {
@@ -4060,12 +4086,13 @@ static void wav_header(u8* h, int& hl, int nch, u32 rate, int bps, u64 nsamples)
     wr_le32(h + p + 4, data > 0xFFFFFFFFull ? 0xFFFFFFFF : (u32)data);
 }
 
+static u8 g_wavbuf[(size_t)MAXBS * MAXCH * 4];  // one block of interleaved samples
+
 struct WavWriter {
     FILE* f;
     int nch, bps, cb;
     u32 rate;
     u64 nsamples;
-    Buf buf;
     bool open(const char* name, int nch_, u32 rate_, int bps_) {
         f = fopen(name, "wb");
         if (!f) return false;
@@ -4082,9 +4109,7 @@ struct WavWriter {
     }
     void write(s32** pcm, u32 n) {
         int sh = cb * 8 - bps;
-        buf.n = 0;
-        buf.reserve((size_t)n * nch * cb);
-        u8* o = buf.p;
+        u8* o = g_wavbuf;
         for (u32 i = 0; i < n; i++)
             for (int c = 0; c < nch; c++) {
                 u32 v = (u32)pcm[c][i] << sh;
@@ -4093,7 +4118,7 @@ struct WavWriter {
                 else
                     for (int b = 0; b < cb; b++) *o++ = (u8)(v >> (8 * b));
             }
-        fwrite(buf.p, 1, o - buf.p, f);
+        fwrite(g_wavbuf, 1, o - g_wavbuf, f);
         nsamples += n;
     }
     bool close() {
@@ -4104,7 +4129,6 @@ struct WavWriter {
         fwrite(h, 1, hl, f);
         bool ok = !ferror(f);
         fclose(f);
-        buf.release();
         return ok;
     }
 };
@@ -4113,7 +4137,6 @@ struct WavReader {
     FILE* f;
     int nch, bps, cb;
     u64 nsamples, pos;
-    Buf buf;
     bool open(const char* name) {
         f = fopen(name, "rb");
         if (!f) return false;
@@ -4155,12 +4178,11 @@ struct WavReader {
         }
     }
     bool read(s32** pcm, int n_ch, u32 n) {
-        if (n_ch != nch || pos + n > nsamples) return false;
+        if (n_ch != nch || nch > MAXCH || cb > 4 || n > MAXBS || pos + n > nsamples) return false;
         size_t bytes = (size_t)n * nch * cb;
-        buf.reserve(bytes);
-        if (fread(buf.p, 1, bytes, f) != bytes) return false;
+        if (fread(g_wavbuf, 1, bytes, f) != bytes) return false;
         int sh = cb * 8 - bps;
-        const u8* p = buf.p;
+        const u8* p = g_wavbuf;
         for (u32 i = 0; i < n; i++)
             for (int c = 0; c < nch; c++) {
                 s32 v;
@@ -4181,7 +4203,6 @@ struct WavReader {
     void close() {
         if (f) fclose(f);
         f = nullptr;
-        buf.release();
     }
 };
 
@@ -4316,7 +4337,7 @@ static bool code_vorbis(AC& ac, Models& M, MBlock& b) {
         int b64 = 0, kind = 0;
         B64Fmt fmt = {0, 0, 0, 0};
         u32 klen = 0;
-        Buf dec;
+        size_t dn = 0;
         if (!ac.dec && l >= 20) {
             const u8* c = b.data + p;
             while (klen < l && c[klen] != '=') klen++;
@@ -4328,14 +4349,13 @@ static bool code_vorbis(AC& ac, Models& M, MBlock& b) {
                 for (u32 j = 0; j < vn && hex; j++)
                     hex = (v[j] >= '0' && v[j] <= '9') || (v[j] >= 'a' && v[j] <= 'f') || (v[j] >= 'A' && v[j] <= 'F') ||
                           v[j] == '\r' || v[j] == '\n';
-                if (!hex && b64f_parse(v, vn, dec, fmt))
-                    b64 = b64_worth(dec, fmt, g_ext.prefix && !g_ext.keep_inline, kind);
+                if (!hex && b64f_parse(v, vn, g_b64dec_v, B64MAX, dn, fmt))
+                    b64 = b64_worth(g_b64dec_v, dn, fmt, g_ext.prefix && !g_ext.keep_inline, kind);
             }
         }
         b64 = ac.bit(M.mflag[3], b64);
         if (!b64) {
             good = text(l);
-            dec.release();
             continue;
         }
         klen = (u32)code_uint(ac, M.len_m, klen);
@@ -4351,19 +4371,14 @@ static bool code_vorbis(AC& ac, Models& M, MBlock& b) {
             fmt.final_eol = ac.bit(M.mflag[7], fmt.final_eol);
         }
         kind = (int)ac.tree(M.b64kind, 2, (u32)kind);
-        u64 dn = code_uint(ac, M.len_m, dec.n);
-        if (!good || kind == 0 || b64f_len((size_t)dn, fmt) != l - klen) {
+        dn = (size_t)code_uint(ac, M.len_m, dn);
+        if (!good || kind == 0 || dn > B64MAX || b64f_len(dn, fmt) != l - klen) {
             good = false;
             break;
         }
-        if (ac.dec) {
-            dec.reserve((size_t)dn + 1);
-            dec.n = (size_t)dn;
-        }
-        good = code_region(ac, dec.p, (size_t)dn, kind == 1 ? 1 : 2, false);
-        if (good && ac.dec) b64f_encode(dec.p, dec.n, fmt, b.data + p);
+        good = code_region(ac, g_b64dec_v, dn, kind == 1 ? 1 : 2, false);
+        if (good && ac.dec) b64f_encode(g_b64dec_v, dn, fmt, b.data + p);
         p += l - klen;
-        dec.release();
     }
     cm.release();
     return good && p == b.len;
@@ -4386,20 +4401,29 @@ static bool vorbis_ok(const u8* d, u32 len) {
     return p == len;
 }
 
-// Part A: prefix, block list, contents not depending on frames
-static bool code_layout(AC& ac, Models& M, FlacLayout& L) {
+static int vendor_hint(const u8* data, u32 len);
+
+// Part A: prefix, block list, contents not depending on frames.
+// d: everything except STREAMINFO and seek table contents is written to 'out' right away.
+static bool code_layout(AC& ac, Models& M, FlacLayout& L, Sink* out) {
     ac.cat = C_META;
     g_ext.count = 0;
     model_init(g_extm);
     g_extm.n.len[0].p = 3000;  // most regions contain no embedded files
     g_extm.n.len[0].n = 4;
-    u64 plen = code_uint(ac, M.len_m, L.prefix.n);
-    if (ac.dec) {
-        L.prefix.n = 0;
-        L.prefix.reserve(plen + 1);
-        L.prefix.n = (size_t)plen;
-    }
-    if (!code_region(ac, L.prefix.p, (size_t)plen, 0, false)) return false;
+    u64 plen = code_uint(ac, M.len_m, L.prefix_n);
+    if (ac.dec) {  // unbounded size (e.g. an ID3v2 tag): temporary buffer, written out at once
+        Buf pb;
+        pb.reserve((size_t)plen + 1);
+        bool ok = code_region(ac, pb.p, (size_t)plen, 0, false);
+        if (ok) out->write_at(0, pb.p, (size_t)plen);
+        pb.release();
+        if (!ok) return false;
+        L.prefix_n = (size_t)plen;
+        out->write_at(plen, (const u8*)"fLaC", 4);
+    } else if (!code_region(ac, L.prefix, (size_t)plen, 0, false))
+        return false;
+    L.vendor = 0;
     ac.cat = C_META;
     code_stream_params(ac, L.sp);
     if (L.sp.nch < 1 || L.sp.nch > 8 || L.sp.bps < 4 || L.sp.bps > 32) return false;
@@ -4415,16 +4439,24 @@ static bool code_layout(AC& ac, Models& M, FlacLayout& L) {
         }
         L.blocks[0].type = 0;
         L.blocks[0].len = 34;
-        L.blocks[0].data = (u8*)xcalloc(34);
+        L.blocks[0].data = L.si;
     }
+    u64 boff = L.prefix_n + 4;
+    L.blocks[0].off = boff;
+    boff += 4 + 34;
     int pt = 0;
     for (size_t i = 1; i < L.blocks.n; i++) {
         MBlock& b = L.blocks[i];
         b.type = (int)ac.tree(M.mtype[Min(pt, 7)], 7, b.type);
         pt = b.type;
         b.len = (u32)code_uint(ac, M.len_m, b.len);
-        if (b.len >= (1u << 24)) return false;
-        if (ac.dec) b.data = (u8*)xcalloc(b.len + 1);
+        if (b.len >= BLOCKMAX) return false;
+        b.off = boff;
+        boff += 4 + (u64)b.len;
+        if (ac.dec) {
+            b.data = g_blockbuf;
+            memset(g_blockbuf, 0, b.len);
+        }
         if (b.type == 1) {  // PADDING
             int z = 1;
             if (!ac.dec)
@@ -4439,10 +4471,22 @@ static bool code_layout(AC& ac, Models& M, FlacLayout& L) {
             if (!s) code_bytes(ac, b.data, b.len, false);
         } else if (b.type == 4) {
             if (!code_vorbis(ac, M, b)) return false;
+            if (!L.vendor) L.vendor = vendor_hint(b.data, b.len);
         } else {
             if (!code_region(ac, b.data, b.len, b.type == 6 ? 1 : 0, false)) return false;
         }
+        if (ac.dec) {  // seek tables are filled in later (code_derived)
+            if (!(b.type == 3 && b.structured)) out->write_at(b.off + 4, b.data, b.len);
+            b.data = nullptr;
+        }
     }
+    if (ac.dec)  // block headers
+        for (size_t i = 0; i < L.blocks.n; i++) {
+            u8 h[4];
+            h[0] = (u8)((i + 1 == L.blocks.n ? 0x80 : 0) | L.blocks[i].type);
+            wr_be24(h + 1, L.blocks[i].len);
+            out->write_at(L.blocks[i].off, h, 4);
+        }
     return true;
 }
 
@@ -4482,7 +4526,7 @@ static u64 frame_containing(const FrameStats& fs, u64 sample) {
     return lo;
 }
 
-static void code_seektable(AC& ac, MBlock& b, const FrameStats& fs, const StreamParams& sp) {
+static void code_seektable(AC& ac, MBlock& b, const FrameStats& fs, const StreamParams& sp, Sink* out) {
     ac.cat = C_SEEK;
     SeekModels S;
     model_init(S);
@@ -4533,7 +4577,8 @@ static void code_seektable(AC& ac, MBlock& b, const FrameStats& fs, const Stream
     u64 prevk = 0;
     int pkind = 0;
     for (u32 j = 0; j < np; j++) {
-        u8* p = d + 18 * j;
+        u8 pt[18];
+        u8* p = ac.dec ? pt : d + 18 * j;
         u64 sn = 0, off = 0;
         u32 fsm = 0;
         int kind = 2;
@@ -4595,11 +4640,12 @@ static void code_seektable(AC& ac, MBlock& b, const FrameStats& fs, const Stream
             wr_be64(p + 8, off);
             p[16] = (u8)(fsm >> 8);
             p[17] = (u8)fsm;
+            out->write_at(b.off + 4 + 18 * (u64)j, p, 18);
         }
     }
 }
 
-static bool code_derived(AC& ac, FlacLayout& L, FrameStats& fs) {
+static bool code_derived(AC& ac, FlacLayout& L, FrameStats& fs, Sink* out) {
     ac.cat = C_META;
     BM fl[8][4];
     bm_init(&fl[0][0], 32);
@@ -4662,9 +4708,10 @@ static bool code_derived(AC& ac, FlacLayout& L, FrameStats& fs) {
         d[13] = (u8)((((sp.bps - 1) & 15) << 4) | ((total >> 32) & 15));
         wr_be32(d + 14, (u32)total);
         memcpy(d + 18, md5, 16);
+        out->write_at(si.off + 4, d, 34);
     }
     for (size_t i = 1; i < L.blocks.n; i++)
-        if (L.blocks[i].type == 3 && L.blocks[i].structured) code_seektable(ac, L.blocks[i], fs, L.sp);
+        if (L.blocks[i].type == 3 && L.blocks[i].structured) code_seektable(ac, L.blocks[i], fs, L.sp, out);
     // 16-bit check of the PCM (detects a .wav that does not belong to this .meta)
     u32 chk = (fs.md5sum[0] << 8) | fs.md5sum[1];
     u32 got = (u32)ac.raw(chk, 16);
@@ -4672,56 +4719,35 @@ static bool code_derived(AC& ac, FlacLayout& L, FrameStats& fs) {
 }
 
 // encoder hint from the VORBIS_COMMENT vendor string: 0 unknown, -1 ffmpeg, libFLAC version*100
-static int vendor_hint(const FlacLayout& L) {
-    for (size_t i = 0; i < L.blocks.n; i++) {
-        const MBlock& b = L.blocks[i];
-        if (b.type != 4 || b.len < 4) continue;
-        u32 vl = rd_le32(b.data);
-        if ((u64)vl + 4 > b.len) return 0;
-        const char* v = (const char*)b.data + 4;
-        if (vl >= 4 && (!memcmp(v, "Lavf", 4) || !memcmp(v, "Lavc", 4))) return -1;
-        const char* pre = "reference libFLAC ";
-        size_t pl = strlen(pre);
-        if (vl > pl && !memcmp(v, pre, pl)) {
-            int d[3] = {0, 0, 0}, k = 0;
-            for (u32 j = (u32)pl; j < vl && k < 3; j++) {
-                char c = v[j];
-                if (c >= '0' && c <= '9')
-                    d[k] = d[k] * 10 + (c - '0');
-                else if (c == '.')
-                    k++;
-                else
-                    break;
-            }
-            if (d[0] == 0 && d[1] == 0) return 150;  // git builds
-            return d[0] * 100 + d[1] * 10 + d[2];
+static int vendor_hint(const u8* data, u32 len) {
+    if (len < 4) return 0;
+    u32 vl = rd_le32(data);
+    if ((u64)vl + 4 > len) return 0;
+    const char* v = (const char*)data + 4;
+    if (vl >= 4 && (!memcmp(v, "Lavf", 4) || !memcmp(v, "Lavc", 4))) return -1;
+    const char* pre = "reference libFLAC ";
+    size_t pl = strlen(pre);
+    if (vl > pl && !memcmp(v, pre, pl)) {
+        int d[3] = {0, 0, 0}, k = 0;
+        for (u32 j = (u32)pl; j < vl && k < 3; j++) {
+            char c = v[j];
+            if (c >= '0' && c <= '9')
+                d[k] = d[k] * 10 + (c - '0');
+            else if (c == '.')
+                k++;
+            else
+                break;
         }
-        return 0;
+        if (d[0] == 0 && d[1] == 0) return 150;  // git builds
+        return d[0] * 100 + d[1] * 10 + d[2];
     }
     return 0;
 }
 
 static u64 header_size(const FlacLayout& L) {
-    u64 s = L.prefix.n + 4;
+    u64 s = L.prefix_n + 4;
     for (size_t i = 0; i < L.blocks.n; i++) s += 4 + L.blocks[i].len;
     return s;
-}
-
-static void write_header(Sink& out, const FlacLayout& L) {
-    out.write_at(0, L.prefix.p, L.prefix.n);
-    u64 pos = L.prefix.n;
-    out.write_at(pos, (const u8*)"fLaC", 4);
-    pos += 4;
-    for (size_t i = 0; i < L.blocks.n; i++) {
-        const MBlock& b = L.blocks[i];
-        u8 h[4];
-        h[0] = (u8)((i + 1 == L.blocks.n ? 0x80 : 0) | b.type);
-        wr_be24(h + 1, b.len);
-        out.write_at(pos, h, 4);
-        pos += 4;
-        out.write_at(pos, b.data, b.len);
-        pos += b.len;
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -4758,7 +4784,8 @@ static void dump_frame_side(Buf& o, const u8* frame, size_t hl, const FrameInfo&
     }
 }
 
-static bool parse_layout(const Buf& in, FlacLayout& L, u64& audio_start) {
+// blocks and prefix point into the input buffer (no copies)
+static bool parse_layout(Buf& in, FlacLayout& L, u64& audio_start) {
     size_t pos = 0;
     // skip ID3v2 tags
     while (pos + 10 <= in.n && !memcmp(in.p + pos, "ID3", 3)) {
@@ -4775,8 +4802,8 @@ static bool parse_layout(const Buf& in, FlacLayout& L, u64& audio_start) {
         if (q + 8 > lim) return false;
         pos = q;
     }
-    L.prefix.n = 0;
-    L.prefix.append(in.p, pos);
+    L.prefix = in.p;
+    L.prefix_n = pos;
     pos += 4;
     L.blocks.n = 0;
     for (;;) {
@@ -4789,8 +4816,8 @@ static bool parse_layout(const Buf& in, FlacLayout& L, u64& audio_start) {
         int last = h[0] >> 7;
         pos += 4;
         if (pos + b.len > in.n) return false;
-        b.data = (u8*)xmalloc(b.len + 1);
-        memcpy(b.data, in.p + pos, b.len);
+        b.off = pos - 4;
+        b.data = in.p + pos;
         pos += b.len;
         L.blocks.push(b);
         if (last) break;
@@ -4819,7 +4846,7 @@ static int do_compress(const char* inname, const char* prefix, const Options& op
     g_ext.prefix = prefix;
     Buf in;
     if (!read_file(inname, in, 64)) die("cannot read input");
-    FlacLayout L;
+    FlacLayout L = {};
     u64 audio_start = 0;
     if (!parse_layout(in, L, audio_start)) die("not a FLAC file (or broken metadata)");
     const StreamParams& sp = L.sp;
@@ -4833,7 +4860,6 @@ static int do_compress(const char* inname, const char* prefix, const Options& op
     Vec<Segment> segs;
     FrameInfo fi;
     frameinfo_init(fi);
-    Buf tmp;
     Buf side;
     if (opt.dump) side.append(in.p, (size_t)audio_start);
     u64 pos = audio_start;
@@ -4847,9 +4873,8 @@ static int do_compress(const char* inname, const char* prefix, const Options& op
             dump_frame_side(side, in.p + pos, hl, fi);
         }
         if (len) {
-            tmp.n = 0;
-            encode_frame(fi, g_pcm, tmp);
-            int same = tmp.n == len && !memcmp(tmp.p, in.p + pos, len);
+            FixOut fo = {g_framebuf, 0, FRAMEMAX, false};
+            int same = encode_frame(fi, g_pcm, fo) && fo.n == len && !memcmp(g_framebuf, in.p + pos, len);
             Segment s;
             s.kind = same ? SEG_FRAME : SEG_RAWFRAME;
             s.off = pos;
@@ -4900,19 +4925,19 @@ static int do_compress(const char* inname, const char* prefix, const Options& op
     meta.append(k_magic, 2);
     AC ac;
     ac.enc_init(&meta);
-    Models* M = (Models*)xmalloc(sizeof(Models));
+    Models* M = &g_models;
     models_init(*M);
-    if (!code_layout(ac, *M, L)) die("internal: layout");
+    if (!code_layout(ac, *M, L, nullptr)) die("internal: layout");
     Ctx cx;
     cx.ac = &ac;
     cx.m = M;
     cx.sp = sp;
     cx.rs.alloc();
-    cx.lp = (LpcPredictor*)xmalloc(sizeof(LpcPredictor));
+    cx.lp = &g_lpred;
     cx.lp->init();
     cx.total_samples = total_samples;
     FrameState st;
-    fstate_init(st, sp, vendor_hint(L));
+    fstate_init(st, sp, L.vendor);
     FrameStats fs;
     fs.init();
     fs.audio_start = audio_start;
@@ -4951,7 +4976,7 @@ static int do_compress(const char* inname, const char* prefix, const Options& op
         }
     }
     fs.md5.final(fs.md5sum);
-    code_derived(ac, L, fs);
+    code_derived(ac, L, fs, nullptr);
     ac.flush();
     FILE* mf = fopen(mname, "wb");
     if (!mf) die("cannot create meta");
@@ -4975,7 +5000,6 @@ static int do_compress(const char* inname, const char* prefix, const Options& op
            meta.n);
     if (g_ext.count) printf(", %d embedded file(s) %llu bytes", g_ext.count, (unsigned long long)g_ext.bytes);
     printf("\n");
-    free(M);
     if (opt.verify) {
         WavReader wr;
         wr.f = nullptr;
@@ -5006,10 +5030,10 @@ static bool decompress_core(const u8* meta, size_t meta_n, WavReader& wav, Sink&
     if (meta_n < 2 || memcmp(meta, k_magic, 2)) return false;
     AC ac;
     ac.dec_init(meta + 2, meta_n - 2);
-    Models* M = (Models*)xmalloc(sizeof(Models));
+    Models* M = &g_models;
     models_init(*M);
-    FlacLayout L;
-    if (!code_layout(ac, *M, L)) return false;
+    FlacLayout L = {};
+    if (!code_layout(ac, *M, L, &out)) return false;
     const StreamParams& sp = L.sp;
     wav.bps = sp.bps;
     if (wav.nch != sp.nch || wav.cb != (sp.bps + 7) / 8) return false;
@@ -5019,17 +5043,17 @@ static bool decompress_core(const u8* meta, size_t meta_n, WavReader& wav, Sink&
     cx.m = M;
     cx.sp = sp;
     cx.rs.alloc();
-    cx.lp = (LpcPredictor*)xmalloc(sizeof(LpcPredictor));
+    cx.lp = &g_lpred;
     cx.lp->init();
     cx.total_samples = wav.nsamples;
     FrameState st;
-    fstate_init(st, sp, vendor_hint(L));
+    fstate_init(st, sp, L.vendor);
     FrameStats fs;
     fs.init();
     fs.audio_start = pos;
     FrameInfo fi;
     frameinfo_init(fi);
-    Buf tmp;
+    Buf tmp;  // raw junk regions (unbounded size)
     u64 done = 0;
     int pk = 4;
     for (;;) {
@@ -5038,21 +5062,23 @@ static bool decompress_core(const u8* meta, size_t meta_n, WavReader& wav, Sink&
         if (kind == SEG_END) break;
         if (kind == SEG_FRAME) {
             if (!model_frame(cx, fi, g_pcm, st, &wav, done)) return false;
-            tmp.n = 0;
-            encode_frame(fi, g_pcm, tmp);
-            out.write_at(pos, tmp.p, tmp.n);
-            fs.add_frame(pos, (u32)tmp.n, fi.bs);
+            FixOut fo = {g_framebuf, 0, FRAMEMAX, false};
+            if (!encode_frame(fi, g_pcm, fo)) return false;
+            out.write_at(pos, g_framebuf, fo.n);
+            fs.add_frame(pos, (u32)fo.n, fi.bs);
             fs.add_pcm(g_pcm, sp.nch, sp.bps, fi.bs);
-            pos += tmp.n;
+            pos += fo.n;
             done += fi.bs;
         } else if (kind == SEG_RAWFRAME) {
             u32 ns = (u32)code_uint(ac, M->len_m, 0) + 1;
             u64 len = code_uint(ac, M->len_m, 0);
             if (ns > MAXBS || !wav.read(g_pcm, sp.nch, ns)) return false;
-            tmp.n = 0;
-            tmp.reserve(len);
-            for (u64 j = 0; j < len; j++) tmp.p[j] = (u8)ac.raw(0, 8);
-            out.write_at(pos, tmp.p, (size_t)len);
+            for (u64 j = 0; j < len;) {  // stream through the frame buffer
+                size_t k = (size_t)Min(len - j, (u64)FRAMEMAX);
+                for (size_t q = 0; q < k; q++) g_framebuf[q] = (u8)ac.raw(0, 8);
+                out.write_at(pos + j, g_framebuf, k);
+                j += k;
+            }
             fs.add_frame(pos, (u32)len, ns);
             fs.add_pcm(g_pcm, sp.nch, sp.bps, ns);
             pos += len;
@@ -5069,17 +5095,12 @@ static bool decompress_core(const u8* meta, size_t meta_n, WavReader& wav, Sink&
         }
     }
     fs.md5.final(fs.md5sum);
-    if (!code_derived(ac, L, fs)) {
+    if (!code_derived(ac, L, fs, &out)) {
         fprintf(stderr, "flacdump: the .wav does not match the .meta\n");
         return false;
     }
-    u64 endpos = pos;
-    write_header(out, L);
-    out.pos = endpos;
-    free(M);
-    for (size_t i = 0; i < L.blocks.n; i++) free(L.blocks[i].data);
+    out.pos = pos;
     L.blocks.release();
-    L.prefix.release();
     tmp.release();
     return true;
 }

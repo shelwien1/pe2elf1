@@ -200,5 +200,11 @@ the same.
   padding are stored raw (still lossless).
 * Frames with CRC errors are kept as raw bytes and their audio is not in the WAV.
 * The whole input FLAC is loaded into memory during `c`.
+* Work buffers are static arrays sized for the format limits (8 channels,
+  65535-sample blocks, 16 MB metadata blocks): about 121 MiB of BSS that is
+  only paged in as it is used. Heap memory is used only for data without a
+  format bound: the input FLAC, the `.meta`, per-frame bookkeeping, the list of
+  metadata blocks and (in `d`) raw byte regions.
+* base64 values that would decode to more than 16 MB are kept as text.
 * WAV files above 4 GB use 0xFFFFFFFF size fields (sample count is then taken
   from the file size).
