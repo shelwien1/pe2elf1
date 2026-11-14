@@ -15,7 +15,7 @@ enum { BO_OFF = 0, BO_MAP = 4, BO_MAP2 = BO_MAP + NCH, BO_G1 = BO_MAP2 + NCH, BO
        DP_BIND = BO_CRC + 4 };  // (the binding's bytes)
 enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND, DP_HEAD = DP_AT_BIND + DP_BIND };  // the header's
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
-constexpr int DP_VERSION = 83;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
+constexpr int DP_VERSION = 84;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
                                // extension as records; 4: a WAV at twice the core's rate, X96 and XXCH; 5: the
                                // scale factor search; 6: the bit allocation search; 7: the bits after the
                                // subframes as the bytes they end in, the energy's quarter of its bucket, the
@@ -141,7 +141,11 @@ constexpr int DP_VERSION = 83;  // the format's (2: a core channel's binding a m
                                // of the bottom subband's value, their nearness and the HF VQ
                                // margins against the level along the subband's FFT path; 83: a
                                // lossless WAV's top subband's HF VQ groups and vectors by each
-                               // value weighed against the FFT's noise there, by the bottom one's)
+                               // value weighed against the FFT's noise there, by the bottom one's;
+                               // 84: their boundary orders' distances, and the missed groups' push,
+                               // by that noise, its power in the RMS rule 3/4 of it, its scale
+                               // factor's nearness by its power weighed by the values'; the HF VQ
+                               // boundary orders' keys the largest against the nearer ones)
 
 static void put_le(U8* p, U64 v, int n) {
   for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));

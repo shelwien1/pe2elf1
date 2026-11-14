@@ -762,7 +762,7 @@ static INLINE S128 hf_group_score(const S32 (*W)[16], const S64* E, int g, const
   return d + shl128((S128)E[g] * sc * sc, 32);
 }
 // The weights (in 2^-16) of 16 values against another subband's x0 at their samples:
-// T^2 / (T^2 + x0^2), T^2 sc^2 2^t2 (within 2^118), their sum into *s
+// T^2 / (T^2 + x0^2), T^2 sc^2 2^t2 (within 2^120: sc under 2^23, t2 to 74), their sum into *s
 static INLINE void hf_weights(const S64* x0, S64 sc, int t2s, U32* w, U32* s) {
   const U128 t2 = (U128)((S128)sc * sc) << t2s;
   *s = 0;
@@ -770,6 +770,12 @@ static INLINE void hf_weights(const S64* x0, S64 sc, int t2s, U32* w, U32* s) {
     const U128 a2 = (U128)((S128)x0[j] * x0[j]);
     w[j] = t2 + a2 ? 65536 - (U32)((a2 << 16) / (t2 + a2)) : 65536, *s += w[j];
   }
+}
+// The same values' noise powers, against the quiet one's: 1 + x0^2 / T^2, T^2 sc^2 2^t2 (in
+// doubles, IEEE's arithmetic: sc^2 exact, its power of 2 too)
+static INLINE void hf_noise(const S64* x0, S64 sc, int t2s, double* r) {
+  const double t2 = ldexp((double)sc * (double)sc, t2s);
+  for (int j = 0; j < 16; j++) r[j] = 1.0 + (double)x0[j] * (double)x0[j] / t2;
 }
 // hf_group_score() with its 16 squared differences weighed by w (sum s), at a mean of 1: the
 // squares in 2^16 (within 2^96, each term 2^112), their weighed sum t over s, then times 2^20 (t / s
@@ -973,6 +979,66 @@ static void hf_bound_vec(const S128* k, int g, int n, S128* o) {
     o[i] = i == f || d == 0 ? -1 : (S128)((double)(k[i] - k[f]) / d);  // (within 2^99)
   }
 }
+// Group g's entries' distances with each other's over their first 16 values, as hf_bound_vec()'s
+// (the root of the squared distance, exactly), into pd
+static void hf_pair_dists(int g, double (*pd)[32]) {
+  for (int i = 0; i < 32; i++)
+    for (int f = 0; f < 32; f++) {
+      S32 s2 = 0;
+      for (int j = 0; j < 16; j++) {
+        const S32 e = HF_VQ[g * 32 + i][j] - HF_VQ[g * 32 + f][j];
+        s2 += e * e;
+      }
+      pd[i][f] = sqrt((double)s2);
+    }
+}
+// The 32 keys k's order, the lower index first of equals, into idx
+static void hf_key_order(const S128* k, int* idx) {
+  for (int i = 0; i < 32; i++) idx[i] = i;
+  for (int a = 1; a < 32; a++) {
+    const int t = idx[a];
+    int c = a;
+    while (c > 0 && (k[idx[c - 1]] > k[t] || (k[idx[c - 1]] == k[t] && idx[c - 1] > t))) idx[c] = idx[c - 1], c--;
+    idx[c] = t;
+  }
+}
+// Since format 84 (16 values): each entry's boundary key the largest of its keys against the M
+// entries nearest by k that lie nearer than it, rather than against the first's alone, as where
+// another lies between the two the encoder's values cross that one's boundary first (`s.2.dts`'s
+// core 0.05% smaller at M 4; 2 0.03%, 32 as 4), the nearest's -1, an entry equal to the nearer ones
+// too; and where r is given (each value's noise power, in the quiet one's), the distance between
+// two entries is the noise's spread across their boundary, the root of their squared differences
+// weighed by it: the encoder's values are these and the noise, so its choice flips from one to the
+// other where the noise along their difference crosses the boundary; else pd's distances, the
+// group's entries' with each other's (hf_pair_dists())
+static void hf_bound_vec_m(const S128* k, int g, const double* r, const double (*pd)[32], int M, S128* o) {
+  int idx[32];
+  hf_key_order(k, idx);
+  for (int a = 0; a < 32; a++) {
+    const int i = idx[a];
+    const S8* const vi = HF_VQ[g * 32 + i];
+    double best = -1;
+    for (int c = 0; c < a && c < M; c++) {
+      const int f = idx[c];
+      const S8* const vf = HF_VQ[g * 32 + f];
+      double d;
+      if (!r) {
+        d = pd[i][f];
+      } else {
+        double s2 = 0;
+        for (int j = 0; j < 16; j++) {
+          const double e = vi[j] - vf[j];
+          s2 += e * e * r[j];
+        }
+        d = sqrt(s2);
+      }
+      if (d == 0) continue;
+      const double z = (double)(k[i] - k[f]) / d;  // (k[i] - k[f] >= 0)
+      if (z > best) best = z;
+    }
+    o[i] = best < 0 ? -1 : (S128)best;
+  }
+}
 // The same of the groups by their scores k, the distance between their W (32 of n values, each
 // group's at W + w g) to the power p (1, or 1.5: d sqrt(d), IEEE's sqrt exact everywhere)
 template <class T>
@@ -989,13 +1055,39 @@ static void hf_bound_grp(const S128* k, const T* W, int w, int n, bool p15, S128
     o[g] = g == f ? -1 : s2 == 0 ? (k[g] == k[f] ? -1 : (S128)1 << 120) : (S128)((double)(k[g] - k[f]) / (p15 ? d * sqrt(d) : d));  // (within 2^118)
   }
 }
-// (the same by the distances' powers D, each group's with each other's)
-static void hf_bound_grp_d(const S128* k, const double (*D)[32], S128* o) {
-  int f = 0;
-  for (int g = 1; g < 32; g++) f = k[g] < k[f] ? g : f;
-  for (int g = 0; g < 32; g++) {
-    const double d = D[g][f];
-    o[g] = g == f ? -1 : d == 0 ? (k[g] == k[f] ? -1 : (S128)1 << 120) : (S128)((double)(k[g] - k[f]) / d);
+// (the same of the groups by their scores k, as hf_bound_vec_m()'s, the distance between two
+// groups' W to the power 1.5: D's, each group's with each other's, or where r is given, of the
+// learned W, 16 values a group, weighed by r, d sqrt(d); a group whose W is a nearer one's but whose
+// score isn't, last; `s.2.dts`'s core 0.43% smaller at M 8, 2 0.28%, 4 0.41%, 32 as 8)
+static void hf_bound_grp_m(const S128* k, const S32 (*W)[16], const double* r, const double (*D)[32], int M, S128* o) {
+  int idx[32];
+  hf_key_order(k, idx);
+  for (int a = 0; a < 32; a++) {
+    const int g = idx[a];
+    double best = -2;
+    bool last = false;
+    for (int c = 0; c < a && c < M; c++) {
+      const int f = idx[c];
+      double dd;
+      if (!r) {
+        dd = D[g][f];
+      } else {
+        double s2 = 0;
+        for (int j = 0; j < 16; j++) {
+          const double e = (double)W[g][j] - (double)W[f][j];
+          s2 += e * e * r[j];
+        }
+        const double d = sqrt(s2);
+        dd = d * sqrt(d);
+      }
+      if (dd == 0) {
+        last |= k[g] != k[f];
+        continue;
+      }
+      const double z = (double)(k[g] - k[f]) / dd;
+      if (z > best) best = z;
+    }
+    o[g] = last ? (S128)1 << 120 : best < 0 ? -1 : (S128)best;
   }
 }
 
@@ -1139,12 +1231,12 @@ static void hf_dists(int g, const S64* x, int n, S64 sc, S128* d) {
   }
 }
 // The same of 16 values, each value's squared difference weighed (in 2^-16) by T^2 / (T^2 + x0^2),
-// x0 another subband's value at its sample and T sc 2^35.5 (2^25.5 times a quarter of the code
-// book's unit, 2^12 sc in these units), exactly: T^2 sc^2 2^71 (within 2^117), the weights within
+// x0 another subband's value at its sample and T sc 2^36.5 (2^26.5 times a quarter of the code
+// book's unit, 2^12 sc in these units), exactly: T^2 sc^2 2^73 (within 2^119), the weights within
 // 2^16, each term within 2^110
 static void hf_dists_w(int g, const S64* x, S64 sc, const S64* x0, S128* d) {
   U32 w[16], s;
-  hf_weights(x0, sc, 71, w, &s);
+  hf_weights(x0, sc, 73, w, &s);
   for (int i = 0; i < 32; i++) {
     U128 s = 0;
     for (int j = 0; j < 16; j++) {
