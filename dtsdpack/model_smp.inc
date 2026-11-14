@@ -1699,10 +1699,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // A lossless WAV's HF VQ subbands at the core's rate (code_hfvq()): the groups and the entries by
   // a Monte Carlo posterior too, the encoder's choice made on samples of its noisy values. The noise
   // is drawn about each value at its deviation (in the top subband 3 2^-40 of the bottom subband's
-  // binade's square, hf_stair2()'s, in subbands 28-30 2^-40 of the square of the level along the
-  // subband's FFT path, plev's), the samples whose mean square the scale factor's region doesn't hold
-  // (the RMS rule's, code_scale()'s) left out; each sample's group the scores' rule's
-  // (hf_group_score()'s, the scores as the model has learned them), its entry the group's nearest.
+  // binade's square, hf_stair2()'s, in subbands 28-30 2^-41 of the square of the level along the
+  // subband's FFT path, plev's, 2^-40 before format 98), the samples whose mean square the scale
+  // factor's region (the RMS rule's, code_scale()'s) doesn't hold left out; each sample's group the
+  // scores' rule's (hf_group_score()'s, the scores as the model has learned them), its entry the
+  // group's nearest.
   // The counts, with a prior of MC_A to each per MC_N kept, give each candidate's probability, and
   // each decision of its rank (code_rank()) the probability of its outcome as vqr's outside
   // prediction, its stretch doubled; the entry's probabilities are those of the samples that took
@@ -1714,8 +1715,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // doubled, the prior 1/20, 0.25% more (by 3 0.01% less, by 4 0.04%); more passes where the region
   // leaves few, 0.18% (format 94's to 256 kept, at most 512, 0.19% more; since format 96 to MC_T, at
   // most MC_K, 0.20% more again, to MC_P passes rather than 8 0.10%, the prior 1/80 0.02%; 64 passes,
-  // 0.01% more); subbands 28-30 too, 0.27% (their noise
-  // at 2^-38 0.11% less; at format 88's 2^-44, the short streams 0.17% bigger): 81703 bytes to 80550
+  // 0.01% more; the top subband's noise at 2, 3.25, 3.5 or 4 2^-40, 0.15%, 0.02%, 0.05% and 0.10%
+  // bigger); subbands 28-30 too, 0.27% (since format 98 their noise at 2^-41, 0.05% smaller; at
+  // 2^-42 0.02%, 2^-43 or 2^-39 bigger; their scale factors' noise at half of SP_K2 bigger, at twice
+  // the same; their noise at 2^-38 0.11% less; at format 88's 2^-44, the short streams 0.17%
+  // bigger): 81703 bytes to 80550
   // in format 93, 3 MB of its middle 0.9% smaller, its first 3 MB 0.2%, the rest as they were. The
   // top subband's noise at 2 or 4 2^-40, 0.14% and 0.02% bigger; with heavier tails (Laplace's,
   // Student's t with 5 or 3 degrees of freedom, at the same variance), the short streams 1-5 bytes
@@ -2346,7 +2350,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         const S64 hi = si != r1 ? vv : r1 + 1 < nt ? ((S64)V + tab[r1 + 1]) << (AQ_F - 1) : -1;
         double sg[16];
         for (int j = 0; j < 16; j++)
-          sg[j] = m28 ? ldexp((double)plev[ch][b][j], -20) : sqrt(ldexp((double)hf_stair2(X[ch][0][j]), -40) * 3.0);
+          sg[j] = m28 ? ldexp((double)plev[ch][b][j], -20) * 0.7071067811865476 : sqrt(ldexp((double)hf_stair2(X[ch][0][j]), -40) * 3.0);
         mk = hf_mc(X[ch][b], sg, (double)lo * (double)lo, hi < 0 ? 1e300 : (double)hi * (double)hi, sc);
         int cg[32] = {0};
         for (int t = 0; t < mk; t++) cg[mcg[t]]++;

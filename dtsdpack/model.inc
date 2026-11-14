@@ -373,17 +373,21 @@ struct Model : ModelX96<f_DEC, LV> {
         // its energies: a miss's, nearly always)
         const int ms = Sn == sg + 1 ? sm : 0;
         const int alt = ms ? (ms <= 8 ? sg - 1 : sg + 1) : -1;
-        // (where the first guess is the table's, the share of those levels at which the table says
-        // it is the first node's outside prediction (its miss's), and the share at which it says the
-        // second guess, of the rest, the second node's; each within 1/64 of 0 and 1. Since format 97:
-        // the short streams 0.09% smaller, `s.2.dts`'s core 0.01%; the first alone, 0.05% and 0.01%,
-        // within 1/32, 1/128 or 1/4096 of them the same or a little bigger; the staircase's first
-        // guess too, the same)
+        // (the share of the levels the subframe's ABITS allow at which the table says the first guess
+        // is the first node's outside prediction (its miss's), and the share at which it says the
+        // second candidate, of the rest, the second node's; each within 1/64 of 0 and 1. Since format
+        // 97 where the first guess is the table's: the short streams 0.09% smaller, `s.2.dts`'s core
+        // 0.01%; the first alone, 0.05% and 0.01%, within 1/32, 1/128 or 1/4096 of them the same or a
+        // little bigger. Since format 98 whatever the first guess (a decoded WAV's search's, the
+        // table's rule or not) and the second candidate whatever it is (the last ABITS, mostly): the
+        // short streams 0.15% smaller again, `96-24.dts`'s core 0.13%, `ES 6.1 16bit.dts`'s 1.3%)
         int pq1 = -1, pq2 = -1;
-        if (fs && ut && shr >= 0) {
-          pq1 = clip(4096 - shr, 64, 4096 - 64);
-          const int sa = shr < 4096 && alt >= 1 ? B::ap_share(pass, ch, b, alt) : -1;
-          if (sa >= 0) pq2 = clip(4096 - (int)((double)sa * 4096.0 / (double)(4096 - shr) + 0.5), 64, 4096 - 64);
+        const int s1 = fe == B::FE_NONE || Sn < 1 ? -1 : fs && ut ? shr : B::ap_share(pass, ch, b, (int)Sn - 1);
+        if (s1 >= 0) {
+          pq1 = clip(4096 - s1, 64, 4096 - 64);
+          const S32 a2 = alt >= lo && alt <= hi ? alt + 1 : hist.abits[ch][b];  // (the second candidate, 1 + it, as abits_code() takes it)
+          const int sa = s1 < 4096 && a2 >= 2 && a2 != Sn ? B::ap_share(pass, ch, b, (int)a2 - 1) : -1;
+          if (sa >= 0) pq2 = clip(4096 - (int)((double)sa * 4096.0 / (double)(4096 - s1) + 0.5), 64, 4096 - 64);
         }
         // (the budget: what the samples may still take, toward the edge ms says, in steps of this
         // subband's bits across it; a lossless WAV's only: a decoded WAV's streams 0.1-0.9% bigger
