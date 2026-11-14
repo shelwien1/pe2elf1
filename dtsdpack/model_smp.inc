@@ -465,6 +465,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const int e = s >> 2;
     return (e >= 0 ? u << e : u >> -e) * QM[s & 3] >> 7;
   }
+  // (the core's subbands' scales' mean, rounded)
+  int hc_mean() const {
+    int sm = 0;
+    for (int k = 0; k < NSUB; k++) sm += hcal[k].s;
+    return sm >= 0 ? (sm + NSUB / 2) / NSUB : -((-sm + NSUB / 2) / NSUB);
+  }
   // (after a hit flag: hit, at probability pq of a miss)
   static void hc_learn(HitCal& hc, int hit, U32 pq) {
     hc.m += !hit, hc.e += pq;
@@ -558,8 +564,14 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // A lossless WAV's scale factors (code_scale()): the encoder's RMS rule (scale_pred_ms()) on the
   // values with the FFT's noise in them, its power at each sample SP_K of the bottom subband's
   // binade's (hf_stair2()) in the top subband, else SP_K2 (the HF VQ subbands 28-30) or SP_K3 (the
-  // rest) of the square of the subband's FFT path's level (path_levels()); their mean square taken
-  // as a normal variable, the mean and variance theirs: each entry's cell's probability
+  // rest, by 2^((s - m) / 8), s the subband's index error scale and m the subbands' mean, hc_mean():
+  // the scale says how far the WAV's path is from the encoder's there, and so its noise; the
+  // regression set's 18 streams and `s.2.dts` 0.12% smaller, `s.2.dts`'s core 0.19%; at 2^-42,
+  // SP_K3's best without it, by 2^((s - m) / 4) 0.15% bigger than by 2^((s - m) / 8), by
+  // 2^(3 (s - m) / 16), 2^((s - m) / 12) or 2^((s - m) / 16) 0.01-0.03%; the HF VQ subbands by their
+  // FFT partner's (31 - b) too 0.14%, the top subband by subband 0's 0.25%) of the square of the
+  // subband's FFT path's level (path_levels()); their mean square taken as a normal variable, the
+  // mean and variance theirs: each entry's cell's probability
   // (sf_post()). Where the likeliest's is under SP_PT, coded by rank, each "this one?" at its share
   // of what those before left, mixed at SP_A with the hits so far at that share (by rank: the first,
   // the second, the rest; SP_NB buckets of its logit, -8 to 8, halved past SP_LIM), past SP_R as
@@ -582,7 +594,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   static constexpr int SP_R = 6, SP_NB = 24, SP_W = 8, SP_A = 16, SP_LIM = 1023;
   static constexpr double SP_K = 2.4 / 1099511627776.0;   // (2.4 2^-40; 3 2^-40 0.4% bigger)
   static constexpr double SP_K2 = 1.0 / 8796093022208.0;  // (2^-43)
-  static constexpr double SP_K3 = 1.0 / 4398046511104.0;  // (2^-42)
+  static constexpr double SP_K3 = 1.0 / 17592186044416.0;  // (2^-44; 2^-43 0.01% bigger, 2^-45 0.05%)
   static constexpr double SP_PT = 0.999;
   U16 sp_n[3][3][SP_NB][2];  // (the top subband's, subbands 28-30's, the rest's: by rank, bucket, hit)
   static constexpr U64 SP_HN = 2560, SP_HPM = 995;  // (a 5.1 frame's indexes)
@@ -2816,9 +2828,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (rr > e && p + 1 < nt) bd = ((S64)tab[p] + tab[p + 1]) << (AQ_F - 1);
     else if (rr <= e && p > 0) bd = ((S64)tab[p - 1] + tab[p]) << (AQ_F - 1);
     if (bd < 0 || lev <= 0) return -1;
-    int sm = 0;
-    for (int k = 0; k < NSUB; k++) sm += hcal[k].s;
-    sm = sm >= 0 ? (sm + NSUB / 2) / NSUB : -((-sm + NSUB / 2) / NSUB);
+    const int sm = hc_mean();
     S64 dd = rr > bd ? rr - bd : bd - rr;
     if (sf_run(tab, nt, p)) {
       const S64 de = rr > e ? rr - e : e - rr;
@@ -2969,7 +2979,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
             const int j0 = tm && j ? tm * 8 : 0;
             if (j0 + n <= nsmp) {
               double s2[NSMP];
-              for (int i = 0; i < n; i++) s2[i] = (double)plev[ch][b][j0 + i] * (double)plev[ch][b][j0 + i] * (hfb ? SP_K2 : SP_K3);
+              double kb = hfb ? SP_K2 : SP_K3;
+              if (!hfb) {  // (SP_K3 by 2^((s - m) / 8), s the subband's error scale, m their mean)
+                const int d = (hcal[b].s - hc_mean()) / 2, q = d >= 0 ? d / 2 : -((-d + 1) / 2);
+                kb = ldexp(d - 2 * q ? 1.4142135623730951 * kb : kb, q);
+              }
+              for (int i = 0; i < n; i++) s2[i] = (double)plev[ch][b][j0 + i] * (double)plev[ch][b][j0 + i] * kb;
               spk = sf_post(v_, s2, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p, spc, spp);
               if (spk && (spp[0] >= SP_PT || !sp_on())) spk = 0;
             }
