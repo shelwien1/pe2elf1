@@ -103,7 +103,7 @@ scores and the ADPCM predictors' codewords were learned from. A 96 kHz stream's 
 and X96's searches cost more: `96-24.dts`'s core (1.9 MB) compresses in 4.8 seconds (385 KB of core
 a second) and decompresses in 4.9 (378 KB). The decoded WAVs' searches cost too; every other stream
 below goes at 550 KB of core a second or more both ways. The short samples below (7 frames, 7 to 23
-KB) take 15 to 52 ms each way, 338 to 665 KB a second: some milliseconds of a run are the same for
+KB) take 15 to 38 ms each way, 330 to 690 KB a second: some milliseconds of a run are the same for
 any stream (starting, the WAV's header and start, the alignment, the WAV's continuation past its
 end, the kernel mapping the pages the model touches), and the searches run on every value of a
 stream's first 2048 (the bit allocation search's first 512), which is all of theirs.

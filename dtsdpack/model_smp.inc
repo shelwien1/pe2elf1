@@ -2310,10 +2310,92 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       x.lb = e * 268435456.0 / ((double)x.ss * (double)x.ss) * (1 - 1e-12) - 2;
     }
   }
+  // The cut's search, where nearly always no pair fits (a lossless WAV's predictors, and a decoded
+  // one's but the decoder's): whether one could, its error sum within lim (the heap's, d2 cut, while
+  // none has fitted: those popped then are all of them, each failing at its lim or fitting), its
+  // values' squared distances in doubles, each index as ab_bounds() finds it, 4 pairs at a time;
+  // false only where each pair's sum is past its lim by more than the doubles' rounding ((n + 1)
+  // 2^-53 of it at most; lim at most l + 1) before any index of it lies within 1e-7 of a rounding
+  // boundary (there the estimate could be off by 1: then true, as the exact search finds)
+  bool ab_cut_any(const CoreRec& r, int ch, const S64* v, int n, int a0, int a1, int p, U64 cut) const {
+    constexpr int NP = 27 * 9;
+    alignas(32) double inv[NP + 3], ssh[NP + 3], dh[NP + 3], dsc[NP + 3], plo[NP + 3], phi[NP + 3], lim[NP + 3];
+    const int nt = sf_entries(r.shuff[ch]), i0 = imax(p - 3, 0), i1 = imin(p + 5, nt - 1);
+    int m = 0;
+    for (int a = a0; a <= a1; a++) {
+      S64 lo, hi;
+      quant_range(r, ch, a, lo, hi);
+      for (int i = i0; i <= i1; i++) {
+        const S64 ss = step_for(r, ch, a, i);
+        if (ss <= 0) continue;
+        const double l = (double)cut * (double)ss * (double)ss / 268435456.0 * (1 + 1e-9);
+        if (!(l < 1e36) || ss >= (S64)1 << 48) return true;
+        int shift = 0;
+        S64 sh_ss = ss;
+        if (ss > (1 << 23)) shift = ilog2((U64)(ss >> 23)) + 1, sh_ss = ss >> shift;
+        const int sh = 22 - shift;
+        inv[m] = 1.0 / (double)ss, ssh[m] = (double)sh_ss, dh[m] = sh > 0 ? (double)((U64)1 << (sh - 1)) : 0.0;
+        dsc[m] = sh > 0 ? 1.0 / (double)((U64)1 << sh) : 1.0, plo[m] = (double)lo, phi[m] = (double)hi;
+        lim[m] = (l + 1) * (1 + 1e-12);
+        m++;
+      }
+    }
+    alignas(32) double ua[NSMP], sg[NSMP], vd[NSMP];
+    for (int j = 0; j < n; j++) {
+      const S64 x = v[j], ax = x < 0 ? -x : x;
+      if (ax >= (S64)1 << 44) return true;  // (the doubles exact within 2^53)
+      ua[j] = (double)ax * 64, sg[j] = x < 0 ? -0.0 : 0.0, vd[j] = (double)x;
+    }
+#ifdef DTSD_AVX2
+    for (; m & 3; m++) inv[m] = 0, ssh[m] = 0, dh[m] = 0, dsc[m] = 1, plo[m] = 0, phi[m] = 0, lim[m] = -1;  // (past at once)
+    const __m256d half = _mm256_set1_pd(0.5), tl = _mm256_set1_pd(1e-7), th = _mm256_set1_pd(1 - 1e-7),
+                  big = _mm256_set1_pd(16777216.0), c23lo = _mm256_set1_pd(-8388608.0), c23hi = _mm256_set1_pd(8388607.0),
+                  f16 = _mm256_set1_pd(65536.0);
+    for (int k = 0; k < m; k += 4) {
+      const __m256d vinv = _mm256_load_pd(inv + k), vssh = _mm256_load_pd(ssh + k), vdh = _mm256_load_pd(dh + k),
+                    vdsc = _mm256_load_pd(dsc + k), vlo = _mm256_load_pd(plo + k), vhi = _mm256_load_pd(phi + k),
+                    vlim = _mm256_load_pd(lim + k);
+      __m256d acc = _mm256_setzero_pd();
+      int past = _mm256_movemask_pd(_mm256_cmp_pd(acc, vlim, _CMP_GT_OQ));
+      for (int j = 0; j < n && past != 15; j++) {
+        const __m256d tq = _mm256_add_pd(_mm256_mul_pd(_mm256_broadcast_sd(ua + j), vinv), half);
+        const __m256d qa = _mm256_floor_pd(tq), fr = _mm256_sub_pd(tq, qa);
+        const __m256d tie = _mm256_and_pd(_mm256_cmp_pd(tq, big, _CMP_LT_OQ),
+                                          _mm256_or_pd(_mm256_cmp_pd(fr, tl, _CMP_LT_OQ), _mm256_cmp_pd(fr, th, _CMP_GT_OQ)));
+        if (_mm256_movemask_pd(tie) & ~past) return true;
+        const __m256d qv = _mm256_min_pd(_mm256_max_pd(_mm256_xor_pd(qa, _mm256_broadcast_sd(sg + j)), vlo), vhi);
+        __m256d y = _mm256_floor_pd(_mm256_mul_pd(_mm256_add_pd(_mm256_mul_pd(qv, vssh), vdh), vdsc));
+        y = _mm256_min_pd(_mm256_max_pd(y, c23lo), c23hi);
+        const __m256d d = _mm256_sub_pd(_mm256_broadcast_sd(vd + j), _mm256_mul_pd(y, f16));
+        acc = _mm256_add_pd(acc, _mm256_mul_pd(d, d));
+        past = _mm256_movemask_pd(_mm256_cmp_pd(acc, vlim, _CMP_GT_OQ));
+      }
+      if (past != 15) return true;
+    }
+#else
+    for (int k = 0; k < m; k++) {
+      double e = 0;
+      int j = 0;
+      for (; j < n && !(e > lim[k]); j++) {
+        const double tq = ua[j] * inv[k] + 0.5, qa = floor(tq), fr = tq - qa;
+        if (tq < 16777216.0 && (fr < 1e-7 || fr > 1 - 1e-7)) return true;
+        double qv = signbit(sg[j]) ? -qa : qa;
+        qv = qv < plo[k] ? plo[k] : qv > phi[k] ? phi[k] : qv;
+        double y = floor((qv * ssh[k] + dh[k]) * dsc[k]);
+        y = y < -8388608.0 ? -8388608.0 : y > 8388607.0 ? 8388607.0 : y;
+        const double d = vd[j] - y * 65536.0;
+        e += d * d;
+      }
+      if (!(e > lim[k])) return true;
+    }
+#endif
+    return false;
+  }
   int abits_search(const CoreRec& r, int ch, const S64* v, int n, int g, int a0, int a1, int p, int* conf, U64* dbest,
                    U64 cut = ~0ull, int* ibest = nullptr) {
     constexpr int NP = 27 * 9, NK = 2;
     const int nt = sf_entries(r.shuff[ch]), nk = imin(n, NK);
+    if (cut != ~0ull && !ab_cut_any(r, ch, v, n, a0, a1, p, cut)) return ab_v = v, 0;
     auto mag = [](S64 x) { return x < 0 ? -x : x; };
     S64 w[NSMP];  // (the values, the largest first)
     for (int j = 0; j < n; j++) {

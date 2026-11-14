@@ -35,6 +35,8 @@ typedef unsigned __int128 U128;
 // x times 2^k (C++11 leaves the left shift of a negative value undefined)
 static INLINE S64 shl64(S64 x, int k) { return (S64)((U64)x << k); }
 static INLINE S128 shl128(S128 x, int k) { return (S128)((U128)x << k); }
+// x in doubles, as (double)x rounds it (to the nearest), in one instruction where it fits in 64 bits
+static INLINE double s128_dbl(S128 x) { return (S128)(S64)x == x ? (double)(S64)x : (double)x; }
 // the floor square root of t (IEEE's sqrt the start, the integer steps exact)
 static INLINE S64 isqrt128(U128 t) {
   S64 q = (S64)sqrt((double)t);
@@ -1100,7 +1102,7 @@ static void hf_bound_vec_m(const S128* k, int g, const double* r, const double (
         d = sqrt(s2);
       }
       if (d == 0) continue;
-      const double z = (double)(k[i] - k[f]) / d;  // (k[i] - k[f] >= 0)
+      const double z = s128_dbl(k[i] - k[f]) / d;  // (k[i] - k[f] >= 0)
       if (z > best) best = z;
     }
     o[i] = best < 0 ? -1 : (S128)best;
@@ -1119,7 +1121,7 @@ static void hf_bound_grp(const S128* k, const T* W, int w, int n, bool p15, S128
       s2 += e * e;
     }
     const double d = sqrt(s2);
-    o[g] = g == f ? -1 : s2 == 0 ? (k[g] == k[f] ? -1 : (S128)1 << 120) : (S128)((double)(k[g] - k[f]) / (p15 ? d * sqrt(d) : d));  // (within 2^118)
+    o[g] = g == f ? -1 : s2 == 0 ? (k[g] == k[f] ? -1 : (S128)1 << 120) : (S128)(s128_dbl(k[g] - k[f]) / (p15 ? d * sqrt(d) : d));  // (within 2^118)
   }
 }
 // (the same of the groups by their scores k, as hf_bound_vec_m()'s, the distance between two
@@ -1157,7 +1159,7 @@ static void hf_bound_grp_m(const S128* k, const S32 (*W)[16], const double* r, c
         last |= k[g] != k[f];
         continue;
       }
-      const double z = (double)(k[g] - k[f]) / dd;
+      const double z = s128_dbl(k[g] - k[f]) / dd;
       if (z > best) {
         best = z;
         if (am) am[g] = f;
@@ -1867,19 +1869,31 @@ struct Probe {
 
 // the double-precision analysis of bands 0-7 (as analyze_m()'s, unscaled), M bands, of the 16 M
 // samples from s (the window's first: those before the block's place), by fir and the cosines cq
+// (by place: cq[i][b], band b's at place i)
 template <int M>
-static void analyze_d(const double* s, const double* fir, const double (*cq)[M], double* x) {
+static void analyze_d(const double* s, const double* fir, const double (*cq)[8], double* x) {
   constexpr int L = 16 * M, H = M / 2;
-  double acc[2 * M];
+  alignas(32) double acc[2 * M];
   for (int i = 0; i < 2 * M; i++) acc[i] = 0;
   for (int k = 0; k < L; k += 2 * M)  // (each acc[] by m in order: analyze_m()'s sums)
     for (int i = 0; i < 2 * M; i++) acc[i] += s[k + i] * fir[k + i];
   for (int k = H; k < M; k++) acc[k] -= acc[M - 1 - k];
   for (int k = M; k < M + H; k++) acc[k] += acc[3 * M - 1 - k];
+#ifdef DTSD_AVX2  // (the 8 bands' sums 4 at a time, each in the same order)
+  __m256d r0 = _mm256_setzero_pd(), r1 = _mm256_setzero_pd();
+  for (int i = 0; i < M; i++) {
+    const __m256d a = _mm256_broadcast_sd(acc + i + H);
+    r0 = _mm256_add_pd(r0, _mm256_mul_pd(a, _mm256_load_pd(cq[i])));
+    r1 = _mm256_add_pd(r1, _mm256_mul_pd(a, _mm256_load_pd(cq[i] + 4)));
+  }
+  _mm256_storeu_pd(x, r0);
+  _mm256_storeu_pd(x + 4, r1);
+#else
   double r[8] = {0, 0, 0, 0, 0, 0, 0, 0};
   for (int i = 0; i < M; i++)
-    for (int b = 0; b < 8; b++) r[b] += acc[i + H] * cq[b][i];
+    for (int b = 0; b < 8; b++) r[b] += acc[i + H] * cq[i][b];
   for (int b = 0; b < 8; b++) x[b] = r[b];
+#endif
 }
 
 // The WAV's channel and offset of each of the core's nch channels, from the probe blocks pr (n of
@@ -1901,11 +1915,12 @@ static Bind find_bind(const WavIn& w, const Probe* pr, int n, int nch, int filts
   const int M = 32 * up, L = 16 * M;
   const S64 olo = -1024 * up, ohi = 1536 * up;
   const int span = (int)(ohi - olo) + L;
-  static double fir[1024], cq32[8][32], cq64[8][64], seg[PROBES_MAX * SPAN];
+  static double fir[1024], seg[PROBES_MAX * SPAN];
+  alignas(32) static double cq32[32][8], cq64[64][8];
   for (int m = 0; m < 512 * up; m++) fir[m] = (double)(up == 2 ? FIR_64 : filts ? FIR_PERFECT : FIR_NONPERFECT)[m];
   for (int k = 0; k < 8; k++) {
-    for (int i = 0; i < 32; i++) cq32[k][i] = (double)COSQ[k][i];
-    for (int i = 0; i < 64; i++) cq64[k][i] = (double)COSQ64[k][i];
+    for (int i = 0; i < 32; i++) cq32[i][k] = (double)COSQ[k][i];
+    for (int i = 0; i < 64; i++) cq64[i][k] = (double)COSQ64[k][i];
   }
   if (n > PROBES_MAX) n = PROBES_MAX;
   auto fetch = [&](int wc, S64 o, int len, double* d) {  // (samples o.. of WAV channel wc: at()'s, those
