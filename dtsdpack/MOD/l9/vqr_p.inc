@@ -16,15 +16,15 @@ void D9_vqr_make( const M_vqr_v & D, tcx & X ) {
   M_vqr_VARS(M_LOCAL)
 
   a = 0;
-  a = a*2 + (((mg)>8+(1-1)));
-  a = a*3 + (((nc)>1+(1-1))+((nc)>2+(1-1)));
-  a = a*9 + D9_vqr_a_ml[__min(15,__max(0,(ml)-(1-1)))];
+  a = a*3 + (((mg)>0+(1-1))+((mg)>8+(1-1)));
+  a = a*4 + D9_vqr_a_nc[__min(6,__max(0,(nc)-(1-1)))];
+  a = a*10 + D9_vqr_a_ml[__min(15,__max(0,(ml)-(1-1)))];
   a = a*4 + D9_vqr_a_gr[__min(7,__max(0,(gr)-(1-1)))];
 
   b = 0;
   b = b*3 + (((kd)>0+(1-1))+((kd)>1+(1-1)));
   b = b*7 + D9_vqr_b_mg[__min(12,__max(0,(mg)-(1-1)))];
-  b = b*5 + D9_vqr_b_gn[__min(15,__max(0,(gn)-(1-1)))];
+  b = b*6 + D9_vqr_b_gn[__min(15,__max(0,(gn)-(1-1)))];
 
   c = 0;
   c = c*4 + D9_vqr_c_kd[__min(3,__max(0,(kd)-(1-1)))];
@@ -43,7 +43,7 @@ void D9_vqr_make( const M_vqr_v & D, tcx & X ) {
 
   h = 0;
   h = h*3 + (((kd)>0+(1-1))+((kd)>2+(1-1)));
-  h = h*9 + D9_vqr_h_gn[__min(15,__max(0,(gn)-(1-1)))];
+  h = h*8 + D9_vqr_h_gn[__min(15,__max(0,(gn)-(1-1)))];
   h = h*3 + (((lh)>0+(1-1))+((lh)>1+(1-1)));
 
   i = 0;
@@ -54,18 +54,18 @@ void D9_vqr_make( const M_vqr_v & D, tcx & X ) {
 
   j = 0;
   j = j*3 + (((kd)>0+(1-1))+((kd)>2+(1-1)));
-  j = j*7 + D9_vqr_j_bd[__min(31,__max(0,(bd)-(1-1)))];
+  j = j*6 + D9_vqr_j_bd[__min(31,__max(0,(bd)-(1-1)))];
   j = j*2 + (((lh)>0+(1-1)));
 
   k = 0;
   k = k*4 + D9_vqr_k_kd[__min(3,__max(0,(kd)-(1-1)))];
   k = k*3 + (((cc)>0+(1-1))+((cc)>1+(1-1)));
-  k = k*9 + D9_vqr_k_mg[__min(12,__max(0,(mg)-(1-1)))];
+  k = k*8 + D9_vqr_k_mg[__min(12,__max(0,(mg)-(1-1)))];
 
   l = 0;
   l = l*6 + D9_vqr_l_mq[__min(8,__max(0,(mq)-(1-1)))];
   l = l*2 + (((kd)>1+(1-1)));
-  l = l*3 + (((gn)>4+(1-1))+((gn)>7+(1-1)));
+  l = l*4 + D9_vqr_l_gn[__min(15,__max(0,(gn)-(1-1)))];
 
   s = 0;
   s = s*4 + D9_vqr_s_kd[__min(3,__max(0,(kd)-(1-1)))];
@@ -82,7 +82,7 @@ void D9_vqr_make( const M_vqr_v & D, tcx & X ) {
 
   w = 0;
   w = w*2 + (((mg)>3+(1-1)));
-  w = w*7 + D9_vqr_w_ml[__min(15,__max(0,(ml)-(1-1)))];
+  w = w*6 + D9_vqr_w_ml[__min(15,__max(0,(ml)-(1-1)))];
 
   t = 0;
   t = t*4 + D9_vqr_t_kd[__min(3,__max(0,(kd)-(1-1)))];

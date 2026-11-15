@@ -12,60 +12,60 @@ Const 0
 
 Index a
  a_pk: pk, 1!0
- a_nr: nr, 1!100000001100011
- a_nl: nl, 1!000000110100000
+ a_nr: nr, 1!000001011100011
+ a_nl: nl, 1!100000110100000
 
 Index b
  b_pk: pk, 1!1
- b_ab: ab, 1!010001010010000000000000000
- b_ql: ql, 1!111111010101010100000
+ b_ab: ab, 1!001111010010000000000000000
+ b_ql: ql, 1!111111010100010000000
 
 Index c
  c_pk: pk, 1!0
- c_nr: nr, 1!100010011000110
+ c_nr: nr, 1!100010011100000
  c_hm: hm, 1!11
 
 Index d
- d_pk: pk, 1!0
- d_ab: ab, 1!000111011111010100101100100
- d_m1: m1, 1!1111010000000000000000
+ d_pk: pk, 1!1
+ d_ab: ab, 1!010111011111010100101000000
+ d_m1: m1, 1!1101101001000010000000
 
 Index e
  e_pk: pk, 1!1
  e_ab: ab, 1!010001010000000000000000000
- e_m1: m1, 1!1100011001100010000000
- e_m2: m2, 1!1111001001000101010000
+ e_m1: m1, 1!1110100001101100000001
+ e_m2: m2, 1!1111001001000101000000
 
 Index h
  h_pk: pk, 1!0
- h_ab: ab, 1!010101011110101001100010001
- h_nr: nr, 1!000000000000000
+ h_ab: ab, 1!010101011110101001100011000
+ h_nr: nr, 1!000001000000000
 
 Index i
- i_pk: pk, 1!0
- i_ab: ab, 1!011000010111001011011001000
+ i_pk: pk, 1!1
+ i_ab: ab, 1!010000110111000010010001000
  i_hw: hw, 1!000
  i_pm: pm, 1!1
 
 Index j
- j_pk: pk, 1!0
- j_ab: ab, 1!010001010111010010100000000
- j_bd: bd, 1!0100101100011101000011010111111
+ j_pk: pk, 1!1
+ j_ab: ab, 1!010001010111010010100001000
+ j_bd: bd, 1!0000100100000100000001000100011
 
 Index k
  k_pk: pk, 1!0
- k_nr: nr, 1!100001001010101
+ k_nr: nr, 1!000001001010101
  k_pm: pm, 1!1
 
 Index l
  l_pk: pk, 1!1
- l_nl: nl, 1!100011101110010
- l_ab: ab, 1!010111101111110100101110000
+ l_nl: nl, 1!100111111100010
+ l_ab: ab, 1!010111101111100100100100000
 
 Index s
  s_pk: pk, 1!0
- s_nr: nr, 1!000000000000111
- s_nl: nl, 1!000011110011001
+ s_nr: nr, 1!000000010000011
+ s_nl: nl, 1!000111110011001
 
 Index f
  f_pk: pk, 1!1
@@ -80,7 +80,7 @@ Index w
  w_nl: nl, 1!100000000010100
 
 Index t
- t_ab: ab, 1!000000001000111101000000010
+ t_ab: ab, 1!000000101111110101011000010
 
 Index n
 #  Frozen: the mantissa mixer it is for mixes only by a hint, and nothing gives this family one.
@@ -89,27 +89,27 @@ Index n
 Index g
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
-Number rA, 1, 0!00000100
-Number mwA, 1, 0!11110110
-Number rB, 1, 0!11101010
+Number rA, 1, 0!00000000
+Number mwA, 1, 0!11100110
+Number rB, 1, 0!10101001
 Number mwB, 1, 0!00000000
-Number rC, 1, 0!11000010
+Number rC, 1, 0!10010110
 Number mwC, 1, 0!11111110
 Number rD, 1, 0!00100111
-Number mwD, 1, 0!00011001
+Number mwD, 1, 0!00010001
 Number rE, 1, 0!11100111
-Number mwE, 1, 0!00000110
-Number rH, 1, 0!11000000
+Number mwE, 1, 0!00000100
+Number rH, 1, 0!11110001
 Number mwH, 1, 0!00000000
-Number rI, 1, 0!11101110
+Number rI, 1, 0!11111100
 Number mwI, 1, 0!11000000
-Number rJ, 1, 0!11111001
-Number mwJ, 1, 0!00000000
+Number rJ, 1, 0!10111001
+Number mwJ, 1, 0!00000011
 Number rK, 1, 0!11001010
-Number mwK, 1, 0!11111111
-Number rL, 1, 0!11110101
-Number mwL, 1, 0!00000100
-Number lr, 1, 0!10101
+Number mwK, 1, 0!11110111
+Number rL, 1, 0!11111010
+Number mwL, 1, 0!00000101
+Number lr, 1, 0!10100
 Number mb, 1, 0!00100000
 Number rS1, 1, 0!01000
 Number rS2, 1, 0!01000
