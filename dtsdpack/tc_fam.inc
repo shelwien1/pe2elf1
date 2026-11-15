@@ -179,18 +179,37 @@ template <int f_DEC, class C> struct tc_fam {
       tc_ifits("counter G", C::kG, C::NG);
       tc_ifits("mixer", C::kM, (sz)ND * NIN);
       tc_ifits("mantissa mixer", C::kN, (sz)MND * TC_MIN);
+      // The mixers' initial weights (cm_mix's w0v), where not 1 / their inputs: since format 111
+      // the first three's outside prediction's a quarter (1/24 before; an eighth or a half 28 and
+      // 36 bytes bigger), the final mixer's a third for each mixer and 0 for the bias (a quarter
+      // each before): the regression set 99 bytes smaller, the final mixer's alone 30 (2/5 each 18
+      // bigger than before; the bias's a quarter kept, 18 less in all). The outside prediction in
+      // the final mixer too, its weight 1/5 as the others', 1187 bytes bigger; A's APM refinement's
+      // a quarter too, 124; each new row of the first three from weights by node that every
+      // decision of the node trains, 122; the final mixer's rate twice or half the others', 684 and
+      // 928. Since format 112 the family's own (famcfg.inc's wp, wq, wo and wf, in 256ths), each
+      // counter's probabilities' too, the adaptive one's (P) and the fast one's (Q), tuned on the
+      // families' dumps (the regression set 70 bytes smaller; the same for every family, P's 1/10
+      // and Q's 0, 44; P's 1/16 and Q's 1/48, 30; Q's 0 and P's 1/12 or 1/8, 38 and 24; P's 1/6, 41
+      // bigger; P's 1/48 and Q's 1/16, 48 bigger)
       mx.init(b.W, b.WC);
-      mx.set_w0(2 * NC + 1, TC_W0_OUT);
+      for(int k = 0; k < NC; k++)
+        mx.set_w0(2 * k, C::wp), mx.set_w0(2 * k + 1, C::wq);
+      mx.set_w0(2 * NC + 1, C::wo);
       if(C::NMIX > 1) {
         tc_ifits("mixer 2", C::kW, (sz)ND * NIN);
         tc_ifits("mixer 3", C::kS, (sz)ND * NIN);
         mx2.init(b.W2, b.W2C);
         mx3.init(b.W3, b.W3C);
-        mx2.set_w0(2 * NC + 1, TC_W0_OUT);
-        mx3.set_w0(2 * NC + 1, TC_W0_OUT);
+        for(int k = 0; k < NC; k++) {
+          mx2.set_w0(2 * k, C::wp), mx2.set_w0(2 * k + 1, C::wq);
+          mx3.set_w0(2 * k, C::wp), mx3.set_w0(2 * k + 1, C::wq);
+        }
+        mx2.set_w0(2 * NC + 1, C::wo);
+        mx3.set_w0(2 * NC + 1, C::wo);
         mxf.init(b.WF, b.WFC);
         for(int i = 0; i < TC_FIN - 1; i++)
-          mxf.set_w0(i, TC_W0_FIN);
+          mxf.set_w0(i, C::wf);
         mxf.set_w0(TC_FIN - 1, 0);
       }
       if(C::NAPM) {

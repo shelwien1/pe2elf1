@@ -102,6 +102,12 @@ Number rL, 1, 0!00000000
 Number mwL, 1, 0!10000000
 Number lr, 1, 0!01111
 Number mb, 1, 0!11010100
+#  the mixers' initial weights, in 256ths (format 112): each counter's two probabilities' in the
+#  first three (wp, wq), the outside prediction's there (wo), each mixer's in the final one (wf)
+Number wp, 1, 0!00010011
+Number wq, 1, 0!00000010
+Number wo, 1, 0!01000000
+Number wf, 1, 0!01000011
 Number rS1, 1, 0!00011
 Number rS2, 1, 0!01000
 Number qs, 1, 3!1110011

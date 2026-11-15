@@ -35,15 +35,6 @@ constexpr int TC_BW_BITS = 4, TC_BW_ONE = 1 << TC_BW_BITS;
 //  the final mixer's inputs (the three mixers', the bias), the mantissa mixer's (counter T's, the
 //  hint's counter's, the bias)
 constexpr int TC_FIN = 4, TC_MIN = 3;
-//  the mixers' initial weights (cm_mix's w0v) where not 1 / their inputs (format 111): the first
-//  three's outside prediction's a quarter (1/24 before; an eighth or a half 28 and 36 bytes
-//  bigger), the final mixer's a third for each mixer and 0 for the bias (a quarter each before):
-//  the regression set 99 bytes smaller, the final mixer's alone 30 (2/5 each 18 bigger than
-//  before; the bias's a quarter kept, 18 less in all). The outside prediction in the final mixer
-//  too, its weight 1/5 as the others', 1187 bytes bigger; A's APM refinement's a quarter too, 124;
-//  each new row of the first three from weights by node that every decision of the node trains,
-//  122; the final mixer's rate twice or half the others', 684 and 928
-constexpr int TC_W0_OUT = (1 << CM_WBITS) / 4, TC_W0_FIN = (1 << CM_WBITS) / 3;
 //  the mixers' inputs besides the counters' (A's APM refinement, the outside prediction, the bias,
 //  the hint's counter), all of them padded to TC_LANES (AVX2's 32-bit lanes)
 constexpr int TC_XIN = 4, TC_LANES = 8;
