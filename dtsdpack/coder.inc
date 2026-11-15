@@ -11,34 +11,31 @@ enum { CAT_RAW, CAT_HDR, CAT_SIDE, CAT_ABITS, CAT_SCALE, CAT_SMP, CAT_TAIL, CAT_
 
 constexpr int CO_PBITS = h264p::SCALElog;               // a probability's bits (code_bit()'s p)
 constexpr U32 CO_ONE = 1u << CO_PBITS;                  // (certain)
-constexpr int CO_COST_SHIFT = 3;                        // bitcost[] by a probability's top bits
-constexpr int CO_COSTS = 1 << (CO_PBITS - CO_COST_SHIFT);
-
-// -log2(i / CO_COSTS): a bit's cost by its probability, made as the program starts (as cm.inc's
-// tables are); and within CO_EDGE of either end, where a probability's top bits say too little
-// (the families' all but sure decisions, fam.inc's fbit()), each probability's own (e: from the
-// end near 0, e[CO_EDGE + k] at CO_ONE - CO_EDGE + k)
-constexpr U32 CO_EDGE = 16;
+// A bit's cost by the probability q (CO_PBITS bits) of its value, -log2(q / CO_ONE), for the
+// statistics (-s, and famtune's costs): by q's leading bit and log2(1 + i / 256) for the 8 after
+// it (a table made as the program starts, as cm.inc's are), the bits below going linearly between
+// its entries (within 3e-6 of a bit); and within 2^-8 of certain by the first two terms of
+// -log2(1 - x) (within 3e-8 of a bit), where the families' and the hit flags' all but sure
+// decisions cost as little as 2^-18 / ln 2 (each probability's own since format 102: its top 12
+// bits made 3 MB of s.2.dts's start's subband samples 10% dearer than they are)
 struct CoCosts {
-  float c[CO_COSTS + 1], e[2 * CO_EDGE];
+  float m[257];
 };
 static CoCosts co_make_costs(void) {
   CoCosts t;
-  int i;
-  t.c[0] = CO_PBITS;  // (a probability of 0 as one of the least)
-  for (i = 1; i <= CO_COSTS; i++) t.c[i] = (float)(-log((double)i / CO_COSTS) / log(2.0));
-  t.e[0] = CO_PBITS;
-  for (i = 1; i < (int)(2 * CO_EDGE); i++) {
-    const U32 q = i < (int)CO_EDGE ? (U32)i : CO_ONE - 2 * CO_EDGE + (U32)i;
-    t.e[i] = (float)(-log((double)q / CO_ONE) / log(2.0));
-  }
+  for (int i = 0; i <= 256; i++) t.m[i] = (float)(log(1.0 + i / 256.0) / log(2.0));
   return t;
 }
 static const CoCosts bitcost_ = co_make_costs();
-static const float (&bitcost)[CO_COSTS + 1] = bitcost_.c;
-// a bit's cost by the probability q (CO_PBITS bits) of its value
 static INLINE float co_cost(U32 q) {
-  return q < CO_EDGE ? bitcost_.e[q] : q >= CO_ONE - CO_EDGE ? bitcost_.e[q - (CO_ONE - 2 * CO_EDGE)] : bitcost[q >> CO_COST_SHIFT];
+  if (q >= CO_ONE - (CO_ONE >> 8)) {
+    const float x = (float)(CO_ONE - q) / (float)CO_ONE;
+    return x * (1.4426950f + 0.7213475f * x);
+  }
+  const int e = 31 - __builtin_clz(q | 1), s = e - 8;
+  const U32 i = (s >= 0 ? q >> s : q << -s) & 255;
+  const float r = s > 0 ? (float)(q & ((1u << s) - 1)) / (float)(1u << s) : 0.0f;
+  return (float)(CO_PBITS - e) - (bitcost_.m[i] + (bitcost_.m[i + 1] - bitcost_.m[i]) * r);
 }
 
 // The range coder of a run, coding (f_DEC 0) or decoding (1): the coroutine itself, which its base

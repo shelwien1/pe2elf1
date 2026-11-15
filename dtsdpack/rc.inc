@@ -1,8 +1,16 @@
-// The binary range coder of oggcomp (balrogg-P-hash rc.inc): 15-bit
-// probabilities, 64-bit low with carry propagation -- oggcomp's options as
-// h264p has them: no carryless mode, eight bytes of low. The flush writes
-// all of low, so that the decoder reads exactly the bytes the coder wrote,
-// to the last: none past them, none left.
+// The binary range coder of oggcomp (balrogg-P-hash rc.inc), 64-bit low with
+// carry propagation -- oggcomp's options as h264p has them: no carryless mode,
+// eight bytes of low. The flush writes all of low, so that the decoder reads
+// exactly the bytes the coder wrote, to the last: none past them, none left.
+// Its probabilities have 18 bits since dtsdpack's format 103 (15 before), and
+// a decision's share of the range is the range times the probability in 64
+// bits rather than the range's top bits times it (the range is 2^24 or more,
+// so a probability of 1 still has 64 of it): dtsdpack's regression set 0.48%
+// smaller (s.2.dts 0.61%, ES 6.1 16bit.dts 2.3%); the product alone, at 15
+// bits, 0.02-1.0% on six of its streams; 20 bits as 18. A decision may then
+// leave as little as 64 of the range, so it comes back to 2^24 by up to three
+// bytes (two at 15 bits, where it left 512 or more; with two, a run of
+// decisions each the 2^-18 value took it to 0).
 //
 // The byte I/O is Lib3's Coroutine itself (coro3b.inc), the coder's base:
 // put() into the output pin, a yield 2 when its buffer is full; get() from
@@ -19,7 +27,7 @@
 
 namespace h264p {
 
-enum { SCALElog = 15 };
+enum { SCALElog = 18 };
 #if defined(__GNUC__) || defined(__clang__)
 #define RC_BSR64(x) ((uint)(63 - __builtin_clzll(x)))
 #else
@@ -36,6 +44,7 @@ template <int f_DEC> struct Rangecoder : Coroutine {
   static const uint LOWBITS = LOWBYTES * 8;
   static const uint sTOP = 1u << 24;
   static const uint gTOP = 1u << 16;
+  static const uint bTOP = 1u << 8;
   uint lowl, lowh;
   uint rpre;
   uint Carry;
@@ -89,7 +98,7 @@ template <int f_DEC> struct Rangecoder : Coroutine {
       code = (code << 8) + get();
   }
   void rc_Renorm() {
-    const uint n = (range < sTOP) + (range < gTOP);
+    const uint n = (range < sTOP) + (range < gTOP) + (range < bTOP);
     if(f_DEC == 0)
       ShiftLow(n);
     else
@@ -99,8 +108,7 @@ template <int f_DEC> struct Rangecoder : Coroutine {
   INLINE void rc_Process(uint freq, uint &bit) {
     uint b = bit;
     rc_Renorm();
-    rpre = range >> SCALElog;
-    rpre *= freq;
+    rpre = (uint)(((uint64_t)range * freq) >> SCALElog);
     if(f_DEC)
       b = (code >= rpre);
     range -= rpre;

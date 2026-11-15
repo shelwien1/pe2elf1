@@ -80,11 +80,11 @@ template <int f_DEC, class C> struct tc_fam {
   int cn_lim[2 * TC_NC_PAD], cn_tg[2][2 * TC_NC_PAD];
   bool cn_v;
   //  A decision within 4 of the 12-bit probabilities' ends (1 to 4 of CM_PONE, or as near 1),
-  //  coded at the coder's 15 bits by how often the family's such decisions went the unlikely way
-  //  (cap_f of cap_n, (f + 1/2) / (n + 1), in three bins: at the end, next to it, 3-4 off; halved
-  //  at 2^16), and no likelier than the 12 bits say: at 1/4096 a decision that is all but sure
-  //  costs 3.5e-4 bits, and most of a stream's are (3 MB of `s.2.dts`'s first 418 thousand of the
-  //  families' 614 thousand, 9 of them the other way)
+  //  coded at the coder's 18 bits (15 until format 103) by how often the family's such decisions
+  //  went the unlikely way (cap_f of cap_n, (f + 1/2) / (n + 1), in three bins: at the end, next
+  //  to it, 3-4 off; halved at 2^16), and no likelier than the 12 bits say: at 1/4096 a decision
+  //  that is all but sure costs 3.5e-4 bits, and most of a stream's are (3 MB of `s.2.dts`'s first
+  //  418 thousand of the families' 614 thousand, 9 of them the other way)
   u32 cap_n[3], cap_f[3];
   INLINE int fbit(int p, int b) {
     const bool lo = p <= 4, hi = p >= CM_PONE - 4;

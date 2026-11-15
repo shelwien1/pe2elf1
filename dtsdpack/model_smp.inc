@@ -3371,7 +3371,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       U16* const nn = sp_n[g][r < 2 ? r : 2][bk];
       const double ph = (nn[1] + SP_A * pc) / (nn[0] + nn[1] + SP_A);
       U32 q = (U32)((1.0 - ph) * CO_ONE);
-      q = q < 16 ? 16 : q > CO_ONE - 16 ? CO_ONE - 16 : q;
+      const U32 qe = CO_ONE >> 14;  // (no surer than 2^-14: 2^-11 until format 103's 18-bit coder)
+      q = q < qe ? qe : q > CO_ONE - qe ? CO_ONE - qe : q;
       const int hit = c->code_bit(q, ENC && v == ci[r]);
       if (++nn[hit] + nn[1 - hit] > SP_LIM) nn[0] >>= 1, nn[1] >>= 1;
       if (hit) return ci[r];
