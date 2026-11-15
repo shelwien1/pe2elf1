@@ -87,10 +87,32 @@ template <int f_DEC, class C> struct tc_fam {
   //  stream's are (3 MB of `s.2.dts`'s first 418 thousand of the families' 614 thousand, 9 of them
   //  the other way)
   u32 cap_n[4], cap_f[4];
+  //  And past the cap, to 255 of 4096 (format 105): the unlikely value's probability e times how
+  //  often the family's such decisions went that way against how often they were expected to,
+  //  (made + 2) / (expected + 2), by e's log2 in halves (2^18 a decision's worth; halved at 1024 of
+  //  them): `s.2.dts`'s core 16 bytes smaller, the short streams 1 bigger; to 511 of 4096 the short
+  //  streams 14 bigger, `s.2.dts` 19 smaller still; halved at 16 or with a prior of 1, bigger
+  u64 fc_e[10], fc_m[10];
   INLINE int fbit(int p, int b) {
     const bool lo = p <= 8, hi = p >= CM_PONE - 8;
-    if(LIKELY(!lo && !hi))
-      return tc_bit(rc, p, b);
+    if(LIKELY(!lo && !hi)) {
+      const bool ul = p < CM_PONE / 2;  // (the unlikely value 0)
+      const int e = ul ? p : CM_PONE - p;
+      if(e >= 256)
+        return tc_bit(rc, p, b);
+      const int lb = 31 - __builtin_clz((unsigned)e);
+      const int k = 2 * lb + ((unsigned)(e * e) >= (1u << (2 * lb + 1))) - 6;  // (9-11: 0, ..., 182-255: 9)
+      const U64 qa = (U64)2 << CO_PBITS, e18 = (U64)e << (CO_PBITS - CM_PBITS);
+      U64 q = e18 * (fc_m[k] + qa) / (fc_e[k] + qa);
+      q = q < 1 ? 1 : q > CO_ONE / 2 ? CO_ONE / 2 : q;
+      b = rc->code_bit(ul ? (U32)q : CO_ONE - (U32)q, b);
+      fc_e[k] += e18;
+      if(b == (ul ? 0 : 1))
+        fc_m[k] += (U64)1 << CO_PBITS;
+      if(fc_e[k] + fc_m[k] >= (U64)1024 << CO_PBITS)
+        fc_e[k] >>= 1, fc_m[k] >>= 1;
+      return b;
+    }
     const int e = lo ? p : CM_PONE - p, k = e <= 2 ? e - 1 : e <= 4 ? 2 : 3;
     const U32 nom = (U32)e << (CO_PBITS - CM_PBITS);
     U32 q = (U32)(((U64)(2 * cap_f[k] + 1) << CO_PBITS) / (2 * (U64)cap_n[k] + 2));

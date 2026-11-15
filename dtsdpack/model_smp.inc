@@ -593,9 +593,16 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // subband's FFT path's level (path_levels()); their mean square taken as a normal variable, the
   // mean and variance theirs: each entry's cell's probability
   // (sf_post()). Where the likeliest's is under SP_PT, coded by rank, each "this one?" at its share
-  // of what those before left, mixed at SP_A with the hits so far at that share (by rank: the first,
-  // the second, the rest; SP_NB buckets of its logit, -8 to 8, halved past SP_LIM), past SP_R as
-  // f_scl's difference from the likeliest (sf_post_code()); surer than that, the RMS rule's hit flag
+  // of what those before left, past SP_R as f_scl's difference from the likeliest (sf_post_code());
+  // the share calibrated (since format 105): by rank (the first, the second, the rest) and SP_NB
+  // buckets of its logit, -8 to 8, its odds times the bucket's hits made against those expected (the
+  // shares' sum) over its misses so (each with a prior of 2), between its bucket's and the nearer
+  // neighbour's by how far it lies from its bucket's middle, the counts halved past SP_LIM (where
+  // they had been mixed with the share at 16, halved past 1023, which leaves the bucket's rate as its
+  // counts grow, not the share's own odds within it: `s.2.dts`'s core 0.13% smaller, its scale
+  // factors 0.7%, the other streams within 3 bytes; without the neighbours 7 bytes less of it,
+  // halved past 1023 4 less, past 255 25 bytes bigger; a prior of 1 or 4 as 2); surer than that,
+  // the RMS rule's hit flag
   // as before. And only where the stream's indexes have been the audio's at least SP_HPM thousandths
   // of the time, after SP_HN of them (sp_on()): the noise is the analysis's where the WAV is the
   // encoder's input to the bit, its indexes then the audio's 99.66-99.92% of the time (the lossless
@@ -611,12 +618,16 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // RMS rule's guess has been the encoder's more often, `s.2.dts`'s core 2.3% bigger; the noise's
   // power adapted to each stream (a step toward the likelier of 2^(1/4) times it and 2^(-1/4), by
   // how much), 12 bytes less in all; the switch at 99% the same in all, at 98% 23 bytes more
-  static constexpr int SP_R = 6, SP_NB = 24, SP_W = 8, SP_A = 16, SP_LIM = 1023;
+  static constexpr int SP_R = 6, SP_NB = 24, SP_W = 8, SP_LIM = 4095;
   static constexpr double SP_K = 2.4 / 1099511627776.0;   // (2.4 2^-40; 3 2^-40 0.4% bigger)
   static constexpr double SP_K2 = 1.0 / 8796093022208.0;  // (2^-43)
   static constexpr double SP_K3 = 1.0 / 17592186044416.0;  // (2^-44; 2^-43 0.01% bigger, 2^-45 0.05%)
   static constexpr double SP_PT = 0.999;
-  U16 sp_n[3][3][SP_NB][2];  // (the top subband's, subbands 28-30's, the rest's: by rank, bucket, hit)
+  // (the top subband's, subbands 28-30's, the rest's: by rank and bucket, the hits, the misses, the
+  // hits expected and the misses so)
+  double sp_x[3][3][SP_NB][4];
+  // (a bucket's calibration: its hits made against expected over its misses so, with a prior of 2)
+  static double sp_k(const double* x) { return (x[1] + 2.0) * (x[2] + 2.0) / ((x[0] + 2.0) * (x[3] + 2.0)); }
   static constexpr U64 SP_HN = 2560, SP_HPM = 995;  // (a 5.1 frame's indexes)
   bool sp_on() const { return n_smp >= SP_HN && n_hit * 1000 >= n_smp * SP_HPM; }
   double sp_t[SP_NB - 1];    // (the buckets' edges)
@@ -646,7 +657,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     for (int k = 0; k < 6; k++) tw_n[k][0] = 1, tw_n[k][1] = 7;
     tw_t[0] = tw_t[1] = 0;
-    memset(sp_n, 0, sizeof sp_n);
+    memset(sp_x, 0, sizeof sp_x);
     {  // (MC's samples: the quantiles in an order of each value's own, by an LCG's Fisher-Yates)
       U64 rs = 0x243F6A8885A308D3ull;
       for (int j = 0; j < 16; j++) {
@@ -3382,13 +3393,26 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       pc = pc < 1e-4 ? 1e-4 : pc > 1 - 1e-4 ? 1 - 1e-4 : pc;
       int bk = 0;
       while (bk < SP_NB - 1 && pc >= sp_t[bk]) bk++;
-      U16* const nn = sp_n[g][r < 2 ? r : 2][bk];
-      const double ph = (nn[1] + SP_A * pc) / (nn[0] + nn[1] + SP_A);
+      double(*const xr)[4] = sp_x[g][r < 2 ? r : 2];
+      // (between the bucket's calibration and the nearer neighbour's, by the odds' place from the
+      // bucket's middle toward its edge, half of the neighbour's there; the outer buckets alone)
+      const double od = pc / (1.0 - pc);
+      double kk = sp_k(xr[bk]);
+      if (bk > 0 && bk < SP_NB - 1) {
+        const double olo = sp_t[bk - 1] / (1.0 - sp_t[bk - 1]), ohi = sp_t[bk] / (1.0 - sp_t[bk]);
+        const double om = sqrt(olo * ohi), ed = od < om ? olo : ohi;
+        double wn = 0.5 * (od - om) / (ed - om);
+        wn = wn < 0.0 ? 0.0 : wn > 0.5 ? 0.5 : wn;
+        kk = kk * (1.0 - wn) + sp_k(xr[od < om ? bk - 1 : bk + 1]) * wn;
+      }
+      const double ph = 1.0 / (1.0 + (1.0 - pc) / pc * kk);
       U32 q = (U32)((1.0 - ph) * CO_ONE);
       const U32 qe = CO_ONE >> 14;  // (no surer than 2^-14: 2^-11 until format 103's 18-bit coder)
       q = q < qe ? qe : q > CO_ONE - qe ? CO_ONE - qe : q;
       const int hit = c->code_bit(q, ENC && v == ci[r]);
-      if (++nn[hit] + nn[1 - hit] > SP_LIM) nn[0] >>= 1, nn[1] >>= 1;
+      double* const xx = xr[bk];
+      xx[hit ? 0 : 1] += 1.0, xx[2] += pc, xx[3] += 1.0 - pc;
+      if (xx[0] + xx[1] > SP_LIM) xx[0] *= 0.5, xx[1] *= 0.5, xx[2] *= 0.5, xx[3] *= 0.5;
       if (hit) return ci[r];
       rem -= pv[r];
     }
