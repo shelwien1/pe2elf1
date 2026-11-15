@@ -180,12 +180,18 @@ template <int f_DEC, class C> struct tc_fam {
       tc_ifits("mixer", C::kM, (sz)ND * NIN);
       tc_ifits("mantissa mixer", C::kN, (sz)MND * TC_MIN);
       mx.init(b.W, b.WC);
+      mx.set_w0(2 * NC + 1, TC_W0_OUT);
       if(C::NMIX > 1) {
         tc_ifits("mixer 2", C::kW, (sz)ND * NIN);
         tc_ifits("mixer 3", C::kS, (sz)ND * NIN);
         mx2.init(b.W2, b.W2C);
         mx3.init(b.W3, b.W3C);
+        mx2.set_w0(2 * NC + 1, TC_W0_OUT);
+        mx3.set_w0(2 * NC + 1, TC_W0_OUT);
         mxf.init(b.WF, b.WFC);
+        for(int i = 0; i < TC_FIN - 1; i++)
+          mxf.set_w0(i, TC_W0_FIN);
+        mxf.set_w0(TC_FIN - 1, 0);
       }
       if(C::NAPM) {
         tc_ifits("APM 1", C::kS, (sz)ND * C::qs);

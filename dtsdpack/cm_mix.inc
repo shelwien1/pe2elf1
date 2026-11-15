@@ -1,10 +1,13 @@
 // cm_mix.inc -- cm.inc's cm_mix: a logistic mixer of N inputs.
 
+//  Its weights by row (w), each less its input's initial weight, so that a row's zeroed memory
+//  starts there: W0, 1/N, unless set_w0() makes it another (w0v)
 template <int N> struct cm_mix {
   static_assert(N <= CM_MIX_MAX, "cm_mix: its AVX2 sum is exact for 32 inputs at most");
   rp<i32> w;
   rp<u8> c;
   int x[N], pr, row, ctxn;
+  i32 w0v[N];
   enum { W0 = (1 << CM_WBITS) / N };
   static constexpr int LO = 15;  // (the AVX2 sum: a weight as hi 2^LO + lo)
   void init(rp<i32> wt, rp<u8> cnt) {
@@ -13,7 +16,10 @@ template <int N> struct cm_mix {
     row = 0;
     ctxn = 0;
     pr = CM_PHALF;
+    for(int i = 0; i < N; i++)
+      w0v[i] = W0;
   }
+  void set_w0(int k, int v) { w0v[k] = v; }
   INLINE void set(int k, int st) { x[k] = st; }
   INLINE int mix(u32 ctx) { return mix(ctx, x, nullptr); }
   // with the inputs xi (packed in xp, N a multiple of 8, or null)
@@ -24,23 +30,24 @@ template <int N> struct cm_mix {
     row = (int)ctx * N;
 #ifdef DTSD_AVX2
     if(xp) {
-      // exactly the sum below: each weight (with W0, under 2^29) as hi 2^15
+      // exactly the sum below: each weight (with w0v's, under 2^29) as hi 2^15
       // + lo, lo in 0..32767, so that both sums of products stay in 32 bits
       const rp<const i32> ww = w + row;
-      const __m256i w0 = _mm256_set1_epi32(W0), mlo = _mm256_set1_epi32((1 << LO) - 1);
+      const __m256i mlo = _mm256_set1_epi32((1 << LO) - 1);
       __m256i sh = _mm256_setzero_si256(), sl = sh;
       for(i = 0; i + CM_V16 <= N; i += CM_V16) {
-        __m256i va = _mm256_add_epi32(_mm256_loadu_si256((const __m256i *)(ww + i)), w0);
-        __m256i vb = _mm256_add_epi32(_mm256_loadu_si256((const __m256i *)(ww + i + CM_V32)), w0);
+        __m256i va = _mm256_add_epi32(_mm256_loadu_si256((const __m256i *)(ww + i)), _mm256_loadu_si256((const __m256i *)(w0v + i)));
+        __m256i vb = _mm256_add_epi32(_mm256_loadu_si256((const __m256i *)(ww + i + CM_V32)),
+                                      _mm256_loadu_si256((const __m256i *)(w0v + i + CM_V32)));
         sh = _mm256_add_epi32(sh, _mm256_madd_epi16(_mm256_packs_epi32(_mm256_srai_epi32(va, LO), _mm256_srai_epi32(vb, LO)), xp->v[i / CM_V16]));
         sl = _mm256_add_epi32(sl, _mm256_madd_epi16(_mm256_packs_epi32(_mm256_and_si256(va, mlo), _mm256_and_si256(vb, mlo)), xp->v[i / CM_V16]));
       }
       __m128i h = _mm_add_epi32(_mm256_castsi256_si128(sh), _mm256_extracti128_si256(sh, 1));
       __m128i l = _mm_add_epi32(_mm256_castsi256_si128(sl), _mm256_extracti128_si256(sl, 1));
       if(N % CM_V16) {
-        const __m128i w0h = _mm_set1_epi32(W0), mloh = _mm_set1_epi32((1 << LO) - 1);
-        __m128i va = _mm_add_epi32(_mm_loadu_si128((const __m128i *)(ww + N - CM_V32)), w0h);
-        __m128i vb = _mm_add_epi32(_mm_loadu_si128((const __m128i *)(ww + N - CM_H32)), w0h);
+        const __m128i mloh = _mm_set1_epi32((1 << LO) - 1);
+        __m128i va = _mm_add_epi32(_mm_loadu_si128((const __m128i *)(ww + N - CM_V32)), _mm_loadu_si128((const __m128i *)(w0v + N - CM_V32)));
+        __m128i vb = _mm_add_epi32(_mm_loadu_si128((const __m128i *)(ww + N - CM_H32)), _mm_loadu_si128((const __m128i *)(w0v + N - CM_H32)));
         h = _mm_add_epi32(h, _mm_madd_epi16(_mm_packs_epi32(_mm_srai_epi32(va, LO), _mm_srai_epi32(vb, LO)), xp->t));
         l = _mm_add_epi32(l, _mm_madd_epi16(_mm_packs_epi32(_mm_and_si128(va, mloh), _mm_and_si128(vb, mloh)), xp->t));
       }
@@ -54,7 +61,7 @@ template <int N> struct cm_mix {
       (void)xp;
       CM_UNROLL
       for(i = 0; i < N; i++)
-        s += (i64)(w[row + i] + W0) * xi[i];
+        s += (i64)(w[row + i] + w0v[i]) * xi[i];
     }
     pr = cm_squash((int)(s >> CM_WBITS));
     return cm_pclip(pr);
