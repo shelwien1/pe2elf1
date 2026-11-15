@@ -79,18 +79,19 @@ template <int f_DEC, class C> struct tc_fam {
   //  coded at once)
   int cn_lim[2 * TC_NC_PAD], cn_tg[2][2 * TC_NC_PAD];
   bool cn_v;
-  //  A decision within 4 of the 12-bit probabilities' ends (1 to 4 of CM_PONE, or as near 1),
+  //  A decision within 8 of the 12-bit probabilities' ends (1 to 8 of CM_PONE, or as near 1),
   //  coded at the coder's 18 bits (15 until format 103) by how often the family's such decisions
-  //  went the unlikely way (cap_f of cap_n, (f + 1/2) / (n + 1), in three bins: at the end, next
-  //  to it, 3-4 off; halved at 2^16), and no likelier than the 12 bits say: at 1/4096 a decision
-  //  that is all but sure costs 3.5e-4 bits, and most of a stream's are (3 MB of `s.2.dts`'s first
-  //  418 thousand of the families' 614 thousand, 9 of them the other way)
-  u32 cap_n[3], cap_f[3];
+  //  went the unlikely way (cap_f of cap_n, (f + 1/2) / (n + 1), in four bins: at the end, next
+  //  to it, 3-4 off, 5-8 off, the last since format 104; halved at 2^16), and no likelier than the
+  //  12 bits say: at 1/4096 a decision that is all but sure costs 3.5e-4 bits, and most of a
+  //  stream's are (3 MB of `s.2.dts`'s first 418 thousand of the families' 614 thousand, 9 of them
+  //  the other way)
+  u32 cap_n[4], cap_f[4];
   INLINE int fbit(int p, int b) {
-    const bool lo = p <= 4, hi = p >= CM_PONE - 4;
+    const bool lo = p <= 8, hi = p >= CM_PONE - 8;
     if(LIKELY(!lo && !hi))
       return tc_bit(rc, p, b);
-    const int e = lo ? p : CM_PONE - p, k = e <= 2 ? e - 1 : 2;
+    const int e = lo ? p : CM_PONE - p, k = e <= 2 ? e - 1 : e <= 4 ? 2 : 3;
     const U32 nom = (U32)e << (CO_PBITS - CM_PBITS);
     U32 q = (U32)(((U64)(2 * cap_f[k] + 1) << CO_PBITS) / (2 * (U64)cap_n[k] + 2));
     q = q < 1 ? 1 : q > nom ? nom : q;

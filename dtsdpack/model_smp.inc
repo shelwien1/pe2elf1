@@ -425,6 +425,20 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // FATE's samples 1.0-1.6% smaller, the 7-frame xll ones 0.3-0.7%, `s.2.dts`'s core 0.04%)
   static constexpr U32 HIT_ONE = 256, HIT_PRIOR = 1, HIT_LIMIT = 1u << 4, HIT_SLIMIT = 1u << 18, HIT_RLIMIT = 1u << 12;
   U32 hit_c[2][4][16][QB_N][QB_N][4], hit_r[2][4][16][QB_N][2];
+  // (format 104) And then calibrated: by its miss probability's log2 in halves (HAP_N bins, one
+  // between two weighing on both by how near), the misses each bin's flags were expected to make
+  // and those they made (2^26 a miss), its probability times their ratio ((made + 2) / (expected +
+  // 2)); in two tables, one halved at 32 misses (expected and made), one at 4096, and of the fast
+  // one's, the slow one's and their mean (of the logs) the one whose flags have cost the least so
+  // far (hap_k, 2^-16 bits): the cells' rates' geometric mean, from counts that start empty, is
+  // not how often their flags miss (with the cap's fourth bin, tc_fam.inc's, 12 bytes of it: the
+  // regression set 0.16% smaller, FATE's samples 0.4-1.8%, the 7-frame xll ones 0.4-1.0%,
+  // `s.2.dts`'s core 0.10%, `dts_es.dts`'s 0.17% bigger; one table, halved at 1024 misses, 0.08%
+  // smaller, by the cells' class of recent misses too 0.07%, by quarters of a log2 0.07%)
+  static constexpr int HAP_N = 40;
+  static constexpr U64 HAP_A = (U64)2 << 26, HAP_FAST = (U64)1 << 31, HAP_SLOW = (U64)1 << 38;
+  U64 hap_e[2][2][HAP_N], hap_m[2][2][HAP_N];  // (by kd, the PMODE; the fast table and the slow one)
+  S64 hap_k[2][3];
   // (format 80) An index's miss in the channels coded before, at the same subband's same sample:
   // where the WAV isn't what the encoder had, or a decoder's values aren't the core's, the channels
   // miss together (in 3 MB from `s.2.dts`'s middle, cut from it, a sample missed 0.11% of the time
@@ -4182,7 +4196,40 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         const U32 p0 = cprob(cb), p1 = xm ? cprob(cb + 8) : 0;
         const bool ux = xm && xm_loss[1] + ((S64)4 << 16) + xm_loss[0] / 32 < xm_loss[0];
         const U32 pq = ux ? p1 : p0;
-        hit = c->code_bit(pq, ENC && v == qp);
+        const S64 hap_l = (S64)lg2tab.log2x(pq) - (S64)lg2tab.log2x(CO_ONE);  // (its log2, 2^-16)
+        int hap_b = (int)(-hap_l >> 15), hap_f = (int)(-hap_l >> 7) & 255;  // (its bin, 256ths past it)
+        if (hap_b >= HAP_N - 1) hap_b = HAP_N - 2, hap_f = 255;
+        S64 hap_c[2];
+        for (int t = 0; t < 2; t++) {
+          const U64* const he = hap_e[kd][t];
+          const U64* const hm2 = hap_m[kd][t];
+          const S64 c0 = (S64)lg2tab.log2x(hm2[hap_b] + HAP_A) - (S64)lg2tab.log2x(he[hap_b] + HAP_A);
+          const S64 c1 = (S64)lg2tab.log2x(hm2[hap_b + 1] + HAP_A) - (S64)lg2tab.log2x(he[hap_b + 1] + HAP_A);
+          hap_c[t] = ((256 - hap_f) * c0 + hap_f * c1) >> 8;
+        }
+        const U32 hap_p[3] = {lg2tab.prob(hap_l + hap_c[0]), lg2tab.prob(hap_l + hap_c[1]),
+                              lg2tab.prob(hap_l + (hap_c[0] + hap_c[1]) / 2)};
+        S64* const hap_s = hap_k[kd];
+        int hap_i = 2;
+        if (hap_s[0] < hap_s[hap_i]) hap_i = 0;
+        if (hap_s[1] < hap_s[hap_i]) hap_i = 1;
+        hit = c->code_bit(hap_p[hap_i], ENC && v == qp);
+        {
+          const S64 one = lg2tab.log2x(CO_ONE);
+          for (int t = 0; t < 3; t++) hap_s[t] += one - lg2tab.log2x(hit ? CO_ONE - hap_p[t] : hap_p[t]);
+          if (hap_s[0] + hap_s[1] + hap_s[2] >= (S64)1 << 40) hap_s[0] >>= 1, hap_s[1] >>= 1, hap_s[2] >>= 1;
+        }
+        for (int t = 0; t < 2; t++) {
+          U64* const he = hap_e[kd][t];
+          U64* const hm2 = hap_m[kd][t];
+          const U64 lim = t ? HAP_SLOW : HAP_FAST;
+          for (int k = 0; k < 2; k++) {
+            const U64 w = k ? (U64)hap_f : (U64)(256 - hap_f);
+            he[hap_b + k] += (U64)pq * w;
+            if (!hit) hm2[hap_b + k] += w << CO_PBITS;
+            if (he[hap_b + k] + hm2[hap_b + k] >= lim) he[hap_b + k] >>= 1, hm2[hap_b + k] >>= 1;
+          }
+        }
         if (hk) hc_learn(*hc, hit, pq);
         if (!ux) cupd(cb, hit);
         if (xm) {
