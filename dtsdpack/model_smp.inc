@@ -4006,6 +4006,14 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       tq = 1;
       if (jx_more(tw_t, 4, 1)) qp = qt, dist = dt, alt = at;
     }
+    // (a sample past the WAV's end coded without it: its continuation's index as context)
+    const int pe = bound[ch] && !bnd;
+    S64 qc = 0;
+    if (pe) {
+      S128 dc;
+      S64 ac;
+      qc = requant(xv - shl64(pred, AQ_F), ss, lo, hi, &dc, &ac);
+    }
     M_smp_v D;
     D.ab = a;
     D.hw = sample_coding(r, ch, a);
@@ -4014,13 +4022,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // (the encoder's arithmetic errs by about its signal's level: the channel's loudest subband's)
     const S128 lvu = (S128)(r.shuff[ch] == 6 ? SF7 : SF6)[imax(esmax[ch] - 1, 0)] << 38;
     D.nl = bnd ? near_bucket(dist, lvu, 28) : 0;
-    D.ql = bnd ? imin(bit_len((U64)(qp < 0 ? -qp : qp)), 21) : 0;
+    D.ql = bnd ? imin(bit_len((U64)(qp < 0 ? -qp : qp)), 21) : pe ? imin(bit_len((U64)(qc < 0 ? -qc : qc)), 21) : 0;
     D.hm = imin(__builtin_popcount(miss[ch][b]), 3);
     D.pm = pm;
     D.bd = b;
     D.m1 = q1[ch][b] ? imin(q1[ch][b] - 1, 21) : 22;
     D.m2 = q2[ch][b] ? imin(q2[ch][b] - 1, 21) : 22;
-    D.sq = bnd ? svar(qp) : 0;
+    D.sq = bnd ? svar(qp) : pe ? svar(qc) : 0;
     D.s1 = qs[ch][b];
     int how;
     // (cb: how many of the channel's last 32 missed, 0, 1-2, 3-7, more (0, 1, 2-3, more before format

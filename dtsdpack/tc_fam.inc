@@ -79,6 +79,28 @@ template <int f_DEC, class C> struct tc_fam {
   //  coded at once)
   int cn_lim[2 * TC_NC_PAD], cn_tg[2][2 * TC_NC_PAD];
   bool cn_v;
+  //  A decision within 4 of the 12-bit probabilities' ends (1 to 4 of CM_PONE, or as near 1),
+  //  coded at the coder's 15 bits by how often the family's such decisions went the unlikely way
+  //  (cap_f of cap_n, (f + 1/2) / (n + 1), in three bins: at the end, next to it, 3-4 off; halved
+  //  at 2^16), and no likelier than the 12 bits say: at 1/4096 a decision that is all but sure
+  //  costs 3.5e-4 bits, and most of a stream's are (3 MB of `s.2.dts`'s first 418 thousand of the
+  //  families' 614 thousand, 9 of them the other way)
+  u32 cap_n[3], cap_f[3];
+  INLINE int fbit(int p, int b) {
+    const bool lo = p <= 4, hi = p >= CM_PONE - 4;
+    if(LIKELY(!lo && !hi))
+      return tc_bit(rc, p, b);
+    const int e = lo ? p : CM_PONE - p, k = e <= 2 ? e - 1 : 2;
+    const U32 nom = (U32)e << (CO_PBITS - CM_PBITS);
+    U32 q = (U32)(((U64)(2 * cap_f[k] + 1) << CO_PBITS) / (2 * (U64)cap_n[k] + 2));
+    q = q < 1 ? 1 : q > nom ? nom : q;
+    b = rc->code_bit(lo ? q : CO_ONE - q, b);
+    cap_n[k]++;
+    cap_f[k] += lo ? b == 0 : b == 1;
+    if(cap_n[k] >= 1u << 16)
+      cap_n[k] >>= 1, cap_f[k] >>= 1;
+    return b;
+  }
   //  (Init(), then wire() to its tables as the model starts; on zeroed
   //  memory: what it sets not, as it codes, is 0)
   void Init() {
@@ -228,7 +250,7 @@ template <int f_DEC, class C> struct tc_fam {
       fatal("internal: sign context %u of a family of %d", sc, C::NG);
     TC_DUMP(rec('G', sc, s));
     cm_cnt g = G[bg * (u32)C::NG + sc];
-    s = tc_bit(rc, g.P(), ENC && s);
+    s = fbit(g.P(), ENC && s);
     g.upd(s, C::rG, C::mwG);
     G[bg * (u32)C::NG + sc] = g;
     return s;
@@ -423,7 +445,7 @@ template <int f_DEC, class C> struct tc_fam {
     int pf = C::NAPM && C::bw < TC_BW_ONE
                  ? (C::bw * pm + (TC_BW_ONE - C::bw) * ap2.pp(pm, row_f(node)) + TC_BW_ONE / 2) >> TC_BW_BITS
                  : pm;
-    b = tc_bit(rc, cm_pclip(pf), b);
+    b = fbit(cm_pclip(pf), b);
     mx.upd(b, C::lr, C::mb, mx.x, xq);
     if(C::NMIX > 1) {
       mx2.upd(b, C::lr, C::mb, mx.x, xq);
@@ -501,14 +523,14 @@ template <int f_DEC, class C> struct tc_fam {
       mxm.set(1, cm_stretch(z.P()));
       mxm.set(2, TC_BIAS);
       int pm = mxm.mix(bn + (u32)node);
-      b = tc_bit(rc, cm_pclip(pm), b);
+      b = fbit(cm_pclip(pm), b);
       mxm.upd(b, C::lrm, C::mbm);
       t.upd(b, C::rT, C::mwT);
       T[bt + node] = t;
       z.upd(b, C::rT, C::mwT);
       return b;
     }
-    b = tc_bit(rc, t.P(), b);
+    b = fbit(t.P(), b);
     t.upd(b, C::rT, C::mwT);
     T[bt + node] = t;
     return b;

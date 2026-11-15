@@ -15,19 +15,31 @@ constexpr int CO_COST_SHIFT = 3;                        // bitcost[] by a probab
 constexpr int CO_COSTS = 1 << (CO_PBITS - CO_COST_SHIFT);
 
 // -log2(i / CO_COSTS): a bit's cost by its probability, made as the program starts (as cm.inc's
-// tables are)
+// tables are); and within CO_EDGE of either end, where a probability's top bits say too little
+// (the families' all but sure decisions, fam.inc's fbit()), each probability's own (e: from the
+// end near 0, e[CO_EDGE + k] at CO_ONE - CO_EDGE + k)
+constexpr U32 CO_EDGE = 16;
 struct CoCosts {
-  float c[CO_COSTS + 1];
+  float c[CO_COSTS + 1], e[2 * CO_EDGE];
 };
 static CoCosts co_make_costs(void) {
   CoCosts t;
   int i;
   t.c[0] = CO_PBITS;  // (a probability of 0 as one of the least)
   for (i = 1; i <= CO_COSTS; i++) t.c[i] = (float)(-log((double)i / CO_COSTS) / log(2.0));
+  t.e[0] = CO_PBITS;
+  for (i = 1; i < (int)(2 * CO_EDGE); i++) {
+    const U32 q = i < (int)CO_EDGE ? (U32)i : CO_ONE - 2 * CO_EDGE + (U32)i;
+    t.e[i] = (float)(-log((double)q / CO_ONE) / log(2.0));
+  }
   return t;
 }
 static const CoCosts bitcost_ = co_make_costs();
 static const float (&bitcost)[CO_COSTS + 1] = bitcost_.c;
+// a bit's cost by the probability q (CO_PBITS bits) of its value
+static INLINE float co_cost(U32 q) {
+  return q < CO_EDGE ? bitcost_.e[q] : q >= CO_ONE - CO_EDGE ? bitcost_.e[q - (CO_ONE - 2 * CO_EDGE)] : bitcost[q >> CO_COST_SHIFT];
+}
 
 // The range coder of a run, coding (f_DEC 0) or decoding (1): the coroutine itself, which its base
 // is (rc.inc's Rangecoder: its bytes go to the coroutine's output, or come from its input), with
@@ -63,9 +75,9 @@ struct Coder : h264p::Rangecoder<f_DEC> {
   // a decision, p the probability of a 0 (CO_PBITS bits)
   INLINE int code_bit(U32 p, int bit) {
     uint b = (uint)bit;
-    if (!f_DEC && stats) cost[cat] += bitcost[(bit ? CO_ONE - p : p) >> CO_COST_SHIFT];
+    if (!f_DEC && stats) cost[cat] += co_cost(bit ? CO_ONE - p : p);
 #ifdef DTSD_FSTAT
-    if (!f_DEC && stats) fcost[fid] += bitcost[(bit ? CO_ONE - p : p) >> CO_COST_SHIFT];
+    if (!f_DEC && stats) fcost[fid] += co_cost(bit ? CO_ONE - p : p);
 #endif
     RC::rc_Process(p, b);
     return (int)b;
