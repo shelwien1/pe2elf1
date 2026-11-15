@@ -1749,88 +1749,96 @@ static void wav_extend(WavIn& w) {
   w.ext_n = WAV_EXT;
   for (int c = 0; c < WAV_CH; c++) w.ext_done[c] = -1;
 }
+// The linear prediction of order WAV_LPC the WAV_FIT samples of channel c before sample N make
+// (their autocorrelation under a half parabola, the newest weighted most, the windowed samples
+// taken at 25 bits; a 10000th of white noise in it; Levinson's recursion in the soft float): q
+// (Q30; q[0] 1 where it is a fit, else 0s) and qa, the sum of |q|
+static void wav_fit(const WavIn& w, int c, S64 N, S64* q, S64& qa) {
+  const S64 n = N < WAV_FIT ? N : WAV_FIT;
+  for (int i = 0; i <= WAV_LPC; i++) q[i] = 0;
+  qa = 0;
+  do {
+    if (n <= 2 * WAV_LPC) break;
+    // (not on the coroutine's stack: the windowed samples, within 2^48, shifted down to 25 bits
+    // where longer, so the products' sums are within 2^62; after RP 0s, and 0s to a multiple
+    // of 4 after them, so every lag's sum runs over the same k)
+    constexpr int RP = 68;  // (the lags made, 4 at a time: those past WAV_LPC not taken)
+    const int n4 = ((int)n + 3) & ~3;
+    S64* const xb = (S64*)xmalloc(sizeof(S64) * (RP + WAV_FIT + 4));
+    S64* const xs = xb + RP;
+    for (int k = 0; k < RP; k++) xb[k] = 0;
+    S64 vmax = 0;
+    for (int k = 0; k < (int)n; k++) {
+      xs[k] = (S64)w.at(c, N - n + k) * (k + 1) * (2 * n - k);  // (|x| <= 2^23: within 2^48)
+      vmax |= xs[k] < 0 ? ~xs[k] : xs[k];
+    }
+    for (int k = (int)n; k < n4; k++) xs[k] = 0;
+    const int sh = vmax ? imax(64 - __builtin_clzll((U64)vmax) - 25, 0) : 0;
+    for (int k = 0; k < (int)n; k++) xs[k] >>= sh;
+    S64 r[RP];
+    for (int l = 0; l < RP; l += 4) {
+#ifdef DTSD_AVX2  // (the low 32 bits of each lane signed: the samples, as they are within 2^25)
+      __m256i a0 = _mm256_setzero_si256(), a1 = a0, a2 = a0, a3 = a0;
+      for (int k = 0; k < n4; k += 4) {
+        const __m256i x = _mm256_loadu_si256((const __m256i*)(xs + k));
+        a0 = _mm256_add_epi64(a0, _mm256_mul_epi32(x, _mm256_loadu_si256((const __m256i*)(xs + k - l))));
+        a1 = _mm256_add_epi64(a1, _mm256_mul_epi32(x, _mm256_loadu_si256((const __m256i*)(xs + k - l - 1))));
+        a2 = _mm256_add_epi64(a2, _mm256_mul_epi32(x, _mm256_loadu_si256((const __m256i*)(xs + k - l - 2))));
+        a3 = _mm256_add_epi64(a3, _mm256_mul_epi32(x, _mm256_loadu_si256((const __m256i*)(xs + k - l - 3))));
+      }
+      alignas(32) S64 t[16];
+      _mm256_store_si256((__m256i*)t, a0), _mm256_store_si256((__m256i*)(t + 4), a1);
+      _mm256_store_si256((__m256i*)(t + 8), a2), _mm256_store_si256((__m256i*)(t + 12), a3);
+      for (int j = 0; j < 4; j++) r[l + j] = t[4 * j] + t[4 * j + 1] + t[4 * j + 2] + t[4 * j + 3];
+#else
+      for (int j = 0; j < 4; j++) {
+        S64 a = 0;
+        for (int k = 0; k < n4; k++) a += xs[k] * xs[k - l - j];
+        r[l + j] = a;
+      }
+#endif
+    }
+    free(xb);
+    if (r[0] <= 0) break;
+    Sf R[WAV_LPC + 1], a[WAV_LPC + 1], t[WAV_LPC + 1];
+    for (int l = 0; l <= WAV_LPC; l++) R[l] = sf_make(r[l], 0);
+    R[0] = sf_add(R[0], sf_make(r[0] / 10000, 0));
+    const Sf one = sf_make(1, 0);
+    a[0] = one;
+    Sf err = R[0];
+    int m = 1;
+    for (; m <= WAV_LPC; m++) {
+      Sf acc = R[m];
+      for (int i = 1; i < m; i++) acc = sf_add(acc, sf_mul(a[i], R[m - i]));
+      Sf k = sf_div(acc, err);
+      k.m = -k.m;
+      for (int i = 1; i < m; i++) t[i] = sf_add(a[i], sf_mul(k, a[m - i]));
+      for (int i = 1; i < m; i++) a[i] = t[i];
+      a[m] = k;
+      err = sf_mul(err, sf_sub(one, sf_mul(k, k)));
+      if (err.m <= 0) break;
+    }
+    if (m <= WAV_LPC) break;  // (not a fit: 0s)
+    for (int i = 1; i <= WAV_LPC; i++) {
+      Sf u = a[i];
+      u.m = -u.m;
+      q[i] = sf_int(u, 30);
+      qa = qa < (S64)1 << 39 ? qa + (q[i] < 0 ? -q[i] : q[i]) : qa;
+    }
+    q[0] = 1;  // (a fit)
+  } while (0);
+}
 // (each channel's fit as its continuation is first read, then the continuation as far as it is
 // read, 256 samples at a time: as making all of it at once)
 void WavIn::ext_more(int c, S64 kneed) const {
   const WavIn& w = *this;
   static_assert(WAV_FIT <= WAV_WIN, "the samples fitted are in the window");
-  const S64 N = (S64)w.nsamp, n = N < WAV_FIT ? N : WAV_FIT;  // (those fitted: the ring has them)
+  const S64 N = (S64)w.nsamp;  // (those fitted, WAV_FIT before it: the ring has them)
   S64* const q = ext_q[c];  // (the predictor, Q30: x[t] by sum q_i x[t - i])
   S64& qa = ext_qa[c];      // (the sum of |q_i|, where under 2^39: the sums in 64 bits)
   if (ext_done[c] < 0) {
     ext_done[c] = 0;
-    for (int i = 0; i <= WAV_LPC; i++) q[i] = 0;
-    qa = 0;
-    do {
-      if (n <= 2 * WAV_LPC) break;
-      // (not on the coroutine's stack: the windowed samples, within 2^48, shifted down to 25 bits
-      // where longer, so the products' sums are within 2^62; after RP 0s, and 0s to a multiple
-      // of 4 after them, so every lag's sum runs over the same k)
-      constexpr int RP = 68;  // (the lags made, 4 at a time: those past WAV_LPC not taken)
-      const int n4 = ((int)n + 3) & ~3;
-      S64* const xb = (S64*)xmalloc(sizeof(S64) * (RP + WAV_FIT + 4));
-      S64* const xs = xb + RP;
-      for (int k = 0; k < RP; k++) xb[k] = 0;
-      S64 vmax = 0;
-      for (int k = 0; k < (int)n; k++) {
-        xs[k] = (S64)w.at(c, N - n + k) * (k + 1) * (2 * n - k);  // (|x| <= 2^23: within 2^48)
-        vmax |= xs[k] < 0 ? ~xs[k] : xs[k];
-      }
-      for (int k = (int)n; k < n4; k++) xs[k] = 0;
-      const int sh = vmax ? imax(64 - __builtin_clzll((U64)vmax) - 25, 0) : 0;
-      for (int k = 0; k < (int)n; k++) xs[k] >>= sh;
-      S64 r[RP];
-      for (int l = 0; l < RP; l += 4) {
-#ifdef DTSD_AVX2  // (the low 32 bits of each lane signed: the samples, as they are within 2^25)
-        __m256i a0 = _mm256_setzero_si256(), a1 = a0, a2 = a0, a3 = a0;
-        for (int k = 0; k < n4; k += 4) {
-          const __m256i x = _mm256_loadu_si256((const __m256i*)(xs + k));
-          a0 = _mm256_add_epi64(a0, _mm256_mul_epi32(x, _mm256_loadu_si256((const __m256i*)(xs + k - l))));
-          a1 = _mm256_add_epi64(a1, _mm256_mul_epi32(x, _mm256_loadu_si256((const __m256i*)(xs + k - l - 1))));
-          a2 = _mm256_add_epi64(a2, _mm256_mul_epi32(x, _mm256_loadu_si256((const __m256i*)(xs + k - l - 2))));
-          a3 = _mm256_add_epi64(a3, _mm256_mul_epi32(x, _mm256_loadu_si256((const __m256i*)(xs + k - l - 3))));
-        }
-        alignas(32) S64 t[16];
-        _mm256_store_si256((__m256i*)t, a0), _mm256_store_si256((__m256i*)(t + 4), a1);
-        _mm256_store_si256((__m256i*)(t + 8), a2), _mm256_store_si256((__m256i*)(t + 12), a3);
-        for (int j = 0; j < 4; j++) r[l + j] = t[4 * j] + t[4 * j + 1] + t[4 * j + 2] + t[4 * j + 3];
-#else
-        for (int j = 0; j < 4; j++) {
-          S64 a = 0;
-          for (int k = 0; k < n4; k++) a += xs[k] * xs[k - l - j];
-          r[l + j] = a;
-        }
-#endif
-      }
-      free(xb);
-      if (r[0] <= 0) break;
-      Sf R[WAV_LPC + 1], a[WAV_LPC + 1], t[WAV_LPC + 1];
-      for (int l = 0; l <= WAV_LPC; l++) R[l] = sf_make(r[l], 0);
-      R[0] = sf_add(R[0], sf_make(r[0] / 10000, 0));
-      const Sf one = sf_make(1, 0);
-      a[0] = one;
-      Sf err = R[0];
-      int m = 1;
-      for (; m <= WAV_LPC; m++) {
-        Sf acc = R[m];
-        for (int i = 1; i < m; i++) acc = sf_add(acc, sf_mul(a[i], R[m - i]));
-        Sf k = sf_div(acc, err);
-        k.m = -k.m;
-        for (int i = 1; i < m; i++) t[i] = sf_add(a[i], sf_mul(k, a[m - i]));
-        for (int i = 1; i < m; i++) a[i] = t[i];
-        a[m] = k;
-        err = sf_mul(err, sf_sub(one, sf_mul(k, k)));
-        if (err.m <= 0) break;
-      }
-      if (m <= WAV_LPC) break;  // (not a fit: 0s)
-      for (int i = 1; i <= WAV_LPC; i++) {
-        Sf u = a[i];
-        u.m = -u.m;
-        q[i] = sf_int(u, 30);
-        qa = qa < (S64)1 << 39 ? qa + (q[i] < 0 ? -q[i] : q[i]) : qa;
-      }
-      q[0] = 1;  // (a fit)
-    } while (0);
+    wav_fit(w, c, N, q, qa);
   }
   S32* const e = w.ext + (size_t)c * WAV_EXT;
   const int k0 = ext_done[c], k1 = (int)(kneed + 256 < WAV_EXT ? (kneed + 256) & ~255 : WAV_EXT);
@@ -1857,6 +1865,33 @@ void WavIn::ext_more(int c, S64 kneed) const {
     e[k] = (S32)(v < -(1 << 23) ? -(1 << 23) : v > (1 << 23) - 1 ? (1 << 23) - 1 : v);
     hb[WAV_LPC + (k - k0)] = e[k];
   }
+}
+
+// channel c's continuation of n samples from its sample E (out), by the fit q, qa wav_fit() makes
+// there: as ext_more() makes the WAV's own from its end
+static void wav_run(const WavIn& w, int c, S64 E, const S64* q, S64 qa, S32* out, int n) {
+  if (!q[0]) {
+    for (int k = 0; k < n; k++) out[k] = 0;
+    return;
+  }
+  S32* const hb = (S32*)xmalloc(sizeof(S32) * (size_t)(WAV_LPC + n));  // (the samples before E, then those made)
+  for (int i = 0; i < WAV_LPC; i++) hb[i] = w.at(c, E - WAV_LPC + i);
+  for (int k = 0; k < n; k++) {
+    const S32* const h = hb + WAV_LPC + k;
+    S64 v;
+    if (qa < (S64)1 << 39) {  // (|x| <= 2^23)
+      S64 p = 0;
+      for (int i = 1; i <= WAV_LPC; i++) p += q[i] * h[-i];
+      v = (p + ((S64)1 << 29)) >> 30;
+    } else {
+      S128 p = 0;
+      for (int i = 1; i <= WAV_LPC; i++) p += (S128)q[i] * h[-i];
+      v = (S64)((p + ((S128)1 << 29)) >> 30);
+    }
+    out[k] = (S32)(v < -(1 << 23) ? -(1 << 23) : v > (1 << 23) - 1 ? (1 << 23) - 1 : v);
+    hb[WAV_LPC + k] = out[k];
+  }
+  free(hb);
 }
 
 // The correction's least squares fit: the decimated samples around each LFE sample (f, NF of

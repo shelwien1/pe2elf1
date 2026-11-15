@@ -26,6 +26,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   int nsmp;       // the subframe's samples
   int ext_set;    // (the WAV's continuation past its end: 1 made, 2 taken or not: smp_subframe())
   int past_on;    // (and whether the audio far past it is the encoder's: past_end())
+  // (a cut stream's WAV whose last frame a decoder made from that frame alone, vend_swap(): whether
+  // that's been decided, whether that frame's samples are the continuation from its start now,
+  // where it starts, the WAV's own there, the analyses' reach as it was)
+  int vend_set, vend_on, vend_past;
+  S64 vend_e, vend_ag;
+  S32* vend_buf;
   int bound[NCH];  // whether the subframe's channel has the audio's subband samples (X)
   S64 X[NCH][NSUB][NSMP];  // the audio's subband samples in the subframe (2^-AQ_F)
   S64 xh[NCH][NSUB][4];    // the audio's last 4 before the subframe (xh[.][.][0] the last)
@@ -682,8 +688,66 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // one ends with its WAV, but its last frame, 512 samples ahead, has the audio that went on, which
   // no continuation makes; there an index is coded without the audio (past_on, a bit, as smp_subframe()
   // finds the continuation making fewer than half of those indexes)
-  bool past_far(S64 t) const { return wav && 32 * bind.up * t + bind.off - (S64)wav->nsamp > WAV_PAST * bind.up; }
-  bool past_end(S64 t) const { return past_on && past_far(t); }
+  // (past vend_e, while the frames before a cut stream's last take the continuation from there:
+  // VEND_PAST, the one that makes the frames before most of their indexes; 128 to 384 tried)
+  static constexpr int VEND_PAST = 256;
+  bool past_far(S64 t) const {
+    return wav && 32 * bind.up * t + bind.off - (vend_on ? vend_e : (S64)wav->nsamp) > (vend_on ? VEND_PAST : WAV_PAST) * bind.up;
+  }
+  bool past_end(S64 t) const { return (vend_on ? vend_past : past_on) && past_far(t); }
+  // every channel but the LFE's samples from vend_e to the WAV's end: the continuation from vend_e
+  // (on), or their own again (the continuation of the WAV's end fitted before, on its own samples)
+  void vend_swap(bool on) {
+    WavIn& w = *wav;
+    const S64 n = (S64)w.nsamp - vend_e;
+    if (on) {
+      for (int c = 0; w.ext && c < w.nch; c++)
+        if (w.ext_done[c] < 0) w.ext_more(c, 0);
+      vend_buf = (S32*)xmalloc(sizeof(S32) * (size_t)(w.nch * n));
+      S32* const run = (S32*)xmalloc(sizeof(S32) * (size_t)n);
+      for (int c = 0; c < w.nch; c++) {
+        S32* const sv = vend_buf + (size_t)c * n;
+        for (S64 k = 0; k < n; k++) sv[k] = w.ring[c][(vend_e + k) & (WAV_WIN - 1)];
+        if (c == bind.lfe) continue;
+        S64 q[WAV_LPC + 1], qa;
+        wav_fit(w, c, vend_e, q, qa);
+        wav_run(w, c, vend_e, q, qa, run, (int)n);
+        for (S64 k = 0; k < n; k++) w.ring[c][(vend_e + k) & (WAV_WIN - 1)] = run[k];
+      }
+      free(run);
+      vend_ag = w.ana_got, w.ana_got = imin64(w.ana_got, vend_e);
+    } else {
+      for (int c = 0; c < w.nch; c++)
+        for (S64 k = 0; k < n; k++) w.ring[c][(vend_e + k) & (WAV_WIN - 1)] = vend_buf[(size_t)c * n + k];
+      free(vend_buf);
+      vend_buf = nullptr;
+      w.ana_got = vend_ag;
+    }
+    vend_on = on;
+  }
+  // (c) of the subframe's samples j0 on, those of its bound channels' subbands that neither predict
+  // nor are VQ ones whose index the analysis makes (as ext_hits())
+  int vend_hits(const CoreRec& r, const CoreSub& s, S64 o0, int j0, int* hp = nullptr, int* np = nullptr) {
+    int h = 0;
+    S64 x[64];
+    for (int ch = r.ch0(); ch < r.ch1(); ch++) {
+      if (!bind.bound(ch, wav->nch)) continue;
+      for (int j = j0; j < nsmp; j++) {
+        analyze_bound(*wav, bind, ch, o0 + 32 * bind.up * j, fir, x, x96a ? NSUB96 : NSUB, !ss_rule() && !x96a);
+        for (int b = 0; b < r.nvqsub[ch]; b++) {
+          const int a = s.abits[ch][b];
+          if (!a || s.pmode[ch][b]) continue;
+          S64 qlo, qhi, alt;
+          S128 dist;
+          quant_range(r, ch, a, qlo, qhi);
+          const int hit = requant(x[b], step_scale(r, s, ch, b, j >> 3), qlo, qhi, &dist, &alt) == s.q[ch][b][j];
+          h += hit;
+          if (hp && past_far(t0 + j)) *hp += hit, ++*np;
+        }
+      }
+    }
+    return h;
+  }
 
   // --- the subframe's audio --------------------------------------------------------------------------
 
@@ -715,6 +779,37 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       hi = imax(hi, 64 * up * (n0 + lfe_n - 1 + LFE_K) + bind.off + 32 * up);
     }
     wav->need(lo, hi);
+    // (where the analysis first reaches into the WAV's last frame (of the core's frame's length), but
+    // not past its end: a cut stream's WAV whose last frame a decoder made from that frame's own
+    // subband samples alone, its synthesis without the frames before (FFmpeg's, where the lossless
+    // extension ends before the core does), lacks what those frames' samples add there, and nothing
+    // there says what that was; so the frames before take the continuation from that frame's start
+    // instead (each channel but the LFE, whose decoding has no such gap) where it makes more of the
+    // subframe's indexes, a bit, and code without the audio their samples whose windows lie past
+    // that by more than VEND_PAST where the continuation makes fewer than half of those, a second
+    // bit; the WAV's own again where the analysis reaches past its end. Since format 101: 3 MB of
+    // `s.2.dts`'s middle 8.4% smaller, FATE's `Master Audio 5.0 96khz.dts` 5.0%, `Master Audio
+    // 7.1.dts` 2.9%; with that frame as the decoder made it going on (a bound) 28%; the last frame
+    // taking the continuation too, bigger)
+    const S64 fr = 32 * (S64)up * (r.nblks + 1), ve = (S64)wav->nsamp - fr;
+    if (!vend_set && hs > ve && hs <= (S64)wav->nsamp && ve >= fr && fr <= WAV_EXT) {
+      vend_set = 1;
+      wav->need(lo, (S64)wav->nsamp);
+      if (wav->got == wav->nsamp) {
+        vend_e = ve;
+        int m = 0, hp = 0, np = 0;
+        if (ENC) {
+          const int j0 = (int)clip((ve - o0) / (32 * (S64)up) + 1, 0, nsmp);
+          const int h0 = vend_hits(r, s, o0, j0);
+          vend_swap(true);
+          m = vend_hits(r, s, o0, j0, &hp, &np) > h0;
+          if (!m) vend_swap(false);
+        }
+        if (c->code_bit(CO_ONE / 2, m) && !vend_on) vend_swap(true);
+        if (vend_on) vend_past = c->code_bit(CO_ONE / 2, ENC && 2 * hp < np);
+      }
+    }
+    if (vend_on && hs > (S64)wav->nsamp) vend_swap(false);
     // (past the WAV's end, its continuation: from where the subbands' analysis first reaches past
     // it, or 0s, whichever makes more of that subframe's indexes, a bit: the encoder's input went
     // on, or ended; the LFE's windows, reaching on further, have it before)

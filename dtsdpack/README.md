@@ -90,8 +90,8 @@ Exit codes:
 |---|---:|---:|---:|---:|
 | `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 79479 (0.16%) | 71.86% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3650 (0.29%) | | |
-| 3 MB from its middle (5.7 s) | 1068372 | 5271 (0.49%) | | |
-| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2811 (0.12%) | | |
+| 3 MB from its middle (5.7 s) | 1068372 | 4827 (0.45%) | | |
+| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2812 (0.12%) | | |
 
 Compressing the whole of `s.2.dts`'s core takes 78 seconds (0.6 MB of core a second; 71 in format
 95, 38 before the HF VQ's sampling of format 93, below) and 42 MB of memory, decompressing it 80
@@ -1291,7 +1291,7 @@ files.
 
 ### The format
 
-"dtsdpack", the format's version (100), the level; what the WAV was (whether it was one, its
+"dtsdpack", the format's version (101), the level; what the WAV was (whether it was one, its
 channels and bytes a sample, its size and the CRC-32 of its first 64 KB) and the binding (the
 offset; the WAV's samples to the core's, 1, 2 or 4 (its lower band, then 2), and the lower band's
 resolution; the LFE's channel; each core channel's WAV channel, and where it isn't that channel
@@ -1332,11 +1332,20 @@ binding's fields at a fixed size: up to a third of a 7-frame DTS-HD MA sample's 
   `s.2.dts`. The WAV's continuation by LPC makes the indexes whose windows end 64-128 samples past
   it 71-77% of the time, 42-59% at 128-192, 10-26% at 192-256 (their signs 83-90%); past 192 they
   go without it (160-320 tried: 224 makes 35 bytes fewer in all, some streams bigger). In three of
-  them the frame before costs as much again, its analysis all in the WAV: the WAV's last frame
-  isn't the encoder's input either (`Master Audio 7.1.dts`'s has two channels 0; `Master Audio 5.0
-  96khz.dts`, the 3 MB from `s.2.dts`'s middle), yet the WAV taken a frame shorter costs more
-  (67-164 bytes). (A decoded WAV's last frame could be solved for, the decoder's synthesis being
-  known, but the system is ill-conditioned for the frame's later blocks.) And in its first frames
+  them (`Master Audio 7.1.dts`, `Master Audio 5.0 96khz.dts`, the 3 MB from `s.2.dts`'s middle) the
+  frame before cost as much again, its analysis all in the WAV: their WAV's last frame is FFmpeg's
+  decode of that frame alone, its synthesis without the frames before (as where the lossless
+  extension ends before the core does: every channel but the LFE starts at 0 and comes to the
+  decode by the frame's end; the decode going on in its place, the 3 MB from the middle 28%
+  smaller), and nothing in it says what the frames before add there. The WAV taken a frame shorter
+  costs more (67-164 bytes), the last frame's own samples being there; so since format 101 the
+  frames before alone take the continuation from that frame's start (every channel but the LFE),
+  where that makes more of their indexes, a bit, and go without the audio past it by 256 samples
+  or more where it makes fewer than half of those, a second bit (128 to 384 tried): the 3 MB from
+  the middle 8.4% smaller, `Master Audio 5.0 96khz.dts` 5.0%, `Master Audio 7.1.dts` 2.9%. (A
+  decoded WAV's last frame could be solved for, the decoder's synthesis being known, but the
+  system is ill-conditioned for the frame's later blocks; and the frames before's part of a
+  last frame decoded alone can't be: the WAV has none of it.) And in its first frames
   the WAV isn't quite the encoder's input: `3-1.dts`'s first six 1.6 KB, noise of about a step,
   white, in all its subbands, as if each channel's decoder state caught up; and a whole program's
   too, `s.2.dts`'s first 15 frames about 0.8 KB (9% of frame 0's indexes missed, 1% of frame 10's,
