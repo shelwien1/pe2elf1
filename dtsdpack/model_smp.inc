@@ -1932,11 +1932,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (u < 1) u = 1;
       D.ml = k2 < 0 ? 0 : imin(near_bucket(k2, u, 25), 13);
     }
-    B::sel(f_vqr, D);
-    int at = 0;
-    if (ENC)
-      while (cand[at].i != v) at++;
-    double qr[64];  // (pq, each candidate's probability, by rank)
+    // (pq, each candidate's probability, by rank; and how sure that is, mq, the likeliest one's
+    // probability, which selects the first mixer's weights and a table's rows: how far to trust the
+    // posterior goes with how sure it is. Since format 99: `s.2.dts`'s core 0.07% smaller, 0.11%
+    // with vqr tuned again, the short streams 0.03%; the likeliest one's against the first in the
+    // order too, or 5 or 12 classes rather than 8, the same; in the other mixers' indexes, bigger)
+    double qr[64];
+    D.mq = 0;
     if (pq) {
       int ix[64];
       for (int a = 0; a < n; a++) {
@@ -1945,7 +1947,14 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         ix[k] = a;
       }
       for (int k = 0; k < n; k++) qr[k] = pq[cand[ix[k]].i];
+      double pt = qr[0];
+      for (int k = 1; k < n; k++) pt = qr[k] > pt ? qr[k] : pt;
+      D.mq = 1 + (pt < 0.3 ? 0 : pt < 0.45 ? 1 : pt < 0.6 ? 2 : pt < 0.75 ? 3 : pt < 0.9 ? 4 : pt < 0.97 ? 5 : pt < 0.995 ? 6 : 7);
     }
+    B::sel(f_vqr, D);
+    int at = 0;
+    if (ENC)
+      while (cand[at].i != v) at++;
     const int r = code_rank(ENC ? rank_of(cand, n, at) : 0, nb, D, cand, n, pq ? qr : nullptr);
     if (!ENC) v = select_rank(cand, n, r);
     if (mu > 0 && r) {

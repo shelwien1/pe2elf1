@@ -13,7 +13,7 @@ Const 0
 Index a
  a_pk: pk, 1!0
  a_nr: nr, 1!100001101110111
- a_nl: nl, 1!000000110101001
+ a_nl: nl, 1!000000111101001
 
 Index b
  b_pk: pk, 1!1
@@ -22,19 +22,19 @@ Index b
 
 Index c
  c_pk: pk, 1!0
- c_nr: nr, 1!100001011111110
+ c_nr: nr, 1!100000011111110
  c_hm: hm, 1!11
 
 Index d
  d_pk: pk, 1!0
- d_ab: ab, 1!000111001111010110101100100
+ d_ab: ab, 1!001111001111010110101100100
  d_m1: m1, 1!1111010000000000000000
 
 Index e
  e_pk: pk, 1!1
  e_ab: ab, 1!010001010000000000000000000
- e_m1: m1, 1!1111111001001110000000
- e_m2: m2, 1!1111100011000101000000
+ e_m1: m1, 1!1111111001100010000000
+ e_m2: m2, 1!1111100011000001100000
 
 Index h
  h_pk: pk, 1!0
@@ -59,18 +59,18 @@ Index k
 
 Index l
  l_pk: pk, 1!1
- l_nl: nl, 1!101110100100110
- l_ab: ab, 1!011111101111100110101100000
+ l_nl: nl, 1!100011100100010
+ l_ab: ab, 1!011111101111100110100100000
 
 Index s
  s_pk: pk, 1!0
- s_nr: nr, 1!000000000001111
- s_nl: nl, 1!111011110011001
+ s_nr: nr, 1!000000000000111
+ s_nl: nl, 1!001011110011001
 
 Index f
  f_pk: pk, 1!1
  f_nl: nl, 1!010001000000101
- f_nr: nr, 1!000000101100000
+ f_nr: nr, 1!000000110100000
 
 Index m
  m_pk: pk, 1!0
@@ -90,23 +90,23 @@ Index g
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
 Number rA, 1, 0!00000100
-Number mwA, 1, 0!11101110
-Number rB, 1, 0!11111100
+Number mwA, 1, 0!11110110
+Number rB, 1, 0!11100010
 Number mwB, 1, 0!00000000
-Number rC, 1, 0!10110000
-Number mwC, 1, 0!11111101
-Number rD, 1, 0!10111101
-Number mwD, 1, 0!00011000
+Number rC, 1, 0!11000010
+Number mwC, 1, 0!11111111
+Number rD, 1, 0!10111010
+Number mwD, 1, 0!00011001
 Number rE, 1, 0!11110110
 Number mwE, 1, 0!00000100
-Number rH, 1, 0!11010110
+Number rH, 1, 0!11001100
 Number mwH, 1, 0!00000000
 Number rI, 1, 0!11011111
-Number mwI, 1, 0!11010011
-Number rJ, 1, 0!10111000
+Number mwI, 1, 0!11010000
+Number rJ, 1, 0!11101000
 Number mwJ, 1, 0!00000000
-Number rK, 1, 0!11001111
-Number mwK, 1, 0!11101100
+Number rK, 1, 0!11000111
+Number mwK, 1, 0!11111000
 Number rL, 1, 0!11101010
 Number mwL, 1, 0!01000000
 Number lr, 1, 0!10100

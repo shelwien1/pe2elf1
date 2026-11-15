@@ -147,7 +147,9 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      2^-18 of ml's unit of it (0, 1, 2, 3-4, 5-8, more: 0-5; 6 none), gr past a miss's first bucket t (the
 //      rank 2^t or more?), how far the next bucket's first candidate (2^t) lies from the best against
 //      this one's (2^(t-1)), in doublings (0 within 2 times, 6 by 64 or more; 7 none: the first
-//      bucket, the bits below a bucket's top, no candidate 2^t)
+//      bucket, the bits below a bucket's top, no candidate 2^t), mq a lossless WAV's HF VQ group's
+//      or vector's Monte Carlo posterior's (model_smp.inc's hf_mc()) likeliest candidate's
+//      probability (0 none; 1-8 below 0.3, 0.45, 0.6, 0.75, 0.9, 0.97, 0.995, else)
 // raw: c1, c2 the bytes before, code what the bytes are (0 between frames, 1 a frame kept as bytes,
 //      2 the bits after the subframes, 3 those before the XCH extension), at the byte's place
 //      (tc_qlog; the tail's and the gap's from their end), cl
@@ -158,7 +160,7 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 #define M_scl_VARS(X) X(kd) X(ab) X(pm) X(pk) X(pn) X(lp) X(hm) X(bd) X(dp) X(cc) X(nb) X(pl)
 #define M_hit_VARS(X) X(pm) X(nr) X(nl) X(ab) X(ql) X(hm)
 #define M_smp_VARS(X) X(ab) X(hw) X(pk) X(nr) X(nl) X(ql) X(hm) X(pm) X(bd) X(m1) X(m2) X(sq) X(s1)
-#define M_vqr_VARS(X) X(kd) X(cc) X(bd) X(mg) X(gn) X(lh) X(ml) X(nc) X(gr)
+#define M_vqr_VARS(X) X(kd) X(cc) X(bd) X(mg) X(gn) X(lh) X(ml) X(nc) X(gr) X(mq)
 #define M_raw_VARS(X) X(c1) X(c2) X(code) X(at) X(cl)
 
 // the variables as the model gives them to a family
