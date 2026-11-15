@@ -422,21 +422,26 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // encoder's arithmetic errs by more or less than the level says as the signal goes (format 71's
   // one count at 128: `s.2.dts`'s core 0.4% smaller than at 2^18, `96-24.dts`'s 0.1% bigger; with
   // both, at 64, those two 0.08% and 0.11% smaller still; at 16, with HIT_PRIOR 1 rather than 2,
-  // FATE's samples 1.0-1.6% smaller, the 7-frame xll ones 0.3-0.7%, `s.2.dts`'s core 0.04%)
-  static constexpr U32 HIT_ONE = 256, HIT_PRIOR = 1, HIT_LIMIT = 1u << 4, HIT_SLIMIT = 1u << 18, HIT_RLIMIT = 1u << 12;
+  // FATE's samples 1.0-1.6% smaller, the 7-frame xll ones 0.3-0.7%, `s.2.dts`'s core 0.04%; since
+  // format 106, with the calibration below, HIT_PRIOR 2 again: `s.2.dts`'s core 42 bytes smaller,
+  // the short streams 8 bigger; at 3, 7 bytes bigger in all; the fast counts at 8 or 32 flags, or
+  // the rows at 2^14, the short streams' and `s.2.dts`'s gains each the other's loss)
+  static constexpr U32 HIT_ONE = 256, HIT_PRIOR = 2, HIT_LIMIT = 1u << 4, HIT_SLIMIT = 1u << 18, HIT_RLIMIT = 1u << 12;
   U32 hit_c[2][4][16][QB_N][QB_N][4], hit_r[2][4][16][QB_N][2];
   // (format 104) And then calibrated: by its miss probability's log2 in halves (HAP_N bins, one
   // between two weighing on both by how near), the misses each bin's flags were expected to make
   // and those they made (2^26 a miss), its probability times their ratio ((made + 2) / (expected +
-  // 2)); in two tables, one halved at 32 misses (expected and made), one at 4096, and of the fast
-  // one's, the slow one's and their mean (of the logs) the one whose flags have cost the least so
-  // far (hap_k, 2^-16 bits): the cells' rates' geometric mean, from counts that start empty, is
-  // not how often their flags miss (with the cap's fourth bin, tc_fam.inc's, 12 bytes of it: the
-  // regression set 0.16% smaller, FATE's samples 0.4-1.8%, the 7-frame xll ones 0.4-1.0%,
-  // `s.2.dts`'s core 0.10%, `dts_es.dts`'s 0.17% bigger; one table, halved at 1024 misses, 0.08%
-  // smaller, by the cells' class of recent misses too 0.07%, by quarters of a log2 0.07%)
+  // 2)); in two tables, one halved at 4 misses (expected and made; at 32 until format 106: with
+  // HIT_PRIOR 2, at 16 the short streams 19 bytes smaller, at 8 45, at 4 54, at 2 the same), one at
+  // 4096, and of the fast one's, the slow one's and their mean (of the logs) the one whose flags
+  // have cost the least so far (hap_k, 2^-16 bits): the cells' rates' geometric mean, from counts
+  // that start empty, is not how often their flags miss (with the cap's fourth bin, tc_fam.inc's,
+  // 12 bytes of it: the regression set 0.16% smaller, FATE's samples 0.4-1.8%, the 7-frame xll ones
+  // 0.4-1.0%, `s.2.dts`'s core 0.10%, `dts_es.dts`'s 0.17% bigger; one table, halved at 1024
+  // misses, 0.08% smaller, by the cells' class of recent misses too 0.07%, by quarters of a log2
+  // 0.07%)
   static constexpr int HAP_N = 40;
-  static constexpr U64 HAP_A = (U64)2 << 26, HAP_FAST = (U64)1 << 31, HAP_SLOW = (U64)1 << 38;
+  static constexpr U64 HAP_A = (U64)2 << 26, HAP_FAST = (U64)1 << 28, HAP_SLOW = (U64)1 << 38;
   U64 hap_e[2][2][HAP_N], hap_m[2][2][HAP_N];  // (by kd, the PMODE; the fast table and the slow one)
   S64 hap_k[2][3];
   // (format 80) An index's miss in the channels coded before, at the same subband's same sample:
