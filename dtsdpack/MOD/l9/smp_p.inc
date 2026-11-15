@@ -16,7 +16,7 @@ void D9_smp_make( const M_smp_v & D, tcx & X ) {
   M_smp_VARS(M_LOCAL)
 
   a = 0;
-  a = a*4 + D9_smp_a_nr[__min(15,__max(0,(nr)-(1-1)))];
+  a = a*3 + (((nr)>7+(1-1))+((nr)>13+(1-1)));
   a = a*7 + D9_smp_a_nl[__min(15,__max(0,(nl)-(1-1)))];
 
   b = 0;
@@ -25,13 +25,14 @@ void D9_smp_make( const M_smp_v & D, tcx & X ) {
   b = b*14 + D9_smp_b_ql[__min(21,__max(0,(ql)-(1-1)))];
 
   c = 0;
+  c = c*2 + (((pk)>0+(1-1)));
   c = c*7 + D9_smp_c_nr[__min(15,__max(0,(nr)-(1-1)))];
   c = c*3 + (((hm)>0+(1-1))+((hm)>1+(1-1)));
 
   d = 0;
   d = d*2 + (((pk)>0+(1-1)));
-  d = d*14 + D9_smp_d_ab[__min(27,__max(0,(ab)-(1-1)))];
-  d = d*9 + D9_smp_d_m1[__min(22,__max(0,(m1)-(1-1)))];
+  d = d*15 + D9_smp_d_ab[__min(27,__max(0,(ab)-(1-1)))];
+  d = d*8 + D9_smp_d_m1[__min(22,__max(0,(m1)-(1-1)))];
 
   e = 0;
   e = e*2 + (((pk)>0+(1-1)));
@@ -41,17 +42,18 @@ void D9_smp_make( const M_smp_v & D, tcx & X ) {
 
   h = 0;
   h = h*13 + D9_smp_h_ab[__min(27,__max(0,(ab)-(1-1)))];
-  h = h*2 + (((nr)>2+(1-1)));
+  h = h*2 + (((nr)>5+(1-1)));
 
   i = 0;
   i = i*2 + (((pk)>0+(1-1)));
   i = i*9 + D9_smp_i_ab[__min(27,__max(0,(ab)-(1-1)))];
+  i = i*2 + (((hw)>2+(1-1)));
   i = i*2 + (((pm)>0+(1-1)));
 
   j = 0;
   j = j*2 + (((pk)>0+(1-1)));
-  j = j*10 + D9_smp_j_ab[__min(27,__max(0,(ab)-(1-1)))];
-  j = j*9 + D9_smp_j_bd[__min(31,__max(0,(bd)-(1-1)))];
+  j = j*9 + D9_smp_j_ab[__min(27,__max(0,(ab)-(1-1)))];
+  j = j*8 + D9_smp_j_bd[__min(31,__max(0,(bd)-(1-1)))];
 
   k = 0;
   k = k*6 + D9_smp_k_nr[__min(15,__max(0,(nr)-(1-1)))];
@@ -60,16 +62,16 @@ void D9_smp_make( const M_smp_v & D, tcx & X ) {
   l = 0;
   l = l*2 + (((pk)>0+(1-1)));
   l = l*9 + D9_smp_l_nl[__min(15,__max(0,(nl)-(1-1)))];
-  l = l*14 + D9_smp_l_ab[__min(27,__max(0,(ab)-(1-1)))];
+  l = l*15 + D9_smp_l_ab[__min(27,__max(0,(ab)-(1-1)))];
 
   s = 0;
   s = s*3 + (((nr)>8+(1-1))+((nr)>13+(1-1)));
-  s = s*8 + D9_smp_s_nl[__min(15,__max(0,(nl)-(1-1)))];
+  s = s*9 + D9_smp_s_nl[__min(15,__max(0,(nl)-(1-1)))];
 
   f = 0;
   f = f*2 + (((pk)>0+(1-1)));
   f = f*4 + D9_smp_f_nl[__min(15,__max(0,(nl)-(1-1)))];
-  f = f*2 + (((nr)>7+(1-1)));
+  f = f*3 + (((nr)>9+(1-1))+((nr)>10+(1-1)));
 
   m = 0;
 

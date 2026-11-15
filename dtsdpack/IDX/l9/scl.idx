@@ -17,14 +17,14 @@ Index a
 Index b
  b_kd: kd, 1!111
  b_pk: pk, 1!1
- b_pn: pn, 1!1100000
+ b_pn: pn, 1!0100000
  b_dp: dp, 1!1100110
  b_pl: pl, 1!100000011100110
 
 Index c
  c_kd: kd, 1!000
  c_pk: pk, 1!1
- c_ab: ab, 1!001100100000000001110000000
+ c_ab: ab, 1!001100100000000001110000100
 
 Index d
  d_kd: kd, 1!000
@@ -58,14 +58,14 @@ Index j
 Index k
  k_kd: kd, 1!000
  k_pk: pk, 1!1
- k_lp: lp, 1!111011101
+ k_lp: lp, 1!111011111
  k_pn: pn, 1!1011101
 
 Index l
  l_kd: kd, 1!101
  l_pk: pk, 1!1
  l_hm: hm, 1!01
- l_ab: ab, 1!011000111101000010111110000
+ l_ab: ab, 1!011000110111000000111100000
 
 Index s
  s_kd: kd, 1!110
@@ -82,7 +82,7 @@ Index f
 Index m
  m_kd: kd, 1!010
  m_pk: pk, 1!1
- m_dp: dp, 1!1001101
+ m_dp: dp, 1!1000011
 
 Index w
  w_pn: pn, 1!0000000
@@ -102,22 +102,22 @@ Index g
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
 Number rA, 1, 0!00000000
 Number mwA, 1, 0!01111111
-Number rB, 1, 0!11011110
+Number rB, 1, 0!11011111
 Number mwB, 1, 0!01001010
 Number rC, 1, 0!00011001
-Number mwC, 1, 0!11111111
+Number mwC, 1, 0!11111110
 Number rD, 1, 0!00000000
 Number mwD, 1, 0!11111110
 Number rE, 1, 0!00000000
-Number mwE, 1, 0!11111110
-Number rH, 1, 0!11111100
+Number mwE, 1, 0!11111111
+Number rH, 1, 0!11111111
 Number mwH, 1, 0!00000011
 Number rI, 1, 0!01001101
 Number mwI, 1, 0!00000000
-Number rJ, 1, 0!11111100
+Number rJ, 1, 0!11111101
 Number mwJ, 1, 0!00000100
 Number rK, 1, 0!00000000
-Number mwK, 1, 0!11101110
+Number mwK, 1, 0!11101111
 Number rL, 1, 0!00000000
 Number mwL, 1, 0!01011110
 Number lr, 1, 0!01111
@@ -125,14 +125,16 @@ Number mb, 1, 0!01111001
 #  the mixers' initial weights, in 256ths (format 112): each counter's two probabilities' in the
 #  first three (wp, wq), the outside prediction's there (wo), A's APM refinement's (wa, format
 #  113), each mixer's in the final one (wf); and the final mixer's rate and boost, in 16ths of the
-#  others' (lf, bf, format 113)
+#  others' (lf, bf, format 113), mixer 2's and 3's rates, in 16ths of mixer 1's (l2, l3, format 114)
 Number wp, 1, 0!00110101
 Number wq, 1, 0!00000011
 Number wo, 1, 0!01000000
-Number wa, 1, 0!00001101
+Number wa, 1, 0!00001100
 Number wf, 1, 0!01011111
 Number lf, 1, 0!00010000
 Number bf, 1, 0!00010000
+Number l2, 1, 0!00000000
+Number l3, 1, 0!00010000
 Number rS1, 1, 0!10000
 Number rS2, 1, 0!00100
 Number qs, 1, 3!1000101

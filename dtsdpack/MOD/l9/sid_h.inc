@@ -1,7 +1,7 @@
 
 
 
-static const byte D9_sid_c_bd[31+1]={ 0,1,2,3,4,5,6,7,8,8,8,8,9,9,9,9,10,10,10,10,11,12,13,13,14,14,14,14,14,15,16,17 };
+static const byte D9_sid_c_bd[31+1]={ 0,1,2,3,4,5,6,7,8,8,8,8,9,9,9,9,10,10,10,10,11,12,13,13,14,15,15,15,15,16,17,18 };
 
 static const byte D9_sid_d_ac[8+1]={ 0,1,2,2,3,3,3,4,4 };
 
@@ -34,7 +34,7 @@ static const byte D9_sid_n_fld[8+1]={ 0,1,2,3,4,5,6,7,8 };
 
 static const int D9_sid_rA = (0+0) * (1);
 static const int D9_sid_mwA = (253+0) * (1);
-static const int D9_sid_rB = (253+0) * (1);
+static const int D9_sid_rB = (248+0) * (1);
 static const int D9_sid_mwB = (254+0) * (1);
 static const int D9_sid_rC = (65+0) * (1);
 static const int D9_sid_mwC = (9+0) * (1);
@@ -50,7 +50,7 @@ static const int D9_sid_rJ = (33+0) * (1);
 static const int D9_sid_mwJ = (16+0) * (1);
 static const int D9_sid_rK = (254+0) * (1);
 static const int D9_sid_mwK = (0+0) * (1);
-static const int D9_sid_rL = (251+0) * (1);
+static const int D9_sid_rL = (249+0) * (1);
 static const int D9_sid_mwL = (3+0) * (1);
 static const int D9_sid_lr = (15+0) * (1);
 static const int D9_sid_mb = (74+0) * (1);
@@ -61,6 +61,8 @@ static const int D9_sid_wa = (1+0) * (1);
 static const int D9_sid_wf = (65+0) * (1);
 static const int D9_sid_lf = (16+0) * (1);
 static const int D9_sid_bf = (16+0) * (1);
+static const int D9_sid_l2 = (0+0) * (1);
+static const int D9_sid_l3 = (16+0) * (1);
 static const int D9_sid_rS1 = (8+0) * (1);
 static const int D9_sid_rS2 = (4+0) * (1);
 static const int D9_sid_qs = (89+3) * (1);
@@ -92,7 +94,7 @@ static const int D9_sid_hN = (22+0) * (1);
 
 static const long long D9_sid_a_Volume = tc_vmul(tc_vmul(1, 2), (1<<2)); // 8
 static const long long D9_sid_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), (1<<2)), (1<<6)); // 512
-static const long long D9_sid_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 18), (1<<3)); // 288
+static const long long D9_sid_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 19), (1<<3)); // 304
 static const long long D9_sid_d_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 5), (1<<3)); // 80
 static const long long D9_sid_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 3), 11); // 66
 static const long long D9_sid_f_Volume = tc_vmul(tc_vmul(1, 3), 8); // 24

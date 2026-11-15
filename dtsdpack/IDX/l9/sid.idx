@@ -21,7 +21,7 @@ Index b
 
 Index c
  c_fld: fld, 1!00100000
- c_bd: bd, 1!1111111100010001000111010000111
+ c_bd: bd, 1!1111111100010001000111011000111
  c_lv: lv, &000111
 
 Index d
@@ -57,7 +57,7 @@ Index k
  k_ac: ac, 1!11101100
 
 Index l
- l_fld: fld, 1!01000000
+ l_fld: fld, 1!00010000
  l_lv: lv, &000111
  l_ab: ab, 1!011000010000110000011100000
  l_ac: ac, 1!11111011
@@ -89,7 +89,7 @@ Index g
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
 Number rA, 1, 0!00000000
 Number mwA, 1, 0!11111101
-Number rB, 1, 0!11111101
+Number rB, 1, 0!11111000
 Number mwB, 1, 0!11111110
 Number rC, 1, 0!01000001
 Number mwC, 1, 0!00001001
@@ -105,14 +105,14 @@ Number rJ, 1, 0!00100001
 Number mwJ, 1, 0!00010000
 Number rK, 1, 0!11111110
 Number mwK, 1, 0!00000000
-Number rL, 1, 0!11111011
+Number rL, 1, 0!11111001
 Number mwL, 1, 0!00000011
 Number lr, 1, 0!01111
 Number mb, 1, 0!01001010
 #  the mixers' initial weights, in 256ths (format 112): each counter's two probabilities' in the
 #  first three (wp, wq), the outside prediction's there (wo), A's APM refinement's (wa, format
 #  113), each mixer's in the final one (wf); and the final mixer's rate and boost, in 16ths of the
-#  others' (lf, bf, format 113)
+#  others' (lf, bf, format 113), mixer 2's and 3's rates, in 16ths of mixer 1's (l2, l3, format 114)
 Number wp, 1, 0!00010001
 Number wq, 1, 0!00000000
 Number wo, 1, 0!01000000
@@ -120,6 +120,8 @@ Number wa, 1, 0!00000001
 Number wf, 1, 0!01000001
 Number lf, 1, 0!00010000
 Number bf, 1, 0!00010000
+Number l2, 1, 0!00000000
+Number l3, 1, 0!00010000
 Number rS1, 1, 0!01000
 Number rS2, 1, 0!00100
 Number qs, 1, 3!1011001

@@ -26,7 +26,7 @@ void D9_sid_make( const M_sid_v & D, tcx & X ) {
 
   c = 0;
   c = c*2 + (((fld)>2+(1-1)));
-  c = c*18 + D9_sid_c_bd[__min(31,__max(0,(bd)-(1-1)))];
+  c = c*19 + D9_sid_c_bd[__min(31,__max(0,(bd)-(1-1)))];
   c = (c<<3) + (((lv)&7)); // 000111
 
   d = 0;
@@ -61,7 +61,7 @@ void D9_sid_make( const M_sid_v & D, tcx & X ) {
   k = k*6 + D9_sid_k_ac[__min(8,__max(0,(ac)-(1-1)))];
 
   l = 0;
-  l = l*2 + (((fld)>1+(1-1)));
+  l = l*2 + (((fld)>3+(1-1)));
   l = (l<<3) + (((lv)&7)); // 000111
   l = l*9 + D9_sid_l_ab[__min(27,__max(0,(ab)-(1-1)))];
   l = l*8 + D9_sid_l_ac[__min(8,__max(0,(ac)-(1-1)))];
