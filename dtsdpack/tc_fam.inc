@@ -191,11 +191,14 @@ template <int f_DEC, class C> struct tc_fam {
       // counter's probabilities' too, the adaptive one's (P) and the fast one's (Q), tuned on the
       // families' dumps (the regression set 70 bytes smaller; the same for every family, P's 1/10
       // and Q's 0, 44; P's 1/16 and Q's 1/48, 30; Q's 0 and P's 1/12 or 1/8, 38 and 24; P's 1/6, 41
-      // bigger; P's 1/48 and Q's 1/16, 48 bigger)
+      // bigger; P's 1/48 and Q's 1/16, 48 bigger). Since format 113 A's APM refinement's too (wa),
+      // and the final mixer's rate and boost the family's own (lf, bf: famcfg.inc's lrf and mbf),
+      // all tuned again with the rest (the regression set 37 bytes smaller than with format 112's
+      // tuned anew; A's refinement's from 0 for every family, 8 bigger)
       mx.init(b.W, b.WC);
       for(int k = 0; k < NC; k++)
         mx.set_w0(2 * k, C::wp), mx.set_w0(2 * k + 1, C::wq);
-      mx.set_w0(2 * NC + 1, C::wo);
+      mx.set_w0(2 * NC, C::wa), mx.set_w0(2 * NC + 1, C::wo);
       if(C::NMIX > 1) {
         tc_ifits("mixer 2", C::kW, (sz)ND * NIN);
         tc_ifits("mixer 3", C::kS, (sz)ND * NIN);
@@ -205,8 +208,8 @@ template <int f_DEC, class C> struct tc_fam {
           mx2.set_w0(2 * k, C::wp), mx2.set_w0(2 * k + 1, C::wq);
           mx3.set_w0(2 * k, C::wp), mx3.set_w0(2 * k + 1, C::wq);
         }
-        mx2.set_w0(2 * NC + 1, C::wo);
-        mx3.set_w0(2 * NC + 1, C::wo);
+        mx2.set_w0(2 * NC, C::wa), mx2.set_w0(2 * NC + 1, C::wo);
+        mx3.set_w0(2 * NC, C::wa), mx3.set_w0(2 * NC + 1, C::wo);
         mxf.init(b.WF, b.WFC);
         for(int i = 0; i < TC_FIN - 1; i++)
           mxf.set_w0(i, C::wf);
@@ -513,7 +516,7 @@ template <int f_DEC, class C> struct tc_fam {
     if(C::NMIX > 1) {
       mx2.upd(b, C::lr, C::mb, mx.x, xq);
       mx3.upd(b, C::lr, C::mb, mx.x, xq);
-      mxf.upd(b, C::lr, C::mb);
+      mxf.upd(b, C::lrf, C::mbf);
     }
     //  (APM 2 with no share, bw TC_BW_ONE, is neither read nor trained:
     //  what it would give goes nowhere)
