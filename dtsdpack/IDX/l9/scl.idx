@@ -12,24 +12,24 @@ Const 0
 Index a
  a_kd: kd, 1!000
  a_pk: pk, 1!1
- a_dp: dp, 1!1000110
+ a_dp: dp, 1!1010110
 
 Index b
  b_kd: kd, 1!111
  b_pk: pk, 1!1
  b_pn: pn, 1!0100000
  b_dp: dp, 1!1100110
- b_pl: pl, 1!010000011100110
+ b_pl: pl, 1!110100011100110
 
 Index c
  c_kd: kd, 1!000
  c_pk: pk, 1!1
- c_ab: ab, 1!000100111100000000111111000
+ c_ab: ab, 1!000100110100000000111110000
 
 Index d
  d_kd: kd, 1!001
  d_pk: pk, 1!1
- d_lp: lp, 1!000111001
+ d_lp: lp, 1!000101001
 
 Index e
  e_kd: kd, 1!001
@@ -58,14 +58,14 @@ Index j
 Index k
  k_kd: kd, 1!000
  k_pk: pk, 1!1
- k_lp: lp, 1!011010000
+ k_lp: lp, 1!001010000
  k_pn: pn, 1!1111101
 
 Index l
  l_kd: kd, 1!101
  l_pk: pk, 1!1
  l_hm: hm, 1!01
- l_ab: ab, 1!011000110111010000111110000
+ l_ab: ab, 1!011000110111010000111110100
 
 Index s
  s_kd: kd, 1!110
@@ -77,7 +77,7 @@ Index s
 Index f
  f_kd: kd, 1!111
  f_pk: pk, 1!1
- f_pl: pl, 1!001011000000010
+ f_pl: pl, 1!001011000000110
 
 Index m
  m_kd: kd, 1!010
@@ -89,7 +89,7 @@ Index w
  w_pl: pl, 1!100000000000100
 
 Index t
- t_kd: kd, 1!111
+ t_kd: kd, 1!011
  t_pk: pk, 1!1
 
 Index n
@@ -102,33 +102,33 @@ Index g
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
 Number rA, 1, 0!00000000
 Number mwA, 1, 0!01111111
-Number rB, 1, 0!11100100
+Number rB, 1, 0!11000110
 Number mwB, 1, 0!01001111
 Number rC, 1, 0!00110000
-Number mwC, 1, 0!11111110
+Number mwC, 1, 0!11111101
 Number rD, 1, 0!00000000
 Number mwD, 1, 0!11111100
 Number rE, 1, 0!00000000
-Number mwE, 1, 0!11111001
+Number mwE, 1, 0!11111111
 Number rH, 1, 0!11111111
 Number mwH, 1, 0!00000011
 Number rI, 1, 0!01001101
 Number mwI, 1, 0!00000000
-Number rJ, 1, 0!11111000
+Number rJ, 1, 0!11111100
 Number mwJ, 1, 0!00000100
 Number rK, 1, 0!00000000
 Number mwK, 1, 0!11100010
 Number rL, 1, 0!00000000
 Number mwL, 1, 0!01011111
 Number lr, 1, 0!01111
-Number mb, 1, 0!01111000
+Number mb, 1, 0!01111001
 Number rS1, 1, 0!10000
-Number rS2, 1, 0!00100
+Number rS2, 1, 0!00101
 Number qs, 1, 3!1000101
 Number qf, 1, 3!0010011
 Number bw, 1, 0!01000
 Number rT, 1, 0!00000100
-Number mwT, 1, 0!00111111
+Number mwT, 1, 0!00100101
 Number mt, 1, 0!110
 #  the mantissa mixer's rates: frozen (Index n)
 ! Number lrm, 1, 0!11111

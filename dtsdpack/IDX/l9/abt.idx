@@ -14,8 +14,8 @@ Index a
  a_es: es, &01110000
 
 Index b
- b_la: la, 1!001011110110110101010101100
- b_lb: lb, 1!100110100000011110100101000
+ b_la: la, 1!001011111110100000011100100
+ b_lb: lb, 1!100110100000001000100101000
 
 Index c
  c_sn: sn, 1!101111101110100001111011001
@@ -32,13 +32,13 @@ Index d
  d_sx: sx, 1!11101
 
 Index e
- e_bd: bd, 1!0011100000000000001000100100000
+ e_bd: bd, 1!0011100000000000001100101100000
  e_sn: sn, 1!111111001100100001001111011
 
 Index h
  h_lb: lb, 1!000000010110111101000000100
  h_es: es, &00011111
- h_bd: bd, 1!0000000001100100000000000000000
+ h_bd: bd, 1!0000000001100101000000000000000
 
 Index i
  i_es: es, &00001011
@@ -51,9 +51,9 @@ Index j
  j_pm: pm, 1!0
 
 Index k
- k_sn: sn, 1!101000000111110001010100100
+ k_sn: sn, 1!101000000111110001010110101
  k_nn: nn, 1!000000000000001
- k_sc: sc, 1!01110000000010
+ k_sc: sc, 1!11110000000010
  k_eq: eq, 1!0000
  k_sm: sm, 1!1100100011100000
  k_bg: bg, 1!0001000
@@ -63,7 +63,7 @@ Index k
 Index l
  l_bd: bd, 1!1001110000000000000000000011000
  l_cc: cc, 1!10
- l_la: la, 1!110000010000010000010111100
+ l_la: la, 1!110000000001010000010101000
 
 Index s
  s_sn: sn, 1!010111111110000000000000011
@@ -99,18 +99,18 @@ Number rA, 1, 0!00001111
 Number mwA, 1, 0!11111011
 Number rB, 1, 0!11110110
 Number mwB, 1, 0!10010110
-Number rC, 1, 0!11111101
+Number rC, 1, 0!11111111
 Number mwC, 1, 0!00100001
-Number rD, 1, 0!11111111
+Number rD, 1, 0!11111110
 Number mwD, 1, 0!00000001
 Number rE, 1, 0!00000000
 Number mwE, 1, 0!10000001
-Number rH, 1, 0!11101011
+Number rH, 1, 0!11111110
 Number mwH, 1, 0!01111110
-Number rI, 1, 0!11111110
+Number rI, 1, 0!11111100
 Number mwI, 1, 0!10010111
 Number rJ, 1, 0!00000000
-Number mwJ, 1, 0!10001110
+Number mwJ, 1, 0!10001111
 Number rK, 1, 0!10110101
 Number mwK, 1, 0!00000111
 Number rL, 1, 0!11110101
@@ -129,7 +129,7 @@ Number mt, 1, 0!100
 ! Number lrm, 1, 0!11111
 ! Number mbm, 1, 0!00011001
 Number rG, 1, 0!00000100
-Number mwG, 1, 0!00100110
+Number mwG, 1, 0!00100111
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
 #  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.

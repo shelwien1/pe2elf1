@@ -463,6 +463,17 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // 171 bigger)
   static constexpr double HMX_R = 1.0 / 2048;
   double hmx_d[HAP_N][4], hmx_b[NSUB + NSUB96 + 1][HAP_N][4];
+  // (format 109) A miss neither within HIT_NEAR of the audio's index nor alt (the audio's 4 or
+  // more): by its distance past HIT_NEAR and its side, where so far such misses' distances would
+  // have taken fewer bits than their magnitudes (fm_c: 2 for each bit of each one's length and 2
+  // more, either way, halved past 2^16), else by its magnitude, as all were until then. Where a cut
+  // stream's WAV ends, its last frame decoded alone (format 101), its far misses lie nearer the
+  // audio's index than 0: `Master Audio 7.1.dts`'s core 2.0% smaller, `Master Audio 5.0
+  // 96khz.dts`'s 1.8%, `mid.dtsc` 1.6%, `s2h.dtsc` 1.2%, the regression set's short streams 0.6%
+  // (`s.2.dts`'s, uncut, the same); FATE's XXCH samples', where they don't, 18-76% bigger by
+  // their distances alone, `open bitrate.dts`'s 11%. (The switch by core, X96 and the LFE apart,
+  // the side as alt's or not, the last far miss's length as the length's context: within 2 bytes)
+  U64 fm_c[2];
   // (format 80) An index's miss in the channels coded before, at the same subband's same sample:
   // where the WAV isn't what the encoder had, or a decoder's values aren't the core's, the channels
   // miss together (in 3 MB from `s.2.dts`'s middle, cut from it, a sample missed 0.11% of the time
@@ -4171,6 +4182,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   S64 code_index(const M_smp_v& D, S64 v, int pk, S64 qp, S64 alt, S64 lo, S64 hi, int* how, HitCal* hc = nullptr,
                  S128 dist = 0, S128 unit = 0, int cb = 0, S128 su = 0, int hn = -1, bool xm = false) {
     *how = 2;
+    bool far = false;  // (a miss past HIT_NEAR: by distance or by magnitude, fm_c's)
     if (pk) {
       const int kd = D.ab == 27 ? 2 : D.pm;
       M_hit_v H;
@@ -4317,10 +4329,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       }
       if (hit) return *how = 0, qp;
       if (alt != qp && f_hit.bit(HT_ALT, ENC && v == alt)) return *how = 1, alt;
+      far = (qp < 0 ? -qp : qp) >= 4;
       // (neither, the audio's 4 or more: where within HIT_NEAR of it, its side, alt's or the other
       // (up or down where none is), and its distance in unary, from 2 on alt's side (1 is alt), else
-      // from 1; else its magnitude, below. A miss next to a small index costs less as its
-      // magnitude: 96-24.dts's, the X96 residuals' in its core's values)
+      // from 1; else its distance past HIT_NEAR or its magnitude, below. A miss next to a small
+      // index costs less as its magnitude: 96-24.dts's, the X96 residuals' in its core's values)
       if ((qp < 0 ? -qp : qp) >= 4) {
         const int sa = alt > qp ? 1 : alt < qp ? -1 : 0;
         const S64 d = ENC ? v - qp : 0, ad = d < 0 ? -d : d;
@@ -4334,13 +4347,33 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       }
     }
     B::sel(f_smp, D);
-    const S64 mmax = -lo > hi ? -lo : hi;
-    const int maxnb = imax(bit_len((U64)mmax), 1);
-    const S64 m = checked(code_len(f_smp, QN_LEN, maxnb, LV::smp::mt, ENC ? (v < 0 ? -v : v) : 0, ENC), 0, mmax);
-    int neg = 0;
-    if (m && m <= hi && m <= -lo) neg = f_smp.bit(QN_SIGN, ENC && v < 0);
-    else if (m > hi) neg = 1;
-    return neg ? -m : m;
+    S64 w;
+    if (far && fm_c[1] < fm_c[0]) {
+      // (its distance past HIT_NEAR, as far as either side allows, then which side where both do)
+      const S64 d = ENC ? v - qp : 0, ad = d < 0 ? -d : d;
+      const S64 up = hi - qp - HIT_NEAR - 1, dn = qp - lo - HIT_NEAR - 1, fmax = up > dn ? up : dn;
+      const int fnb = imax(bit_len((U64)(fmax > 0 ? fmax : 0)), 1);
+      const S64 m = checked(code_len(f_smp, QN_LEN, fnb, LV::smp::mt, ENC ? ad - HIT_NEAR - 1 : 0, ENC), 0, fmax);
+      int neg = 0;
+      if (m <= up && m <= dn) neg = f_smp.bit(QN_SIGN, ENC && d < 0);
+      else if (m > up) neg = 1;
+      w = neg ? qp - (m + HIT_NEAR + 1) : qp + (m + HIT_NEAR + 1);
+      w = w < lo ? lo : w > hi ? hi : w;
+    } else {
+      const S64 mmax = -lo > hi ? -lo : hi;
+      const int maxnb = imax(bit_len((U64)mmax), 1);
+      const S64 m = checked(code_len(f_smp, QN_LEN, maxnb, LV::smp::mt, ENC ? (v < 0 ? -v : v) : 0, ENC), 0, mmax);
+      int neg = 0;
+      if (m && m <= hi && m <= -lo) neg = f_smp.bit(QN_SIGN, ENC && v < 0);
+      else if (m > hi) neg = 1;
+      w = neg ? -m : m;
+    }
+    if (far) {
+      const S64 aw = w < 0 ? -w : w, dw = w - qp, af = (dw < 0 ? -dw : dw) - HIT_NEAR - 1;
+      fm_c[0] += 2 * (U64)bit_len((U64)aw) + 2, fm_c[1] += 2 * (U64)bit_len((U64)(af > 0 ? af : 0)) + 2;
+      if (fm_c[0] + fm_c[1] >= (U64)1 << 16) fm_c[0] >>= 1, fm_c[1] >>= 1;
+    }
+    return w;
   }
 
   // --- the LFE -----------------------------------------------------------------------------------------
