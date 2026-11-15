@@ -103,13 +103,13 @@ wanders by a third; on an earlier 2.3 GHz host, before format 84, it took 22 sec
 rows were all in the tuning sets (below; the whole of `s.2.dts` since the HF VQ groups' scores were
 learned), and `s.2.dts` in what the HF VQ groups' scores and the ADPCM predictors' codewords were
 learned from. A 96 kHz stream's 64-band analysis and X96's searches cost more: `96-24.dts`'s core
-(1.9 MB) compresses in 4.2 seconds (441 KB of core a second) and decompresses in 4.1 (447 KB). The
-decoded WAVs' searches cost too; every other stream below goes at 550 KB of core a second or more
-both ways. The short samples below (7 frames, 7 to 23 KB) take 12 to 33 ms each way, 460 to 930 KB
-a second: some milliseconds of a run are the same for any stream (starting, the WAV's header and
-start, the alignment, the WAV's continuation past its end, the kernel mapping the pages the model
-touches), and the searches run on every value of a stream's first 2048 (the bit allocation
-search's first 512), which is all of theirs.
+(1.9 MB) compresses in 4.6 seconds (413 KB of core a second; 4.2 before format 104's calibrations)
+and decompresses in 4.3 (435 KB). The decoded WAVs' searches cost too; every other stream below
+goes at 550 KB of core a second or more both ways. The short samples below (7 frames, 7 to 23 KB)
+take 12 to 33 ms each way, 400 to 930 KB a second: some milliseconds of a run are the same for any
+stream (starting, the WAV's header and start, the alignment, the WAV's continuation past its end,
+the kernel mapping the pages the model touches), and the searches run on every value of a stream's
+first 2048 (the bit allocation search's first 512), which is all of theirs.
 
 FFmpeg's small DTS-HD MA samples (`xll_*`, 7 frames each) round-trip too:
 
