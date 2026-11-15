@@ -428,22 +428,26 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // the rows at 2^14, the short streams' and `s.2.dts`'s gains each the other's loss)
   static constexpr U32 HIT_ONE = 256, HIT_PRIOR = 2, HIT_LIMIT = 1u << 4, HIT_SLIMIT = 1u << 18, HIT_RLIMIT = 1u << 12;
   U32 hit_c[2][4][16][QB_N][QB_N][4], hit_r[2][4][16][QB_N][2];
-  // (format 104) And then calibrated: by its miss probability's log2 in halves (HAP_N bins, one
-  // between two weighing on both by how near), the misses each bin's flags were expected to make
-  // and those they made (2^26 a miss), its probability times their ratio ((made + 2) / (expected +
-  // 2)); in two tables, one halved at 4 misses (expected and made; at 32 until format 106: with
-  // HIT_PRIOR 2, at 16 the short streams 19 bytes smaller, at 8 45, at 4 54, at 2 the same), one at
-  // 4096, and of the fast one's, the slow one's and their mean (of the logs) the one whose flags
-  // have cost the least so far (hap_k, 2^-16 bits): the cells' rates' geometric mean, from counts
-  // that start empty, is not how often their flags miss (with the cap's fourth bin, tc_fam.inc's,
-  // 12 bytes of it: the regression set 0.16% smaller, FATE's samples 0.4-1.8%, the 7-frame xll ones
-  // 0.4-1.0%, `s.2.dts`'s core 0.10%, `dts_es.dts`'s 0.17% bigger; one table, halved at 1024
-  // misses, 0.08% smaller, by the cells' class of recent misses too 0.07%, by quarters of a log2
-  // 0.07%)
-  static constexpr int HAP_N = 40;
+  // (format 104) And then calibrated: by its miss probability's log2 (HAP_N bins, in halves until
+  // format 107, one between two weighing on both by how near), the misses each bin's flags were
+  // expected to make and those they made (2^26 a miss), its probability times their ratio ((made +
+  // 2) / (expected + 2)); in two tables, one halved at 4 misses (expected and made; at 32 until
+  // format 106: with HIT_PRIOR 2, at 16 the short streams 19 bytes smaller, at 8 45, at 4 54, at 2
+  // the same), one at 4096, and of the fast one's, the slow one's and their mean (of the logs) the
+  // one whose flags have cost the least so far (hap_k, 2^-16 bits): the cells' rates' geometric
+  // mean, from counts that start empty, is not how often their flags miss (with the cap's fourth
+  // bin, tc_fam.inc's, 12 bytes of it: the regression set 0.16% smaller, FATE's samples 0.4-1.8%,
+  // the 7-frame xll ones 0.4-1.0%, `s.2.dts`'s core 0.10%, `dts_es.dts`'s 0.17% bigger; one table,
+  // halved at 1024 misses, 0.08% smaller, by the cells' class of recent misses too 0.07%, by
+  // quarters of a log2 0.07%). Since format 107 the bins are whole log2s, the fast table's prior 1
+  // miss, and the tables the same for subbands with ADPCM prediction and without (by PMODE until
+  // then): the short streams 22 bytes smaller, `s.2.dts`'s core 5; each alone 9-12 of it, the bins
+  // by two log2s 17 bytes bigger than by one, the fast table's prior 1 alongside the rest 21
+  // smaller
+  static constexpr int HAP_N = 20;
   static constexpr U64 HAP_A = (U64)2 << 26, HAP_FAST = (U64)1 << 28, HAP_SLOW = (U64)1 << 38;
-  U64 hap_e[2][2][HAP_N], hap_m[2][2][HAP_N];  // (by kd, the PMODE; the fast table and the slow one)
-  S64 hap_k[2][3];
+  U64 hap_e[2][HAP_N], hap_m[2][HAP_N];  // (the fast table and the slow one)
+  S64 hap_k[3];
   // (format 80) An index's miss in the channels coded before, at the same subband's same sample:
   // where the WAV isn't what the encoder had, or a decoder's values aren't the core's, the channels
   // miss together (in 3 MB from `s.2.dts`'s middle, cut from it, a sample missed 0.11% of the time
@@ -600,14 +604,14 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // (sf_post()). Where the likeliest's is under SP_PT, coded by rank, each "this one?" at its share
   // of what those before left, past SP_R as f_scl's difference from the likeliest (sf_post_code());
   // the share calibrated (since format 105): by rank (the first, the second, the rest) and SP_NB
-  // buckets of its logit, -8 to 8, its odds times the bucket's hits made against those expected (the
-  // shares' sum) over its misses so (each with a prior of 2), between its bucket's and the nearer
-  // neighbour's by how far it lies from its bucket's middle, the counts halved past SP_LIM (where
-  // they had been mixed with the share at 16, halved past 1023, which leaves the bucket's rate as its
-  // counts grow, not the share's own odds within it: `s.2.dts`'s core 0.13% smaller, its scale
-  // factors 0.7%, the other streams within 3 bytes; without the neighbours 7 bytes less of it,
-  // halved past 1023 4 less, past 255 25 bytes bigger; a prior of 1 or 4 as 2); surer than that,
-  // the RMS rule's hit flag
+  // buckets of its logit, -8 to 8 (24 until format 107, 6 bytes bigger; 8 as 12), its odds times
+  // the bucket's hits made against those expected (the shares' sum) over its misses so (each with a
+  // prior of 2), between its bucket's and the nearer neighbour's by how far it lies from its
+  // bucket's middle, the counts halved past SP_LIM (where they had been mixed with the share at 16,
+  // halved past 1023, which leaves the bucket's rate as its counts grow, not the share's own odds
+  // within it: `s.2.dts`'s core 0.13% smaller, its scale factors 0.7%, the other streams within 3
+  // bytes; without the neighbours 7 bytes less of it, halved past 1023 4 less, past 255 25 bytes
+  // bigger; a prior of 1 or 4 as 2); surer than that, the RMS rule's hit flag
   // as before. And only where the stream's indexes have been the audio's at least SP_HPM thousandths
   // of the time, after SP_HN of them (sp_on()): the noise is the analysis's where the WAV is the
   // encoder's input to the bit, its indexes then the audio's 99.66-99.92% of the time (the lossless
@@ -623,7 +627,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // RMS rule's guess has been the encoder's more often, `s.2.dts`'s core 2.3% bigger; the noise's
   // power adapted to each stream (a step toward the likelier of 2^(1/4) times it and 2^(-1/4), by
   // how much), 12 bytes less in all; the switch at 99% the same in all, at 98% 23 bytes more
-  static constexpr int SP_R = 6, SP_NB = 24, SP_W = 8, SP_LIM = 4095;
+  static constexpr int SP_R = 6, SP_NB = 12, SP_W = 8, SP_LIM = 4095;
   static constexpr double SP_K = 2.4 / 1099511627776.0;   // (2.4 2^-40; 3 2^-40 0.4% bigger)
   static constexpr double SP_K2 = 1.0 / 8796093022208.0;  // (2^-43)
   static constexpr double SP_K3 = 1.0 / 17592186044416.0;  // (2^-44; 2^-43 0.01% bigger, 2^-45 0.05%)
@@ -4226,19 +4230,20 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         const bool ux = xm && xm_loss[1] + ((S64)4 << 16) + xm_loss[0] / 32 < xm_loss[0];
         const U32 pq = ux ? p1 : p0;
         const S64 hap_l = (S64)lg2tab.log2x(pq) - (S64)lg2tab.log2x(CO_ONE);  // (its log2, 2^-16)
-        int hap_b = (int)(-hap_l >> 15), hap_f = (int)(-hap_l >> 7) & 255;  // (its bin, 256ths past it)
+        int hap_b = (int)(-hap_l >> 16), hap_f = (int)(-hap_l >> 8) & 255;  // (its bin, 256ths past it)
         if (hap_b >= HAP_N - 1) hap_b = HAP_N - 2, hap_f = 255;
         S64 hap_c[2];
         for (int t = 0; t < 2; t++) {
-          const U64* const he = hap_e[kd][t];
-          const U64* const hm2 = hap_m[kd][t];
-          const S64 c0 = (S64)lg2tab.log2x(hm2[hap_b] + HAP_A) - (S64)lg2tab.log2x(he[hap_b] + HAP_A);
-          const S64 c1 = (S64)lg2tab.log2x(hm2[hap_b + 1] + HAP_A) - (S64)lg2tab.log2x(he[hap_b + 1] + HAP_A);
+          const U64* const he = hap_e[t];
+          const U64* const hm2 = hap_m[t];
+          const U64 ha = t ? HAP_A : HAP_A / 2;  // (the fast table's prior a miss, the slow one's 2)
+          const S64 c0 = (S64)lg2tab.log2x(hm2[hap_b] + ha) - (S64)lg2tab.log2x(he[hap_b] + ha);
+          const S64 c1 = (S64)lg2tab.log2x(hm2[hap_b + 1] + ha) - (S64)lg2tab.log2x(he[hap_b + 1] + ha);
           hap_c[t] = ((256 - hap_f) * c0 + hap_f * c1) >> 8;
         }
         const U32 hap_p[3] = {lg2tab.prob(hap_l + hap_c[0]), lg2tab.prob(hap_l + hap_c[1]),
                               lg2tab.prob(hap_l + (hap_c[0] + hap_c[1]) / 2)};
-        S64* const hap_s = hap_k[kd];
+        S64* const hap_s = hap_k;
         int hap_i = 2;
         if (hap_s[0] < hap_s[hap_i]) hap_i = 0;
         if (hap_s[1] < hap_s[hap_i]) hap_i = 1;
@@ -4249,8 +4254,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           if (hap_s[0] + hap_s[1] + hap_s[2] >= (S64)1 << 40) hap_s[0] >>= 1, hap_s[1] >>= 1, hap_s[2] >>= 1;
         }
         for (int t = 0; t < 2; t++) {
-          U64* const he = hap_e[kd][t];
-          U64* const hm2 = hap_m[kd][t];
+          U64* const he = hap_e[t];
+          U64* const hm2 = hap_m[t];
           const U64 lim = t ? HAP_SLOW : HAP_FAST;
           for (int k = 0; k < 2; k++) {
             const U64 w = k ? (U64)hap_f : (U64)(256 - hap_f);
