@@ -1,5 +1,5 @@
 // coder.inc -- the range coder of a run, as dtsdpack codes through it: rc.inc's (oggcomp's, as
-// h264p has it), every family's decisions (fam.inc's tc_bit) and the stream's CRC, with where the
+// h264p has it), every family's decisions (tc_fam.inc's fbit()) and the stream's CRC, with where the
 // bits go (-s) and whether what it decodes is damaged.
 
 #include "rc.inc"  // h264p::Rangecoder: the coder, on the bytes of the coroutine it is

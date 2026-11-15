@@ -71,10 +71,6 @@ struct tcx {
 };
 #include "tc_tabs.inc"  // tc_tabs: a family's tables
 
-//  One bit through the coder of the run (coder.inc), p the probability of a 0 (12 bits)
-template <int f_DEC>
-static INLINE int tc_bit(Coder<f_DEC> *rc, int p, int bit) { return rc->code_bit((U32)p << (CO_PBITS - CM_PBITS), bit); }
-
 //  The dump (IDX/famtune.cpp): what each family is asked to code as the
 //  compressor runs, written by a build with DTSD_DUMP to
 //  $DTSD_DUMP/<family>.dump -- R where a stream starts, then the

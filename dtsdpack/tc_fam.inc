@@ -87,31 +87,45 @@ template <int f_DEC, class C> struct tc_fam {
   //  stream's are (3 MB of `s.2.dts`'s first 418 thousand of the families' 614 thousand, 9 of them
   //  the other way)
   u32 cap_n[4], cap_f[4];
-  //  And past the cap, to 255 of 4096 (format 105): the unlikely value's probability e times how
-  //  often the family's such decisions went that way against how often they were expected to,
-  //  (made + 2) / (expected + 2), by e's log2 (in halves until format 107, 12 bytes bigger; 2^18 a
-  //  decision's worth; halved at 1024 of them): `s.2.dts`'s core 16 bytes smaller, the short
-  //  streams 1 bigger; to 511 of 4096 the short streams 14 bigger, `s.2.dts` 19 smaller still;
-  //  halved at 16 or with a prior of 1, bigger
-  u64 fc_e[5], fc_m[5];
-  INLINE int fbit(int p, int b) {
+  //  And past the cap (format 105; to 255 of 4096 until format 108): the unlikely value's
+  //  probability e times how often the family's such decisions went that way against how often
+  //  they were expected to, (made + a) / (expected + a), by e's log2 (in halves until format 107,
+  //  12 bytes bigger): to 255 of 4096 `s.2.dts`'s core 16 bytes smaller, the short streams 1
+  //  bigger, to 511 the short streams 14 bigger and `s.2.dts` 19 smaller still (a of 2, halved at
+  //  1024 decisions; at 16 or with a of 1, bigger). Since format 108 every decision so, a table for
+  //  each kind of decision (FC_K: a sign's, a value's first node's, its others' through the
+  //  mixers, a mantissa's with the hint's, one's without), the correction between the bin's and
+  //  the next one's by e's place in the bin (each counting the decision by that weight), a of 2 to
+  //  255 of 4096 and 16 past it (8 or 32 bigger), halved at 16384 decisions: the regression set's
+  //  short streams 0.15% smaller, `s.2.dts`'s core 0.06% (to 1023 of 4096 alone, a of 2, `s.2.dts`
+  //  32 bytes smaller and the short streams 9 bigger; a of 8 past 255 the short ones 17 smaller;
+  //  every decision 20 more, the bins' interpolation 26, the kinds' tables 42; the cap's counts by
+  //  kind too, the same)
+  enum { FC_SIGN, FC_FIRST, FC_MIX, FC_HINT, FC_PLAIN, FC_K };
+  u64 fc_e[FC_K][8], fc_m[FC_K][8];
+  INLINE int fbit(int p, int b, int kind) {
     const bool lo = p <= 8, hi = p >= CM_PONE - 8;
     if(LIKELY(!lo && !hi)) {
       const bool ul = p < CM_PONE / 2;  // (the unlikely value 0)
       const int e = ul ? p : CM_PONE - p;
-      if(e >= 256)
-        return tc_bit(rc, p, b);
       const int lb = 31 - __builtin_clz((unsigned)e);
-      const int k = lb - 3;  // (9-15: 0, 16-31: 1, ..., 128-255: 4)
-      const U64 qa = (U64)2 << CO_PBITS, e18 = (U64)e << (CO_PBITS - CM_PBITS);
-      U64 q = e18 * (fc_m[k] + qa) / (fc_e[k] + qa);
+      const int k = lb > 10 ? 7 : lb - 3;  // (9-15: 0, 16-31: 1, ..., 1024-2048: 7)
+      const int f = k >= 7 ? 0 : ((e << 8) >> lb) - 256, k1 = k + (f > 0);  // (256ths toward the next bin)
+      u64 *const fe = fc_e[kind], *const fm = fc_m[kind];
+      const U64 a0 = (U64)(k >= 5 ? 16 : 2) << CO_PBITS, a1 = (U64)(k1 >= 5 ? 16 : 2) << CO_PBITS;
+      const U64 e18 = (U64)e << (CO_PBITS - CM_PBITS);
+      const U64 r0 = ((fm[k] + a0) << 16) / (fe[k] + a0), r1 = ((fm[k1] + a1) << 16) / (fe[k1] + a1);
+      U64 q = e18 * (((U64)(256 - f) * r0 + (U64)f * r1) >> 8) >> 16;
       q = q < 1 ? 1 : q > CO_ONE / 2 ? CO_ONE / 2 : q;
       b = rc->code_bit(ul ? (U32)q : CO_ONE - (U32)q, b);
-      fc_e[k] += e18;
+      fe[k] += e18 * (U64)(256 - f) >> 8;
+      fe[k1] += e18 * (U64)f >> 8;
       if(b == (ul ? 0 : 1))
-        fc_m[k] += (U64)1 << CO_PBITS;
-      if(fc_e[k] + fc_m[k] >= (U64)1024 << CO_PBITS)
-        fc_e[k] >>= 1, fc_m[k] >>= 1;
+        fm[k] += (U64)(256 - f) << (CO_PBITS - 8), fm[k1] += (U64)f << (CO_PBITS - 8);
+      if(fe[k] + fm[k] >= (U64)16384 << CO_PBITS)
+        fe[k] >>= 1, fm[k] >>= 1;
+      if(fe[k1] + fm[k1] >= (U64)16384 << CO_PBITS)
+        fe[k1] >>= 1, fm[k1] >>= 1;
       return b;
     }
     const int e = lo ? p : CM_PONE - p, k = e <= 2 ? e - 1 : e <= 4 ? 2 : 3;
@@ -274,7 +288,7 @@ template <int f_DEC, class C> struct tc_fam {
       fatal("internal: sign context %u of a family of %d", sc, C::NG);
     TC_DUMP(rec('G', sc, s));
     cm_cnt g = G[bg * (u32)C::NG + sc];
-    s = fbit(g.P(), ENC && s);
+    s = fbit(g.P(), ENC && s, FC_SIGN);
     g.upd(s, C::rG, C::mwG);
     G[bg * (u32)C::NG + sc] = g;
     return s;
@@ -469,7 +483,7 @@ template <int f_DEC, class C> struct tc_fam {
     int pf = C::NAPM && C::bw < TC_BW_ONE
                  ? (C::bw * pm + (TC_BW_ONE - C::bw) * ap2.pp(pm, row_f(node)) + TC_BW_ONE / 2) >> TC_BW_BITS
                  : pm;
-    b = fbit(cm_pclip(pf), b);
+    b = fbit(cm_pclip(pf), b, node ? FC_MIX : FC_FIRST);
     mx.upd(b, C::lr, C::mb, mx.x, xq);
     if(C::NMIX > 1) {
       mx2.upd(b, C::lr, C::mb, mx.x, xq);
@@ -547,14 +561,14 @@ template <int f_DEC, class C> struct tc_fam {
       mxm.set(1, cm_stretch(z.P()));
       mxm.set(2, TC_BIAS);
       int pm = mxm.mix(bn + (u32)node);
-      b = fbit(cm_pclip(pm), b);
+      b = fbit(cm_pclip(pm), b, FC_HINT);
       mxm.upd(b, C::lrm, C::mbm);
       t.upd(b, C::rT, C::mwT);
       T[bt + node] = t;
       z.upd(b, C::rT, C::mwT);
       return b;
     }
-    b = fbit(t.P(), b);
+    b = fbit(t.P(), b, FC_PLAIN);
     t.upd(b, C::rT, C::mwT);
     T[bt + node] = t;
     return b;

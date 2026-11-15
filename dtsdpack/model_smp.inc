@@ -448,6 +448,21 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   static constexpr U64 HAP_A = (U64)2 << 26, HAP_FAST = (U64)1 << 28, HAP_SLOW = (U64)1 << 38;
   U64 hap_e[2][HAP_N], hap_m[2][HAP_N];  // (the fast table and the slow one)
   S64 hap_k[3];
+  // (format 108) And what is calibrated is the cells' rates mixed, not their mean: its log2 the sum
+  // of the fast counts' rates' log2 (their mean's over the cells, by how near), the slow ones', the
+  // rows' (their rates', by how near) and 1, each times a weight learned as the flags go (from 1/2,
+  // 1/2, 0 and 0, by the gradient of the flag's cost, HMX_R of it), each weight the sum of one for
+  // the mean's whole log2 and one for that in the subband (hmx_d, hmx_b; the X96 subbands' own),
+  // no surer of a miss than 2^-0.05 nor of a hit than 2^-19: the regression set's short streams
+  // 0.13% smaller, `s.2.dts`'s core 3 bytes bigger (with the weights for the log2 alone, 23 bytes
+  // smaller in all, mixing the rates' logits 2, learning at 1/1000 or 1/500 21 and 12; with the
+  // subband's alone 14 more, with both 37; the rows' rates 15 more; by the cells' class of recent
+  // misses, 14 bigger; the cells where a channel coded before missed as an input too, 1 smaller;
+  // at 1/1024, the short streams 13 smaller and `s.2.dts` 13 bigger; faster at a stream's start,
+  // or slower, bigger; the calibration's tables' probabilities mixed in place of the cheaper's,
+  // 171 bigger)
+  static constexpr double HMX_R = 1.0 / 2048;
+  double hmx_d[HAP_N][4], hmx_b[NSUB + NSUB96 + 1][HAP_N][4];
   // (format 80) An index's miss in the channels coded before, at the same subband's same sample:
   // where the WAV isn't what the encoder had, or a decoder's values aren't the core's, the channels
   // miss together (in 3 MB from `s.2.dts`'s middle, cut from it, a sample missed 0.11% of the time
@@ -4191,22 +4206,27 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         // samples 0.4-1.6%)
         const int hq = hn < 0 ? D.hm : hn >= 7 ? 3 : hn >= 4 ? 2 : hn >= 1 ? 1 : 0;
         const U32 cw[4] = {(U32)(v0 * w0), (U32)(v0 * w1), (U32)(v1 * w0), (U32)(v1 * w1)}, rw[2] = {16u * w0, 16u * w1};
-        // (a class's cells' probability of a miss, and their counts after the flag)
+        // (a class's cells' probability of a miss, its fast and slow counts' and its rows' log2s,
+        // and their counts after the flag)
+        S64 cl_f = 0, cl_s = 0, cl_r = 0;
         auto cprob = [&](int cl) {
           U32* const ce[4] = {hit_c[kd][hq][cl][j0][i0], hit_c[kd][hq][cl][j0][i1], hit_c[kd][hq][cl][j1][i0],
                               hit_c[kd][hq][cl][j1][i1]};
           U32* const ro[2] = {hit_r[kd][hq][cl][i0], hit_r[kd][hq][cl][i1]};
           const U64 rd[2] = {2 * (U64)ro[0][1] + 2 * HIT_ONE, 2 * (U64)ro[1][1] + 2 * HIT_ONE},
                     rn[2] = {HIT_PRIOR * HIT_ONE * (2 * (U64)ro[0][0] + HIT_ONE), HIT_PRIOR * HIT_ONE * (2 * (U64)ro[1][0] + HIT_ONE)};
-          S64 lp = 0;  // (the weights' sum of the rates' log2, 2^-16 units: each cell's two)
+          S64 lf = 0, ls = 0, lr = 0;  // (the weights' sums of the rates' log2, 2^-16 units)
           for (int k = 0; k < 4; k++) {
             if (!cw[k]) continue;
             const U32* ck = ce[k];
             const U64 r = rd[k & 1];
-            lp += (S64)cw[k] * (lg2tab.log2x((U64)ck[0] * r + rn[k & 1]) - lg2tab.log2x(((U64)ck[1] + HIT_PRIOR * HIT_ONE) * r));
-            lp += (S64)cw[k] * (lg2tab.log2x((U64)ck[2] * r + rn[k & 1]) - lg2tab.log2x(((U64)ck[3] + HIT_PRIOR * HIT_ONE) * r));
+            lf += (S64)cw[k] * (lg2tab.log2x((U64)ck[0] * r + rn[k & 1]) - lg2tab.log2x(((U64)ck[1] + HIT_PRIOR * HIT_ONE) * r));
+            ls += (S64)cw[k] * (lg2tab.log2x((U64)ck[2] * r + rn[k & 1]) - lg2tab.log2x(((U64)ck[3] + HIT_PRIOR * HIT_ONE) * r));
           }
-          return lg2tab.prob(lp >> 9);
+          for (int k = 0; k < 2; k++)
+            if (rw[k]) lr += (S64)rw[k] * (lg2tab.log2x(2 * (U64)ro[k][0] + 1) - lg2tab.log2x(2 * (U64)ro[k][1] + 2));
+          cl_f = lf >> 8, cl_s = ls >> 8, cl_r = lr >> 8;
+          return lg2tab.prob((lf + ls) >> 9);
         };
         auto cupd = [&](int cl, int ht) {
           U32* const ce[4] = {hit_c[kd][hq][cl][j0][i0], hit_c[kd][hq][cl][j0][i1], hit_c[kd][hq][cl][j1][i0],
@@ -4226,9 +4246,21 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         };
         // (where a channel coded before missed at this sample, the cells of their own, cb + 8, while
         // they have cost less: xm_loss)
-        const U32 p0 = cprob(cb), p1 = xm ? cprob(cb + 8) : 0;
+        const U32 p0 = cprob(cb);
+        S64 mf = cl_f, ms = cl_s, mr = cl_r;
+        const U32 p1 = xm ? cprob(cb + 8) : 0;
         const bool ux = xm && xm_loss[1] + ((S64)4 << 16) + xm_loss[0] / 32 < xm_loss[0];
-        const U32 pq = ux ? p1 : p0;
+        if (ux) mf = cl_f, ms = cl_s, mr = cl_r;
+        const U32 pm = ux ? p1 : p0;
+        // (the rates mixed by the weights for the mean's log2, and the subband's)
+        const double mx[4] = {(double)mf / 65536.0, (double)ms / 65536.0, (double)mr / 65536.0, 1.0};
+        int mxb = (int)(((S64)lg2tab.log2x(CO_ONE) - (S64)lg2tab.log2x(pm)) >> 16);
+        mxb = mxb > HAP_N - 1 ? HAP_N - 1 : mxb;
+        double* const md = hmx_d[mxb];
+        double* const mb = hmx_b[hc ? (int)(hc - hcal) : NSUB + NSUB96][mxb];
+        double xs = (0.5 + md[0] + mb[0]) * mx[0] + (0.5 + md[1] + mb[1]) * mx[1] + (md[2] + mb[2]) * mx[2] + (md[3] + mb[3]) * mx[3];
+        xs = xs > -0.05 ? -0.05 : xs < -19.0 ? -19.0 : xs;
+        const U32 pq = lg2tab.prob((S64)(xs * 65536.0));
         const S64 hap_l = (S64)lg2tab.log2x(pq) - (S64)lg2tab.log2x(CO_ONE);  // (its log2, 2^-16)
         int hap_b = (int)(-hap_l >> 16), hap_f = (int)(-hap_l >> 8) & 255;  // (its bin, 256ths past it)
         if (hap_b >= HAP_N - 1) hap_b = HAP_N - 2, hap_f = 255;
@@ -4264,7 +4296,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
             if (he[hap_b + k] + hm2[hap_b + k] >= lim) he[hap_b + k] >>= 1, hm2[hap_b + k] >>= 1;
           }
         }
-        if (hk) hc_learn(*hc, hit, pq);
+        {
+          const double pd = (double)pq / (double)CO_ONE, er = (hit ? (pd > 0.8 ? -4.0 : -pd / (1.0 - pd)) : 1.0) * HMX_R;
+          for (int k = 0; k < 4; k++) md[k] += er * mx[k], mb[k] += er * mx[k];
+        }
+        if (hk) hc_learn(*hc, hit, pm);
         if (!ux) cupd(cb, hit);
         if (xm) {
           cupd(cb + 8, hit);
