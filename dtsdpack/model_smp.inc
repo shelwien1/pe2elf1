@@ -1324,9 +1324,36 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     *ok = abp[p][b].set;
     return 4 * (S64)abp[p][b].o;
   }
+  // The share of the levels lo..hi of those the subframe's ABITS so far allow (apl's ilo..ihi): of
+  // a lossless WAV's, under a normal prior about the subframe's level, the table's (pri + d), at a
+  // deviation of AP_SD 128ths, 1/AP_UM of it the share's as it is; of a decoded WAV's (whose first
+  // guess is the search's) the share as it is. The subframe's level lies within about half a
+  // 128th of that one half the time (3 MB of `s.2.dts`'s middle: the share's first decision 82
+  // bytes where the range is straddled, 524 as it was), but the margin (abt's sm) already has much
+  // of it: since format 100 `s.2.dts`'s core 0.09% smaller, the lossless WAVs' short streams 0.05%;
+  // at 0.35, 0.5 or 0.7 of a 128th, 0.08%, 0.05% and 0.03%; at an eighth, 0.06%; a decoded WAV's
+  // too, its streams 0.04-0.8% bigger
+  static constexpr double AP_SD = 0.25;
+  static constexpr int AP_UM = 100;
+  // (the normal's mass between a and b, about mu at deviation s; det_q()'s tails)
+  static double ap_mass(double a, double b, double mu, double s) {
+    const double za = (a - mu) / s, zb = (b - mu) / s;
+    return za >= 0 ? det_q(za) - det_q(zb) : zb <= 0 ? det_q(-zb) - det_q(-za) : 1.0 - det_q(-za) - det_q(zb);
+  }
+  double ap_pshare(int p, S64 lo, S64 hi) const {
+    const AbParLevel& A = apl[p];
+    const S64 w = A.ihi - A.ilo, a = imax64(A.ilo, lo), z = imin64(A.ihi, hi);
+    const double u = z > a ? (double)(z - a) / (double)w : 0.0;
+    if (ss_rule()) return u;
+    const double mu = (double)((S64)(A.pri + A.d) * AP_XU), s = AP_SD * (double)AP_XU;
+    const double t = ap_mass((double)A.ilo, (double)A.ihi, mu, s);
+    if (!(t > 1e-9)) return u;
+    const double m = z > a ? ap_mass((double)a, (double)z, mu, s) : 0.0;
+    return (1.0 - 1.0 / AP_UM) * (m / t) + u / AP_UM;
+  }
   // how the table's guess g for channel ch's band b stands against the levels at which it makes the
-  // subframe's ABITS so far: 0 they don't bound it, 1 all of them say g; else by the share that says
-  // another, 2 under a tenth, 3 under half, 4 under nine tenths, 5 more
+  // subframe's ABITS so far: 0 they don't bound it, 1 all of them say g; else by its share of them
+  // (ap_pshare()'s since format 100), 2 over nine tenths, 3 over half, 4 over a tenth, 5 less
   // (since format 95 the levels and the energies in 2^-18 of a log2, fe_sx's, rather than in
   // quarters of fine_energy()'s 128ths: the table's misses are 71% of `s.2.dts`'s ABITS' bytes, 82%
   // of them within a 128th of an edge, and there the energy's quarters still put a third of them on
@@ -1348,10 +1375,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       return 1;
     }
     if (A.ilo <= -AP_INF || A.ihi >= AP_INF) return 0;
-    const S64 w = A.ihi - A.ilo, in = imax64(0, imin64(A.ihi, ghi) - imax64(A.ilo, glo));
-    const S64 out = w - in;
-    if (sh) *sh = (int)((double)in / (double)w * 4096.0 + 0.5);
-    return 10 * out < w ? 2 : 2 * out < w ? 3 : 10 * out < 9 * w ? 4 : 5;
+    const double ps = ap_pshare(p, glo, ghi);
+    if (sh) *sh = (int)(ps * 4096.0 + 0.5);
+    return ps > 0.9 ? 2 : ps > 0.5 ? 3 : ps > 0.1 ? 4 : 5;
   }
   // (the same share for ABITS a)
   int ap_share(int p, int ch, int b, int a) const {
@@ -1360,8 +1386,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const S64 o = ap_off4(p, b, &ok);
     if (!ok || fe_sx[ch][b] == FE_NONE || a < 1 || a > 26 || A.ilo <= -AP_INF || A.ihi >= AP_INF) return -1;
     const S64 y = fe_sx[ch][b] - o * AP_XQ, alo = y - ap_edge(a + 1) * AP_XU, ahi = y - ap_edge(a) * AP_XU;
-    const S64 w = A.ihi - A.ilo, in = imax64(0, imin64(A.ihi, ahi) - imax64(A.ilo, alo));
-    return (int)((double)in / (double)w * 4096.0 + 0.5);
+    return (int)(ap_pshare(p, alo, ahi) * 4096.0 + 0.5);
   }
   // and its ABITS was v
   void ap_range(int p, int ch, int b, int v) {
