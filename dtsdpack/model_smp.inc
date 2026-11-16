@@ -75,6 +75,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // (the energies in 128ths of a doubling)
   static constexpr int AL_ND = 512, AL_NK = 2 * AL_ND + 1;  // (the level's search: 4 doublings either side)
   static constexpr int AB_RC = 1024;  // (the rate control's: 8 doublings either side of the last level)
+  static constexpr int AB_RB = 4096;  // (the core's budget's, where the bits meet the frame's only further: 32)
   static constexpr S32 FE_NONE = -(1 << 30), AL_C = 1 << 15;
   struct AbStair {
     S32 lo[32], hi[32];  // each ABITS's energies, less the level
@@ -1193,7 +1194,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // centre as the encoder's rate control would make it: the level at which the staircases' ABITS
   // cost what the last subframes' did (the nearer of the two either side; within AB_RC); the
   // core's, where their samples would take the frame's bits (above), and the same of the
-  // allocation table's ABITS (apl's c0t, within AB_RC of the last)
+  // allocation table's ABITS (apl's c0t), each within AB_RC of the last or, where only further,
+  // within AB_RB: since format 124, as a DTS:X encoder's level rises 8-23 doublings from a
+  // subframe to the next at a loud onset (37 times in the Cymatics stream, whose bit allocations
+  // came to 14.1 KB from 16.0; within 64 doublings, `Master Audio 7.1.dts`'s core 1.4% smaller,
+  // but two of FATE's 7-frame XXCH samples' 1.3% and 1.7% bigger; anywhere, more of them bigger)
   // (at the subframe's first ABITS, at bit at of the frame)
   void level_centre(const CoreRec& r, const CoreSub& s, int p, U64 at) {
     AbLevel& L = abl[p];
@@ -1225,8 +1230,17 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       const S64 T = L.avail + L.rb;
       S32 lo = L.c0 - AB_RC, hi = L.c0 + AB_RC;
       S64 tl = bud_total(r, s, lo), th = bud_total(r, s, hi);
-      if (tl <= T) hi = lo, th = tl;
-      else if (th > T) lo = hi, tl = th;
+      if (tl <= T) {  // (lower: to AB_RB, where the bits take the frame's there; else the edge)
+        const S32 l2 = L.c0 - AB_RB;
+        const S64 t2 = bud_total(r, s, l2);
+        if (t2 > T) hi = lo, th = tl, lo = l2, tl = t2;
+        else hi = lo, th = tl;
+      } else if (th > T) {
+        const S32 h2 = L.c0 + AB_RB;
+        const S64 t2 = bud_total(r, s, h2);
+        if (t2 <= T) lo = hi, tl = th, hi = h2, th = t2;
+        else lo = hi, tl = th;
+      }
       while (hi - lo > 1) {
         const S32 m = lo + (hi - lo) / 2;
         const S64 tm = bud_total(r, s, m);
@@ -1236,10 +1250,20 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       L.c0 = clip(tl - T < T - th ? lo : hi, -AL_C, AL_C);
       // (and the table's: where its ABITS take those bits)
       AbParLevel& A = apl[0];
-      lo = (A.cset ? A.c0t : L.c0) - AB_RC, hi = (A.cset ? A.c0t : L.c0) + AB_RC;
+      const S32 ct = A.cset ? A.c0t : L.c0;
+      lo = ct - AB_RC, hi = ct + AB_RC;
       tl = bud_total_tab(r, lo), th = bud_total_tab(r, hi);
-      if (tl <= T) hi = lo, th = tl;
-      else if (th > T) lo = hi, tl = th;
+      if (tl <= T) {
+        const S32 l2 = ct - AB_RB;
+        const S64 t2 = bud_total_tab(r, l2);
+        if (t2 > T) hi = lo, th = tl, lo = l2, tl = t2;
+        else hi = lo, th = tl;
+      } else if (th > T) {
+        const S32 h2 = ct + AB_RB;
+        const S64 t2 = bud_total_tab(r, h2);
+        if (t2 <= T) lo = hi, tl = th, hi = h2, th = t2;
+        else lo = hi, tl = th;
+      }
       while (hi - lo > 1) {
         const S32 m = lo + (hi - lo) / 2;
         const S64 tm = bud_total_tab(r, m);
@@ -1443,10 +1467,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // (ap_shape()): bands 5-19 the same, 20-27 2 dB more each, and the bottom five the same or, the
   // shape of `s.2.dts`'s encoder and FFmpeg's `master_audio_7.1_24bit.dts`'s, 18, 15, 12, 7.5 and
   // 4.5 dB lower (the offsets each band's own ABITS make, at the end of a stream, lie within 2 units
-  // of the shape's: within 10 of it in `Master Audio 7.1.dts`'s, a downmix's). Fitted afterwards, a
+  // of the shape's: within 10 of it in `Master Audio 7.1.dts`'s, a downmix's), or, a DTS:X
+  // encoder's (the Cymatics stream's; format 124), 18, 15, 12, 9 and 6 dB lower: with a level for
+  // each subframe fitted afterwards, it makes all but 0.10% of that stream's ABITS (the first
+  // shape is 1.5 dB off in its bands 3 and 4, so that the staircases' guesses were taken). Fitted afterwards, a
   // level per subframe, the staircases miss 0.6% of a lossless WAV's ABITS where their intervals as
   // they come miss 1.6%. So the stream's offset is the one most of the last ABITS of all the bands
-  // (the newer the more) say at their subframes' levels, for each shape, the shape the one more of
+  // (the newer the more) say at their subframes' levels, for each shape, the shape the one most of
   // them say (app: from a stream's first frames, where a band of its own has few; and far more
   // exactly, as every band's ABITS count, than each band's offset by its own ABITS, which the table
   // goes by until a stream's first ABITS above 1: `s.2.dts`'s core 2.2% smaller, the other lossless
@@ -1469,14 +1496,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     U32 sc[2 * AP_W + 1];  // each offset's score (ap_inc's)
   } abp[2][NSUB];
   // band b's offset in shape k, less the stream's
+  static constexpr int AP_NK = 3;  // (the shapes: `s.2.dts`'s encoder's, the flat one, the DTS:X encoder's)
   static S32 ap_shape(int k, int b) {
-    static const S16 LOW[5] = {-768, -640, -512, -320, -192};
-    return (b < 5 && !k ? LOW[b] : 0) + (b > 19 ? (S32)((256 * (b - 19) + 1) / 3) : 0);
+    static const S16 LOW[2][5] = {{-768, -640, -512, -320, -192}, {-768, -640, -512, -384, -256}};
+    return (b < 5 && k != 1 ? LOW[k >> 1][b] : 0) + (b > 19 ? (S32)((256 * (b - 19) + 1) / 3) : 0);
   }
   struct AbPool {
-    S32 c, best[2];          // the scores' centre (the stream's first ABITS above 1's); each shape's offset
+    S32 c, best[AP_NK];      // the scores' centre (the stream's first ABITS above 1's); each shape's offset
     U8 set, k, out;          // (whether c is set; the shape taken; ABITS in a row the scores miss)
-    U32 sc[2][2 * AP_W + 1]; // each shape's offsets' scores (ap_inc's)
+    U32 sc[AP_NK][2 * AP_W + 1];  // each shape's offsets' scores (ap_inc's)
   } app[2];
   // band b's offset (*ok: whether it has one): the stream's in its shape, or where none is set yet,
   // the band's own
@@ -1531,7 +1559,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const AbPool& q = app[p];
     *ok = true;
     if (q.set)
-      return 4 * (S64)q.best[q.k] + (b < 5 && !q.k ? 4 * ap_shape(0, b) : 0) + (b > 19 ? (1024 * (S64)(b - 19) + 1) / 3 : 0);
+      return 4 * (S64)q.best[q.k] + (b < 5 ? 4 * ap_shape(q.k, b) : 0) + (b > 19 ? (1024 * (S64)(b - 19) + 1) / 3 : 0);
     *ok = abp[p][b].set;
     return 4 * (S64)abp[p][b].o;
   }
@@ -1689,11 +1717,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (v < 2) return;
       const S64 m = ((lo > hi - 255 ? lo : hi - 255) + hi) >> 1;
       q.set = 1, q.out = 0, q.k = 0, q.c = (S32)(m - ap_shape(0, b));
-      q.best[0] = q.c, q.best[1] = (S32)(m - ap_shape(1, b));
+      for (int k = 1; k < AP_NK; k++) q.best[k] = (S32)(m - ap_shape(k, b));
       memset(q.sc, 0, sizeof q.sc);
     }
-    U32 mx[2];
-    for (int k = 0; k < 2; k++) {
+    U32 mx[AP_NK];
+    for (int k = 0; k < AP_NK; k++) {
       const S64 sh = ap_shape(k, b), cur = clip((S64)q.best[k] - q.c, -AP_W, AP_W) + AP_W;
       const S64 j0 = clip(lo - sh - q.c, -AP_W, AP_W + 1) + AP_W, j1 = clip(hi - sh - q.c, -AP_W - 1, AP_W) + AP_W;
       U32 best = q.sc[k][cur];
@@ -1710,7 +1738,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       q.best[k] = (S32)(bo - AP_W + q.c);
       mx[k] = best;
     }
-    if (mx[1 - q.k] > mx[q.k]) q.k = (U8)(1 - q.k);
+    int kb = q.k;  // (another where it says more)
+    for (int k = 0; k < AP_NK; k++)
+      if (mx[k] > mx[kb]) kb = k;
+    q.k = (U8)kb;
   }
   // pass p's subframe's ABITS all known (abl[p]'s obs): each band's offsets scored at its level, the
   // level's distance from the centre into the average
@@ -1756,7 +1787,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (A.inc >= 1u << 20) {
         for (int c = 0; c < NSUB; c++)
           for (int k = 0; k <= 2 * AP_W; k++) abp[p][c].sc[k] >>= 10;
-        for (int k = 0; k < 2; k++)
+        for (int k = 0; k < AP_NK; k++)
           for (int j = 0; j <= 2 * AP_W; j++) app[p].sc[k][j] >>= 10;
         A.inc >>= 10;
       }
