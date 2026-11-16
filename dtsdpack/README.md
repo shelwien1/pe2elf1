@@ -195,11 +195,13 @@ context of the family's (its mixers' choice) it takes 44 bytes off, the short st
 already know it. The HF VQ indexes are 27 KB, their misses in the top subband: 15-16% of the
 centre's and the surrounds' groups and vectors there, which hold little but the encoder's FFT noise,
 4.5-6.7% of the fronts'; the model's noise there is as strong as it should be (half as strong or
-twice made those frames 0.4% and 1.0% bigger). Its LFE, 17 KB, is no fixed filter of the WAV's LFE:
-one of 128 taps at 6 kHz fitted to half of those frames misses the other half's values by 1.2 steps
-RMS (0.7 in its own), and one for each place in the frame or a gain that changes does no better;
-the other channels' low end explains none of it, even where the WAV's LFE is under -70 dBFS (the
-core's LFE there, 20 steps RMS at its small steps, is the WAV's LFE's but for 2.7).
+twice made those frames 0.4% and 1.0% bigger). Its LFE, 17 KB, is a fixed filter of the WAV's LFE,
+rounded up, but at its quietest: one of 64 taps at 6 kHz fitted to half of those frames makes the
+louder three quarters of the other half's values to 0.37 steps RMS (81% of them exactly; with 64 ms
+of the past, 0.32 and 90%), the quietest quarter, whose steps are about a twentieth of the WAV's
+unit, to 2 steps; the other channels' low end explains none of it. The model's best prediction is
+the value 82% of the time, one of its twelve 97%; its fit with 31 ms of the past, or whether its two
+best agree as a context, made 10-40 bytes of difference.
 
 FATE's `dtsx_7.1.4_24bit.dts`, two frames of another DTS:X stream (7.1.4), is a cut, it seems: as
 with eight frames cut from the middle of the Cymatics stream, FFmpeg decodes its first frame as the
