@@ -197,7 +197,8 @@ template <int f_DEC, class C> struct tc_fam {
       // tuned anew; A's refinement's from 0 for every family, 8 bigger). Since format 114 mixer 2's
       // and 3's rates the family's own too (l2, l3: famcfg.inc's lr2 and lr3), tuned with the rest
       // (the regression set 57 bytes smaller: sid's and scl's mixer 2 all but still, at a rate of
-      // 1)
+      // 1). Since format 115 their boosts too (b2, b3: famcfg.inc's mb2 and mb3; sid's and scl's
+      // mixer 2 boosted 4 and 8 times, 7 bytes smaller).
       mx.init(b.W, b.WC);
       for(int k = 0; k < NC; k++)
         mx.set_w0(2 * k, C::wp), mx.set_w0(2 * k + 1, C::wq);
@@ -517,8 +518,8 @@ template <int f_DEC, class C> struct tc_fam {
     b = fbit(cm_pclip(pf), b, node ? FC_MIX : FC_FIRST);
     mx.upd(b, C::lr, C::mb, mx.x, xq);
     if(C::NMIX > 1) {
-      mx2.upd(b, C::lr2, C::mb, mx.x, xq);
-      mx3.upd(b, C::lr3, C::mb, mx.x, xq);
+      mx2.upd(b, C::lr2, C::mb2, mx.x, xq);
+      mx3.upd(b, C::lr3, C::mb3, mx.x, xq);
       mxf.upd(b, C::lrf, C::mbf);
     }
     //  (APM 2 with no share, bw TC_BW_ONE, is neither read nor trained:

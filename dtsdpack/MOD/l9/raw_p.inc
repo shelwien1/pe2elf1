@@ -48,7 +48,7 @@ void D9_raw_make( const M_raw_v & D, tcx & X ) {
   j = 0;
   j = j*4 + D9_raw_j_code[__min(3,__max(0,(code)-(1-1)))];
   j = j*11 + D9_raw_j_cl[__min(256,__max(0,(cl)-(1-1)))];
-  j = j*6 + D9_raw_j_at[__min(39,__max(0,(at)-(1-1)))];
+  j = j*7 + D9_raw_j_at[__min(39,__max(0,(at)-(1-1)))];
 
   k = 0;
   k = (k<<4) + (((((c1)>>6)&1)<<3) + ((((c1)>>3)&3)<<1) + ((c1)&1)); // 01011001
@@ -60,7 +60,7 @@ void D9_raw_make( const M_raw_v & D, tcx & X ) {
 
   s = 0;
   s = s*4 + D9_raw_s_code[__min(3,__max(0,(code)-(1-1)))];
-  s = s*9 + D9_raw_s_at[__min(39,__max(0,(at)-(1-1)))];
+  s = s*8 + D9_raw_s_at[__min(39,__max(0,(at)-(1-1)))];
 
   f = 0;
   f = f*4 + D9_raw_f_code[__min(3,__max(0,(code)-(1-1)))];

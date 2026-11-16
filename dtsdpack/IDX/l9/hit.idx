@@ -11,11 +11,11 @@ Debug 1
 Const 0
 
 Index a
- a_nr: nr, 1!100010110010101
- a_nl: nl, 1!100101111011111
+ a_nr: nr, 1!000000110010101
+ a_nl: nl, 1!100101111111111
 
 Index b
- b_nr: nr, 1!000010100110011
+ b_nr: nr, 1!000000100110011
  b_nl: nl, 1!000000111101011
  b_pm: pm, 1!10
 
@@ -37,7 +37,7 @@ Index h
 
 Index i
  i_nr: nr, 1!000000110010100
- i_nl: nl, 1!001000100100010
+ i_nl: nl, 1!001001100100010
  i_hm: hm, 1!11
 
 Index j
@@ -83,11 +83,11 @@ Number rA, 1, 0!01001101
 Number mwA, 1, 0!11111101
 Number rB, 1, 0!10011111
 Number mwB, 1, 0!00000000
-Number rC, 1, 0!11111101
+Number rC, 1, 0!11111100
 Number mwC, 1, 0!00010000
 Number rD, 1, 0!00000000
 Number mwD, 1, 0!00010101
-Number rE, 1, 0!11111111
+Number rE, 1, 0!11111011
 Number mwE, 1, 0!00000000
 Number rH, 1, 0!00000000
 Number mwH, 1, 0!00100011
@@ -97,7 +97,7 @@ Number rJ, 1, 0!00000000
 Number mwJ, 1, 0!00000011
 Number rK, 1, 0!00001011
 Number mwK, 1, 0!00000000
-Number rL, 1, 0!10110000
+Number rL, 1, 0!10110011
 Number mwL, 1, 0!00000000
 Number lr, 1, 0!01011
 Number mb, 1, 0!00100000
@@ -105,6 +105,7 @@ Number mb, 1, 0!00100000
 #  first three (wp, wq), the outside prediction's there (wo), A's APM refinement's (wa, format
 #  113), each mixer's in the final one (wf); and the final mixer's rate and boost, in 16ths of the
 #  others' (lf, bf, format 113), mixer 2's and 3's rates, in 16ths of mixer 1's (l2, l3, format 114)
+#  and boosts (b2, b3, format 115)
 Number wp, 1, 0!00011010
 Number wq, 1, 0!00000100
 Number wo, 1, 0!01000000
@@ -114,6 +115,8 @@ Number lf, 1, 0!00001010
 Number bf, 1, 0!00000000
 Number l2, 1, 0!00010000
 Number l3, 1, 0!00010000
+Number b2, 1, 0!00010000
+Number b3, 1, 0!00010000
 Number rS1, 1, 0!01000
 Number rS2, 1, 0!01000
 Number qs, 1, 3!1110011

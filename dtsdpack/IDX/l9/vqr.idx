@@ -36,11 +36,11 @@ Index d
 Index e
  e_kd: kd, 1!101
  e_cc: cc, 1!10
- e_bd: bd, 1!0000011011100000000000000011111
+ e_bd: bd, 1!0000011111100000000000000011111
 
 Index h
  h_kd: kd, 1!111
- h_gn: gn, 1!110111101000000
+ h_gn: gn, 1!110111111000000
  h_lh: lh, 1!11
 
 Index i
@@ -118,6 +118,7 @@ Number mb, 1, 0!01001001
 #  first three (wp, wq), the outside prediction's there (wo), A's APM refinement's (wa, format
 #  113), each mixer's in the final one (wf); and the final mixer's rate and boost, in 16ths of the
 #  others' (lf, bf, format 113), mixer 2's and 3's rates, in 16ths of mixer 1's (l2, l3, format 114)
+#  and boosts (b2, b3, format 115)
 Number wp, 1, 0!00011000
 Number wq, 1, 0!00001000
 Number wo, 1, 0!01001101
@@ -127,6 +128,8 @@ Number lf, 1, 0!00010000
 Number bf, 1, 0!00000100
 Number l2, 1, 0!00010000
 Number l3, 1, 0!00010000
+Number b2, 1, 0!00010000
+Number b3, 1, 0!00010000
 Number rS1, 1, 0!01000
 Number rS2, 1, 0!01000
 Number qs, 1, 3!0111101

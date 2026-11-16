@@ -38,11 +38,11 @@ void D9_vqr_make( const M_vqr_v & D, tcx & X ) {
   e = 0;
   e = e*3 + (((kd)>0+(1-1))+((kd)>2+(1-1)));
   e = e*2 + (((cc)>0+(1-1)));
-  e = e*11 + D9_vqr_e_bd[__min(31,__max(0,(bd)-(1-1)))];
+  e = e*12 + D9_vqr_e_bd[__min(31,__max(0,(bd)-(1-1)))];
 
   h = 0;
   h = h*4 + D9_vqr_h_kd[__min(3,__max(0,(kd)-(1-1)))];
-  h = h*8 + D9_vqr_h_gn[__min(15,__max(0,(gn)-(1-1)))];
+  h = h*9 + D9_vqr_h_gn[__min(15,__max(0,(gn)-(1-1)))];
   h = h*3 + (((lh)>0+(1-1))+((lh)>1+(1-1)));
 
   i = 0;

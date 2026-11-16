@@ -16,11 +16,11 @@ void D9_hit_make( const M_hit_v & D, tcx & X ) {
   M_hit_VARS(M_LOCAL)
 
   a = 0;
-  a = a*8 + D9_hit_a_nr[__min(15,__max(0,(nr)-(1-1)))];
-  a = a*12 + D9_hit_a_nl[__min(15,__max(0,(nl)-(1-1)))];
+  a = a*6 + D9_hit_a_nr[__min(15,__max(0,(nr)-(1-1)))];
+  a = a*13 + D9_hit_a_nl[__min(15,__max(0,(nl)-(1-1)))];
 
   b = 0;
-  b = b*7 + D9_hit_b_nr[__min(15,__max(0,(nr)-(1-1)))];
+  b = b*6 + D9_hit_b_nr[__min(15,__max(0,(nr)-(1-1)))];
   b = b*8 + D9_hit_b_nl[__min(15,__max(0,(nl)-(1-1)))];
   b = b*2 + (((pm)>0+(1-1)));
 
@@ -41,7 +41,7 @@ void D9_hit_make( const M_hit_v & D, tcx & X ) {
 
   i = 0;
   i = i*5 + D9_hit_i_nr[__min(15,__max(0,(nr)-(1-1)))];
-  i = i*5 + D9_hit_i_nl[__min(15,__max(0,(nl)-(1-1)))];
+  i = i*6 + D9_hit_i_nl[__min(15,__max(0,(nl)-(1-1)))];
   i = i*3 + (((hm)>0+(1-1))+((hm)>1+(1-1)));
 
   j = 0;

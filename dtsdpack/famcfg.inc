@@ -76,7 +76,7 @@ struct FC_NAME {
   static const int lr, mb, lrm, mbm;            // the mixers' rates
   static const int wp, wq, wo, wa, wf;          // their initial weights (tc_fam's wire())
   static const int lrf, mbf;                    // the final mixer's rate and boost
-  static const int lr2, lr3;                    // mixer 2's and 3's rates
+  static const int lr2, lr3, mb2, mb3;          // mixer 2's and 3's rates and boosts
   static const int hM, hT, hN;                  // mixer 1's, the mantissa's, its mixer's index
   static const sz kM, kT, kN, kG;               // their rows, and the signs'
   // (0 where the shape has not the part, which tc_fam then never reads)
@@ -136,6 +136,8 @@ set lrf = clip(lr * clip(FCX(lf), 1, 255) / 16, 1, 4 * TC_LR_MAX);
 set mbf = clip(mb * clip(FCX(bf), 0, 255) / 16, 0, TC_MB_MAX);
 set lr2 = clip(lr * clip(FCX(l2), 1, 255) / 16, 1, TC_LR_MAX);
 set lr3 = clip(lr * clip(FCX(l3), 1, 255) / 16, 1, TC_LR_MAX);
+set mb2 = clip(mb * clip(FCX(b2), 0, 255) / 16, 0, TC_MB_MAX);
+set mb3 = clip(mb * clip(FCX(b3), 0, 255) / 16, 0, TC_MB_MAX);
 set hM = FC_HASH(FCX(m_Volume), FCX(hM));
 set hT = FC_HASH(FCX(t_Volume), FCX(hT));
 set hN = FC_HASH(FCX(n_Volume), FCX(hN));

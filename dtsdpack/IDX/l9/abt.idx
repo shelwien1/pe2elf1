@@ -15,7 +15,7 @@ Index a
 
 Index b
  b_la: la, 1!001111011111100000000000100
- b_lb: lb, 1!100110100000001000100100000
+ b_lb: lb, 1!100110100000001001100000000
 
 Index c
  c_sn: sn, 1!101111101110100001111011001
@@ -36,14 +36,14 @@ Index e
  e_sn: sn, 1!101111000100100001011110011
 
 Index h
- h_lb: lb, 1!000000011110111101000011100
+ h_lb: lb, 1!000000011110111111000101100
  h_es: es, &00011111
  h_bd: bd, 1!0000000001100101000000000000000
 
 Index i
  i_es: es, &00001011
  i_nb: nb, 1!101100100
- i_la: la, 1!001110100011001011111001000
+ i_la: la, 1!001110100011001011111000100
 
 Index j
  j_es: es, &00000000
@@ -51,22 +51,22 @@ Index j
  j_pm: pm, 1!0
 
 Index k
- k_sn: sn, 1!101000000111110001010110101
+ k_sn: sn, 1!101000000111110001111110101
  k_nn: nn, 1!000000000000001
  k_sc: sc, 1!11110000001010
  k_eq: eq, 1!0000
- k_sm: sm, 1!1100100011100000
+ k_sm: sm, 1!0100100011100000
  k_bg: bg, 1!0001000
  k_ag: ag, 1!1000
  k_sx: sx, 1!01001
 
 Index l
- l_bd: bd, 1!1001010001000000000000000010010
+ l_bd: bd, 1!1001010001000000000010000010010
  l_cc: cc, 1!10
- l_la: la, 1!100000001111000000110110100
+ l_la: la, 1!100000001101000000110000100
 
 Index s
- s_sn: sn, 1!010111111110000000000000110
+ s_sn: sn, 1!010111111110000000000000111
  s_sd: sd, 1!10
  s_nn: nn, 1!000000000000000
  s_sc: sc, 1!01111110110000
@@ -98,7 +98,7 @@ Index g
 Number rA, 1, 0!00001111
 Number mwA, 1, 0!11111010
 Number rB, 1, 0!11100001
-Number mwB, 1, 0!10010110
+Number mwB, 1, 0!10010111
 Number rC, 1, 0!11111111
 Number mwC, 1, 0!00100000
 Number rD, 1, 0!11111101
@@ -111,9 +111,9 @@ Number rI, 1, 0!11011100
 Number mwI, 1, 0!10010111
 Number rJ, 1, 0!00000000
 Number mwJ, 1, 0!10001111
-Number rK, 1, 0!10111110
+Number rK, 1, 0!10100110
 Number mwK, 1, 0!00000111
-Number rL, 1, 0!11110011
+Number rL, 1, 0!11111001
 Number mwL, 1, 0!11011111
 Number lr, 1, 0!10111
 Number mb, 1, 0!01000100
@@ -121,6 +121,7 @@ Number mb, 1, 0!01000100
 #  first three (wp, wq), the outside prediction's there (wo), A's APM refinement's (wa, format
 #  113), each mixer's in the final one (wf); and the final mixer's rate and boost, in 16ths of the
 #  others' (lf, bf, format 113), mixer 2's and 3's rates, in 16ths of mixer 1's (l2, l3, format 114)
+#  and boosts (b2, b3, format 115)
 Number wp, 1, 0!00011111
 Number wq, 1, 0!00001000
 Number wo, 1, 0!01000010
@@ -130,13 +131,15 @@ Number lf, 1, 0!00010010
 Number bf, 1, 0!00010001
 Number l2, 1, 0!00010000
 Number l3, 1, 0!00010000
+Number b2, 1, 0!00010000
+Number b3, 1, 0!00010000
 Number rS1, 1, 0!01000
 Number rS2, 1, 0!00101
 Number qs, 1, 3!1101101
 Number qf, 1, 3!0011000
 Number bw, 1, 0!01000
 Number rT, 1, 0!00001000
-Number mwT, 1, 0!00000010
+Number mwT, 1, 0!00000000
 Number mt, 1, 0!100
 #  the mantissa mixer's rates: frozen (Index n)
 ! Number lrm, 1, 0!11111
