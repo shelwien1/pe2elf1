@@ -17,6 +17,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   M_FAM(hit)
   M_FAM(smp)
   M_FAM(vqr)
+  M_FAM(vqp)
   WavIn* wav;     // the WAV (none: ok 0)
   Bind bind;      // how the core lines up with it
   const S64* fir; // the prototype filter of the frame's FILTS
@@ -1821,14 +1822,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // by their keys) lies from the best against this one's (gr, the contexts selected again): where
   // the encoder's arithmetic makes another its choice, the nearer ones are likelier, and how many
   // lie near goes by where the keys jump (`s.2.dts`'s core 0.7% smaller)
-  int code_rank(int r, int nb, M_vqr_v& D, const KeyIx* c, int n, const double* qr = nullptr) {
+  template <class F, class V>
+  int code_rank(F& f, int r, int nb, V& D, const KeyIx* c, int n, const double* qr = nullptr) {
     // (qr: each rank's probability, the outside prediction of each decision, its stretch doubled)
     auto setp = [&](int lo, int mid, int hi) {
       if (!qr) return;
       double a = 0, t = 0;
       for (int i = lo; i < hi && i < n; i++) t += qr[i], a += i >= mid ? qr[i] : 0;
       const int p0 = t > 0 ? clip((int)((1.0 - a / t) * CM_PONE + 0.5), 1, CM_PONE - 1) : CM_PHALF;
-      f_vqr.prp = cm_pclip(cm_squash(2 * cm_stretch(p0)));
+      f.prp = cm_pclip(cm_squash(2 * cm_stretch(p0)));
     };
     const int bk = ENC ? bit_len((U64)r) : 0;
     int t = 0;
@@ -1849,23 +1851,23 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           if (g)
             while (D.gr < 6 && a >= g << (D.gr + 1)) D.gr++;
         }
-        B::sel(f_vqr, D);
+        B::sel(f, D);
       }
       setp(t ? 1 << (t - 1) : 0, 1 << t, n);
-      if (!f_vqr.bit(VN_BKT + t, ENC && bk > t)) break;
+      if (!f.bit(VN_BKT + t, ENC && bk > t)) break;
       t++;
     }
     if (t < 2) {
-      f_vqr.prp = -1;
+      f.prp = -1;
       return t;
     }
     int m = 1;
     for (int p = 0; p < t - 1; p++) {
       const int sh = t - 2 - p;
       setp(m << (sh + 1), (2 * m + 1) << sh, (m + 1) << (sh + 1));
-      m = 2 * m + f_vqr.bit(VN_BIT + 3 * t + imin(p, 2), ENC && ((r >> sh) & 1));
+      m = 2 * m + f.bit(VN_BIT + 3 * t + imin(p, 2), ENC && ((r >> sh) & 1));
     }
-    f_vqr.prp = -1;
+    f.prp = -1;
     return m;
   }
   // the rank of index v among the n candidates (c), or the index of the rank coded (d); kind kd, the
@@ -2131,11 +2133,22 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       for (int k = 1; k < n; k++) pt = qr[k] > pt ? qr[k] : pt;
       D.mq = 1 + (pt < 0.3 ? 0 : pt < 0.45 ? 1 : pt < 0.6 ? 2 : pt < 0.75 ? 3 : pt < 0.9 ? 4 : pt < 0.97 ? 5 : pt < 0.995 ? 6 : 7);
     }
-    B::sel(f_vqr, D);
     int at = 0;
     if (ENC)
       while (cand[at].i != v) at++;
-    const int r = code_rank(ENC ? rank_of(cand, n, at) : 0, nb, D, cand, n, pq ? qr : nullptr);
+    const int r0 = ENC ? rank_of(cand, n, at) : 0;
+    int r;
+    if (kd == VK_PVQ || kd == VK_PVE) {  // (the predictors' ranks, by the vqp family: format 116)
+      M_vqp_v E;
+#define M_COPY(f) E.f = D.f;
+      M_vqr_VARS(M_COPY)
+#undef M_COPY
+      B::sel(f_vqp, E);
+      r = code_rank(f_vqp, r0, nb, E, cand, n, pq ? qr : nullptr);
+    } else {
+      B::sel(f_vqr, D);
+      r = code_rank(f_vqr, r0, nb, D, cand, n, pq ? qr : nullptr);
+    }
     if (!ENC) v = select_rank(cand, n, r);
     if (mu > 0 && r) {
       hvs[0] += mr >= 8, hvs[1] += ml >= 8;

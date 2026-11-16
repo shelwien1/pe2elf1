@@ -3,11 +3,12 @@
 // Apart from model.inc for IDX/famtune.cpp, which replays a family's decisions without the model.
 
 // the families, X(name) each, in the order the model has them
-#define DTSD_FAMS(X) X(hdr) X(sid) X(abt) X(scl) X(hit) X(smp) X(vqr) X(raw)
+#define DTSD_FAMS(X) X(hdr) X(sid) X(jsc) X(abt) X(scl) X(hit) X(smp) X(vqr) X(vqp) X(raw)
 
 // The fields the hdr family codes, each of their own values (fld): the core frame's header and
 // coding header, a subframe's header fields, then the container's (below), then the XCH
-// extension's; and the sid family's, a subband's side information (SF_*).
+// extension's; and the sid family's, a subband's side information (SF_*; its joint scale factors
+// the jsc family's, since format 116).
 constexpr int NHF = 80;  // (the levels' contexts take parts of a field's number: XXCH's, past 63, share theirs)
 // the container's fields, after the frame's: a chunk's kind, the length of bytes kept as bytes,
 // the bits after the subframes all zero, and how many of their last bytes are not; the same of the
@@ -22,6 +23,7 @@ enum { SF_PMODE, SF_PVQ, SF_TMODE, SF_JSHUFF, SF_JSCALE, SF_HFVQ, SF_LFE, SF_TMS
 //        value is the last one, 14 the one before it, 15 a flag (a field of one bit)
 //   sid  the same (14: the value is that of the place before in the subframe), then an index
 //        (PVQ, HFVQ): 16-31 its top 4 bits as a tree, 32-47 the bits below them by place
+//   jsc  sid's nodes 0-15 (a joint scale factor)
 //   abt  ABITS: code() of its difference from the last (0-12), 13 the last one, 14 the band below's
 //   scl  a scale factor: code() of its difference from the prediction (0-12), 13 the prediction,
 //        14 the last one (no prediction)
@@ -35,6 +37,7 @@ enum { SF_PMODE, SF_PVQ, SF_TMODE, SF_JSHUFF, SF_JSCALE, SF_HFVQ, SF_LFE, SF_TMS
 //   vqr  a rank (model_smp.inc's code_rank()): 13-24 its bucket (0; 1; 2-3; 4-7; ...) in unary,
 //        25-63 the bits below the bucket's top, by the bucket and their place (the first two;
 //        the rest)
+//   vqp  the same (the ADPCM predictors' ranks, vqr's before format 116)
 //   raw  a byte's bits, by their place in its binary tree (1-255)
 enum { HN_SAME = TC_NODE, HN_SAME2, HN_BIT, HN_N };
 enum { SN_SAME = TC_NODE, SN_SAMEP, SN_BIT, SN_IX, SN_IXPOS = SN_IX + 16, SN_N = SN_IXPOS + 16 };
@@ -52,6 +55,7 @@ enum { VN_BKT = TC_NODE, VN_BIT = VN_BKT + RANK_BITS, VN_N = VN_BIT + 3 * (RANK_
 enum { VK_PVQ, VK_HFG, VK_HFV, VK_PVE, VK_N };
 constexpr int M_hdr_ND = HN_N, M_hdr_MND = TC_MNODE, M_hdr_NG = NHF;
 constexpr int M_sid_ND = SN_N, M_sid_MND = TC_MNODE, M_sid_NG = SF_N;
+constexpr int M_jsc_ND = HN_N, M_jsc_MND = TC_MNODE, M_jsc_NG = SF_N;
 constexpr int M_abt_ND = AN_N, M_abt_MND = TC_MNODE, M_abt_NG = 32;
 constexpr int M_scl_ND = CN_N, M_scl_MND = TC_MNODE, M_scl_NG = 4;
 constexpr int HIT_NEAR = 4;  // (an index neither the audio's nor alt, within this of the audio's: its distance from it)
@@ -59,6 +63,7 @@ enum { HT_HIT = TC_NODE, HT_ALT, HT_NEAR, HT_SIDE, HT_DIST, HT_N = HT_DIST + 2 *
 constexpr int M_hit_ND = HT_N, M_hit_MND = 1, M_hit_NG = 1;
 constexpr int M_smp_ND = QN_N, M_smp_MND = TC_MNODE, M_smp_NG = 1;
 constexpr int M_vqr_ND = VN_N, M_vqr_MND = 1, M_vqr_NG = 1;
+constexpr int M_vqp_ND = VN_N, M_vqp_MND = 1, M_vqp_NG = 1;
 constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 
 // Each family's variables, X(name) each, as M_<family>_v has them: what the model fills and the
@@ -156,11 +161,13 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      the byte at the place in the last field of the kind (0 none, else 1 + it)
 #define M_hdr_VARS(X) X(fld) X(lv) X(l2) X(pos) X(st) X(nch)
 #define M_sid_VARS(X) X(fld) X(cc) X(bd) X(lv) X(pq) X(st) X(ac) X(ab) X(ec) X(tr)
+#define M_jsc_VARS(X) M_sid_VARS(X)  // (sid's, fld SF_JSCALE)
 #define M_abt_VARS(X) X(bd) X(cc) X(la) X(lb) X(es) X(de) X(ls) X(pm) X(st) X(nb) X(mx) X(sn) X(sd) X(nn) X(sc) X(eq) X(sm) X(bg) X(ag) X(sx)
 #define M_scl_VARS(X) X(kd) X(ab) X(pm) X(pk) X(pn) X(lp) X(hm) X(bd) X(dp) X(cc) X(nb) X(pl)
 #define M_hit_VARS(X) X(pm) X(nr) X(nl) X(ab) X(ql) X(hm)
 #define M_smp_VARS(X) X(ab) X(hw) X(pk) X(nr) X(nl) X(ql) X(hm) X(pm) X(bd) X(m1) X(m2) X(sq) X(s1)
 #define M_vqr_VARS(X) X(kd) X(cc) X(bd) X(mg) X(gn) X(lh) X(ml) X(nc) X(gr) X(mq)
+#define M_vqp_VARS(X) M_vqr_VARS(X)  // (vqr's, kd VK_PVQ and VK_PVE)
 #define M_raw_VARS(X) X(c1) X(c2) X(code) X(at) X(cl)
 
 // the variables as the model gives them to a family

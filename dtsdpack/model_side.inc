@@ -1,7 +1,7 @@
 // model_side.inc -- the model's side information (model.inc): a subband's PMODE, PVQ, TMODE, joint
-// scale factors and high-frequency VQ vector and the LFE samples (the sid family), each against its
-// last value and the place before's in the subframe; the bit allocations (abt), against the last
-// ones, the subband below's and the audio's energy.
+// scale factors and high-frequency VQ vector and the LFE samples (the sid family; the joint scale
+// factors the jsc family), each against its last value and the place before's in the subframe; the
+// bit allocations (abt), against the last ones, the subband below's and the audio's energy.
 
 template <int f_DEC, class LV>
 struct ModelSide : ModelHdr<f_DEC, LV> {
@@ -12,14 +12,21 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
   using B::checked;
   using B::code_val;
   M_FAM(sid)
+  M_FAM(jsc)
   M_FAM(abt)
   int sst;  // sid: whether the value before in the subframe kept its last one (0 none, 1 kept, 2 changed)
   int ast;  // abt: the same of the subband below's ABITS
 
   // A value v of sid's field fld (in lo..hi; a flag where bit1) of channel ch's subband b: against
-  // its last value A and the place before's, P (1 + them, 0 none); ac, ab, ec as famvars.inc says
+  // its last value A and the place before's, P (1 + them, 0 none); ac, ab, ec as famvars.inc says.
+  // The joint scale factors go to the jsc family, with the same variables
   S64 side_code(int fld, int ch, int b, S64 v, S64 lo, S64 hi, int bit1, S32 A, S32 P, int ac, int ab, int ec, int tr = 0) {
-    M_sid_v D;
+    if (fld == SF_JSCALE) return side_val<M_jsc_v>(f_jsc, fld, ch, b, v, lo, hi, bit1, A, P, ac, ab, ec, tr);
+    return side_val<M_sid_v>(f_sid, fld, ch, b, v, lo, hi, bit1, A, P, ac, ab, ec, tr);
+  }
+  template <class V, class F>
+  S64 side_val(F& f, int fld, int ch, int b, S64 v, S64 lo, S64 hi, int bit1, S32 A, S32 P, int ac, int ab, int ec, int tr) {
+    V D;
     tcx X;
     D.fld = fld;
     D.cc = chan_class(ch);
@@ -31,9 +38,9 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
     D.ab = ab;
     D.ec = ec;
     D.tr = tr;
-    f_sid.make(D, X);
-    f_sid.select(X);
-    v = code_val(f_sid, X, bit1, v, A, P, A ? A - 1 : P ? P - 1 : 0, (u32)fld, lo, hi);
+    f.make(D, X);
+    f.select(X);
+    v = code_val(f, X, bit1, v, A, P, A ? A - 1 : P ? P - 1 : 0, (u32)fld, lo, hi);
     sst = !A ? 0 : v == A - 1 ? 1 : 2;
     return v;
   }
