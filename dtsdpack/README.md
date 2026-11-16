@@ -54,19 +54,19 @@ WAV is the one `c` had: its format, its size and the CRC of its first 64 KB are 
 
 ```
 $ dtsdpack c -s s2.dtsc s2_full.wav s2.dtsd
-s2.dtsc: 50008260 -> 77719 bytes (0.16%, -9); 24855 frames, 24855 packed; 0 bytes between frames; 5 channels and the LFE against the WAV (offset 512, correlation 1.0000)
+s2.dtsc: 50008260 -> 76449 bytes (0.15%, -9); 24855 frames, 24855 packed; 0 bytes between frames; 5 channels and the LFE against the WAV (offset 512, correlation 1.0000)
   bytes                             input     packed
   bytes kept as bytes                   0          3    0.00%
   headers, container              1059444         34    0.00%
-  side information                2521040      36280    1.44%
-  bit allocations                 2174812       5790    0.27%
+  side information                2521040      36278    1.44%
+  bit allocations                 2174812       4522    0.21%
   scale factors                   3512740      15280    0.43%
   subband samples                40631706      20298    0.05%
   bits after the subframes         108518          0    0.00%
-  total                          50008260      77686    0.16%
+  total                          50008260      76416    0.15%
   the audio's indexes: 99.92% of the samples; the audio's scale factors: 99.09%
-  the bit allocations' staircases: 95.53% of the ABITS, right in 99.51% of them
-  the encoders' allocation table: 94.75% of the ABITS, right in 99.51% of them
+  the bit allocations' staircases: 95.53% of the ABITS, right in 99.57% of them
+  the encoders' allocation table: 94.32% of the ABITS, right in 99.57% of them
   the encoder's searches on the audio: 99.76% of the ADPCM predictors; HF VQ: 92.36% of the groups, 93.04% of the vectors in them
   the binding: core channel 0 = WAV 2; core channel 1 = WAV 0; core channel 2 = WAV 1; core channel 3 = WAV 4; core channel 4 = WAV 5; LFE = WAV 3
 ```
@@ -92,10 +92,10 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 77719 (0.16%) | 71.86% | 88.21% |
-| its first 3 MB (6.8 s) | 1275608 | 3538 (0.28%) | | |
-| 3 MB from its middle (5.7 s) | 1068372 | 4683 (0.44%) | | |
-| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2685 (0.11%) | | |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76449 (0.15%) | 71.86% | 88.21% |
+| its first 3 MB (6.8 s) | 1275608 | 3519 (0.28%) | | |
+| 3 MB from its middle (5.7 s) | 1068372 | 4659 (0.44%) | | |
+| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2621 (0.11%) | | |
 
 Compressing the whole of `s.2.dts`'s core takes 78 seconds (0.6 MB of core a second; 71 in format
 95, 38 before the HF VQ's sampling of format 93, below) and 42 MB of memory, decompressing it 80
@@ -117,13 +117,13 @@ FFmpeg's small DTS-HD MA samples (`xll_*`, 7 frames each) round-trip too:
 
 | Sample | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `xll_51_24_48_768` | 7168 | 298 (4.16%) | the WAV's 5.1 |
+| `xll_51_24_48_768` | 7168 | 294 (4.10%) | the WAV's 5.1 |
 | `xll_71_24_48_768_0` | 7168 | 278 (3.88%) | a downmix of its 7.1: every channel at -3 dB, each surround its side and rear surround |
-| `xll_71_24_48_768_1` | 7168 | 299 (4.17%) | the same, the rear surrounds' sign inverted |
-| `xll_xch_61_24_48_768` | 7168 | 557 (7.77%) | its 6.1's 5.1, the back centre in the surrounds at about -3 dB; and in the XCH extension, the back centre |
-| `xll_71_24_96_768` | 7168 | 252 (3.52%) | the 96 kHz WAV's 64-band analysis's lower half, a downmix as the 48 kHz one's |
-| `xll_51_16_192_768_1` | 7168 | 233 (3.25%) | the 64-band analysis's lower half of the 192 kHz WAV's lower frequency band, as DTS-HD MA's XLL makes it (below) |
-| `xll_51_16_192_768_0` | 7168 | 208 (2.90%) | the same (the same WAV, another core) |
+| `xll_71_24_48_768_1` | 7168 | 300 (4.19%) | the same, the rear surrounds' sign inverted |
+| `xll_xch_61_24_48_768` | 7168 | 559 (7.80%) | its 6.1's 5.1, the back centre in the surrounds at about -3 dB; and in the XCH extension, the back centre |
+| `xll_71_24_96_768` | 7168 | 255 (3.56%) | the 96 kHz WAV's 64-band analysis's lower half, a downmix as the 48 kHz one's |
+| `xll_51_16_192_768_1` | 7168 | 235 (3.28%) | the 64-band analysis's lower half of the 192 kHz WAV's lower frequency band, as DTS-HD MA's XLL makes it (below) |
+| `xll_51_16_192_768_0` | 7168 | 212 (2.96%) | the same (the same WAV, another core) |
 
 Before the downmixes were found, the 7.1 and 6.1 ones went to 36-38%: only 3 of their core's
 channels lined up with a WAV channel, and those at the wrong gain in the 7.1 ones. With its XCH
@@ -154,13 +154,13 @@ allocations in):
 
 | Stream | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 28559 (1.51%) | the 96 kHz decode's 64-band analysis's lower half (99.79% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
-| `Master Audio 5.0 96khz.dts` | 1768548 | 3582 (0.20%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
-| `Master Audio 7.1.dts` | 1945604 | 4355 (0.22%) | a downmix of its 7.1 |
-| `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 3850 (0.14%) | its 3.1 |
-| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 2332 (0.04%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
-| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 1633 (0.32%) | the same (1.95%) |
-| `open bitrate.dts` (stereo, open rate) | 5242416 | 884 (0.02%) | decoded (99.99% of the indexes, 99.96% of the scale factors, 99.82% of the bit allocations, 99.99% of the HF VQ groups, 99.82% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
+| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 28564 (1.51%) | the 96 kHz decode's 64-band analysis's lower half (99.79% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
+| `Master Audio 5.0 96khz.dts` | 1768548 | 3501 (0.20%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
+| `Master Audio 7.1.dts` | 1945604 | 4179 (0.21%) | a downmix of its 7.1 |
+| `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 3800 (0.14%) | its 3.1 |
+| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 2336 (0.04%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
+| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 1635 (0.33%) | the same (1.95%) |
+| `open bitrate.dts` (stereo, open rate) | 5242416 | 886 (0.02%) | decoded (99.99% of the indexes, 99.96% of the scale factors, 99.82% of the bit allocations, 99.99% of the HF VQ groups, 99.82% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
 
 A DTS:X stream, `Nigel_Stanford_Cymatics_DTS-X.dts` (5:27; a 5.1 core at 1509 kbps beside DTS-HD
 MA's XLL, whose 7.1 bed FFmpeg decodes, and the DTS:X objects' data, which
@@ -168,7 +168,7 @@ MA's XLL, whose 7.1 bed FFmpeg decodes, and the DTS:X objects' data, which
 
 | Stream | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `Nigel_Stanford_Cymatics_DTS-X.dts` | 61758340 | 76800 (0.12%) | the bed's 5.1 downmix, every channel at -3 dB, each surround its side and back surround, the back's samples first times 32767/32768, rounded (89909 before format 124's allocation table for its encoder, 92266 before format 123's LFE predictions by class, 179247 before format 122's gains before the mix, below; 184951 before format 117's changes for this encoder's LFE) |
+| `Nigel_Stanford_Cymatics_DTS-X.dts` | 61758340 | 67345 (0.11%) | the bed's 5.1 downmix, every channel at -3 dB, each surround its side and back surround, the back's samples first times 32767/32768, rounded (76800 before format 125's transients, 89909 before format 124's allocation table for its encoder, 92266 before format 123's LFE predictions by class, 179247 before format 122's gains before the mix, below; 184951 before format 117's changes for this encoder's LFE) |
 
 Its surrounds' subband samples were 80 KB of its 180, their bottom subband 36 KB, missed 9% of the
 time, the more the louder: what seemed something more in the core than in the bed (white, in time
@@ -194,19 +194,21 @@ the table's guesses taken for 95.7% of its ABITS, right in 98.75% of them, its b
 and its core 78723 bytes. And at a loud onset its level rises 8 to 23 doublings from a subframe to
 the next (37 times), where the budget's level could move 8: it now reaches 32 where the bits meet
 the frame's only past 8, the table right in 99.13%, the bit allocations 14 KB (the first channel of
-a subframe, the centre, guessed before the subframe's ABITS have moved the level, misses most: 2.2%
-of its first guesses, the surrounds' 0.7-0.9%). The HF VQ indexes are 27 KB, their misses in the top
-subband: 15-16% of the centre's and the surrounds' groups and vectors there, which hold little but
-the encoder's FFT noise, 4.5-6.7% of the fronts'; the model's noise there is as strong as it should
-be (half as strong or twice made those frames 0.4% and 1.0% bigger). Its LFE, 17 KB before format
-123 and 14 KB now, is a fixed filter of the WAV's LFE, rounded up, but at its quietest: one of 64
-taps at 6 kHz fitted to half of those frames makes the louder three quarters of the other half's
-values to 0.37 steps RMS (81% of them exactly; with 64 ms of the past, 0.32 and 90%), the quietest
-quarter, whose steps are about a twentieth of the WAV's unit, to 2 steps; the other channels' low
-end explains none of it. The model's best prediction was the value 85.2% of the time over the
-stream, one of its twelve 98.2%: format 123 takes the one best for the best's sign and size (below),
-88.6%; its fit with 31 ms of the past, or whether its two best agree as a context, made 10-40 bytes
-of difference.
+a subframe, the centre, guessed before the subframe's ABITS have moved the level, missed most: 2.2%
+of its first guesses, the surrounds' 0.7-0.9%). But the budget left out a transient's second scale
+factor, so that the level lay low in subframes with many transients, and this encoder takes
+transients from subband 20 up too, where none were expected: since format 125, 5.9 KB, the table
+right in 99.55% (below). The HF VQ indexes are 27 KB, their misses in the top subband: 15-16% of the
+centre's and the surrounds' groups and vectors there, which hold little but the encoder's FFT noise,
+4.5-6.7% of the fronts'; the model's noise there is as strong as it should be (half as strong or
+twice made those frames 0.4% and 1.0% bigger). Its LFE, 17 KB before format 123 and 14 KB now, is a
+fixed filter of the WAV's LFE, rounded up, but at its quietest: one of 64 taps at 6 kHz fitted to
+half of those frames makes the louder three quarters of the other half's values to 0.37 steps RMS
+(81% of them exactly; with 64 ms of the past, 0.32 and 90%), the quietest quarter, whose steps are
+about a twentieth of the WAV's unit, to 2 steps; the other channels' low end explains none of it.
+The model's best prediction was the value 85.2% of the time over the stream, one of its twelve
+98.2%: format 123 takes the one best for the best's sign and size (below), 88.6%; its fit with 31 ms
+of the past, or whether its two best agree as a context, made 10-40 bytes of difference.
 
 FATE's `dtsx_7.1.4_24bit.dts`, two frames of another DTS:X stream (7.1.4), is a cut, it seems: as
 with eight frames cut from the middle of the Cymatics stream, FFmpeg decodes its first frame as the
@@ -219,7 +221,7 @@ No stream at hand has XXCH in its core substream: FATE's XXCH samples (`xxch_71_
 `xbr_xxch_71_24_48_3840`, `x96_xxch_71_24_96_3840`, 7 frames each) have it in their extension
 substreams. Their XXCH frames moved into their core frames after the subframes (EXT_AUDIO set,
 EXT_AUDIO_ID 6), the extension substream dropped, make core-substream XXCH streams that FFmpeg
-decodes as 7.1; dtsdpack round-trips them against those decodes (12.28%, 11.34%, 9.51%; 15.80%,
+decodes as 7.1; dtsdpack round-trips them against those decodes (12.27%, 11.33%, 9.52%; 15.80%,
 17.58% and 14.44% before a twin channel's fields went by the earlier one's, below; the first two
 21.64% and 22.63% before the binding stopped taking a gain a clipped decode's fit makes). Their
 signal is a silent frame, then white noise near full scale; the decoder undoes XXCH's downmix
@@ -232,12 +234,12 @@ their decodes clip too (0.3-1.2% of the samples):
 
 | Stream | Core | dtsdpack |
 |---|---:|---:|
-| `core_51_24_48_768_0`, `_1` (5.1) | 7168 | 1403 (19.57%), 1397 (19.49%) |
-| `xch_61_24_48_768` (6.1 by XCH) | 7168 | 1461 (20.38%) |
-| `x96_51_24_96_1509` (X96) | 14084 | 2639 (18.74%) |
-| `x96_xch_61_24_96_3840` | 14084 | 1851 (13.14%) |
-| `xbr_51_24_48_3840`, `xbr_xch_61_24_48_3840` (XBR: its residuals in the decode) | 14084 | 1599 (11.35%), 2011 (14.28%) |
-| `xll_x96_51_24_96_1509` (DTS-HD MA, X96) | 14084 | 1339 (9.51%) |
+| `core_51_24_48_768_0`, `_1` (5.1) | 7168 | 1407 (19.63%), 1400 (19.53%) |
+| `xch_61_24_48_768` (6.1 by XCH) | 7168 | 1467 (20.47%) |
+| `x96_51_24_96_1509` (X96) | 14084 | 2661 (18.89%) |
+| `x96_xch_61_24_96_3840` | 14084 | 1854 (13.16%) |
+| `xbr_51_24_48_3840`, `xbr_xch_61_24_48_3840` (XBR: its residuals in the decode) | 14084 | 1590 (11.29%), 2008 (14.26%) |
+| `xll_x96_51_24_96_1509` (DTS-HD MA, X96) | 14084 | 1331 (9.45%) |
 
 ## How it works
 
@@ -936,7 +938,8 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   TMODE's prediction, the ratio a context: `ES 6.1 16bit.dts` 9.9% smaller. A lossless WAV's
   encoders make a transient only where a subsubframe's energy is 8 times the one before's at least
   (not once below, in `s.2.dts`'s 3.5 million), never in a subband that predicts and once in one
-  from 20 up, and the likelier the larger the rise and the ABITS (1% at ABITS 1, 81% from 13):
+  from 20 up (the Cymatics stream's encoder 2721 times there), and the likelier the larger the rise
+  and the ABITS (1% at ABITS 1, 81% from 13):
   those make a context, and the largest rise's subsubframe the first guess (`s.2.dts`'s TMODEs were
   8.8 KB, 7.1 of them its 9354 transients; its core 2.9% smaller, the 7-frame samples' 4-7%). And
   a lossless WAV's ABITS, which come before its TMODEs, said whether its encoder took a transient's
@@ -946,7 +949,13 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   million subbands below 20 that don't predict, all within 2% of it: the rise in eighths of a
   doubling against that (PMODE's tr, above) is a context (its TMODEs 1.4 KB to 1.0 at a threshold
   the ABITS moved, its core 0.4% smaller; at the subband's, 0.34 KB), and whether it is reached
-  makes the class (0.17 KB, its core 0.07% smaller).
+  makes the class (0.17 KB, its core 0.07% smaller). From subband 20 up, where the model had them
+  take none, they take one where the rise reaches 2000 times (format 125): the Cymatics stream's
+  encoder 2719 of its 2721 there so (one rose 287 times, the other 1996), and 88 more subbands
+  rise that much; `s.2.dts`'s its one there, the only one that rises 1500 times. The rise against
+  that is the context there too, the subband's ABITS go by its mean square from the rise on, as
+  below, and the bit budget counts its second scale factor (below): the Cymatics stream's TMODEs
+  1168 bytes to 217, its bit allocations 8.1 KB to 5.9 and its core 4.8% smaller.
 - **The bit allocations**: an encoder's ABITS rise with a subband's energy, at thresholds that its
   rate control moves from frame to frame. The ABITS a subband had the last time it had its energy
   (as the scale factor index its RMS makes; an ADPCM subband's residual's), in any channel, is its
@@ -973,16 +982,21 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   theirs (the side information after the ABITS, the bits short of the 16: an average, each
   subframe's weight half the next one's) (`s.2.dts`'s core 3.1% smaller, the other lossless WAVs'
   0.4-2.8%; the nearer of the levels either side, 0.4% more; the rate control as it was stays for
-  the subframes before, and for XCH's). An ADPCM subband's staircase is the subband's, as the
-  other's (its residual's energy meets the same thresholds: 0.8% smaller), and once the subframe's
-  ABITS are all known, the staircases have each of them at its last level, not the level it came at
-  (1.7% smaller). Its guess is the first guess; the second, the ABITS across the edge of its
-  energies the energy lies nearer (a miss's 98% of the time; the last ABITS, the second guess
-  before, 39%); then the difference. How near the energy lies to that edge, and on which side, is a
-  context, and so are the ABITS seen at the energy and either side, the energy, its change, the
-  neighbours' and the loudest subband's. The staircases guess 95.5% of `s.2.dts`'s ABITS (the rest
-  are silent subbands', whose ABITS an encoder fills a frame's bits with by a pattern of its own:
-  there the ABITS seen at the energy is the first guess) and 98.4% of those right: its bit
+  the subframes before, and for XCH's). Since format 125 a subband's bits there count, where the
+  encoders take a transient, its second scale factor's and its TMODE's code's above a 0's: without
+  them the level lay low where a subframe had more transients than the last ones had (in the
+  Cymatics stream by 31 128ths of a doubling with 20-49 of them, 69 with 50 or more; now 0 and 7),
+  `s.2.dts`'s core 1.6% smaller, `Master Audio 7.1.dts`'s 3.6%, the Cymatics stream's 7.9% (its
+  values quantized at the two scale factors besides, the same). An ADPCM subband's staircase is the
+  subband's, as the other's (its residual's energy meets the same thresholds: 0.8% smaller), and
+  once the subframe's ABITS are all known, the staircases have each of them at its last level, not
+  the level it came at (1.7% smaller). Its guess is the first guess; the second, the ABITS across
+  the edge of its energies the energy lies nearer (a miss's 98% of the time; the last ABITS, the
+  second guess before, 39%); then the difference. How near the energy lies to that edge, and on
+  which side, is a context, and so are the ABITS seen at the energy and either side, the energy, its
+  change, the neighbours' and the loudest subband's. The staircases guess 95.5% of `s.2.dts`'s ABITS
+  (the rest are silent subbands', whose ABITS an encoder fills a frame's bits with by a pattern of
+  its own: there the ABITS seen at the energy is the first guess) and 98.4% of those right: its bit
   allocations went from 193 KB to 53 KB, its core from 386893 bytes to 249228 (246945 with abt tuned
   again, below), and the other lossless WAVs' streams 12-45%; the second guess took them to 46 KB
   (its core 3.1% smaller), and the energies in 128ths of a doubling instead of 32nds, with the
@@ -1008,84 +1022,82 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   RMS (1.5 dB) or more for ABITS 2 to 10, 4 steps more for each ABITS above (its quantizer's levels
   doubled), and the next ABITS's less (else 1); the bands' offsets are the stream's: bands 5 to 19
   the same, 20 to 27 2 dB more each, and the bottom five 12, 10, 8, 5 and 3 steps lower in two of
-  the five lossless WAVs (`s.2.dts` and `master audio 7.1 24bit.dts`), as the others in the rest;
-  in the Cymatics stream's, a DTS:X encoder's, 12, 10, 8, 6 and 4 steps lower (format 124, above). A
+  the five lossless WAVs (`s.2.dts` and `master audio 7.1 24bit.dts`), as the others in the rest; in
+  the Cymatics stream's, a DTS:X encoder's, 12, 10, 8, 6 and 4 steps lower (format 124, above). A
   subband with a transient goes by the mean square of its values from the transient on (where its
   second scale factor is): where the rise is 4 doublings or more, nearly always (`s.2.dts`'s 4184
   such subbands: by the subframe's mean square, the table right in 43% of them, by theirs in 94%),
-  from 3 to 4 the more often the louder those values, as it seemed (where the rise is 3.9
-  doublings or more, those values' ABITS by the table 9 or less, an eighth of a doubling less for
-  each ABITS above, to 3: 94% of the 15860 such right, 84% by the subframe's mean square alone):
-  where the encoders take a transient, the rise 8 (19 + b) / 19 times or more in subband b
-  (PMODE's, above), which climbs with the subband as the ABITS fall (its bit allocations 9.9 KB to
-  9.0 by that threshold). So the stream's offset is the one most of the last ABITS of all its bands
-  say at their subframes' levels, in each of the three shapes, and the shape the one most of them say
-  (each ABITS's score 1023/1024 of the next's; the scores start again where two in a row lie past
-  them, as after the silence `Master Audio 7.1.dts` starts with, each band's own offset by its own
-  ABITS taken until then; by those alone, as before format 77, `s.2.dts`'s bit allocations 9.0 KB
-  where they are 6.9 and its core 2.2% bigger, the other lossless WAVs' 1.6-6.3%, as a band's own
-  ABITS are few at a stream's start and say less wherever its energy moves little), and the core's
-  level is where the table's ABITS would take the frame's bits (as the staircases' centre is; both
-  within 8 doublings of the last subframe's, or, since format 124, within 32 where the bits meet
-  the frame's only past 8: the Cymatics stream's core 2.4% smaller, `Master Audio 5.0 96khz.dts`'s
-  1.0%; within 64, `Master Audio 7.1.dts`'s 1.4% smaller, but two of FATE's 7-frame XXCH samples'
-  1.3% and 1.7% bigger), plus
-  how far the last subframes' levels lay from that (an average, each subframe's weight 31/32 of the
-  next one's), then the shift (within 96 128ths, 64 before format 78) at which the table makes the
-  most of the subframe's ABITS so far, less a 16th of one for each 128th, as the staircases'. The
-  table's guess is the first one but where it has missed the staircases' misses and 128 more (of the
-  last 1024 or so where both had one; before format 78, only where it had missed fewer, by 2, so
-  that a stream's first ABITS went by the staircases: the short samples 0.35% bigger), and what the
-  other one says is a context (ag); a transient's guess at the mean square not taken was the second
-  guess where it differed, until the threshold was the encoders' (without it, `s.2.dts`'s core 0.15%
-  smaller). That level is a whole 128th, and the encoders' lies between them: with the energies
-  exact, a level for each subframe makes all but 0.033% of `s.2.dts`'s ABITS, the nearest 128th all
-  but 0.21% (and steps of 1.5 dB, not quarter doublings, all but 0.63%). So the levels at which the
-  table makes all of the subframe's ABITS so far are kept, from the energies in 2^-18 of a log2
-  (`log2_bits()`, the mantissa squared bit by bit; in quarters of a 128th before format 95: 82% of
-  the table's misses are within a 128th of an edge, and the quarters still put a third of those on
-  the wrong side; so `s.2.dts`'s core 0.29% smaller, its bit allocations 6474 bytes to 6239), and
-  how its guess stands against them is a context (sx, format 78; since format 79 by the share of
-  them that makes another ABITS: under a tenth, half, nine tenths, more): where every one of them
-  makes the guess, it misses 0.027% of the time (0.072% by the quarters); where some make another
-  ABITS, 6-24%. The guess itself by those energies and the level clamped into the range, the
-  short streams 0.2% smaller but `s.2.dts`'s core 0.05% bigger; moved toward the range by half a
-  128th at most, the same as it is. Since format 97 the share of them that makes the guess is the
-  first decision's outside prediction too (one more input to abt's mixers: its miss's probability,
-  kept within 1/64 of 0 and 1), and the share that makes the second guess, of those that don't make
-  the first, the second decision's: the short streams 0.09% smaller, `s.2.dts`'s core 0.01% (the
-  first alone, 0.05% and 0.01%). Since format 98 whatever the first guess is (a decoded WAV's
-  search's, mostly) and whatever the second candidate (the last ABITS, mostly), the table's levels
-  standing for the encoder's: the short streams 0.15% smaller again (`ES 6.1 16bit.dts`'s core
-  1.3%, `96-24.dts`'s 0.13%). And since format 100 a lossless WAV's shares are those of a normal
-  prior about the subframe's level as the table has it so far (the prior plus the shift that makes
-  the most of its ABITS), at a deviation of a quarter of a 128th, with a hundredth of the shares
-  as they were: the subframe's level lies within about half a 128th of it half the time, and on
-  3 MB of `s.2.dts`'s middle the first decision costs 82 bytes where the range is straddled
-  rather than 524. The margin context already has much of that: `s.2.dts`'s core 0.09% smaller (its bit
-  allocations 6225 bytes to 6156), the lossless WAVs' short streams 0.05% (at 0.35, 0.5 or 0.7 of
-  a 128th 0.08%, 0.05% and 0.03%; a decoded WAV's shares so, its streams 0.04-0.8% bigger). The
-  table says 94.75% of `s.2.dts`'s
-  ABITS, right in 99.51% of them (90.53% and 99.53% before format 78; by each band's own offset
-  56.51% and 99.33%, the staircases missing less; 90.96% and 99.29% before that, until the
-  transients' threshold went by the subband): its bit allocations went from 26.5 KB to 15.9 KB by
-  the table, to 10.5 KB by the transients' mean squares (10.0 KB with abt tuned for them, below;
-  9.0 by their threshold, 6.9 by the stream's offset, 6.5 by sx, 6.2 by its finer levels), and its core 12.4% smaller in all
-  by format 76 (the other lossless WAVs' 13-17%), then 2.2% more by the stream's offset and 0.5%
-  by format 78. A decoded WAV's values
-  are the decoder's, on the lattice of the step its ABITS and scale factor make, so the bit
-  allocation search tries each ABITS from 4 below the first guess to 4 above (3 before: `open
-  bitrate.dts`'s core 2.8% smaller, FATE's `dts_es.dts`'s 0.5%, `ES 6.1 16bit.dts`'s 0.3%; 5 either
-  side finds more that fit by chance; PMODE's fit is the same search's), with each scale factor from
-  3 below the RMS rule's to 5 above, and takes the pair whose lattice the values lie nearest, in its
-  steps (the indexes nearest them in the quantizer's range, dequantized as the decoder does: a finer
-  lattice fits as nearly, but in more of its steps, and a coarser one misses the values between its
-  points), where an index it makes isn't 0; of pairs as near, the coarser lattice, then the scale
-  factor nearer the RMS rule's (a 3-level quantizer's values lie on the 7-level one's lattice at the
-  same scale factor too: `ES 6.1 16bit.dts`'s search right 99.23% of the time, from 97.90%, its core
-  2.1% smaller). And where no pair fits within a 64th of a step squared a value, a transient's (its
-  TMODE comes after its ABITS): the ABITS whose lattice fits the subsubframes before some one and
-  those from it on, each part at a scale factor of its own, where 4 times nearer at least (`ES 6.1
+  from 3 to 4 the more often the louder those values, as it seemed (where the rise is 3.9 doublings
+  or more, those values' ABITS by the table 9 or less, an eighth of a doubling less for each ABITS
+  above, to 3: 94% of the 15860 such right, 84% by the subframe's mean square alone): where the
+  encoders take a transient, the rise 8 (19 + b) / 19 times or more in subband b (PMODE's, above),
+  which climbs with the subband as the ABITS fall (its bit allocations 9.9 KB to 9.0 by that
+  threshold). So the stream's offset is the one most of the last ABITS of all its bands say at their
+  subframes' levels, in each of the three shapes, and the shape the one most of them say (each
+  ABITS's score 1023/1024 of the next's; the scores start again where two in a row lie past them, as
+  after the silence `Master Audio 7.1.dts` starts with, each band's own offset by its own ABITS
+  taken until then; by those alone, as before format 77, `s.2.dts`'s bit allocations 9.0 KB where
+  they are 6.9 and its core 2.2% bigger, the other lossless WAVs' 1.6-6.3%, as a band's own ABITS
+  are few at a stream's start and say less wherever its energy moves little), and the core's level
+  is where the table's ABITS would take the frame's bits (as the staircases' centre is; both within
+  8 doublings of the last subframe's, or, since format 124, within 32 where the bits meet the
+  frame's only past 8: the Cymatics stream's core 2.4% smaller, `Master Audio 5.0 96khz.dts`'s 1.0%;
+  within 64, `Master Audio 7.1.dts`'s 1.4% smaller, but two of FATE's 7-frame XXCH samples' 1.3% and
+  1.7% bigger), plus how far the last subframes' levels lay from that (an average, each subframe's
+  weight 31/32 of the next one's), then the shift (within 96 128ths, 64 before format 78) at which
+  the table makes the most of the subframe's ABITS so far, less a 16th of one for each 128th, as the
+  staircases'. The table's guess is the first one but where it has missed the staircases' misses and
+  128 more (of the last 1024 or so where both had one; before format 78, only where it had missed
+  fewer, by 2, so that a stream's first ABITS went by the staircases: the short samples 0.35%
+  bigger), and what the other one says is a context (ag); a transient's guess at the mean square not
+  taken was the second guess where it differed, until the threshold was the encoders' (without it,
+  `s.2.dts`'s core 0.15% smaller). That level is a whole 128th, and the encoders' lies between them:
+  with the energies exact, a level for each subframe makes all but 0.033% of `s.2.dts`'s ABITS, the
+  nearest 128th all but 0.21% (and steps of 1.5 dB, not quarter doublings, all but 0.63%). So the
+  levels at which the table makes all of the subframe's ABITS so far are kept, from the energies in
+  2^-18 of a log2 (`log2_bits()`, the mantissa squared bit by bit; in quarters of a 128th before
+  format 95: 82% of the table's misses are within a 128th of an edge, and the quarters still put a
+  third of those on the wrong side; so `s.2.dts`'s core 0.29% smaller, its bit allocations 6474
+  bytes to 6239), and how its guess stands against them is a context (sx, format 78; since format 79
+  by the share of them that makes another ABITS: under a tenth, half, nine tenths, more): where
+  every one of them makes the guess, it misses 0.027% of the time (0.072% by the quarters); where
+  some make another ABITS, 6-24%. The guess itself by those energies and the level clamped into the
+  range, the short streams 0.2% smaller but `s.2.dts`'s core 0.05% bigger; moved toward the range by
+  half a 128th at most, the same as it is. Since format 97 the share of them that makes the guess is
+  the first decision's outside prediction too (one more input to abt's mixers: its miss's
+  probability, kept within 1/64 of 0 and 1), and the share that makes the second guess, of those
+  that don't make the first, the second decision's: the short streams 0.09% smaller, `s.2.dts`'s
+  core 0.01% (the first alone, 0.05% and 0.01%). Since format 98 whatever the first guess is (a
+  decoded WAV's search's, mostly) and whatever the second candidate (the last ABITS, mostly), the
+  table's levels standing for the encoder's: the short streams 0.15% smaller again (`ES 6.1
+  16bit.dts`'s core 1.3%, `96-24.dts`'s 0.13%). And since format 100 a lossless WAV's shares are
+  those of a normal prior about the subframe's level as the table has it so far (the prior plus the
+  shift that makes the most of its ABITS), at a deviation of a quarter of a 128th, with a hundredth
+  of the shares as they were: the subframe's level lies within about half a 128th of it half the
+  time, and on 3 MB of `s.2.dts`'s middle the first decision costs 82 bytes where the range is
+  straddled rather than 524. The margin context already has much of that: `s.2.dts`'s core 0.09%
+  smaller (its bit allocations 6225 bytes to 6156), the lossless WAVs' short streams 0.05% (at 0.35,
+  0.5 or 0.7 of a 128th 0.08%, 0.05% and 0.03%; a decoded WAV's shares so, its streams 0.04-0.8%
+  bigger). The table says 94.75% of `s.2.dts`'s ABITS, right in 99.51% of them (90.53% and 99.53%
+  before format 78; by each band's own offset 56.51% and 99.33%, the staircases missing less; 90.96%
+  and 99.29% before that, until the transients' threshold went by the subband): its bit allocations
+  went from 26.5 KB to 15.9 KB by the table, to 10.5 KB by the transients' mean squares (10.0 KB
+  with abt tuned for them, below; 9.0 by their threshold, 6.9 by the stream's offset, 6.5 by sx, 6.2
+  by its finer levels), and its core 12.4% smaller in all by format 76 (the other lossless WAVs'
+  13-17%), then 2.2% more by the stream's offset and 0.5% by format 78. A decoded WAV's values are
+  the decoder's, on the lattice of the step its ABITS and scale factor make, so the bit allocation
+  search tries each ABITS from 4 below the first guess to 4 above (3 before: `open bitrate.dts`'s
+  core 2.8% smaller, FATE's `dts_es.dts`'s 0.5%, `ES 6.1 16bit.dts`'s 0.3%; 5 either side finds more
+  that fit by chance; PMODE's fit is the same search's), with each scale factor from 3 below the RMS
+  rule's to 5 above, and takes the pair whose lattice the values lie nearest, in its steps (the
+  indexes nearest them in the quantizer's range, dequantized as the decoder does: a finer lattice
+  fits as nearly, but in more of its steps, and a coarser one misses the values between its points),
+  where an index it makes isn't 0; of pairs as near, the coarser lattice, then the scale factor
+  nearer the RMS rule's (a 3-level quantizer's values lie on the 7-level one's lattice at the same
+  scale factor too: `ES 6.1 16bit.dts`'s search right 99.23% of the time, from 97.90%, its core 2.1%
+  smaller). And where no pair fits within a 64th of a step squared a value, a transient's (its TMODE
+  comes after its ABITS): the ABITS whose lattice fits the subsubframes before some one and those
+  from it on, each part at a scale factor of its own, where 4 times nearer at least (`ES 6.1
   16bit.dts`'s search right 99.71%, its core 12.8% smaller still; FATE's `dts_es.dts`'s 9.2%, `open
   bitrate.dts`'s 10.0%). Its ABITS is then the first guess, and its margin over the next pair, and
   whether it is the first guess without it, a context: `open bitrate.dts`'s ABITS were that first
@@ -1581,7 +1593,7 @@ files.
 
 ### The format
 
-"dtsdpack", the format's version (124), the level; what the WAV was (whether it was one, its
+"dtsdpack", the format's version (125), the level; what the WAV was (whether it was one, its
 channels and bytes a sample, its size and the CRC-32 of its first 64 KB) and the binding (the
 offset; the WAV's samples to the core's, 1, 2 or 4 (its lower band, then 2), and the lower band's
 resolution; the LFE's channel; each core channel's WAV channel, and where it isn't that channel

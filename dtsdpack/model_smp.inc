@@ -104,6 +104,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   S16 bud_b[NCH][NSUB][27];    // the bits (in quarters) their samples would take at each ABITS (bud_bits(); -1 not yet)
   S64 bud_v[NCH][NSUB][NSMP];  // their values (an ADPCM subband's residual)
   int bud_n[NCH][NSUB], bud_si[NCH][NSUB];  // (how many; the RMS rule's scale factor)
+  int bud_xs[NCH][NSUB];  // (a transient's second scale factor's and TMODE's bits, in quarters: format 125)
   U64 n_st, n_sthit;  // (-s: the ABITS a staircase said, those it said right)
   int pscale[NCH][NSUB];   // their first scale factor's prediction (1 + it, 0 none)
   // A lossless WAV's top subbands, VQ ones, as its encoder has them: subband NSUB - 1 - c with m
@@ -1223,6 +1224,20 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
                                                 : fine_energy_x(x, n);
         bud_n[ch][b] = n;
         bud_si[ch][b] = scale_pred(x, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
+        // (a transient's: the bits of its second scale factor, where the code book codes differences
+        // the RMS rule's for its values from the transient on less the one for those before, and of
+        // its TMODE's code above a 0's)
+        bud_xs[ch][b] = 0;
+        if (fe_a[ch][b] != FE_NONE) {
+          const int sh = r.shuff[ch];
+          int xb = sh + 1;
+          if (sh < 5) {
+            const int ne = sf_entries(sh);
+            xb = SB[sh].bits(scale_pred(x + 8 * tk_, n - 8 * tk_, SF6, ne, &near) - scale_pred(x, 8 * tk_, SF6, ne, &near));
+          }
+          if (s.nssc > 1) xb += TB[r.thuff[ch]].bits(tk_) - TB[r.thuff[ch]].bits(0);
+          bud_xs[ch][b] = 4 * xb;
+        }
         memset(bud_b[ch][b], 0xFF, sizeof bud_b[ch][b]);
       }
     L.avail = 4 * ((S64)r.fsize * 8 - (S64)at);
@@ -1321,17 +1336,21 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   }
   // the bits (in quarters) channel ch's subband b's samples would take at ABITS a: its values
   // quantized at the RMS rule's scale factor (as requant() does), by the code the frame's header
-  // gives the ABITS
+  // gives the ABITS; and where the encoders take a transient (ab_transient()), the side
+  // information's that it adds, a second scale factor and the TMODE's code (since format 125:
+  // without them the budget's level lay low where a subframe has more transients than the last
+  // ones, 31 128ths of a doubling with 20-49 of them, 69 with 50 or more, in the Cymatics stream;
+  // its values quantized at each part's scale factor besides, the same)
   int bud_bits(const CoreRec& r, int ch, int b, int a) {
     if (a <= 0 || a > 26) return 0;
     S16& t = bud_b[ch][b][a];
     if (t >= 0) return t;
     const int how = sample_coding(r, ch, a), n = bud_n[ch][b];
-    int sum = 0;
+    int sum = bud_xs[ch][b];
     if (how == 2) {
-      sum = 4 * (a - 3) * n;
+      sum += 4 * (a - 3) * n;
     } else if (how == 3) {
-      sum = BLOCK_BITS[a - 1] * n;
+      sum += BLOCK_BITS[a - 1] * n;
     } else {
       const HuffBook& hb = QB[a - 1][r.sel[ch][a - 1]];
       const S64 ss = step_for(r, ch, a, bud_si[ch][b]), lo = hb.minlev, hi = hb.minlev + hb.nlev - 1;
@@ -1358,7 +1377,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     return t;
   }
   // A lossless WAV's subband with a transient (where a subsubframe's mean square is 8 times the one
-  // before's or more, the largest such rise's; not an ADPCM subband's, not from 20 up: tmode_rule()):
+  // before's or more, the largest such rise's; not an ADPCM subband's: tmode_rule()):
   // the encoders seen allocate its bits by the mean square of its values from the transient on,
   // where they take one, the rise rise_thr() or more, else by the subframe's: the fine energy the
   // ABITS are guessed by (fe the subframe's; *fa those values' where they take one, else FE_NONE).
@@ -1367,7 +1386,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // doesn't predict where its gain says it would a transient by that alone.
   S32 ab_transient(const CoreSub& s, int ch, int b, const S64* x, int n, S32 fe, S32* fa_, int* tko = nullptr) const {
     *fa_ = FE_NONE;
-    if (s.pmode[ch][b] || b >= 20 || s.nssc < 2 || fe == FE_NONE) return fe;
+    if (s.pmode[ch][b] || s.nssc < 2 || fe == FE_NONE) return fe;
     int tk = 0;
     S32 tr = 0;
     for (int k = 1; k < s.nssc; k++) {
@@ -1825,16 +1844,18 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     return qm;
   }
   // The rise from a subsubframe to the next at which the encoders seen take a transient in subband
-  // b (below 20; they make no prediction there): 8 (19 + b) / 19 times the energy (to 0.1% in each
-  // subband: `s.2.dts`'s 2441 subbands below 20 that would gain by prediction and rise by it or
-  // more don't predict, of the 216367 that rise less 130 don't; its TMODEs follow it but for 9 of
-  // the 2.27 million that don't predict, all within 2% of it; FFmpeg's master_audio_7.1_24bit.dts's
-  // as well, but for its first subframe)
-  static double rise_thr(int b) { return 8.0 * (19 + b) / 19; }
+  // b: below 20 (where they predict), 8 (19 + b) / 19 times the energy (to 0.1% in each subband:
+  // `s.2.dts`'s 2441 subbands below 20 that would gain by prediction and rise by it or more don't
+  // predict, of the 216367 that rise less 130 don't; its TMODEs follow it but for 9 of the 2.27
+  // million that don't predict, all within 2% of it; FFmpeg's master_audio_7.1_24bit.dts's as well,
+  // but for its first subframe); from 20 up, 2000 times (since format 125: the Cymatics stream's
+  // encoder takes 2719 of its 2721 transients there where the rise reaches it, and 88 more subbands
+  // reach it; `s.2.dts`'s its one, the only subband there that rises 1500 times)
+  static double rise_thr(int b) { return b < 20 ? 8.0 * (19 + b) / 19 : 2000.0; }
   // How subband b's energy rises against that, for its PMODE and TMODE (a sid context, tr:
-  // model.inc): 0 from subband 20, or by less than 20 eighths of a doubling (the largest rise; or
-  // one subsubframe), else by the rise in eighths of a doubling past rise_thr(), floored: 1 -4 or
-  // less, 2 -3 or -2, 3 -1, 4 0, 5 more
+  // model.inc): 0 by less than 20 eighths of a doubling (the largest rise; or one subsubframe), else
+  // by the rise in eighths of a doubling past rise_thr(), floored: 1 -4 or less, 2 -3 or -2, 3 -1,
+  // 4 0, 5 more (0 from subband 20 before format 125)
   struct Rise8 {  // (2^(r/8), r 0 to 48)
     double t[49];
     Rise8() {
@@ -1846,16 +1867,16 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   int pm_rise(const CoreSub& s, int ch, int b) const {
     static const Rise8 rise8;
     int tk;
-    const double q = b < 20 ? rise_max(s, ch, b, &tk) : 0;
+    const double q = rise_max(s, ch, b, &tk);
     if (q < rise8.t[20]) return 0;
     const double u = q / rise_thr(b);  // (2^(d/8) at least, d the largest)
     return u >= rise8.t[1] ? 5 : u >= 1 ? 4 : 2 * u >= rise8.t[7] ? 3 : 2 * u >= rise8.t[5] ? 2 : 1;
   }
   // A lossless WAV's transient (TMODE) as encoders make it: where a subsubframe's energy is 8 times
   // the one before's at least, the largest such rise's (*tg, 1 to nssc - 1, else 0); how likely, the
-  // class returned: 0 no such rise; 1 the subband predicts, 2 it is 20 or above (the encoders seen
-  // make no transient in either); else 3 + 2 times the rise's doublings past 3 (to 2) + whether
-  // ABITS is 10 or more (the likelier, the more of both)
+  // class returned: 0 no such rise; 1 the subband predicts (the encoders seen make no transient
+  // there); else 3 + 2 times the rise's doublings past 3 (to 2) + whether ABITS is 10 or more (the
+  // likelier, the more of both; 2 from subband 20 up, before format 125)
   int tmode_rule(const CoreSub& s, int ch, int b, int* tg) {
     S128 e[NSSF];
     for (int k = 0; k < s.nssc; k++) {
@@ -1872,7 +1893,6 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (bh < 3) return 0;
     *tg = best;
     if (s.pmode[ch][b]) return 1;
-    if (b >= 20) return 2;
     return 3 + 2 * imin(bh - 3, 2) + (s.abits[ch][b] >= 10);
   }
   // the 4 samples before the subframe's of channel ch's subband b (h[0] the last) as the encoder's
