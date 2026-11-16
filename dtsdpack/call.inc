@@ -338,8 +338,17 @@ struct Call {
     bind.dec = (S8)wav.dec;
     bind.dsh = (S8)wav.dsh;
     if (bind.map[0] >= 0) find_mixes(pre, fpos, flen, ft, nf, nch, filts);
-    // the LFE: the WAV channel no core channel has whose decimation correlates best with it
-    if (bind.map[0] < 0 || nl < 16) return;
+    // the LFE: the WAV channel no core channel has whose decimation correlates best with it (by
+    // its samples whose decimation's window ends in the WAV, where it ends in the window: as
+    // find_bind()'s probes)
+    if (bind.map[0] < 0) return;
+    if (wav.got == wav.nsamp) {
+      int m = 0;
+      for (int k = 0; k < nl; k++)
+        if (64 * up * ln[k] + bind.off <= (S64)wav.nsamp) ln[m] = ln[k], ly[m++] = ly[k];
+      nl = m;
+    }
+    if (nl < 16) return;
     double bc = 0.9;
     for (int wc = 0; wc < wav.nch; wc++) {
       int used = 0;

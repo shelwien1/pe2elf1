@@ -168,14 +168,25 @@ MA's XLL, whose 7.1 bed FFmpeg decodes, and the DTS:X objects' data, which
 What is left of its core is mostly what the core has and the bed hasn't. The surrounds' subband
 samples are 80 KB of its 180, their bottom subband 36 KB, missed 9% of the time: what the core's
 values have there beyond the bed's is white, in time (no AR(2) or AR(4) fit of its past gains more
-than 0.1 point) and across the two surrounds (their differences' correlation under 0.01), so
-nothing the stream or the WAV has says it. The bit allocations are 27 KB: the centre's misses come
-in runs of subframes (3% of them, with 59% of its misses) where its allocations are a smooth ramp,
-the same from frame to frame, 4-6 steps above what the bed's centre's energies say; the last
-ones are right there 61% of the time, the staircase 25%, but taking the last ones as the first
-guess there, or as the second, made the core bigger (by 768-875 bytes and by 127: the family
-already weighs them, as its context la), and so did a shift of each channel's own in the subframe
-(by 199 bytes, by 2997 with its staircases at it). Its LFE, 17 KB, is at its rounding noise.
+than 0.1 point) and across the two surrounds (their differences' correlation under 0.01), so nothing
+the stream or the WAV has says it. The bit allocations are 27 KB: the centre's misses come in runs
+of subframes (3% of them, with 59% of its misses) where its allocations are a smooth ramp, the same
+from frame to frame, 4-6 steps above what the bed's centre's energies say; the last ones are right
+there 61% of the time, the staircase 25%, but taking the last ones as the first guess there, or as
+the second, made the core bigger (by 768-875 bytes and by 127: the family already weighs them, as
+its context la), and so did a shift of each channel's own in the subframe (by 199 bytes, by 2997
+with its staircases at it). Nor do the runs need saying: which of the last ABITS and the first guess
+a channel's last subframe took more often, where they differed, would by counts alone say which is
+right for 10.8 KB less, but as a context of the family's (its mixers' choice) it takes 44 bytes off,
+the short streams 9 bytes bigger (among its counters' contexts, 3-7 bytes bigger): its own contexts,
+the last ABITS among them, already know it. Its LFE, 17 KB, is at its rounding noise.
+
+FATE's `dtsx_7.1.4_24bit.dts`, two frames of another DTS:X stream (7.1.4), is a cut, it seems: as
+with eight frames cut from the middle of the Cymatics stream, FFmpeg decodes its first frame as the
+core alone (the back surrounds silent, the core's channels at their own level), the rest as the
+bed, the core's channels at -3 dB of it. Its core (4024 bytes) lined up with nothing until the
+binding left out the blocks whose windows pass the WAV's end (below): 3274 bytes before, 2406
+now; the Cymatics cut's core (16096 bytes) 12528 before, 3835 now.
 
 No stream at hand has XXCH in its core substream: FATE's XXCH samples (`xxch_71_24_48_2046`,
 `xbr_xxch_71_24_48_3840`, `x96_xxch_71_24_96_3840`, 7 frames each) have it in their extension
@@ -194,11 +205,11 @@ their decodes clip too (0.3-1.2% of the samples):
 
 | Stream | Core | dtsdpack |
 |---|---:|---:|
-| `core_51_24_48_768_0`, `_1` (5.1) | 7168 | 1411 (19.68%), 1396 (19.48%) |
+| `core_51_24_48_768_0`, `_1` (5.1) | 7168 | 1402 (19.56%), 1396 (19.48%) |
 | `xch_61_24_48_768` (6.1 by XCH) | 7168 | 1458 (20.34%) |
 | `x96_51_24_96_1509` (X96) | 14084 | 2651 (18.82%) |
 | `x96_xch_61_24_96_3840` | 14084 | 1868 (13.26%) |
-| `xbr_51_24_48_3840`, `xbr_xch_61_24_48_3840` (XBR: its residuals in the decode) | 14084 | 1597 (11.34%), 2010 (14.27%) |
+| `xbr_51_24_48_3840`, `xbr_xch_61_24_48_3840` (XBR: its residuals in the decode) | 14084 | 1598 (11.35%), 2010 (14.27%) |
 | `xll_x96_51_24_96_1509` (DTS-HD MA, X96) | 14084 | 1347 (9.56%) |
 
 ## How it works
@@ -1165,44 +1176,50 @@ time to them.
 
 c finds how the core lines up with the WAV before it starts (`call.inc`'s `find_alignment()`, in
 doubles; the header keeps the result). The offset: from the core's first 4 MB, the 64 blocks with
-the most energy, decoded to their plain subband samples, against the WAV's analysis for each of
-its channels at the decoders' usual delays (0, 256, 512 and 1024 samples, times 2 for the 64-band
-analysis): one that correlates with the core's channel 0 at 0.999 or more is the offset; one at
-0.99 or more is where the best of the offsets within 32 of it is (the 3 best by the 16 blocks with
-the most energy in channel 0, then by all of them), where that lies inside them. Else at every
-offset of -1024..1536 (times 2), by those 16 blocks, then the 64 best of those by all the blocks:
-the best for channel 0 gives it. (A WAV at neither the core's rate nor twice it isn't searched:
-nothing lines up.) Then each core channel, XCH's and XXCH's too (`find_mixes()`): a core may be a downmix of the WAV, as a DTS-HD MA 7.1 stream's is (its
-lossless extension's primary channel set is the 5.1 the core was coded from, each surround the side
-and the rear surround, every channel scaled: coefficients of DTS's downmix table, FFmpeg's
-`ff_dca_dmixtable`, Q15). So over
-up to 256 of the frames read first, a weighted least squares fit (each decoded subband sample by 1 /
-its uncertainty squared: its quantization's, step^2 / 12, and the WAV's own, half a unit, 128 for a
-16-bit WAV: the finer, the surer) of the core channel against every WAV channel and every pair of
-them gives its best single channel and its best pair, each with its gains as fitted and as the
-downmix table's entries either side (signed), and the best single channel as it is; with the
-channel the alignment found as it is and by the table's gains of an unweighted fit, the candidates
-(the best channel as it is for XCH's channel, which the alignment doesn't place: FATE's
-`xbr_xch_61_24_48_3840`'s, its WAV channel as it is, was bound to it at a gain of 0.065 as
-fitted; as it is, its core 14% smaller). Of those, the one that makes the most of
-the channel's indexes exactly is its binding (a simpler one unless another makes 0.5% more; not one
-whose gains are all under 1/64), if it makes a fifth of them. (A clipped decode's distortion swamps
-a channel's quiet subbands at fine steps: their fit's gains came out at 0.00007 for channels that
-are their WAV channels as they are, and as most of those channels' indexes are 0, such a gain made
-more of them exactly than the right one: FATE's 5.1 and 6.1 samples' cores came out 36% and 18%
-bigger, the XXCH ones' 19% and 14%.) (Against a decoded WAV, two kinds of samples break a fit by steps alone: a
-silent subband the encoder gave a fine step, as `open bitrate.dts`'s has ABITS 24 at the smallest
-scale factor, all its indexes 0, where the WAV has its rounding; and silence beside a sudden loud
-onset, where the decoder's filterbank, FILTS 0's not quite perfect reconstruction, leaves a few
-percent of the onset in the WAV. Their fine steps made them outweigh everything else, and the
-fit's gains came out at 0.017 for a channel that is its WAV channel as it is.) The encoder mixed
-in the PCM, before its analysis: each sample's sum of the scaled channels rounded to the nearest
-integer (not each product rounded, nor the sum truncated). So a lossless WAV's mixed or scaled
-core channel, at the core's rate, is analysed as that rounded PCM, not as its channels' analyses
-mixed (`Master Audio 7.1.dts` 14.7% smaller: its indexes the audio's 99.64% of the time, from
-99.51%; the 7-frame 7.1 samples 2%; the XXCH samples' decodes, a decoder's mix, until the scale
-factor search shows them decoded, 0.4-0.7% bigger). The LFE gets the remaining WAV channel whose decimation correlates best with
-the first 1024 LFE samples that aren't 0 (`Master Audio 7.1.dts`'s first 1024 are all 0). `-s` shows the binding:
+the most energy, decoded to their plain subband samples, against the WAV's analysis for each of its
+channels at the decoders' usual delays (0, 256, 512 and 1024 samples, times 2 for the 64-band
+analysis): one that correlates with the core's channel 0 at 0.999 or more is the offset; one at 0.99
+or more is where the best of the offsets within 32 of it is (the 3 best by the 16 blocks with the
+most energy in channel 0, then by all of them), where that lies inside them. Else at every offset of
+-1024..1536 (times 2), by those 16 blocks, then the 64 best of those by all the blocks: the best for
+channel 0 gives it. (A WAV at neither the core's rate nor twice it isn't searched: nothing lines
+up.) Where the WAV ends within those blocks' windows, as a cut stream's does, a block whose window
+passes its end is left out at that offset, and an offset that leaves out more than half of the
+blocks it is judged by is none: the encoder had audio there that the WAV hasn't, and at an offset of
+512, the Cymatics stream's encoder's and FATE's 7-frame samples', the last frame's blocks reach up
+to 480 samples past it (eight frames cut from the middle of the Cymatics stream lined up at 349, by
+0.970, their last frame's blocks putting 512 at 0.967; now at 512, by 0.997). The LFE's samples the
+same. Then each core channel, XCH's and XXCH's too (`find_mixes()`): a core may be a downmix of the
+WAV, as a DTS-HD MA 7.1 stream's is (its lossless extension's primary channel set is the 5.1 the
+core was coded from, each surround the side and the rear surround, every channel scaled:
+coefficients of DTS's downmix table, FFmpeg's `ff_dca_dmixtable`, Q15). So over up to 256 of the
+frames read first, a weighted least squares fit (each decoded subband sample by 1 / its uncertainty
+squared: its quantization's, step^2 / 12, and the WAV's own, half a unit, 128 for a 16-bit WAV: the
+finer, the surer) of the core channel against every WAV channel and every pair of them gives its
+best single channel and its best pair, each with its gains as fitted and as the downmix table's
+entries either side (signed), and the best single channel as it is; with the channel the alignment
+found as it is and by the table's gains of an unweighted fit, the candidates (the best channel as it
+is for XCH's channel, which the alignment doesn't place: FATE's `xbr_xch_61_24_48_3840`'s, its WAV
+channel as it is, was bound to it at a gain of 0.065 as fitted; as it is, its core 14% smaller). Of
+those, the one that makes the most of the channel's indexes exactly is its binding (a simpler one
+unless another makes 0.5% more; not one whose gains are all under 1/64), if it makes a fifth of
+them. (A clipped decode's distortion swamps a channel's quiet subbands at fine steps: their fit's
+gains came out at 0.00007 for channels that are their WAV channels as they are, and as most of those
+channels' indexes are 0, such a gain made more of them exactly than the right one: FATE's 5.1 and
+6.1 samples' cores came out 36% and 18% bigger, the XXCH ones' 19% and 14%.) (Against a decoded WAV,
+two kinds of samples break a fit by steps alone: a silent subband the encoder gave a fine step, as
+`open bitrate.dts`'s has ABITS 24 at the smallest scale factor, all its indexes 0, where the WAV has
+its rounding; and silence beside a sudden loud onset, where the decoder's filterbank, FILTS 0's not
+quite perfect reconstruction, leaves a few percent of the onset in the WAV. Their fine steps made
+them outweigh everything else, and the fit's gains came out at 0.017 for a channel that is its WAV
+channel as it is.) The encoder mixed in the PCM, before its analysis: each sample's sum of the
+scaled channels rounded to the nearest integer (not each product rounded, nor the sum truncated). So
+a lossless WAV's mixed or scaled core channel, at the core's rate, is analysed as that rounded PCM,
+not as its channels' analyses mixed (`Master Audio 7.1.dts` 14.7% smaller: its indexes the audio's
+99.64% of the time, from 99.51%; the 7-frame 7.1 samples 2%; the XXCH samples' decodes, a decoder's
+mix, until the scale factor search shows them decoded, 0.4-0.7% bigger). The LFE gets the remaining
+WAV channel whose decimation correlates best with the first 1024 LFE samples that aren't 0 (`Master
+Audio 7.1.dts`'s first 1024 are all 0). `-s` shows the binding:
 
 ```
   the binding: core channel 0 = 0.707092 WAV 2; core channel 1 = 0.707092 WAV 0; ...; core channel 3 = 0.707092 WAV 4 + 0.707092 WAV 6; ...; LFE = WAV 3

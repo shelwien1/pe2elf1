@@ -2028,7 +2028,10 @@ static void analyze_d(const double* s, const double* fir, const double (*cq)[8],
 // one correlates all but perfectly, it; where by 0.99 or more, the best of the offsets within 32
 // of it, where that is inside them. Else the offsets by the 16 probes of most energy in core
 // channel 0 first, the 64 places best by them then by all the probes: the best of those, as a
-// search of all of them by all the probes finds it, where it is among them.)
+// search of all of them by all the probes finds it, where it is among them.) Where the WAV ends
+// in the window, a probe whose window there passes its end is left out at that offset (a cut
+// stream's encoder had audio there that its WAV hasn't), and an offset that leaves out more than
+// half of those it is correlated by correlates as none.
 static Bind find_bind(const WavIn& w, const Probe* pr, int n, int nch, int filts, int up, double* corr0) {
   Bind b;
   b.none();
@@ -2069,6 +2072,8 @@ static Bind find_bind(const WavIn& w, const Probe* pr, int n, int nch, int filts
     for (int k = 0; k < 8; k++)
       if (pr[i].ok[ch][k]) sm[0] += x[k] * pr[i].y[ch][k], sm[1] += x[k] * x[k], sm[2] += (double)pr[i].y[ch][k] * pr[i].y[ch][k];
   };
+  const S64 wend = w.got == w.nsamp ? (S64)w.nsamp : -1;  // (the WAV's end, where it is in the window)
+  auto in_wav = [&](int i, S64 off) { return wend < 0 || (S64)M * pr[i].t + off <= wend; };
   auto anal = [&](const double* s, double* x) {
     if (up == 2) analyze_d<64>(s, fir, cq64, x);
     else analyze_d<32>(s, fir, cq32, x);
@@ -2076,23 +2081,29 @@ static Bind find_bind(const WavIn& w, const Probe* pr, int n, int nch, int filts
   auto ratio = [](const double* sm) { return sm[1] > 0 && sm[2] > 0 ? sm[0] / sqrt(sm[1] * sm[2]) : 0; };
   auto corr = [&](int ch, S64 off, const int* pi, int np) {  // (by the loaded windows)
     double sm[3] = {0, 0, 0}, x[8];
+    int in = 0;
     for (int j = 0; j < np; j++) {
       const int i = pi ? pi[j] : j;
+      if (!in_wav(i, off)) continue;
+      in++;
       anal(seg + (size_t)i * span + (off - olo), x);
       sums(ch, i, x, sm);
     }
-    return ratio(sm);
+    return 2 * in < np ? -2 : ratio(sm);
   };
   auto corr_at = [&](int wc, S64 off, int c0, int c1, double* r) {  // (channels c0..c1 - 1's at off,
     static double win[1024];                                        // by the probes' windows there)
     double sm[NCH][3], x[8];
     for (int ch = c0; ch < c1; ch++) sm[ch][0] = sm[ch][1] = sm[ch][2] = 0;
+    int in = 0;
     for (int i = 0; i < n; i++) {
+      if (!in_wav(i, off)) continue;
+      in++;
       fetch(wc, (S64)M * pr[i].t + off - L, L, win);
       anal(win, x);
       for (int ch = c0; ch < c1; ch++) sums(ch, i, x, sm[ch]);
     }
-    for (int ch = c0; ch < c1; ch++) r[ch] = ratio(sm[ch]);
+    for (int ch = c0; ch < c1; ch++) r[ch] = 2 * in < n ? -2 : ratio(sm[ch]);
   };
   // the probes of most energy in channel 0, in their order
   int p1[NB1], n1 = 0;
@@ -2135,12 +2146,15 @@ static Bind find_bind(const WavIn& w, const Probe* pr, int n, int nch, int filts
     for (int i = 0; i < n; i++) fetch(bw, (S64)M * pr[i].t + c - r0 - L, ln, loc + (size_t)i * ln);
     auto lcorr = [&](S64 off, const int* pi, int np) {
       double sm[3] = {0, 0, 0}, x[8];
+      int in = 0;
       for (int j = 0; j < np; j++) {
         const int i = pi ? pi[j] : j;
+        if (!in_wav(i, off)) continue;
+        in++;
         anal(loc + (size_t)i * ln + (off - c + r0), x);
         sums(0, i, x, sm);
       }
-      return ratio(sm);
+      return 2 * in < np ? -2 : ratio(sm);
     };
     // (the 3 best by the 16 probes of most energy, where there are more; of those and it, the best
     // by all of them, as of all the offsets in their order)
@@ -2198,7 +2212,7 @@ static Bind find_bind(const WavIn& w, const Probe* pr, int n, int nch, int filts
       if (r > best) best = r, bo = cd[k].off, bw = cd[k].wc;
     }
   }
-  *corr0 = best;
+  *corr0 = best < -1 ? 0 : best;  // (none correlated: every offset left too few probes)
   if (best < 0.9) return b;
   b.off = (S32)bo;
   b.map[0] = (S8)bw;
