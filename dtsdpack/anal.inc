@@ -54,6 +54,7 @@ static INLINE S64 isqrt128(U128 t) {
 // 6.1's (the surround and the back centre at -3 dB). up: the WAV's samples to the core's (1, or 2
 // for a WAV at twice its rate, whose 64-band analysis's lower half is the core: a 96 kHz stream's)
 constexpr S32 BIND_ONE = 1 << 23;
+constexpr S32 BIND_Q15 = 1 << 15;  // (a gain before the mix of 1: Bind's p1, p2)
 struct Bind {
   S32 off;
   S8 up, dec;  // (the WAV's samples to the core's for its analysis, 1 or 2; to those analysed, 1 or 2)
@@ -61,14 +62,21 @@ struct Bind {
   S8 map[NCH];   // each core channel's WAV channel (-1 none)
   S8 map2[NCH];  // the second of its mix (-1 none)
   S32 g1[NCH], g2[NCH];  // their gains (Q23)
+  S32 p1[NCH], p2[NCH];  // and each WAV channel's gain before them, Q15: each sample times it,
+                         // rounded, a half up (pre_gain(); BIND_Q15 none)
+  S8 alt[NCH];             // (whether the mix has a second pair of those, pa1 and pa2, the model
+  S32 pa1[NCH], pa2[NCH];  // taking either for a subframe: model_smp.inc's gain_pick())
   S8 lfe;        // the LFE's (-1 none)
   void none() {
     off = 0;
     up = dec = 1;
     dsh = 0;
-    for (int ch = 0; ch < NCH; ch++) map[ch] = map2[ch] = -1, g1[ch] = BIND_ONE, g2[ch] = 0;
+    for (int ch = 0; ch < NCH; ch++)
+      map[ch] = map2[ch] = -1, g1[ch] = BIND_ONE, g2[ch] = 0, p1[ch] = p2[ch] = pa1[ch] = pa2[ch] = BIND_Q15, alt[ch] = 0;
     lfe = -1;
   }
+  // whether core channel ch is its WAV channel as it is
+  bool unit(int ch) const { return map2[ch] < 0 && g1[ch] == BIND_ONE && p1[ch] == BIND_Q15; }
   // whether core channel ch is bound to the WAV's (nw) channels
   bool bound(int ch, int nw) const { return map[ch] >= 0 && map[ch] < nw && map2[ch] < nw; }
 };
@@ -249,23 +257,27 @@ static void analyze(const WavIn& w, int c, S64 o, int up, const S64* fir, S64* x
 // (analyze()'s): its channel's, or the mix's; a lossless WAV's (pcm) as its encoder made them: at
 // the core's rate, mixed in the PCM, each sample's sum rounded to the nearest, a half up, then
 // analyzed; at twice it (without X96: the caller's), by a 64-band analysis 1 - 1.4e-4 times this one
+// a sample times a gain p (Q15) before the mix, rounded, a half up, as a DTS:X encoder made it
+static INLINE S64 pre_gain(S64 s, S32 p) { return p == BIND_Q15 ? s : (s * p + (1 << 14)) >> 15; }
 static void analyze_bound(const WavIn& w, const Bind& b, int ch, S64 o, const S64* fir, S64* x, int nb = 32, bool pcm = false) {
-  if (pcm && b.up == 1 && !(b.map2[ch] < 0 && b.g1[ch] == BIND_ONE)) {
+  if (pcm && b.up == 1 && !b.unit(ch)) {
     constexpr int L = 512;
     S32 b1[L], b2[L], m[L];
     const S32* s1 = w.span(b.map[ch], o - L, L, b1);
     const S32* s2 = b.map2[ch] >= 0 ? w.span(b.map2[ch], o - L, L, b2) : nullptr;
+    const S32 p1 = b.p1[ch], p2 = b.p2[ch];
     for (int i = 0; i < L; i++)
-      m[i] = (S32)(((S64)s1[i] * b.g1[ch] + (s2 ? (S64)s2[i] * b.g2[ch] : 0) + (1 << 22)) >> 23);
+      m[i] = (S32)((pre_gain(s1[i], p1) * b.g1[ch] + (s2 ? pre_gain(s2[i], p2) * b.g2[ch] : 0) + (1 << 22)) >> 23);
     analyze_sp<32>(m, fir, COSQ, x, nb);
     return;
   }
   analyze(w, b.map[ch], o, b.up, fir, x, nb);
-  if (!(b.map2[ch] < 0 && b.g1[ch] == BIND_ONE)) {
+  if (!b.unit(ch)) {  // (the analyses mixed: the gains before the mix in the gains)
     S64 x2[64];
     if (b.map2[ch] >= 0) analyze(w, b.map2[ch], o, b.up, fir, x2, nb);
+    const S64 e1 = pre_gain(b.g1[ch], b.p1[ch]), e2 = pre_gain(b.g2[ch], b.p2[ch]);
     for (int k = 0; k < nb; k++) {
-      const S128 v = (S128)x[k] * b.g1[ch] + (b.map2[ch] >= 0 ? (S128)x2[k] * b.g2[ch] : 0);
+      const S128 v = (S128)x[k] * e1 + (b.map2[ch] >= 0 ? (S128)x2[k] * e2 : 0);
       x[k] = (S64)((v + (1 << 22)) >> 23);
     }
   }

@@ -36,6 +36,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   S32* vend_buf;
   int bound[NCH];  // whether the subframe's channel has the audio's subband samples (X)
   S64 X[NCH][NSUB][NSMP];  // the audio's subband samples in the subframe (2^-AQ_F)
+  // (a mixed channel with a second pair of gains before the mix (Bind's alt): the binding with every
+  // such channel's second pair, bind2; which one a channel's subframe takes, gsel; the audio's by
+  // the other, XO; of the subframe's samples so far those whose index each makes, the taken's and
+  // the other's, gh; and by how much the other has made more of them lately, gsc: gain_pick())
+  Bind bind2;
+  U8 gsel[NCH];
+  S32 gsc[NCH];
+  U32 gh[NCH][2];
+  S64 XO[NCH][NSUB][NSMP];
   S64 xh[NCH][NSUB][4];    // the audio's last 4 before the subframe (xh[.][.][0] the last)
   S32 yh[NCH][NSUB][4];    // the decoder's last 4
   S32 q1[NCH][NSUB], q2[NCH][NSUB];  // the subband's last two indexes (1 + their length, 0 none; with their signs in qs)
@@ -699,11 +708,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
 
   void smp_start(WavIn* w, const Bind& b) {
     wav = w;
-    bind = b;
+    bind = bind2 = b;
     for (int ch = 0; ch < NCH; ch++) {
+      if (b.alt[ch]) bind2.p1[ch] = b.pa1[ch], bind2.p2[ch] = b.pa2[ch];
+      gsel[ch] = 0, gsc[ch] = 0, gh[ch][0] = gh[ch][1] = 0;
       twin[ch] = -1;
-      for (int e = 0; e < ch && twin[ch] < 0 && b.map[ch] >= 0; e++)
-        if (b.map[e] == b.map[ch] && b.map2[e] == b.map2[ch] && b.g1[e] == b.g1[ch] && b.g2[e] == b.g2[ch]) twin[ch] = e;
+      for (int e = 0; e < ch && twin[ch] < 0 && b.map[ch] >= 0 && !b.alt[ch]; e++)
+        if (b.map[e] == b.map[ch] && b.map2[e] == b.map2[ch] && b.g1[e] == b.g1[ch] && b.g2[e] == b.g2[ch] && b.p1[e] == b.p1[ch] &&
+            b.p2[e] == b.p2[ch] && !b.alt[e])
+          twin[ch] = e;
     }
     for (int k = 0; k < 6; k++) tw_n[k][0] = 1, tw_n[k][1] = 7;
     tw_t[0] = tw_t[1] = 0;
@@ -808,7 +821,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int ch = r.ch0(); ch < r.ch1(); ch++) {
       if (!bind.bound(ch, wav->nch)) continue;
       for (int j = j0; j < nsmp; j++) {
-        analyze_bound(*wav, bind, ch, o0 + 32 * bind.up * j, fir, x, x96a ? NSUB96 : NSUB, !ss_rule() && !x96a);
+        analyze_bound(*wav, gsel[ch] ? bind2 : bind, ch, o0 + 32 * bind.up * j, fir, x, x96a ? NSUB96 : NSUB, !ss_rule() && !x96a);
         for (int b = 0; b < r.nvqsub[ch]; b++) {
           const int a = s.abits[ch][b];
           if (!a || s.pmode[ch][b]) continue;
@@ -826,6 +839,18 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
 
   // --- the subframe's audio --------------------------------------------------------------------------
 
+  // which of its pairs of gains before the mix mixed channel ch's subframe takes: the other, where
+  // it has made more of the channel's indexes lately (the difference, a quarter of it gone each
+  // subframe, past 1). (A DTS:X encoder put its sides into the core's surrounds times 32767/32768,
+  // rounded: the Cymatics stream's. Where the sides are under 2^14 that is them as they are, and
+  // a binding by a stretch of those can't tell the two apart: the stream's frames 3000-5999,
+  // bound by their quiet start, take 1, and this the other from their 22nd frame: 10611 bytes,
+  // 21449 in format 121)
+  void gain_pick(int ch) {
+    gsc[ch] += (S32)gh[ch][1] - (S32)gh[ch][0] - gsc[ch] / 4;
+    if (gsc[ch] > 1) gsel[ch] ^= 1, gsc[ch] = 0;
+    gh[ch][0] = gh[ch][1] = 0;
+  }
   // the subframe sf of the frame c starts (its SSC known): the audio's subband samples of its bound
   // channels, and their subbands' energy and how it goes
   void smp_subframe(const CoreRec& r, int sf) {
@@ -913,8 +938,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (!bind.bound(ch, wav->nch)) continue;
       bound[ch] = 1;
       S64 x[64];
+      if (bind.alt[ch]) {
+        gain_pick(ch);
+        for (int j = 0; j < nsmp; j++) {
+          analyze_bound(*wav, gsel[ch] ? bind : bind2, ch, o0 + 32 * up * j, fir, x, NSUB, !ss_rule() && !x96a);
+          for (int b = 0; b < NSUB; b++) XO[ch][b][j] = x[b];
+        }
+      }
       for (int j = 0; j < nsmp; j++) {
-        analyze_bound(*wav, bind, ch, o0 + 32 * up * j, fir, x, x96a ? NSUB96 : NSUB, !ss_rule() && !x96a);
+        analyze_bound(*wav, gsel[ch] ? bind2 : bind, ch, o0 + 32 * up * j, fir, x, x96a ? NSUB96 : NSUB, !ss_rule() && !x96a);
         for (int b = 0; b < NSUB; b++) X[ch][b][j] = x[b];
         for (int c = 0; c < CPL_N; c++) {
           const int tb = NSUB - 1 - c;
@@ -1000,7 +1032,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     int h = 0;
     S64 x[64];
     for (int j = j0; j < j1; j++) {
-      analyze_bound(*wav, bind, ch, o0 + 32 * bind.up * j, fir, x, x96a ? NSUB96 : NSUB, !ss_rule() && !x96a);
+      analyze_bound(*wav, gsel[ch] ? bind2 : bind, ch, o0 + 32 * bind.up * j, fir, x, x96a ? NSUB96 : NSUB, !ss_rule() && !x96a);
       for (int b = 0; b < r.nvqsub[ch]; b++) {
         const int a = s.abits[ch][b];
         if (!a || s.pmode[ch][b]) continue;
@@ -4206,6 +4238,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     miss[ch][b] = (U8)(miss[ch][b] << 1 | (bnd && how != 0));
     if (bnd) chm[ch] = chm[ch] << 1 | (how != 0);
+    if (bnd && bind.alt[ch]) {  // (gain_pick()'s counts: the index each pair's audio makes as it is)
+      S128 dg;
+      S64 ag;
+      gh[ch][0] += requant(X[ch][b][j] - shl64(pred, AQ_F), ss, lo, hi, &dg, &ag) == v;
+      gh[ch][1] += requant(XO[ch][b][j] - shl64(pred, AQ_F), ss, lo, hi, &dg, &ag) == v;
+    }
     n_smp++;
     n_hit += how == 0;
     q2[ch][b] = q1[ch][b];

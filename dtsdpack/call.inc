@@ -71,6 +71,9 @@ struct MixSums {
 struct MixCand {
   int w1, w2;
   S32 g1, g2;
+  S32 p1, p2;  // (the gains before the mix, Bind's)
+  S64 e1() const { return pre_gain(g1, p1); }  // (the analyses' gains)
+  S64 e2() const { return pre_gain(g2, p2); }
 };
 constexpr int MIX_CANDS = 12;
 struct MixHits {
@@ -88,12 +91,53 @@ struct MixHits {
         index_cell(s.q[ch][b][j], ss, lo, hi, &xlo, &xhi);  // (the values requant() takes to its index)
         for (int k = 0; k < nc[ch]; k++) {
           const MixCand& m = c[ch][k];
-          const S128 v = (S128)xw[m.w1][b] * m.g1 + (m.w2 >= 0 ? (S128)xw[m.w2][b] * m.g2 : 0);
+          const S128 v = (S128)xw[m.w1][b] * m.e1() + (m.w2 >= 0 ? (S128)xw[m.w2][b] * m.e2() : 0);
           const S64 x = (S64)((v + (1 << 22)) >> 23);
           hits[ch][k] += x >= xlo && x <= xhi;
         }
         n[ch]++;
       }
+  }
+};
+
+// The chosen binding's variants (find_mixes()'s third pass): as MixHits, and for each sample which
+// of them make its index (hist, by the mask of those that do), to tell two of them apart by the
+// samples one makes and the other doesn't
+constexpr int MIX_REF = 10;
+struct MixRef {
+  MixCand c[NCH][MIX_REF];
+  int nc[NCH];
+  U64 hits[NCH][MIX_REF], n[NCH];
+  U32 hist[NCH][1 << MIX_REF];
+  void operator()(const CoreRec& r, const CoreSub& s, int j, S64 (*xw)[32]) {
+    for (int ch = 0; ch < r.npchs + r.nxch; ch++) {
+      if (!nc[ch]) continue;
+      for (int b = 0; b < r.nvqsub[ch]; b++) {
+        if (!s.abits[ch][b] || s.pmode[ch][b]) continue;
+        const S64 ss = step_scale(r, s, ch, b, j >> 3);
+        if (ss <= 0) continue;
+        S64 lo, hi, xlo, xhi;
+        quant_range(r, ch, s.abits[ch][b], lo, hi);
+        index_cell(s.q[ch][b][j], ss, lo, hi, &xlo, &xhi);
+        U32 mask = 0;
+        for (int k = 0; k < nc[ch]; k++) {
+          const MixCand& m = c[ch][k];
+          const S128 v = (S128)xw[m.w1][b] * m.e1() + (m.w2 >= 0 ? (S128)xw[m.w2][b] * m.e2() : 0);
+          const S64 x = (S64)((v + (1 << 22)) >> 23);
+          const int h = x >= xlo && x <= xhi;
+          hits[ch][k] += h, mask |= (U32)h << k;
+        }
+        hist[ch][mask]++;
+        n[ch]++;
+      }
+    }
+  }
+  // of channel ch's samples, those variant i makes and k doesn't
+  U64 only(int ch, int i, int k) const {
+    U64 t = 0;
+    for (U32 m = 0; m < 1u << nc[ch]; m++)
+      if ((m >> i & 1) && !(m >> k & 1)) t += hist[ch][m];
+    return t;
   }
 };
 
@@ -682,27 +726,78 @@ struct Call {
       S32 ga[2], gb[2];
       if (bind.map[ch] >= 0) {
         const int w = bind.map[ch];
-        mh.c[ch][n++] = MixCand{w, -1, BIND_ONE, 0};
+        mh.c[ch][n++] = MixCand{w, -1, BIND_ONE, 0, BIND_Q15, BIND_Q15};
         if (ms.Gu[ch][w] > 0) {
           const int na = gain_near(ms.Cu[ch][w] / ms.Gu[ch][w], ga);
           for (int a = 0; a < na; a++)
-            if (ga[a] != BIND_ONE) mh.c[ch][n++] = MixCand{w, -1, ga[a], 0};
+            if (ga[a] != BIND_ONE) mh.c[ch][n++] = MixCand{w, -1, ga[a], 0, BIND_Q15, BIND_Q15};
         }
       }
       if (si >= 0) {
         const int na = gain_near(gs, ga);
-        for (int a = 0; a < na; a++) mh.c[ch][n++] = MixCand{si, -1, ga[a], 0};
-        mh.c[ch][n++] = MixCand{si, -1, (S32)llround(gs * BIND_ONE), 0};
-        if (si != bind.map[ch]) mh.c[ch][n++] = MixCand{si, -1, BIND_ONE, 0};
+        for (int a = 0; a < na; a++) mh.c[ch][n++] = MixCand{si, -1, ga[a], 0, BIND_Q15, BIND_Q15};
+        mh.c[ch][n++] = MixCand{si, -1, (S32)llround(gs * BIND_ONE), 0, BIND_Q15, BIND_Q15};
+        if (si != bind.map[ch]) mh.c[ch][n++] = MixCand{si, -1, BIND_ONE, 0, BIND_Q15, BIND_Q15};
       }
       if (pi >= 0) {
         const int na = gain_near(pa, ga), nb2 = gain_near(pb, gb);
         for (int a = 0; a < na; a++)
-          for (int z = 0; z < nb2; z++) mh.c[ch][n++] = MixCand{pi, pk, ga[a], gb[z]};
-        mh.c[ch][n++] = MixCand{pi, pk, (S32)llround(pa * BIND_ONE), (S32)llround(pb * BIND_ONE)};
+          for (int z = 0; z < nb2; z++) mh.c[ch][n++] = MixCand{pi, pk, ga[a], gb[z], BIND_Q15, BIND_Q15};
+        mh.c[ch][n++] = MixCand{pi, pk, (S32)llround(pa * BIND_ONE), (S32)llround(pb * BIND_ONE), BIND_Q15, BIND_Q15};
       }
     }
     mix_pass(pre, pos, len, ft, nf, nch, filts, mh, keep, keep_t, keep_n, true);
+    auto big = [](S32 g) { return (g < 0 ? -(S64)g : g) >= BIND_ONE / 64; };
+    int bks[NCH];
+    for (int ch = 0; ch < NCH; ch++) {
+      bks[ch] = -1;
+      if (!mh.nc[ch] || !mh.n[ch] || (only && !only[ch])) continue;
+      int bk = 0;  // (the candidates in order of preference: one channel before two, the table's gains before the fit's;
+      for (int k = 1; k < mh.nc[ch]; k++) {  // not one whose gains are all under 1/64, as a clipped WAV's fit makes:
+        const MixCand& m = mh.c[ch][k];        // its distortion swamps the quiet subbands with fine steps)
+        if ((big(m.g1) || (m.w2 >= 0 && big(m.g2))) && mh.hits[ch][k] > mh.hits[ch][bk] + mh.n[ch] / 200) bk = k;
+      }
+      if (mh.hits[ch][bk] * 5 >= mh.n[ch]) bks[ch] = bk;
+    }
+    // (then, at the core's rate, the choice's variants: each gain as the table's entry nearest it,
+    // each WAV channel's samples times 1, 1 - 2^-15 or 1 + 2^-15 before the mix, a pair's either or
+    // both, and the choice as it is; a third pass counts the indexes each makes. A DTS:X encoder's
+    // sides went into the core's surrounds times 32767/32768, a Q15 unity's, rounded, then at the
+    // table's gain, which the fits miss by about their own noise: and two surrounds bound by fits
+    // differ where they are the same, so that the second isn't the first's twin. At twice the rate
+    // a lossless WAV's 64-band analysis is 1 - 1.4e-4 times the one the passes make, so that
+    // 1 - 2^-15 looked better there and wasn't)
+    static MixRef mr;
+    memset((void*)&mr, 0, sizeof mr);
+    int rfk[NCH] = {0}, nord[NCH] = {0};
+    bool more = false;
+    for (int ch = 0; ch < NCH; ch++) {
+      if (bks[ch] < 0 || bind.up != 1) continue;
+      const MixCand& m = mh.c[ch][bks[ch]];
+      auto tab = [&](S32 g) {
+        S32 t[2];
+        return big(g) && gain_near((double)g / BIND_ONE, t) ? t[0] : g;
+      };
+      const S32 t1 = tab(m.g1), t2 = m.w2 >= 0 ? tab(m.g2) : 0;
+      int& n = mr.nc[ch];
+      static const int ord[9][2] = {{0, 0}, {-1, 0}, {0, -1}, {1, 0}, {0, 1}, {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
+      for (int k = 0; k < 9; k++) {
+        const int d1 = ord[k][0], d2 = ord[k][1];
+        if ((d1 && !big(t1)) || (d2 && (m.w2 < 0 || !big(t2)))) continue;
+        MixCand v = m;
+        v.g1 = t1, v.p1 = BIND_Q15 + d1;
+        if (m.w2 >= 0) v.g2 = t2, v.p2 = BIND_Q15 + d2;
+        mr.c[ch][n++] = v;
+      }
+      nord[ch] = n;
+      rfk[ch] = -1;
+      for (int k = 0; k < n && rfk[ch] < 0; k++)
+        if (mr.c[ch][k].g1 == m.g1 && mr.c[ch][k].p1 == m.p1 && (m.w2 < 0 || (mr.c[ch][k].g2 == m.g2 && mr.c[ch][k].p2 == m.p2)))
+          rfk[ch] = k;
+      if (rfk[ch] < 0) rfk[ch] = n, mr.c[ch][n++] = m;
+      more |= n > 1;
+    }
+    if (more) mix_pass(pre, pos, len, ft, nf, nch, filts, mr, keep, keep_t, keep_n, true);
     // (the first pass's analyses, kept for the run: the model's, of the same blocks and channels,
     // the same)
     int kn = 0;
@@ -714,18 +809,47 @@ struct Call {
       free(keep), free(keep_t);
     for (int ch = 0; ch < NCH; ch++) {
       if (!mh.nc[ch] || !mh.n[ch] || (only && !only[ch])) continue;
-      int bk = 0;  // (the candidates in order of preference: one channel before two, the table's gains before the fit's;
-      for (int k = 1; k < mh.nc[ch]; k++) {  // not one whose gains are all under 1/64, as a clipped WAV's fit makes:
-        const MixCand& m = mh.c[ch][k];        // its distortion swamps the quiet subbands with fine steps)
-        auto big = [](S32 g) { return (g < 0 ? -(S64)g : g) >= BIND_ONE / 64; };
-        if ((big(m.g1) || (m.w2 >= 0 && big(m.g2))) && mh.hits[ch][k] > mh.hits[ch][bk] + mh.n[ch] / 200) bk = k;
-      }
-      const MixCand& m = mh.c[ch][bk];
-      if (mh.hits[ch][bk] * 5 < mh.n[ch]) {
+      bind.alt[ch] = 0, bind.p1[ch] = bind.p2[ch] = bind.pa1[ch] = bind.pa2[ch] = BIND_Q15;
+      if (bks[ch] < 0) {
         bind.map[ch] = bind.map2[ch] = -1, bind.g1[ch] = BIND_ONE, bind.g2[ch] = 0;
         continue;
       }
+      // (of the variants that make no fewer of the indexes than the choice as it is, the first in
+      // that order that the one making most doesn't clearly beat: by the samples one of the two
+      // makes and the other doesn't, by more than 8 and 3 sigmas of a fair coin's. Not by the
+      // misses' count: elsewhere in the first window misses of other kinds dilute those of the gain)
+      const int nv = mr.nc[ch], rf = rfk[ch];
+      int bb = 0, bk = rf;
+      for (int k = 1; k < nv; k++)
+        if (mr.hits[ch][k] > mr.hits[ch][bb]) bb = k;
+      for (int k = 0; k < nv; k++) {
+        if (k != rf && mr.hits[ch][k] < mr.hits[ch][rf]) continue;
+        const U64 a = mr.only(ch, bb, k), c = mr.only(ch, k, bb);
+        const double d = (double)a - (double)c;
+        if (d <= 8 || d * d <= 9.0 * (double)(a + c)) {
+          bk = k;
+          break;
+        }
+      }
+      const MixCand& m = mr.nc[ch] ? mr.c[ch][bk] : mh.c[ch][bks[ch]];
       bind.map[ch] = (S8)m.w1, bind.map2[ch] = (S8)m.w2, bind.g1[ch] = m.g1, bind.g2[ch] = m.w2 >= 0 ? m.g2 : 0;
+      bind.p1[ch] = m.p1, bind.p2[ch] = m.w2 >= 0 ? m.p2 : BIND_Q15;
+      // (and a second pair of gains before the mix, model_smp.inc's gain_pick() taking either for a
+      // subframe by the indexes each has made lately: where the choice's are 1 -+ 2^-15, one or
+      // both, 1; where they are 1, the variant's that makes most of the indexes where that makes 8
+      // more than the choice. A DTS:X encoder put its sides into the core's surrounds times
+      // 32767/32768, rounded, which leaves a sample under 2^14 as it is: where they are quiet in
+      // the frames the passes take, the two make the same indexes, 1 is the choice, and the stream
+      // may be louder further on)
+      int ak = -1;
+      if (bk > 0 && bk < nord[ch]) ak = 0;
+      if (!bk && nord[ch] > 1) {
+        int vb = 1;
+        for (int k = 2; k < nord[ch]; k++)
+          if (mr.hits[ch][k] > mr.hits[ch][vb]) vb = k;
+        if (mr.hits[ch][vb] >= mr.hits[ch][0] + 8) ak = vb;
+      }
+      if (ak >= 0) bind.alt[ch] = 1, bind.pa1[ch] = mr.c[ch][ak].p1, bind.pa2[ch] = m.w2 >= 0 ? mr.c[ch][ak].p2 : BIND_Q15;
     }
   }
 

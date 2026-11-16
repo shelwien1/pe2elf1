@@ -243,8 +243,17 @@ static int compress(const char* in_name, const char* wav_name, const char* out_n
       if (k.bind.map[ch] < 0) continue;
       fprintf(stderr, "%s core channel %d = ", any++ ? ";" : "  the binding:", ch);
       if (k.bind.g1[ch] != BIND_ONE || k.bind.map2[ch] >= 0) fprintf(stderr, "%.6f ", (double)k.bind.g1[ch] / BIND_ONE);
-      fprintf(stderr, "WAV %d", k.bind.map[ch]);
-      if (k.bind.map2[ch] >= 0) fprintf(stderr, " + %.6f WAV %d", (double)k.bind.g2[ch] / BIND_ONE, k.bind.map2[ch]);
+      auto pre = [](S32 p) {  // (a WAV channel's gain before the mix, where not 1)
+        if (p != BIND_Q15) fprintf(stderr, "*%d/32768", (int)p);
+      };
+      fprintf(stderr, "WAV %d", k.bind.map[ch]), pre(k.bind.p1[ch]);
+      if (k.bind.map2[ch] >= 0) fprintf(stderr, " + %.6f WAV %d", (double)k.bind.g2[ch] / BIND_ONE, k.bind.map2[ch]), pre(k.bind.p2[ch]);
+      if (k.bind.alt[ch]) {  // (or with its second pair of gains before the mix, subframe by subframe)
+        const char* sep = ", or with ";
+        if (k.bind.pa1[ch] != k.bind.p1[ch]) fprintf(stderr, "%sWAV %d*%d/32768", sep, k.bind.map[ch], (int)k.bind.pa1[ch]), sep = " and ";
+        if (k.bind.map2[ch] >= 0 && k.bind.pa2[ch] != k.bind.p2[ch])
+          fprintf(stderr, "%sWAV %d*%d/32768", sep, k.bind.map2[ch], (int)k.bind.pa2[ch]);
+      }
     }
     if (k.bind.lfe >= 0) fprintf(stderr, "%s LFE = WAV %d", any++ ? ";" : "  the binding:", k.bind.lfe);
     if (any) fprintf(stderr, "\n");

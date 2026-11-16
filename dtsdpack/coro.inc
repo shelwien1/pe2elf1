@@ -6,9 +6,9 @@
 // data: the chunks (kind, then the records of a frame, or a length and the bytes of bytes kept as
 // bytes), the end, and the CRC-32 of the stream (32 bits at 1/2 each).
 enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND };  // the header's fixed part
-enum { DP_BIND_MAX = 3 + 10 + 4 + 5 + 3 + 12 * NCH };                     // (and the binding's bytes at most)
+enum { DP_BIND_MAX = 3 + 10 + 4 + 5 + 3 + 26 * NCH };                     // (and the binding's bytes at most)
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
-constexpr int DP_VERSION = 121;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
+constexpr int DP_VERSION = 122;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
                                // extension as records; 4: a WAV at twice the core's rate, X96 and XXCH; 5: the
                                // scale factor search; 6: the bit allocation search; 7: the bits after the
                                // subframes as the bytes they end in, the energy's quarter of its bucket, the
@@ -205,6 +205,10 @@ constexpr int DP_VERSION = 121;  // the format's (2: a core channel's binding a 
                                // bit allocation search's by 16 and a 32nd; 120: abd and
                                // scd retuned on format 119's decoded WAVs' dumps; 121: vqr,
                                // smp, hit, vqp, abt and scl retuned on format 120's
+                               // dumps; 122: a mixed channel's WAV channels' gains before the
+                               // mix, Q15, the samples rounded, and a second pair of them, the
+                               // one for a subframe that has made more of the decoded
+                               // indexes, the binding saying so)
 
 static void put_le(U8* p, U64 v, int n) {
   for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));
@@ -245,8 +249,10 @@ static bool gain_uncode(U64 u, S32& g) {
 // core's, 1, 2 or 4: its lower band, then 2, and in the upper 4 bits the lower band's resolution, a
 // byte; the LFE's channel, plus 1: 0 none; how many core channels follow, a byte, to the last
 // bound one; each one's WAV channel, plus 1, plus 128 where it is that channel as it is, else where
-// bound, the second of its mix, plus 1, and the gains, gain_code()'s, the second's where it has
-// one), into p: its bytes (DP_BIND_MAX at most)
+// bound, the second of its mix, plus 1, plus 129 where it has gains before the mix, and the gains,
+// gain_code()'s, the second's where it has one; then where it has those, their differences from
+// 1, Q15 (zz()), the second's where it has one, and 0, or 1 and the second pair's the same way),
+// into p: its bytes (DP_BIND_MAX at most)
 static int bind_put(U8* p, const Bind& b, const WavIn& w) {
   int n = 0, nb = 0;
   p[n++] = (U8)w.ok;
@@ -262,12 +268,21 @@ static int bind_put(U8* p, const Bind& b, const WavIn& w) {
     if (b.map[ch] >= 0) nb = ch + 1;
   p[n++] = (U8)nb;
   for (int ch = 0; ch < nb; ch++) {
-    const int plain = b.map[ch] >= 0 && b.map[ch] < 127 && b.map2[ch] < 0 && b.g1[ch] == BIND_ONE;
+    const int m2 = b.map2[ch] >= 0;
+    const int pre = b.map2[ch] < 126 && (b.alt[ch] || b.p1[ch] != BIND_Q15 || (m2 && b.p2[ch] != BIND_Q15));
+    const int plain = b.map[ch] >= 0 && b.map[ch] < 127 && b.unit(ch) && !pre;
     p[n++] = (U8)(b.map[ch] + 1 + 128 * plain);
     if (b.map[ch] < 0 || plain) continue;
-    p[n++] = (U8)(b.map2[ch] + 1);
+    p[n++] = (U8)(b.map2[ch] + 1 + 129 * pre);
     n += put_uv(p + n, gain_code(b.g1[ch]));
-    if (b.map2[ch] >= 0) n += put_uv(p + n, gain_code(b.g2[ch]));
+    if (m2) n += put_uv(p + n, gain_code(b.g2[ch]));
+    if (!pre) continue;
+    n += put_uv(p + n, zz(b.p1[ch] - BIND_Q15));
+    if (m2) n += put_uv(p + n, zz(b.p2[ch] - BIND_Q15));
+    p[n++] = (U8)(b.alt[ch] != 0);
+    if (!b.alt[ch]) continue;
+    n += put_uv(p + n, zz(b.pa1[ch] - BIND_Q15));
+    if (m2) n += put_uv(p + n, zz(b.pa2[ch] - BIND_Q15));
   }
   return n;
 }
@@ -325,11 +340,26 @@ static bool bind_read(G get, Bind& b, BindWav& w) {
       b.map[ch] = (S8)(m - 129);
       continue;
     }
-    const int m2 = get();
-    if (m2 < 0 || m2 > 128) return false;
+    int m2 = get();
+    if (m2 < 0) return false;
+    const int pre = m2 > 128;
+    if (pre) m2 -= 129;
     b.map[ch] = (S8)(m - 1), b.map2[ch] = (S8)(m2 - 1);
     if (!uv(u) || !gain_uncode(u, b.g1[ch])) return false;
     if (m2 && (!uv(u) || !gain_uncode(u, b.g2[ch]))) return false;
+    if (!pre) continue;
+    auto q15 = [&](S32& v) {  // (a gain before the mix: 1/2 to 2)
+      if (!uv(u)) return false;
+      const S64 x = (S64)BIND_Q15 + unzz(u);
+      if (x < BIND_Q15 / 2 || x > 2 * BIND_Q15) return false;
+      v = (S32)x;
+      return true;
+    };
+    if (!q15(b.p1[ch]) || (m2 && !q15(b.p2[ch]))) return false;
+    const int alt = get();
+    if (alt < 0 || alt > 1) return false;
+    b.alt[ch] = (S8)alt;
+    if (alt && (!q15(b.pa1[ch]) || (m2 && !q15(b.pa2[ch])))) return false;
   }
   return true;
 }
