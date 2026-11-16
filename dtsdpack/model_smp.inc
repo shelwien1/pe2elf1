@@ -2819,17 +2819,22 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // of 64 scale factors (it costs, and a lossless WAV's gains nothing); the rule: the search's
   // where it is right clearly more often than the better of the others
   int sf_base() const { return sfr[1] > sfr[0] + 64 + sfr[0] / 8 ? 1 : 0; }
-  bool ss_rule() const { return sfr[2] > sfr[sf_base()] + 64 + sfr[sf_base()] / 8; }
-  // (the decoded WAVs' families, abd and scd, by the same counts sooner: by a 16th, where the search
-  // tracks the better rule on a lossless WAV; by ss_rule()'s margin, FATE's 7-frame decoded samples
-  // 1-23 bytes bigger each, most of their frames coded before it switched)
-  bool dec_fam() const { return sfr[2] > sfr[sf_base()] + sfr[sf_base()] / 16; }
+  // (by a 32nd, the search's: on a lossless WAV it tracks the better rule, on a decoded one it is
+  // ahead by a fifth or more within two frames. Since format 119, and the decoded WAVs' families
+  // (abd, scd) with it, by a 16th in format 118; before, by 64 more and an 8th, which FATE's
+  // 7-frame decoded samples never reached: the short streams 0.47% smaller, the decoded WAVs'
+  // 0.69%, the lossless ones' the same; by any lead, FATE's x96_xch sample, whose search is no
+  // better than the RMS rule, 32 bytes bigger)
+  bool ss_rule() const { return sfr[2] > sfr[sf_base()] + sfr[sf_base()] / 32; }
   bool search_on() const { return ss_n < 2048 || ss_rule() || !(n_sf & 63); }
   // the same of the bit allocation search, of the ABITS: in its first 512 (the 7-frame samples' the
   // same, 4-8% faster), and while it has been right clearly more often than the first guess without
   // it (a lossless WAV's search, which rarely finds one, as often: then it ran on, for nothing, its
   // streams the same and 7.6% faster)
-  bool ab_rule() const { return abr[1] > abr[0] + 32 + abr[0] / 32; }
+  // (the rule: by 16 and a 32nd since format 119, by 32 before: the decoded WAVs' streams but
+  // FATE's 1-7 bytes smaller; by 8 and a 64th, a lossless WAV's too, `s.2.dts`'s first 3 MB's 5
+  // bytes bigger)
+  bool ab_rule() const { return abr[1] > abr[0] + 16 + abr[0] / 32; }
   bool ab_search_on() const { return ab_n < 512 || abr[1] > abr[0] + 32 + abr[0] / 64 || !(n_ab & 63); }
   bool hf_min_on() const { return hf_n < 2048 || hfr[0] * 8 > hfr[1] || !(n_hfvq & 63); }
 
@@ -3499,10 +3504,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (A && f.bit(CN_SAME, ENC && v == A - 1)) return A - 1;
     return checked((A ? A - 1 : 0) + f.codes(X, ENC ? v - (A ? A - 1 : 0) : 0, (u32)D.kd), 0, max - 1);
   }
-  // (scl's, or scd's where the scale factor search shows the WAV decoded: dec_fam())
+  // (scl's, or scd's where the scale factor search shows the WAV decoded: ss_rule())
   S64 scale(M_scl_v& D, S64 v, int p, S32 A, int max, int spu = 0, int sg = 0, const int* spc = nullptr,
             const double* spp = nullptr, int spk = 0) {
-    if (!dec_fam()) return scale_val(f_scl, D, v, p, A, max, spu, sg, spc, spp, spk);
+    if (!ss_rule()) return scale_val(f_scl, D, v, p, A, max, spu, sg, spc, spp, spk);
     M_scd_v E;
 #define M_COPY(f) E.f = D.f;
     M_scl_VARS(M_COPY)

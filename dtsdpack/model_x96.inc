@@ -603,7 +603,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
         int sc = 0;
         if (G >= 0 && x96_ab_rule()) Sn = G + 1, sc = 13 + (G + 1 == og), n_abs9++;
         v = abits_code(ch, b, v, lo, hi, hab[ch][b], b > b0 ? s.abits[ch][b - 1] + 1 : 0, e, de, ls, s.pmode[ch][b], lbd, nb,
-                       mx, Sn, near_e ? 14 : nn, sc, 4, 0, 0, 0, 0, 0, -1, -1, B::dec_fam() || x96_ab_rule());
+                       mx, Sn, near_e ? 14 : nn, sc, 4, 0, 0, 0, 0, 0, -1, -1, B::ss_rule() || x96_ab_rule());
         v = checked(v, lo, hi);
         if (sn) *sn = (U8)(v + 1);
         if (srch) {
@@ -859,11 +859,12 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     *conf = imin(bitlen128((U128)ratio) - 3, SB_N - 1);
     return best;
   }
-  // (as search_on(): kind k's rule, the search's where it is right clearly more often than the
-  // better of the others)
+  // (as search_on(): kind k's rule, the search's where it is right more often than the better of
+  // the others by a 32nd, as ss_rule(); since format 119, by 64 more and an 8th before: `96-24.dts`'s
+  // core 118 bytes smaller, FATE's x96_51 sample's 39; by 16 and a 32nd, 46 bytes more of them)
   bool x96_rule(int k) const {
     const U32 lead = imax(sfr9[k][0], sfr9[k][1]);
-    return sfr9[k][2] > lead + 64 + lead / 8;
+    return sfr9[k][2] > lead + lead / 32;
   }
   bool x96_search_on(int k) const { return ss9_n < 2048 || x96_rule(k) || !(n_sf9 & 63); }
 
