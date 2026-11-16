@@ -42,6 +42,8 @@ struct WavIn {
   U8* rb;            // a read's bytes
   U8* probe;         // the first bytes, the samples after the header in them not taken yet
   size_t pn, pat;    // their number, and where the next sample's bytes start
+  size_t pat0;       // (where the first sample's start)
+  long data_at;      // (the file's place after them, where it can be read again from there: a file's; else -1)
   char why[128];     // why it isn't a WAV it reads
   S32* ext;          // past its end: each channel's continuation, ext_n samples of it (anal.inc's
   int ext_n, ext_on;  // wav_extend()), where ext_on (else 0s)
@@ -77,6 +79,7 @@ struct WavIn {
     crc = crc32_upd(0, probe, pn);
     struct stat st;
     if (!fstat(fileno(f), &st) && S_ISREG(st.st_mode)) size = (U64)st.st_size;
+    data_at = size ? ftell(f) : -1;
     if (!parse()) return;
     for (int c = 0; c < nch; c++) ring[c] = (S32*)xmalloc(sizeof(S32) * WAV_WIN);
     rb = (U8*)xmalloc((size_t)IO_BUF * nch * bps);
@@ -96,29 +99,45 @@ struct WavIn {
   }
   // the stream's resolution as the WAV's samples have it (compressing, for the binding): their
   // common trailing 0 bits (to 8; 0 where all are 0), of those in the first 64 KB and, where the
-  // file can be read on and back, the next 4 MB
+  // file can be read on and back, the next 4 MB, and 4 MB more at a time while fewer than 2^16 of
+  // them aren't 0, to 256 MB (a quiet start's 0s say nothing: a 16-bit stream's resolution, 8, was
+  // 0 where its first 4 MB were silent, its lower band split at another's)
   int low_zeros() {
     if (!ok) return 0;
     const size_t fb = (size_t)nch * bps, more = (size_t)4 << 20;
-    U8* buf = (U8*)xmalloc(pn - pat + more);
+    U8* buf = (U8*)xmalloc(fb + pn - pat + more);
     size_t n = pn - pat;
     memcpy(buf, probe + pat, n);
     const long at = ftell(f);
-    if (at >= 0) {
-      n += fread(buf + n, 1, more, f);
-      if (fseek(f, at, SEEK_SET)) fatal("the WAV can't be read again from where it was");
-    }
     U32 any = 0;
-    for (size_t i = 0; i + bps <= n - n % fb; i += bps) {
-      const U8* p = buf + i;
-      any |= bps == 2 ? (U32)((U32)p[0] | (U32)p[1] << 8) << 8
-           : bps == 3 ? (U32)p[0] | (U32)p[1] << 8 | (U32)p[2] << 16
-                      : ((U32)p[0] | (U32)p[1] << 8 | (U32)p[2] << 16 | (U32)p[3] << 24) >> 8;
+    U64 nz = 0;
+    for (int k = 0; k < 64; k++) {
+      size_t r = 0;
+      if (at >= 0) r = fread(buf + n, 1, more, f), n += r;
+      const size_t whole = n - n % fb;  // (the whole sample frames, the rest kept for the next)
+      for (size_t i = 0; i + bps <= whole; i += bps) {
+        const U8* p = buf + i;
+        const U32 v = bps == 2 ? (U32)((U32)p[0] | (U32)p[1] << 8) << 8
+                    : bps == 3 ? (U32)p[0] | (U32)p[1] << 8 | (U32)p[2] << 16
+                               : ((U32)p[0] | (U32)p[1] << 8 | (U32)p[2] << 16 | (U32)p[3] << 24) >> 8;
+        any |= v, nz += (v & 0xFFFFFF) != 0;
+      }
+      memmove(buf, buf + whole, n - whole);
+      n -= whole;
+      if (at < 0 || r < more || nz >= 1u << 16) break;
     }
+    if (at >= 0 && fseek(f, at, SEEK_SET)) fatal("the WAV can't be read again from where it was");
     free(buf);
     int z = 0;
     while (any && z < 8 && !(any >> z & 1)) z++;
     return any ? z : 0;
+  }
+  // (c, after the binding's search far into it: call.inc's find_alignment()) back to its first
+  // sample, as init() left it, where it can be read again from there
+  bool can_rewind() const { return ok && data_at >= 0; }
+  void rewind() {
+    if (fseek(f, data_at, SEEK_SET)) fatal("the WAV can't be read again from its start");
+    pat = pat0, got = 0, lo = 0, rgot = 0, rend = 0, xb0 = 0, xbn = 0;
   }
   void quit() {
     for (int c = 0; c < WAV_CH; c++)
@@ -218,7 +237,7 @@ struct WavIn {
         if (fmt != 1 || nch < 1 || nch > WAV_CH || (bits != 16 && bits != 24 && bits != 32))
           return snprintf(why, sizeof why, "not a WAV of 16, 24 or 32-bit PCM, 1 to %d channels", WAV_CH), false;
         bps = bits / 8;
-        pat = i + 8;
+        pat = pat0 = i + 8;
         U64 dn = sz == 0xFFFFFFFFu ? ds64 : sz;
         if (size && (!dn || pat + dn > size)) dn = size - pat;  // (as much as there is)
         if (!dn && !size) dn = ~0ULL;                          // (a pipe: to its end)

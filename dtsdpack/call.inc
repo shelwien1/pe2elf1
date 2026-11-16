@@ -2,6 +2,7 @@
 // line, its run; d and c on it. (ac3pack's, with the WAV, and the alignment c finds.)
 
 constexpr size_t PRE_READ = 4 * MIB;  // c: the stream's start, read first to find the alignment
+constexpr size_t FAR_READ = 64 * MIB;  // (and where nothing lines up in it, up to this much more: find_alignment())
 constexpr int PROBES = 64;            // the blocks the alignment is found from
 static_assert(PROBES <= PROBES_MAX, "find_bind()'s");
 constexpr int LFE_PROBES = 1024;      // and the LFE samples its channel is
@@ -106,6 +107,7 @@ struct Call {
   RunCounts n;
   Bind bind;    // c: how the core lines up with the WAV
   double corr;  // and how well its channel 0 correlates there
+  bool lfe_few;  // (c: whether the LFE had too few samples that aren't 0 there: find_alignment())
   U32 core_hz;  // the core's samples a second (as its first frame says; 0: not known)
 
   // from the file from to to (compare: s compares with to instead of writing it), the WAV wavf, its
@@ -124,6 +126,7 @@ struct Call {
     memset(&n, 0, sizeof n);
     bind.none();
     corr = 0;
+    lfe_few = false;
     core_hz = 0;
     pr.Init();
     if (o.progress || (!o.quiet && stderr_tty())) pr.start(tag, file_size(in));
@@ -254,8 +257,160 @@ struct Call {
   // all of it): the decoder's plain subband samples of bands 0-7 of the frames there, each block at
   // its place in the stream as the run counts them (every frame's NBLKS + 1), the PROBES with the
   // most energy of those the WAV's window holds, searched for in the WAV (anal.inc's find_bind()):
-  // by the 64-band analysis where the WAV is at twice the core's rate (as the first frame has it)
+  // by the 64-band analysis where the WAV is at twice the core's rate (as the first frame has it).
+  // Where nothing lines up there and the WAV can be read again from its start, the same from the
+  // stream's first block within 30 dB of its loudest (loud_start()), in those bytes and, where the
+  // input can be read on and back, up to FAR_READ more: a stream that starts quiet for longer than
+  // the WAV's window (2^20 samples: 21.8 s at 48 kHz) has nothing there to line up. And where the
+  // channels lined up but the window had too few of the LFE's samples that aren't 0, the LFE's by
+  // them further on (lfe_far()). The WAV is read again from its start after.
   void find_alignment(pcU8 pre, size_t n, int eof) {
+    align_at(pre, n, eof, 0);
+    const bool far = bind.map[0] < 0;
+    if ((!far && !lfe_few) || !wav.can_rewind()) return;
+    U8* more = nullptr;
+    pcU8 buf = pre;
+    size_t bn = n;
+    int beof = eof;
+    const long at = eof ? -1 : ftell(in);
+    if (at >= 0) {
+      more = (U8*)xmalloc(n + FAR_READ + PAD);
+      memcpy(more, pre, n);
+      while (bn < n + FAR_READ) {
+        const size_t r = fread(more + bn, 1, n + FAR_READ - bn, in);
+        if (!r) break;
+        bn += r;
+      }
+      beof = bn < n + FAR_READ;
+      memset(more + bn, 0, PAD);
+      if (fseek(in, at, SEEK_SET)) fatal("the input can't be read again from where it was");
+      buf = more;
+    }
+    bool moved = false;
+    if (far) {
+      const S64 t0 = loud_start(buf, bn, beof);
+      if (t0 > 0) align_at(buf, bn, beof, t0), moved = true;
+    }
+    if (bind.map[0] >= 0 && lfe_few && lfe_far(buf, bn, beof)) moved = true;
+    if (moved) wav.rewind();
+    free(more);
+  }
+  // the LFE's binding (where the window the channels lined up in had too few of its samples that
+  // aren't 0: align_at()'s) by those in the n bytes at buf (eof: all of them) from the first that
+  // has 16 more within the WAV's window, as many as align_at() takes; whether it moved the WAV's
+  // window there
+  bool lfe_far(pcU8 buf, size_t n, int eof) {
+    static CoreRec r;  // (large)
+    static S64 ln[LFE_PROBES], ly[LFE_PROBES];
+    const int up = bind.up;
+    const S64 span = (WAV_WIN - 4096 * up) / (64 * up);  // (the LFE's samples a window holds)
+    int nl = 0, nch = 0, filts = -1;
+    S64 t = 0;
+    for (size_t i = 0; i < n && nl < LFE_PROBES;) {
+      const int m = frame_at(buf + i, n - i, eof, &r);
+      if (!m) {
+        i++;
+        continue;
+      }
+      const int nb = core_blocks(buf + i, (size_t)m);
+      if (!core_parse(buf + i, m, r) && (filts < 0 || (r.npchs == nch && r.filts == filts))) {
+        if (filts < 0) filts = r.filts, nch = r.npchs;
+        S64 tb = t;
+        for (int sf = 0; sf < r.nsubfs && nl < LFE_PROBES; sf++) {
+          const CoreSub& s = r.sub[sf];
+          for (int k = 0; r.lff == 2 && k < 4 * s.nssc && nl < LFE_PROBES; k++) {
+            if (!s.lfe[k]) continue;
+            const S64 p = tb / 2 + k;
+            if (nl && p - ln[0] >= span) {  // (past the window from the first: enough, or the first ones dropped)
+              if (nl >= 16) goto done;
+              int d = 0;
+              while (d < nl && p - ln[d] >= span) d++;
+              for (int j = d; j < nl; j++) ln[j - d] = ln[j], ly[j - d] = ly[j];
+              nl -= d;
+            }
+            ln[nl] = p, ly[nl++] = s.lfe[k] * lfe_scale(s.lfescale);
+          }
+          tb += s.nssc * 8;
+        }
+      }
+      t += nb;
+      i += (size_t)m;
+    }
+  done:
+    if (nl < 16) return false;
+    wav.need(imax64(0, 64 * up * ln[0] + bind.off - 1024 * up), 64 * up * ln[nl - 1] + bind.off + 512 * up);
+    bind_lfe(ln, ly, nl, up);
+    return true;
+  }
+  static S64 imax64(S64 a, S64 b) { return a > b ? a : b; }
+  // the LFE: the WAV channel no core channel has whose decimation correlates best with its nl
+  // samples ln, ly (by those whose decimation's window ends in the WAV, where it ends in the
+  // window: as find_bind()'s probes), by 0.9 or more
+  void bind_lfe(S64* ln, S64* ly, int nl, int up) {
+    if (wav.got == wav.nsamp) {
+      int m = 0;
+      for (int k = 0; k < nl; k++)
+        if (64 * up * ln[k] + bind.off <= (S64)wav.nsamp) ln[m] = ln[k], ly[m++] = ly[k];
+      nl = m;
+    }
+    if (nl < 16) return;
+    double bc = 0.9;
+    for (int wc = 0; wc < wav.nch; wc++) {
+      int used = 0;
+      for (int ch = 0; ch < NCH; ch++) used |= bind.map[ch] == wc || bind.map2[ch] == wc;
+      if (used) continue;
+      double sxy = 0, sxx = 0, syy = 0;
+      for (int k = 0; k < nl; k++) {
+        const double x = (double)lfe_decim(wav, wc, 64 * up * ln[k] + bind.off, up), y = (double)ly[k];
+        sxy += x * y, sxx += x * x, syy += y * y;
+      }
+      const double c = sxx > 0 && syy > 0 ? sxy / sqrt(sxx * syy) : 0;
+      if (c > bc) bc = c, bind.lfe = (S8)wc;
+    }
+  }
+  // the first block of the frames in the n bytes at buf (eof: all of them) whose plain subband
+  // samples (bands 0-7, as align_at()'s probes have them) have at least a 1024th of the energy of
+  // the loudest's (0: none)
+  S64 loud_start(pcU8 buf, size_t n, int eof) {
+    static CoreRec r;  // (large)
+    double emax = 0;
+    for (int pass = 0; pass < 2; pass++) {
+      int nch = 0, filts = -1;
+      S64 t = 0;
+      for (size_t i = 0; i < n;) {
+        const int m = frame_at(buf + i, n - i, eof, &r);
+        if (!m) {
+          i++;
+          continue;
+        }
+        const int nb = core_blocks(buf + i, (size_t)m);
+        if (!core_parse(buf + i, m, r) && (filts < 0 || (r.npchs == nch && r.filts == filts))) {
+          if (filts < 0) filts = r.filts, nch = r.npchs;
+          S64 tb = t;
+          for (int sf = 0; sf < r.nsubfs; sf++) {
+            const CoreSub& s = r.sub[sf];
+            for (int j = 0; j < s.nssc * 8; j++, tb++) {
+              double e = 0;
+              for (int ch = 0; ch < r.npchs; ch++)
+                for (int b = 0; b < 8; b++)
+                  if (b < r.nvqsub[ch] && s.abits[ch][b] && !s.pmode[ch][b]) {
+                    const double y = (double)dequantize(s.q[ch][b][j], step_scale(r, s, ch, b, j >> 3));
+                    e += y * y;
+                  }
+              if (!pass) emax = e > emax ? e : emax;
+              else if (e > 0 && e >= emax / 1024) return tb;
+            }
+          }
+        }
+        t += nb;
+        i += (size_t)m;
+      }
+      if (emax <= 0) return 0;
+    }
+    return 0;
+  }
+  // the binding by the blocks from t0 on that the WAV's window holds (find_alignment()'s)
+  void align_at(pcU8 pre, size_t n, int eof, S64 t0) {
     static CoreRec r;                 // (large)
     static Probe pr_[4 * PROBES];     // the most energetic so far (a heap would do; few are kept)
     static double en[4 * PROBES];
@@ -263,7 +418,9 @@ struct Call {
     static U32 fpos[MIX_SEEN], flen[MIX_SEEN];   // the frames that parse, for the mixes: where, how long, their first block
     static S64 ft[MIX_SEEN];
     int np = 0, nch = 0, filts = -1, nl = 0, nf = 0, up = 1;
+    bool has_lfe = false;
     S64 t = 0;
+    lfe_few = false;
     if (!wav.ok) return;
     for (size_t i = 0; i < n; i++) {
       const int m = frame_at(pre + i, n - i, eof, &r);
@@ -276,7 +433,7 @@ struct Call {
       }
       break;
     }
-    const S64 tmax = (WAV_WIN - 4096 * up) / (32 * up);  // (the probes' audio within the window from 0)
+    const S64 tmax = t0 + (WAV_WIN - 4096 * up) / (32 * up);  // (the probes' audio within the window from t0)
     for (size_t i = 0; i < n && t < tmax;) {
       const int m = frame_at(pre + i, n - i, eof, &r);
       if (!m) {
@@ -286,13 +443,15 @@ struct Call {
       const int nb = core_blocks(pre + i, (size_t)m);
       if (!core_parse(pre + i, m, r) && (filts < 0 || (r.npchs == nch && r.filts == filts))) {
         if (filts < 0) filts = r.filts, nch = r.npchs;
-        if (nf < MIX_SEEN && t + nb <= tmax) fpos[nf] = (U32)i, flen[nf] = (U32)m, ft[nf++] = t;
+        has_lfe |= r.lff == 2;
+        if (nf < MIX_SEEN && t >= t0 && t + nb <= tmax) fpos[nf] = (U32)i, flen[nf] = (U32)m, ft[nf++] = t;
         S64 tb = t;
         for (int sf = 0; sf < r.nsubfs; sf++) {
           const CoreSub& s = r.sub[sf];
           for (int k = 0; r.lff == 2 && k < 4 * s.nssc && nl < LFE_PROBES; k++)  // (those not 0: a silent start says nothing)
-            if (s.lfe[k]) ln[nl] = tb / 2 + k, ly[nl++] = s.lfe[k] * lfe_scale(s.lfescale);
+            if (s.lfe[k] && tb >= t0) ln[nl] = tb / 2 + k, ly[nl++] = s.lfe[k] * lfe_scale(s.lfescale);
           for (int j = 0; j < s.nssc * 8; j++, tb++) {
+            if (tb < t0) continue;
             Probe q;
             double e = 0;
             memset(&q, 0, sizeof q);
@@ -333,35 +492,16 @@ struct Call {
     S64 last = 0;
     for (int k = 0; k < nb; k++) last = best[k].t > last ? best[k].t : last;
     for (int k = 0; k < nl; k++) last = imax(last, 2 * ln[k]);
-    wav.need(0, 32 * up * (last + 1) + (1536 + 512) * up);
+    wav.need(t0 > 64 ? 32 * up * (t0 - 64) : 0, 32 * up * (last + 1) + (1536 + 512) * up);  // (from 2048 samples (times up) before t0's)
     bind = find_bind(wav, best, nb, nch, filts, up, &corr);
     bind.dec = (S8)wav.dec;
     bind.dsh = (S8)wav.dsh;
     if (bind.map[0] >= 0) find_mixes(pre, fpos, flen, ft, nf, nch, filts);
-    // the LFE: the WAV channel no core channel has whose decimation correlates best with it (by
-    // its samples whose decimation's window ends in the WAV, where it ends in the window: as
-    // find_bind()'s probes)
+    // the LFE (too few of its samples aren't 0, where the core has one at 64 times: lfe_few, for
+    // find_alignment())
     if (bind.map[0] < 0) return;
-    if (wav.got == wav.nsamp) {
-      int m = 0;
-      for (int k = 0; k < nl; k++)
-        if (64 * up * ln[k] + bind.off <= (S64)wav.nsamp) ln[m] = ln[k], ly[m++] = ly[k];
-      nl = m;
-    }
-    if (nl < 16) return;
-    double bc = 0.9;
-    for (int wc = 0; wc < wav.nch; wc++) {
-      int used = 0;
-      for (int ch = 0; ch < NCH; ch++) used |= bind.map[ch] == wc || bind.map2[ch] == wc;
-      if (used) continue;
-      double sxy = 0, sxx = 0, syy = 0;
-      for (int k = 0; k < nl; k++) {
-        const double x = (double)lfe_decim(wav, wc, 64 * up * ln[k] + bind.off, up), y = (double)ly[k];
-        sxy += x * y, sxx += x * x, syy += y * y;
-      }
-      const double c = sxx > 0 && syy > 0 ? sxy / sqrt(sxx * syy) : 0;
-      if (c > bc) bc = c, bind.lfe = (S8)wc;
-    }
+    lfe_few = has_lfe && nl < 16;
+    bind_lfe(ln, ly, nl, up);
   }
 
   // a pass over (up to MIX_FRAMES of) the nf frames read first, at pre (where, how long, their
