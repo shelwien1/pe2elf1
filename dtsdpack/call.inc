@@ -19,10 +19,12 @@ struct MixSums {
   double sg;  // what the WAV's analysis can't tell apart (its rounding and the bands' leakage: decoder units)
   double G[NCH][WAV_CH][WAV_CH], C[NCH][WAV_CH], Y[NCH];  // (G's lower half)
   double Cu[NCH][WAV_CH], Gu[NCH][WAV_CH];  // and unweighted (loud samples decide: Call::find_mixes())
-  U64 N[NCH];
+  U64 N[NCH], NZ[NCH];  // (the samples, and those not 0)
+  int nchx;             // (the channels, XCH's too)
   void operator()(const CoreRec& r, const CoreSub& s, int j, S64 (*xw)[32]) {
     double xs[32][WAV_CH];  // (the WAV's channels' values, in decoder units: each once; 0s to a multiple of 4)
     int nb = 0;
+    if (r.npchs + r.nxch > nchx) nchx = r.npchs + r.nxch;
     const int nw4 = (nw + 3) & ~3;
     for (int ch = 0; ch < r.npchs + r.nxch; ch++) nb = r.nvqsub[ch] > nb ? r.nvqsub[ch] : nb;
     for (int b = 0; b < nb && b < 32; b++) {
@@ -60,7 +62,7 @@ struct MixSums {
         }
 #endif
         Y[ch] += wt * y * y;
-        N[ch]++;
+        N[ch]++, NZ[ch] += y != 0;
       }
   }
 };
@@ -108,6 +110,7 @@ struct Call {
   Bind bind;    // c: how the core lines up with the WAV
   double corr;  // and how well its channel 0 correlates there
   bool lfe_few;  // (c: whether the LFE had too few samples that aren't 0 there: find_alignment())
+  U8 chfew[NCH];  // (and which channels did: find_mixes())
   U32 core_hz;  // the core's samples a second (as its first frame says; 0: not known)
 
   // from the file from to to (compare: s compares with to instead of writing it), the WAV wavf, its
@@ -127,6 +130,7 @@ struct Call {
     bind.none();
     corr = 0;
     lfe_few = false;
+    memset(chfew, 0, sizeof chfew);
     core_hz = 0;
     pr.Init();
     if (o.progress || (!o.quiet && stderr_tty())) pr.start(tag, file_size(in));
@@ -267,7 +271,7 @@ struct Call {
   void find_alignment(pcU8 pre, size_t n, int eof) {
     align_at(pre, n, eof, 0);
     const bool far = bind.map[0] < 0;
-    if ((!far && !lfe_few) || !wav.can_rewind()) return;
+    if ((!far && !lfe_few && !any_few()) || !wav.can_rewind()) return;
     U8* more = nullptr;
     pcU8 buf = pre;
     size_t bn = n;
@@ -291,6 +295,7 @@ struct Call {
       const S64 t0 = loud_start(buf, bn, beof);
       if (t0 > 0) align_at(buf, bn, beof, t0), moved = true;
     }
+    if (bind.map[0] >= 0 && any_few() && chans_far(buf, bn, beof)) moved = true;
     if (bind.map[0] >= 0 && lfe_few && lfe_far(buf, bn, beof)) moved = true;
     if (moved) wav.rewind();
     free(more);
@@ -343,6 +348,82 @@ struct Call {
     return true;
   }
   static S64 imax64(S64 a, S64 b) { return a > b ? a : b; }
+  bool any_few() const {
+    for (int ch = 0; ch < NCH; ch++)
+      if (chfew[ch]) return true;
+    return false;
+  }
+  // the channels the window bound none of for too few of their samples that aren't 0 (chfew, as
+  // find_mixes() had them) by the frames in the n bytes at buf (eof: all of them) from the first
+  // block where one of them is within 30 dB of its loudest, that a window holds, as find_mixes()
+  // binds them; whether it moved the WAV's window there
+  bool chans_far(pcU8 buf, size_t n, int eof) {
+    static CoreRec r;  // (large)
+    static U32 fpos[MIX_SEEN], flen[MIX_SEEN];
+    static S64 ft[MIX_SEEN];
+    double emax[NCH];
+    for (int ch = 0; ch < NCH; ch++) emax[ch] = 0;
+    S64 t1 = -1;
+    for (int pass = 0; pass < 2 && t1 < 0; pass++) {
+      int nch = 0, filts = -1;
+      S64 t = 0;
+      for (size_t i = 0; i < n && t1 < 0;) {
+        const int m = frame_at(buf + i, n - i, eof, &r);
+        if (!m) {
+          i++;
+          continue;
+        }
+        const int nb = core_blocks(buf + i, (size_t)m);
+        if (!core_parse(buf + i, m, r) && (filts < 0 || (r.npchs == nch && r.filts == filts))) {
+          if (filts < 0) filts = r.filts, nch = r.npchs;
+          S64 tb = t;
+          for (int sf = 0; sf < r.nsubfs && t1 < 0; sf++) {
+            const CoreSub& s = r.sub[sf];
+            for (int j = 0; j < s.nssc * 8 && t1 < 0; j++, tb++)
+              for (int ch = 0; ch < r.npchs + r.nxch && ch < NCH; ch++) {
+                if (!chfew[ch]) continue;
+                double e = 0;
+                for (int b = 0; b < 8; b++)
+                  if (b < r.nvqsub[ch] && s.abits[ch][b] && !s.pmode[ch][b]) {
+                    const double y = (double)dequantize(s.q[ch][b][j], step_scale(r, s, ch, b, j >> 3));
+                    e += y * y;
+                  }
+                if (!pass) emax[ch] = e > emax[ch] ? e : emax[ch];
+                else if (e > 0 && e >= emax[ch] / 1024) {
+                  t1 = tb;
+                  break;
+                }
+              }
+          }
+        }
+        t += nb;
+        i += (size_t)m;
+      }
+    }
+    if (t1 <= 0) return false;
+    const int up = bind.up;
+    const S64 tmax = t1 + (WAV_WIN - 4096 * up) / (32 * up);
+    int nf = 0, nch = 0, filts = -1;
+    S64 t = 0;
+    for (size_t i = 0; i < n && t < tmax;) {
+      const int m = frame_at(buf + i, n - i, eof, &r);
+      if (!m) {
+        i++;
+        continue;
+      }
+      const int nb = core_blocks(buf + i, (size_t)m);
+      if (!core_parse(buf + i, m, r) && (filts < 0 || (r.npchs == nch && r.filts == filts))) {
+        if (filts < 0) filts = r.filts, nch = r.npchs;
+        if (nf < MIX_SEEN && t >= t1 && t + nb <= tmax) fpos[nf] = (U32)i, flen[nf] = (U32)m, ft[nf++] = t;
+      }
+      t += nb;
+      i += (size_t)m;
+    }
+    if (!nf) return false;
+    wav.need(t1 > 64 ? 32 * up * (t1 - 64) : 0, 32 * up * (ft[nf - 1] + 128) + bind.off + 512 * up);
+    find_mixes(buf, fpos, flen, ft, nf, nch, filts, chfew);
+    return true;
+  }
   // the LFE: the WAV channel no core channel has whose decimation correlates best with its nl
   // samples ln, ly (by those whose decimation's window ends in the WAV, where it ends in the
   // window: as find_bind()'s probes), by 0.9 or more
@@ -421,6 +502,7 @@ struct Call {
     bool has_lfe = false;
     S64 t = 0;
     lfe_few = false;
+    memset(chfew, 0, sizeof chfew);
     if (!wav.ok) return;
     for (size_t i = 0; i < n; i++) {
       const int m = frame_at(pre + i, n - i, eof, &r);
@@ -542,7 +624,10 @@ struct Call {
   // the channel's indexes exactly
   // (MixHits; by 0.5% of them at least over the ones before it; not one whose gains are all under
   // 1/64), where that is a fifth of them at least (else the channel isn't bound)
-  void find_mixes(pcU8 pre, const U32* pos, const U32* len, const S64* ft, int nf, int nch, int filts) {
+  // (only: the channels it binds, those of it not 0; else all, and those it had too few samples of
+  // that aren't 0 to bind, where the alignment didn't, in chfew)
+  void find_mixes(pcU8 pre, const U32* pos, const U32* len, const S64* ft, int nf, int nch, int filts,
+                  const U8* only = nullptr) {
     static MixSums ms;
     static MixHits mh;
     S64 last = 0;
@@ -562,8 +647,15 @@ struct Call {
     mix_pass(pre, pos, len, ft, nf, nch, filts, ms, keep, keep_t, keep_n, false);
     const int nw = wav.nch;
     auto g = [&](int ch, int i, int k) { return i >= k ? ms.G[ch][i][k] : ms.G[ch][k][i]; };
+    if (!only) memset(chfew, 0, sizeof chfew);
     for (int ch = 0; ch < NCH; ch++) {  // (XCH's channel too: after the core's)
-      if (ms.N[ch] < 64) continue;  // (too few to tell: as find_bind() had it)
+      if (only && !only[ch]) continue;
+      // (too few to tell: as find_bind() had it; where it had none, too few not 0 too: a silent
+      // channel's fit, all 0s, took a gain of 0, as FFmpeg's encoder's silent subbands have bits)
+      if (ms.N[ch] < 64 || (bind.map[ch] < 0 && ms.NZ[ch] < 64)) {
+        if (!only && bind.map[ch] < 0 && ch < ms.nchx) chfew[ch] = 1;
+        continue;
+      }
       double rs = 1e300, rp = 1e300, gs = 0, pa = 0, pb = 0;
       int si = -1, pi = -1, pk = -1;
       for (int i = 0; i < nw; i++) {
@@ -615,13 +707,13 @@ struct Call {
     // the same)
     int kn = 0;
     while (kn < keep_n && keep_t[kn] >= 0) kn++;
-    if (kn) {
+    if (kn && !wav.ana_n) {  // (the first window's, where it's there)
       wav.ana = (S64*)keep, wav.ana_t = keep_t, wav.ana_n = kn, wav.ana_up = bind.up, wav.ana_off = bind.off;
       wav.ana_got = (S64)wav.got, wav.ana_fir = filts ? FIR_PERFECT : FIR_NONPERFECT;
     } else
       free(keep), free(keep_t);
     for (int ch = 0; ch < NCH; ch++) {
-      if (!mh.nc[ch] || !mh.n[ch]) continue;
+      if (!mh.nc[ch] || !mh.n[ch] || (only && !only[ch])) continue;
       int bk = 0;  // (the candidates in order of preference: one channel before two, the table's gains before the fit's;
       for (int k = 1; k < mh.nc[ch]; k++) {  // not one whose gains are all under 1/64, as a clipped WAV's fit makes:
         const MixCand& m = mh.c[ch][k];        // its distortion swamps the quiet subbands with fine steps)

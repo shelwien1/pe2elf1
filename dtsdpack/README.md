@@ -1214,27 +1214,33 @@ of an unweighted fit, the candidates (the best channel as it is for XCH's channe
 alignment doesn't place: FATE's `xbr_xch_61_24_48_3840`'s, its WAV channel as it is, was bound to it
 at a gain of 0.065 as fitted; as it is, its core 14% smaller). Of those, the one that makes the most
 of the channel's indexes exactly is its binding (a simpler one unless another makes 0.5% more; not
-one whose gains are all under 1/64), if it makes a fifth of them. (A clipped decode's distortion
-swamps a channel's quiet subbands at fine steps: their fit's gains came out at 0.00007 for channels
-that are their WAV channels as they are, and as most of those channels' indexes are 0, such a gain
-made more of them exactly than the right one: FATE's 5.1 and 6.1 samples' cores came out 36% and 18%
-bigger, the XXCH ones' 19% and 14%.) (Against a decoded WAV, two kinds of samples break a fit by
-steps alone: a silent subband the encoder gave a fine step, as `open bitrate.dts`'s has ABITS 24 at
-the smallest scale factor, all its indexes 0, where the WAV has its rounding; and silence beside a
-sudden loud onset, where the decoder's filterbank, FILTS 0's not quite perfect reconstruction,
-leaves a few percent of the onset in the WAV. Their fine steps made them outweigh everything else,
-and the fit's gains came out at 0.017 for a channel that is its WAV channel as it is.) The encoder
-mixed in the PCM, before its analysis: each sample's sum of the scaled channels rounded to the
-nearest integer (not each product rounded, nor the sum truncated). So a lossless WAV's mixed or
-scaled core channel, at the core's rate, is analysed as that rounded PCM, not as its channels'
-analyses mixed (`Master Audio 7.1.dts` 14.7% smaller: its indexes the audio's 99.64% of the time,
-from 99.51%; the 7-frame 7.1 samples 2%; the XXCH samples' decodes, a decoder's mix, until the scale
-factor search shows them decoded, 0.4-0.7% bigger). The LFE gets the remaining WAV channel whose
-decimation correlates best with the first 1024 LFE samples that aren't 0 (`Master Audio 7.1.dts`'s
-first 1024 are all 0); where the window has fewer than 16 of them and the WAV can be read again,
-with those further on, from the first that has 16 more within a window's length, as above (the
-Cymatics stream's frames 3301-9300 with their LFE made 0 for the first 25.6 s, in the core and the
-WAV: the LFE went without the WAV for the rest, 52220 bytes; now 44422). `-s` shows the binding:
+one whose gains are all under 1/64), if it makes a fifth of them. A channel the alignment didn't
+place, fewer than 64 of whose samples there aren't 0, isn't bound there (its fit, all 0s where
+FFmpeg's encoder gives a silent subband bits, took a gain of 0, which predicts nothing); where the
+WAV can be read again, such channels are bound the same way by the frames from the first block where
+one of them is within 30 dB of its loudest, as above: a minute of 5.1 shaped noise whose surrounds
+start at 30 s, FFmpeg's encode against its decode, came out at 19.81% of its core, its surrounds
+bound at a gain of 0, now at 2.13%. (A clipped decode's distortion swamps a channel's quiet subbands
+at fine steps: their fit's gains came out at 0.00007 for channels that are their WAV channels as
+they are, and as most of those channels' indexes are 0, such a gain made more of them exactly than
+the right one: FATE's 5.1 and 6.1 samples' cores came out 36% and 18% bigger, the XXCH ones' 19% and
+14%.) (Against a decoded WAV, two kinds of samples break a fit by steps alone: a silent subband the
+encoder gave a fine step, as `open bitrate.dts`'s has ABITS 24 at the smallest scale factor, all its
+indexes 0, where the WAV has its rounding; and silence beside a sudden loud onset, where the
+decoder's filterbank, FILTS 0's not quite perfect reconstruction, leaves a few percent of the onset
+in the WAV. Their fine steps made them outweigh everything else, and the fit's gains came out at
+0.017 for a channel that is its WAV channel as it is.) The encoder mixed in the PCM, before its
+analysis: each sample's sum of the scaled channels rounded to the nearest integer (not each product
+rounded, nor the sum truncated). So a lossless WAV's mixed or scaled core channel, at the core's
+rate, is analysed as that rounded PCM, not as its channels' analyses mixed (`Master Audio 7.1.dts`
+14.7% smaller: its indexes the audio's 99.64% of the time, from 99.51%; the 7-frame 7.1 samples 2%;
+the XXCH samples' decodes, a decoder's mix, until the scale factor search shows them decoded,
+0.4-0.7% bigger). The LFE gets the remaining WAV channel whose decimation correlates best with the
+first 1024 LFE samples that aren't 0 (`Master Audio 7.1.dts`'s first 1024 are all 0); where the
+window has fewer than 16 of them and the WAV can be read again, with those further on, from the
+first that has 16 more within a window's length, as above (the Cymatics stream's frames 3301-9300
+with their LFE made 0 for the first 25.6 s, in the core and the WAV: the LFE went without the WAV
+for the rest, 52220 bytes; now 44422). `-s` shows the binding:
 
 ```
   the binding: core channel 0 = 0.707092 WAV 2; core channel 1 = 0.707092 WAV 0; ...; core channel 3 = 0.707092 WAV 4 + 0.707092 WAV 6; ...; LFE = WAV 3
