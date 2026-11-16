@@ -1,7 +1,8 @@
 // model_side.inc -- the model's side information (model.inc): a subband's PMODE, PVQ, TMODE, joint
 // scale factors and high-frequency VQ vector and the LFE samples (the sid family; the joint scale
 // factors the jsc family), each against its last value and the place before's in the subframe; the
-// bit allocations (abt), against the last ones, the subband below's and the audio's energy.
+// bit allocations (abt; a decoded WAV's the abd family), against the last ones, the subband below's
+// and the audio's energy.
 
 template <int f_DEC, class LV>
 struct ModelSide : ModelHdr<f_DEC, LV> {
@@ -14,6 +15,7 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
   M_FAM(sid)
   M_FAM(jsc)
   M_FAM(abt)
+  M_FAM(abd)
   int sst;  // sid: whether the value before in the subframe kept its last one (0 none, 1 kept, 2 changed)
   int ast;  // abt: the same of the subband below's ABITS
 
@@ -77,12 +79,12 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
   // the subframe Bw (1 + them, 0 none), and the audio's energy (es, de, ls, lbd as famvars.inc says)
   // (Sn: the first guess, 1 + it, 0 none; then Alt, the second (1 + it), else the last one; then the
   // difference from the first of them there is; pq, pq2: the outside predictions of the first two,
-  // P(not it) in 4096ths, -1 none)
+  // P(not it) in 4096ths, -1 none; dec: a decoded WAV's, the scale factor search's counts or the bit
+  // allocation search's rule say (the abd family's: its own parameters, since format 118)
   S64 abits_code(int ch, int b, S64 v, S64 lo, S64 hi, S32 A, S32 Bw, int es, int de, int ls, int pm, int lbd,
                  int nb, int mx, S32 Sn, int nn, int sc, int eq, int sm, S32 Alt = 0, int bg = 0, int ag = 0, int sx = 0,
-                 int pq = -1, int pq2 = -1) {
+                 int pq = -1, int pq2 = -1, int dec = 0) {
     M_abt_v D;
-    tcx X;
     D.bd = b;
     D.cc = chan_class(ch);
     D.la = vvar(A, 27);
@@ -103,19 +105,32 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
     D.bg = bg;
     D.ag = ag;
     D.sx = sx;
-    f_abt.make(D, X);
-    f_abt.select(X);
     const S32 c1 = Sn ? Sn : A, c2 = Alt ? Alt : Sn ? A : Bw;
+    if (dec) {
+      M_abd_v E;
+#define M_COPY(f) E.f = D.f;
+      M_abt_VARS(M_COPY)
+#undef M_COPY
+      v = abits_val(f_abd, E, v, lo, hi, c1, c2, b, pq, pq2);
+    } else
+      v = abits_val(f_abt, D, v, lo, hi, c1, c2, b, pq, pq2);
+    ast = !A ? 0 : v == A - 1 ? 1 : 2;
+    return v;
+  }
+  template <class F, class V>
+  S64 abits_val(F& f, V& D, S64 v, S64 lo, S64 hi, S32 c1, S32 c2, int b, int pq, int pq2) {
+    tcx X;
+    f.make(D, X);
+    f.select(X);
     int pa[HN_N];
     if (pq >= 0 || pq2 >= 0) {
       for (int k = 0; k < HN_N; k++) pa[k] = -1;
       if (pq >= 0) pa[HN_SAME] = cm_pclip(pq);
       if (pq2 >= 0) pa[HN_SAME2] = cm_pclip(pq2);
-      f_abt.prpa = pa;
+      f.prpa = pa;
     }
-    v = code_val(f_abt, X, 0, v, c1, c2, c1 ? c1 - 1 : c2 ? c2 - 1 : 0, (u32)imin(b, M_abt_NG - 1), lo, hi);  // (X96's subbands past 31: 31's)
-    f_abt.prpa = nullptr;
-    ast = !A ? 0 : v == A - 1 ? 1 : 2;
+    v = code_val(f, X, 0, v, c1, c2, c1 ? c1 - 1 : c2 ? c2 - 1 : 0, (u32)imin(b, M_abt_NG - 1), lo, hi);  // (X96's subbands past 31: 31's)
+    f.prpa = nullptr;
     return v;
   }
 };

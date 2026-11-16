@@ -40,7 +40,7 @@
 // lower half is the core's (a 96 kHz stream's core is), its upper half and the core's residuals
 // X96's. Without a WAV that lines up, the model codes the core by itself.
 //
-// The model. Each element is binarised and each decision goes to one of 10 families (fam.inc, as
+// The model. Each element is binarised and each decision goes to one of 12 families (fam.inc, as
 // m4vpack's, h264p's and ac3pack's): counters chosen by context indices, mixed in the logistic
 // domain, refined by APMs, the decision then range coded (rc.inc). famvars.inc lists what the model
 // gives each family; IDX/l<L>/<family>.idx declares a level's indices over those variables and their
@@ -52,7 +52,9 @@
 //   jsc  the joint scale factors, against the source channel's audio or their running mean
 //   abt  the bit allocations, against the bit allocation search's (a decoded WAV's) or the
 //        staircase's at the subband's energy, the ABITS seen at it, and the last ones
+//   abd  the same of a decoded WAV (as the scale factor or bit allocation search shows it)
 //   scl  the scale factors, against the one the audio's RMS makes
+//   scd  the same of a decoded WAV (as the scale factor search shows it)
 //   hit  whether an index that isn't the audio's is the one across the rounding boundary
 //   smp  the subband samples' indexes otherwise: magnitude and sign
 //   vqr  the ranks of the HF VQ vectors in the encoder's search order

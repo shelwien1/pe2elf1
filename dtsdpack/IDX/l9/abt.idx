@@ -10,82 +10,82 @@ Debug 1
 Const 0
 
 Index a
- a_bd: bd, 1!1000010000000000000000001110110
- a_es: es, &01110000
+ a_bd: bd, 1!1100010000000000000000001100000
+ a_es: es, &01100000
 
 Index b
- b_la: la, 1!001111011111100000000000100
- b_lb: lb, 1!100110100000001001100000000
+ b_la: la, 1!001101101111010010010000100
+ b_lb: lb, 1!100100100000000000000000100
 
 Index c
- c_sn: sn, 1!101111101110100001111011001
- c_la: la, 1!011110111101100001000000000
+ c_sn: sn, 1!001111000011100001010010101
+ c_la: la, 1!001010000101100001000000000
 
 Index d
- d_sn: sn, 1!110000001000000000000000000
- d_sd: sd, 1!11
+ d_sn: sn, 1!101000001000000000000000000
+ d_sd: sd, 1!10
  d_de: de, 1!000000000
  d_sc: sc, 1!10000101000000
  d_sm: sm, 1!0011000010110100
- d_bg: bg, 1!0001000
- d_ag: ag, 1!0111
+ d_bg: bg, 1!1001000
+ d_ag: ag, 1!1100
  d_sx: sx, 1!11101
 
 Index e
- e_bd: bd, 1!0011100000000000001100101000000
- e_sn: sn, 1!101111000100100001011110011
+ e_bd: bd, 1!0011100000000000000000001000000
+ e_sn: sn, 1!001111000001000001000000011
 
 Index h
- h_lb: lb, 1!000000011110111111000101100
- h_es: es, &00011111
- h_bd: bd, 1!0000000001100101000000000000000
+ h_lb: lb, 1!101000110111111011001111100
+ h_es: es, &01011110
+ h_bd: bd, 1!0000000001101101001001101010000
 
 Index i
  i_es: es, &00001011
- i_nb: nb, 1!101100100
- i_la: la, 1!001110100011001011111000100
+ i_nb: nb, 1!101100110
+ i_la: la, 1!000000100011111101000100100
 
 Index j
  j_es: es, &00000000
- j_de: de, 1!000000000
+ j_de: de, 1!000110000
  j_pm: pm, 1!0
 
 Index k
- k_sn: sn, 1!101000000111110001111110101
+ k_sn: sn, 1!100000000100000000000010011
  k_nn: nn, 1!000000000000001
  k_sc: sc, 1!11110000001010
  k_eq: eq, 1!0000
- k_sm: sm, 1!0100100011100000
+ k_sm: sm, 1!1110100011100000
  k_bg: bg, 1!0001000
- k_ag: ag, 1!1000
+ k_ag: ag, 1!1010
  k_sx: sx, 1!01001
 
 Index l
- l_bd: bd, 1!1001010001000000000010000010010
- l_cc: cc, 1!10
- l_la: la, 1!100000001101000000110000100
+ l_bd: bd, 1!1000000111110000000000111010000
+ l_cc: cc, 1!11
+ l_la: la, 1!100100001111000100000010100
 
 Index s
- s_sn: sn, 1!010111111110000000000000111
+ s_sn: sn, 1!010110011100000000000000011
  s_sd: sd, 1!10
  s_nn: nn, 1!000000000000000
  s_sc: sc, 1!01111110110000
  s_sm: sm, 1!0100100111001000
  s_bg: bg, 1!1010100
- s_ag: ag, 1!1000
+ s_ag: ag, 1!0010
  s_sx: sx, 1!01000
 
 Index f
- f_es: es, &01100000
+ f_es: es, &01110000
 
 Index m
- m_nn: nn, 1!000011000000011
+ m_nn: nn, 1!000010000000011
 
 Index w
- w_st: st, 1!000000101
+ w_st: st, 1!100000011
 
 Index t
- t_bd: bd, 1!1111000000000000000000000011000
+ t_bd: bd, 1!0111000000000000000000000000000
 
 Index n
 #  Frozen: the mantissa mixer it is for mixes only by a hint, and nothing gives this family one.
@@ -95,26 +95,26 @@ Index g
  g_bd: bd, 1!1111111111111111111111111111111
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
-Number rA, 1, 0!00001111
-Number mwA, 1, 0!11111010
-Number rB, 1, 0!11100001
-Number mwB, 1, 0!10010111
-Number rC, 1, 0!11111111
-Number mwC, 1, 0!00100000
+Number rA, 1, 0!00101101
+Number mwA, 1, 0!11111111
+Number rB, 1, 0!11111010
+Number mwB, 1, 0!11010010
+Number rC, 1, 0!11111011
+Number mwC, 1, 0!10001111
 Number rD, 1, 0!11111101
-Number mwD, 1, 0!00000001
+Number mwD, 1, 0!00000000
 Number rE, 1, 0!00000000
 Number mwE, 1, 0!10000010
-Number rH, 1, 0!11110100
-Number mwH, 1, 0!01111101
-Number rI, 1, 0!11011100
-Number mwI, 1, 0!10010111
+Number rH, 1, 0!11110101
+Number mwH, 1, 0!11111110
+Number rI, 1, 0!11011101
+Number mwI, 1, 0!11101111
 Number rJ, 1, 0!00000000
-Number mwJ, 1, 0!10001111
-Number rK, 1, 0!10100110
-Number mwK, 1, 0!00000111
-Number rL, 1, 0!11111001
-Number mwL, 1, 0!11011111
+Number mwJ, 1, 0!10011111
+Number rK, 1, 0!10101011
+Number mwK, 1, 0!00011101
+Number rL, 1, 0!11101011
+Number mwL, 1, 0!11111001
 Number lr, 1, 0!10111
 Number mb, 1, 0!01000100
 #  the mixers' initial weights, in 256ths (format 112): each counter's two probabilities' in the
@@ -125,8 +125,8 @@ Number mb, 1, 0!01000100
 Number wp, 1, 0!00011111
 Number wq, 1, 0!00001000
 Number wo, 1, 0!01000010
-Number wa, 1, 0!00001010
-Number wf, 1, 0!01010100
+Number wa, 1, 0!00000000
+Number wf, 1, 0!01101011
 Number lf, 1, 0!00010010
 Number bf, 1, 0!00010001
 Number l2, 1, 0!00010000
@@ -134,18 +134,18 @@ Number l3, 1, 0!00010000
 Number b2, 1, 0!00010000
 Number b3, 1, 0!00010000
 Number rS1, 1, 0!01000
-Number rS2, 1, 0!00101
+Number rS2, 1, 0!01000
 Number qs, 1, 3!1101101
-Number qf, 1, 3!0011000
+Number qf, 1, 3!0011010
 Number bw, 1, 0!01000
-Number rT, 1, 0!00001000
-Number mwT, 1, 0!00000000
+Number rT, 1, 0!00000000
+Number mwT, 1, 0!01000000
 Number mt, 1, 0!100
 #  the mantissa mixer's rates: frozen (Index n)
 ! Number lrm, 1, 0!11111
 ! Number mbm, 1, 0!00011001
-Number rG, 1, 0!00000100
-Number mwG, 1, 0!00100111
+Number rG, 1, 0!00000010
+Number mwG, 1, 0!00111001
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
 #  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.

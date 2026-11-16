@@ -603,7 +603,7 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
         int sc = 0;
         if (G >= 0 && x96_ab_rule()) Sn = G + 1, sc = 13 + (G + 1 == og), n_abs9++;
         v = abits_code(ch, b, v, lo, hi, hab[ch][b], b > b0 ? s.abits[ch][b - 1] + 1 : 0, e, de, ls, s.pmode[ch][b], lbd, nb,
-                       mx, Sn, near_e ? 14 : nn, sc, 4, 0);
+                       mx, Sn, near_e ? 14 : nn, sc, 4, 0, 0, 0, 0, 0, -1, -1, B::dec_fam() || x96_ab_rule());
         v = checked(v, lo, hi);
         if (sn) *sn = (U8)(v + 1);
         if (srch) {
@@ -913,7 +913,6 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     const int ba = s.abits[ch][b], k = ba >= 2 ? 0 : ba == 1 ? 1 : 2;
     M_scl_v D;
     D.pl = 15;
-    tcx X_;
     int p = -1, p0 = -1, p1 = -1, ps = -1, pq = -1, conf = 0, tried = 0, near = SB_N - 1;
     if (bd9[ch]) {
       S64 x[NSMP];
@@ -961,16 +960,10 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     D.bd = b;
     D.cc = chan_class(ch);
     D.nb = 9;
-    this->f_scl.make(D, X_);
-    this->f_scl.select(X_);
+    v = this->scale(D, v, p, A, 64);
     if (p >= 0) {
-      if (this->f_scl.bit(CN_HIT, ENC && v == p)) v = p;
-      else v = checked(p + this->f_scl.codes(X_, ENC ? v - p : 0, (u32)D.kd), 0, 63);
       hm9[ch] = v == p ? 1 : 2;
       n_sfhit9 += v == p;
-    } else {
-      if (A && this->f_scl.bit(CN_SAME, ENC && v == A - 1)) v = A - 1;
-      else v = checked((A ? A - 1 : 0) + this->f_scl.codes(X_, ENC ? v - (A ? A - 1 : 0) : 0, (u32)D.kd), 0, 63);
     }
     if (pl >= 0) B::jx_tally(lcg_r, v, pr >= 0 ? pr : A - 1, pl);
     psc9[ch][b] = p + 1;

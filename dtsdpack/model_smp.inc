@@ -14,6 +14,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   using B::checked;
   using B::cat;
   M_FAM(scl)
+  M_FAM(scd)
   M_FAM(hit)
   M_FAM(smp)
   M_FAM(vqr)
@@ -2819,6 +2820,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // where it is right clearly more often than the better of the others
   int sf_base() const { return sfr[1] > sfr[0] + 64 + sfr[0] / 8 ? 1 : 0; }
   bool ss_rule() const { return sfr[2] > sfr[sf_base()] + 64 + sfr[sf_base()] / 8; }
+  // (the decoded WAVs' families, abd and scd, by the same counts sooner: by a 16th, where the search
+  // tracks the better rule on a lossless WAV; by ss_rule()'s margin, FATE's 7-frame decoded samples
+  // 1-23 bytes bigger each, most of their frames coded before it switched)
+  bool dec_fam() const { return sfr[2] > sfr[sf_base()] + sfr[sf_base()] / 16; }
   bool search_on() const { return ss_n < 2048 || ss_rule() || !(n_sf & 63); }
   // the same of the bit allocation search, of the ABITS: in its first 512 (the 7-frame samples' the
   // same, 4-8% faster), and while it has been right clearly more often than the first guess without
@@ -3447,7 +3452,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   }
   // (the scale factor v by sf_post()'s k entries ci, pv, of class g (the top subband, 28-30, the
   // rest); past the first SP_R, f_scl's difference from the likeliest)
-  int sf_post_code(int g, const int* ci, const double* pv, int k, S64 v, tcx& X_, u32 kd, int max) {
+  template <class F>
+  int sf_post_code(F& f, int g, const int* ci, const double* pv, int k, S64 v, tcx& X_, u32 kd, int max) {
     double rem = 1.0;
     for (int r = 0; r < k && r < SP_R; r++) {
       double pc = rem > 1e-12 ? pv[r] / rem : 0.0;
@@ -3477,7 +3483,31 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (hit) return ci[r];
       rem -= pv[r];
     }
-    return (int)checked(ci[0] + f_scl.codes(X_, ENC ? v - ci[0] : 0, kd), 0, max - 1);
+    return (int)checked(ci[0] + f.codes(X_, ENC ? v - ci[0] : 0, kd), 0, max - 1);
+  }
+  // A scale factor v in 0..max-1 by the family f (scl's; a decoded WAV's scd's, since format 118:
+  // scale()), its variables D: by sf_post()'s k entries where spu (sf_post_code()), else against
+  // p (>= 0: whether it is p, else its difference from it) or the last one A (1 + it, 0 none)
+  template <class F, class V>
+  S64 scale_val(F& f, V& D, S64 v, int p, S32 A, int max, int spu = 0, int sg = 0, const int* spc = nullptr,
+                const double* spp = nullptr, int spk = 0) {
+    tcx X;
+    f.make(D, X);
+    f.select(X);
+    if (spu) return sf_post_code(f, sg, spc, spp, spk, v, X, (u32)D.kd, max);
+    if (p >= 0) return f.bit(CN_HIT, ENC && v == p) ? p : checked(p + f.codes(X, ENC ? v - p : 0, (u32)D.kd), 0, max - 1);
+    if (A && f.bit(CN_SAME, ENC && v == A - 1)) return A - 1;
+    return checked((A ? A - 1 : 0) + f.codes(X, ENC ? v - (A ? A - 1 : 0) : 0, (u32)D.kd), 0, max - 1);
+  }
+  // (scl's, or scd's where the scale factor search shows the WAV decoded: dec_fam())
+  S64 scale(M_scl_v& D, S64 v, int p, S32 A, int max, int spu = 0, int sg = 0, const int* spc = nullptr,
+            const double* spp = nullptr, int spk = 0) {
+    if (!dec_fam()) return scale_val(f_scl, D, v, p, A, max, spu, sg, spc, spp, spk);
+    M_scd_v E;
+#define M_COPY(f) E.f = D.f;
+    M_scl_VARS(M_COPY)
+#undef M_COPY
+    return scale_val(f_scd, E, v, p, A, max, spu, sg, spc, spp, spk);
   }
 
   // Scale factor j (0 the first, 1 the second, after a transient) of channel ch's subband b, v in
@@ -3490,7 +3520,6 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const int hfb = b >= r.nvqsub[ch], tm = hfb ? 0 : s.tmode[ch][b];
     const int max = r.shuff[ch] == 6 ? 128 : 64;
     M_scl_v D;
-    tcx X_;
     int p = -1, pc = -1, ps = -1, near = SB_N - 1, conf = 0, tried = 0, nlev = -1;
     const int sg = b == NSUB - 1 ? 0 : hfb ? 1 : 2;  // (the posterior's: sf_post(), its class)
     int spc[2 * SP_W + 1], spk = 0;
@@ -3657,22 +3686,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.cc = chan_class(ch);
     D.nb = bound[ch] && b ? clip((es[ch][b - 1] - es[ch][b]) / 2, -4, 4) + 4 : 9;
     if (cpl_leak(r, ch, b, 24, 8) >= 0) D.nb = cpl_leak(r, ch, b, 24, 8);
-    f_scl.make(D, X_);
-    f_scl.select(X_);
     const int spu = spk && p >= 0 && p == pr;
-    if (spu) {
-      v = sf_post_code(sg, spc, spp, spk, v, X_, (u32)D.kd, max);
-      p = spc[0];
+    v = scale(D, v, p, A, max, spu, sg, spc, spp, spk);
+    if (spu) p = spc[0];
+    if (p >= 0) {
       hm[ch] = v == p ? 1 : 2;
       n_sfhit += v == p;
-    } else if (p >= 0) {
-      if (f_scl.bit(CN_HIT, ENC && v == p)) v = p;
-      else v = checked(p + f_scl.codes(X_, ENC ? v - p : 0, (u32)D.kd), 0, max - 1);
-      hm[ch] = v == p ? 1 : 2;
-      n_sfhit += v == p;
-    } else {
-      if (A && f_scl.bit(CN_SAME, ENC && v == A - 1)) v = A - 1;
-      else v = checked((A ? A - 1 : 0) + f_scl.codes(X_, ENC ? v - (A ? A - 1 : 0) : 0, (u32)D.kd), 0, max - 1);
     }
     if (lw) jx_tally(jx_sr[b], v, pa, A - 1);
     if (pj >= 0) jx_tally(jx_jr[b], v, pp, pj);
@@ -4432,7 +4451,6 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     int near;
     const int p = scale_pred(x, lfe_n, SF7, SF7_N, &near);
     M_scl_v D;
-    tcx X_;
     D.kd = 3;
     D.ab = 0;
     D.pm = 0;
@@ -4445,10 +4463,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.dp = sf_run(SF7, SF7_N, p);
     D.cc = 0;
     D.nb = 9;
-    f_scl.make(D, X_);
-    f_scl.select(X_);
-    if (f_scl.bit(CN_HIT, ENC && v == p)) v = p;
-    else v = (int)checked(p + f_scl.codes(X_, ENC ? v - p : 0, 3), 0, 127);
+    v = (int)scale(D, v, p, 0, 128);
     lfe_hm = v == p ? 1 : 2;
     lfe_lp = dvar(v - p);
     n_sf++;

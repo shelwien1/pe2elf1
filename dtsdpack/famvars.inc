@@ -3,7 +3,7 @@
 // Apart from model.inc for IDX/famtune.cpp, which replays a family's decisions without the model.
 
 // the families, X(name) each, in the order the model has them
-#define DTSD_FAMS(X) X(hdr) X(sid) X(jsc) X(abt) X(scl) X(hit) X(smp) X(vqr) X(vqp) X(raw)
+#define DTSD_FAMS(X) X(hdr) X(sid) X(jsc) X(abt) X(abd) X(scl) X(scd) X(hit) X(smp) X(vqr) X(vqp) X(raw)
 
 // The fields the hdr family codes, each of their own values (fld): the core frame's header and
 // coding header, a subframe's header fields, then the container's (below), then the XCH
@@ -25,8 +25,10 @@ enum { SF_PMODE, SF_PVQ, SF_TMODE, SF_JSHUFF, SF_JSCALE, SF_HFVQ, SF_LFE, SF_TMS
 //        (PVQ, HFVQ): 16-31 its top 4 bits as a tree, 32-47 the bits below them by place
 //   jsc  sid's nodes 0-15 (a joint scale factor)
 //   abt  ABITS: code() of its difference from the last (0-12), 13 the last one, 14 the band below's
+//   abd  the same (a decoded WAV's ABITS, abt's before format 118)
 //   scl  a scale factor: code() of its difference from the prediction (0-12), 13 the prediction,
 //        14 the last one (no prediction)
+//   scd  the same (a decoded WAV's scale factors, scl's before format 118)
 //   hit  13 an LFE sample's index is the audio's (a subband sample's goes to the coder as it is:
 //        model_smp.inc's code_index()), 14 an index that isn't is the one on the other side of the
 //        rounding boundary, 15 one that isn't either lies within HIT_NEAR of the audio's, 16 on the
@@ -57,7 +59,9 @@ constexpr int M_hdr_ND = HN_N, M_hdr_MND = TC_MNODE, M_hdr_NG = NHF;
 constexpr int M_sid_ND = SN_N, M_sid_MND = TC_MNODE, M_sid_NG = SF_N;
 constexpr int M_jsc_ND = HN_N, M_jsc_MND = TC_MNODE, M_jsc_NG = SF_N;
 constexpr int M_abt_ND = AN_N, M_abt_MND = TC_MNODE, M_abt_NG = 32;
+constexpr int M_abd_ND = AN_N, M_abd_MND = TC_MNODE, M_abd_NG = 32;
 constexpr int M_scl_ND = CN_N, M_scl_MND = TC_MNODE, M_scl_NG = 4;
+constexpr int M_scd_ND = CN_N, M_scd_MND = TC_MNODE, M_scd_NG = 4;
 constexpr int HIT_NEAR = 4;  // (an index neither the audio's nor alt, within this of the audio's: its distance from it)
 enum { HT_HIT = TC_NODE, HT_ALT, HT_NEAR, HT_SIDE, HT_DIST, HT_N = HT_DIST + 2 * HIT_NEAR };
 constexpr int M_hit_ND = HT_N, M_hit_MND = 1, M_hit_NG = 1;
@@ -163,7 +167,9 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 #define M_sid_VARS(X) X(fld) X(cc) X(bd) X(lv) X(pq) X(st) X(ac) X(ab) X(ec) X(tr)
 #define M_jsc_VARS(X) M_sid_VARS(X)  // (sid's, fld SF_JSCALE)
 #define M_abt_VARS(X) X(bd) X(cc) X(la) X(lb) X(es) X(de) X(ls) X(pm) X(st) X(nb) X(mx) X(sn) X(sd) X(nn) X(sc) X(eq) X(sm) X(bg) X(ag) X(sx)
+#define M_abd_VARS(X) M_abt_VARS(X)  // (abt's, where the scale factor or the bit allocation search shows the WAV decoded)
 #define M_scl_VARS(X) X(kd) X(ab) X(pm) X(pk) X(pn) X(lp) X(hm) X(bd) X(dp) X(cc) X(nb) X(pl)
+#define M_scd_VARS(X) M_scl_VARS(X)  // (scl's, where the scale factor search shows the WAV decoded)
 #define M_hit_VARS(X) X(pm) X(nr) X(nl) X(ab) X(ql) X(hm)
 #define M_smp_VARS(X) X(ab) X(hw) X(pk) X(nr) X(nl) X(ql) X(hm) X(pm) X(bd) X(m1) X(m2) X(sq) X(s1)
 #define M_vqr_VARS(X) X(kd) X(cc) X(bd) X(mg) X(gn) X(lh) X(ml) X(nc) X(gr) X(mq)

@@ -410,7 +410,7 @@ struct Model : ModelX96<f_DEC, LV> {
         if (!twin_field(fid, ch, b, v, lo, hi))
           v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
                          s.pmode[ch][b], lbd, nb, mx, Sn, near_e ? 14 : nn, sc, eq, ms,
-                         alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag, fs && ut ? sx : 0, pq1, pq2);
+                         alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag, fs && ut ? sx : 0, pq1, pq2, B::dec_fam() || B::ab_rule());
         v = checked(v, lo, hi);
         if (!pass && bound[ch]) B::ab_budget_add(r, ch, b, (int)v);
         if (sn) *sn = (U8)(v + 1);
