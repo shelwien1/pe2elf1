@@ -168,7 +168,7 @@ MA's XLL, whose 7.1 bed FFmpeg decodes, and the DTS:X objects' data, which
 
 | Stream | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `Nigel_Stanford_Cymatics_DTS-X.dts` | 61758340 | 92266 (0.15%) | the bed's 5.1 downmix, every channel at -3 dB, each surround its side and back surround, the back's samples first times 32767/32768, rounded (179247 before format 122's gains before the mix, below; 184951 before format 117's changes for this encoder's LFE) |
+| `Nigel_Stanford_Cymatics_DTS-X.dts` | 61758340 | 89909 (0.15%) | the bed's 5.1 downmix, every channel at -3 dB, each surround its side and back surround, the back's samples first times 32767/32768, rounded (92266 before format 123's LFE predictions by class, 179247 before format 122's gains before the mix, below; 184951 before format 117's changes for this encoder's LFE) |
 
 Its surrounds' subband samples were 80 KB of its 180, their bottom subband 36 KB, missed 9% of the
 time, the more the louder: what seemed something more in the core than in the bed (white, in time
@@ -195,13 +195,14 @@ context of the family's (its mixers' choice) it takes 44 bytes off, the short st
 already know it. The HF VQ indexes are 27 KB, their misses in the top subband: 15-16% of the
 centre's and the surrounds' groups and vectors there, which hold little but the encoder's FFT noise,
 4.5-6.7% of the fronts'; the model's noise there is as strong as it should be (half as strong or
-twice made those frames 0.4% and 1.0% bigger). Its LFE, 17 KB, is a fixed filter of the WAV's LFE,
-rounded up, but at its quietest: one of 64 taps at 6 kHz fitted to half of those frames makes the
-louder three quarters of the other half's values to 0.37 steps RMS (81% of them exactly; with 64 ms
-of the past, 0.32 and 90%), the quietest quarter, whose steps are about a twentieth of the WAV's
-unit, to 2 steps; the other channels' low end explains none of it. The model's best prediction is
-the value 82% of the time, one of its twelve 97%; its fit with 31 ms of the past, or whether its two
-best agree as a context, made 10-40 bytes of difference.
+twice made those frames 0.4% and 1.0% bigger). Its LFE, 17 KB before format 123 and 14 KB now, is a
+fixed filter of the WAV's LFE, rounded up, but at its quietest: one of 64 taps at 6 kHz fitted to
+half of those frames makes the louder three quarters of the other half's values to 0.37 steps RMS
+(81% of them exactly; with 64 ms of the past, 0.32 and 90%), the quietest quarter, whose steps are
+about a twentieth of the WAV's unit, to 2 steps; the other channels' low end explains none of it.
+The model's best prediction was the value 85.2% of the time over the stream, one of its twelve
+98.2%: format 123 takes the one best for the best's sign and size (below), 88.6%; its fit with 31 ms
+of the past, or whether its two best agree as a context, made 10-40 bytes of difference.
 
 FATE's `dtsx_7.1.4_24bit.dts`, two frames of another DTS:X stream (7.1.4), is a cut, it seems: as
 with eight frames cut from the middle of the Cymatics stream, FFmpeg decodes its first frame as the
@@ -861,63 +862,69 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   the same variance made 3 MB of its middle 3 bytes bigger and a triangular one the same, and the
   groups' samples at 2/3 or 5/6 of the noise's power (the entries' at all of it) within a byte.
 - **The LFE**: the WAV's LFE channel decimated by a filter near the decoder's 512-tap interpolation
-  prototype, then quantized by the scale factor nearest its RMS. dtsdpack decimates by the
-  prototype and corrects it with a 13-tap filter at the LFE's rate that a least squares fit learns
-  as the stream goes (forgetting, ridged; solved by LDL' in a small deterministic soft float, each
-  entry of the factors a dot product summed exactly at its largest term's scale, then rounded). Each
-  value counts by 1 over its step squared (its error in steps is what the coder pays for), and the
-  fit forgets 1/32 of the past each subframe (1/128 before, unweighted: `s.2.dts`'s first 3 MB
-  2.7% smaller, FFmpeg's `master_audio_7.1_24bit.dts` 1.8%, `s.2.dts` 0.1%, the XXCH samples 0.3%
-  bigger). A
-  decoded WAV's LFE is the decoder's interpolation of the LFE values, 8 of them in each of its
-  samples, so a second fit has the last 7 values too, with which it sees the next alone; the one
-  whose predictions have been the values more often lately is taken (`ES 6.1 16bit.dts` 10%
-  smaller; some lossless WAVs' streams gain too, `Master Audio 7.1.dts` 3.5%). A third fit has
-  the prototype's decimations by 32 around each value (those halfway between too, where the LFE's
-  rate aliases the filter's band), 27 of them, and forgets 1/2048 of the past a subframe
-  (refitted every 16th): the encoders' filter doesn't change, so over a long stream that one
-  learns it far better, while over a short one the first, learning faster, is often the better
-  (`s.2.dts`'s LFE values 99.3% their prediction from 96.7%, its core 2.6% smaller). And the DTS-HD
-  MA encoders' filter is the same in every stream: a fourth, fixed, is the third's fit to all of
-  `s.2.dts`'s values (99.8% of them; `lfefilter.inc`, below), taken from a stream's start where it
-  is the better (`s.2.dts`'s LFE 3184 bytes to 223, its core 3.0% smaller in all; FFmpeg's
-  `master_audio_7.1_24bit.dts`'s LFE 262 bytes to 44, its core 5.9%, `s.2.dts`'s first 3 MB 3.0%;
-  `Master Audio 7.1.dts`'s, which no linear filter of its WAV's makes, 0.4% bigger). FFmpeg's
-  interpolation is the same in every decode too: a fifth, fixed, is that fit to `ES 6.1
-  16bit.dts`'s, FATE's `dts_es.dts`'s and `96-24.dts`'s values (`lfefilterd.inc`, below), the
-  interpolation undone (in large weights that nearly cancel: ridged by 10^-10 of the mean
-  diagonal, as more makes fewer of the values), which makes 90-99% of theirs (`dts_es.dts`'s 93%
-  where fitted without it), and is taken where it is the better: from a decoded WAV's first values,
-  which the fits haven't learned yet (FATE's 7-frame `dcadec-suite` streams with an LFE 18-21 bytes
-  smaller each, their LFE 51-53 bytes to 31-33: their values all made but where the WAV is
-  silent or ends). A lossless WAV's choices are the same as without it. But `Master Audio
-  7.1.dts`'s encoder decimates its LFE by another filter at each place of a frame's values (8 a
-  frame: a fit at each makes 90% of those that aren't 0 within half a step, the one fit 10%). So
-  a sixth is the third at each place apart (format 68; 16 of them, a longer frame's 16th and later
-  places sharing one), which once learned makes 93% of its values, the best of the others 30% (its
-  LFE 1990 bytes to 502, the stream 22% smaller). They are refitted only where the first five
-  missed more than a quarter of the values since the last refit: every time, they'd cost nearly
-  as much as all the other fits (`s.2.dts`'s first 1.2 MB 1.6% slower to compress). A DTS:X
+  prototype, then quantized by the scale factor nearest its RMS. dtsdpack decimates by the prototype
+  and corrects it with a 13-tap filter at the LFE's rate that a least squares fit learns as the
+  stream goes (forgetting, ridged; solved by LDL' in a small deterministic soft float, each entry of
+  the factors a dot product summed exactly at its largest term's scale, then rounded). Each value
+  counts by 1 over its step squared (its error in steps is what the coder pays for), and the fit
+  forgets 1/32 of the past each subframe (1/128 before, unweighted: `s.2.dts`'s first 3 MB 2.7%
+  smaller, FFmpeg's `master_audio_7.1_24bit.dts` 1.8%, `s.2.dts` 0.1%, the XXCH samples 0.3%
+  bigger). A decoded WAV's LFE is the decoder's interpolation of the LFE values, 8 of them in each
+  of its samples, so a second fit has the last 7 values too, with which it sees the next alone; the
+  one whose predictions have been the values more often lately is taken (`ES 6.1 16bit.dts` 10%
+  smaller; some lossless WAVs' streams gain too, `Master Audio 7.1.dts` 3.5%). A third fit has the
+  prototype's decimations by 32 around each value (those halfway between too, where the LFE's rate
+  aliases the filter's band), 27 of them, and forgets 1/2048 of the past a subframe (refitted every
+  16th): the encoders' filter doesn't change, so over a long stream that one learns it far better,
+  while over a short one the first, learning faster, is often the better (`s.2.dts`'s LFE values
+  99.3% their prediction from 96.7%, its core 2.6% smaller). And the DTS-HD MA encoders' filter is
+  the same in every stream: a fourth, fixed, is the third's fit to all of `s.2.dts`'s values (99.8%
+  of them; `lfefilter.inc`, below), taken from a stream's start where it is the better (`s.2.dts`'s
+  LFE 3184 bytes to 223, its core 3.0% smaller in all; FFmpeg's `master_audio_7.1_24bit.dts`'s LFE
+  262 bytes to 44, its core 5.9%, `s.2.dts`'s first 3 MB 3.0%; `Master Audio 7.1.dts`'s, which no
+  linear filter of its WAV's makes, 0.4% bigger). FFmpeg's interpolation is the same in every decode
+  too: a fifth, fixed, is that fit to `ES 6.1 16bit.dts`'s, FATE's `dts_es.dts`'s and `96-24.dts`'s
+  values (`lfefilterd.inc`, below), the interpolation undone (in large weights that nearly cancel:
+  ridged by 10^-10 of the mean diagonal, as more makes fewer of the values), which makes 90-99% of
+  theirs (`dts_es.dts`'s 93% where fitted without it), and is taken where it is the better: from a
+  decoded WAV's first values, which the fits haven't learned yet (FATE's 7-frame `dcadec-suite`
+  streams with an LFE 18-21 bytes smaller each, their LFE 51-53 bytes to 31-33: their values all
+  made but where the WAV is silent or ends). A lossless WAV's choices are the same as without it.
+  But `Master Audio 7.1.dts`'s encoder decimates its LFE by another filter at each place of a
+  frame's values (8 a frame: a fit at each makes 90% of those that aren't 0 within half a step, the
+  one fit 10%). So a sixth is the third at each place apart (format 68; 16 of them, a longer frame's
+  16th and later places sharing one), which once learned makes 93% of its values, the best of the
+  others 30% (its LFE 1990 bytes to 502, the stream 22% smaller). They are refitted only where the
+  first five missed more than a quarter of the values since the last refit: every time, they'd cost
+  nearly as much as all the other fits (`s.2.dts`'s first 1.2 MB 1.6% slower to compress). A DTS:X
   encoder (the Cymatics stream's, above) rounds its LFE values up, to the integer at or above, not
-  to the nearest: they lie half a step above every fit's prediction, which made 50% of its loud
-  ones (the error otherwise about a quarter of a step, white; a silent LFE exactly 0). So each of
-  the six has a second prediction half a step up (less a unit, so that 0 stays 0), taken where it
-  has been the value more often (format 117: 81% of those values; the stream's core 2690 bytes
-  smaller, `ES 6.1 16bit.dts`'s 23). And the third leaves out a value further from its prediction
-  than 4 times its error's running RMS (in steps, of the last 64 or so, 1 at the least), once it
-  has had 64, so that the few it can't explain don't pull it from the rest; the RMS takes those in
-  too, but at most 100 times its mean square, so that where the fit goes wrong for long it learns
-  again (the Cymatics stream's core 659 bytes smaller again, the others the same; the other fits
-  too, `Master Audio 7.1.dts` 13-22 bytes bigger). The LFE
-  scale factor comes after the samples in the bitstream; the model codes it with the first of
-  them (the subframe's values as predicted, for the ones not yet coded), and the samples against
+  to the nearest: they lie half a step above every fit's prediction, which made 50% of its loud ones
+  (the error otherwise about a quarter of a step, white; a silent LFE exactly 0). So each of the six
+  has a second prediction half a step up (less a unit, so that 0 stays 0), taken where it has been
+  the value more often (format 117: 81% of those values; the stream's core 2690 bytes smaller, `ES
+  6.1 16bit.dts`'s 23). And the third leaves out a value further from its prediction than 4 times
+  its error's running RMS (in steps, of the last 64 or so, 1 at the least), once it has had 64, so
+  that the few it can't explain don't pull it from the rest; the RMS takes those in too, but at most
+  100 times its mean square, so that where the fit goes wrong for long it learns again (the Cymatics
+  stream's core 659 bytes smaller again, the others the same; the other fits too, `Master Audio
+  7.1.dts` 13-22 bytes bigger). Of the twelve predictions (the six, and each half a step up) the one
+  taken is the one that has been the value most often lately; since format 123, the one that has
+  been the value most often among those whose best's prediction had the same sign and as many steps
+  from 0 (under 4, 16, 32 or more; their counts halved every 32 values of the class), where that
+  choice has lately made more than 4 more of the values than the best (the two counts halved every
+  256). The Cymatics stream's fits err differently by sign and size (its best fit's values less its
+  predictions, half a step of which is the encoder's rounding up, 0.2-0.8 steps by size where it
+  predicted above 0, 0.6-1.0 below): its LFE values the prediction 88.6% of the time, from 85.2%,
+  its core 2.6% smaller; the other streams' the same but `Master Audio 7.1.dts`'s, 89.3% from 89.2%.
+  The LFE scale factor comes after the samples in the bitstream; the model codes it with the first
+  of them (the subframe's values as predicted, for the ones not yet coded), and the samples against
   the predictions at its step. That step is the 7-bit table's entry times 0.56 (the quantizer's
   0.035, times 16) exactly, as the encoder quantizes by it; FFmpeg's decoder rounds it to an
   integer, so a decoded WAV's LFE (where the scale factor search shows the WAV decoded) has its
-  values times the rounded one. A quiet LFE's steps come to one unit or a few, which rounding
-  puts up to 79% off (a lossless WAV's were rounded too before: FFmpeg's
-  `master_audio_7.1_24bit.dts`'s LFE took 2248 bytes, now 262, its core 30% smaller; `s.2.dts`'s
-  core 2.4%, `Master Audio 7.1.dts`'s 1.0%).
+  values times the rounded one. A quiet LFE's steps come to one unit or a few, which rounding puts
+  up to 79% off (a lossless WAV's were rounded too before: FFmpeg's `master_audio_7.1_24bit.dts`'s
+  LFE took 2248 bytes, now 262, its core 30% smaller; `s.2.dts`'s core 2.4%, `Master Audio
+  7.1.dts`'s 1.0%).
 - **The transients**: a decoded WAV's subband with a transient (TMODE) doesn't fit one scale
   factor's lattice. So, its ABITS known, where the bit allocation search's fit is within a 64th of
   a step squared a value, it has none; else the subsubframe from which two scale factors' lattices
@@ -1565,7 +1572,7 @@ files.
 
 ### The format
 
-"dtsdpack", the format's version (122), the level; what the WAV was (whether it was one, its
+"dtsdpack", the format's version (123), the level; what the WAV was (whether it was one, its
 channels and bytes a sample, its size and the CRC-32 of its first 64 KB) and the binding (the
 offset; the WAV's samples to the core's, 1, 2 or 4 (its lower band, then 2), and the lower band's
 resolution; the LFE's channel; each core channel's WAV channel, and where it isn't that channel

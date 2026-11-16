@@ -313,6 +313,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // fit's 50% of its loud LFE values, half a step up 81%)
   U32 lfh[12];              // how often each one's prediction was the value (halved as they grow)
   U32 lfw[10], lfwn;        // (the first five's since the last refit, and the values)
+  // (and since format 123 the same by the class of the best's prediction, its sign and how many
+  // steps it is from 0, under 4, 16, 32 or more: lfc, 16 a value, halved at LFC_N values of the
+  // class, lfcn; and how often the best's and its class's best's have been the value lately, lsw,
+  // halved at LSW_N values, lswn: the class's taken where it has been LSW_M more often. The
+  // Cymatics stream's fits err by sign and size differently: its best was the value 85.2% of the
+  // time, the classes' 88.6%; `Master Audio 7.1.dts`'s 89.2% and 89.3%, the others' the same)
+  static constexpr int LFC_N = 32, LSW_N = 256, LSW_M = 4;
+  U32 lfc[8][12], lfcn[8];
+  U32 lsw[2], lswn;
   // X96's, where the frame has it and the WAV is at twice the core's rate: each bound channel's
   // 64-band analysis by block of the frame, and the core's decoded samples (X96's residuals are the
   // one less the other: model_x96.inc)
@@ -4559,8 +4568,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int k = 0; k < LFE_NP; k++) lfe_f[i][LFE_NT + k] = lfe_past[k];  // (the values decoded)
     const S64 p1 = lfit.predict(lfe_f[i]), p2 = lfit2.predict(lfe_f[i]), p3 = lfit3.predict(lfe_f3[i]), p4 = lfe_fixed(i),
               p5 = lfe_fixed(i, true), p6 = lfit4[lfe_pl[i]].predict(lfe_f3[i]);
-    const int lb = lfe_best(), lk = lb % 6;
-    lfe_p[i] = (lk == 5 ? p6 : lk == 4 ? p5 : lk == 3 ? p4 : lk == 2 ? p3 : lk == 1 ? p2 : p1) + (lb >= 6 ? lfe_half() : 0);
+    const S64 pk[6] = {p1, p2, p3, p4, p5, p6};
+    const int lb = lfe_best();
+    const S64 pg = pk[lb % 6] + (lb >= 6 ? lfe_half() : 0), ag = pg < 0 ? -pg : pg;
+    const int cx = 2 * (ag < 4 * lfe_st ? 0 : ag < 16 * lfe_st ? 1 : ag < 32 * lfe_st ? 2 : 3) + (pg < 0);
+    int kc = lb;  // (the class's best, the best where none is better there)
+    for (int k = 0; k < 12; k++)
+      if (lfc[cx][k] > lfc[cx][kc]) kc = k;
+    const int kk = lsw[1] > lsw[0] + LSW_M ? kc : lb;
+    lfe_p[i] = pk[kk % 6] + (kk >= 6 ? lfe_half() : 0);
     const S64 qp = requant(lfe_p[i], lfe_st << 6, -128, 127, &dist, &alt);
     M_smp_v D;
     D.ab = 27;
@@ -4593,18 +4609,26 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     {  // (whether each prediction's index was the value)
       S128 dd;
       S64 al;
-      const S64 pk[6] = {p1, p2, p3, p4, p5, p6};
+      U32 hk[12];
       for (int k = 0; k < 6; k++) {
         const U32 h = requant(pk[k], lfe_st << 6, -128, 127, &dd, &al) == v;
         const U32 h2 = requant(pk[k] + lfe_half(), lfe_st << 6, -128, 127, &dd, &al) == v;
         lfh[k] += h;
         lfh[6 + k] += h2;
+        hk[k] = h, hk[6 + k] = h2;
         if (k < 5) lfw[k] += h, lfw[5 + k] += h2;
       }
       lfwn++;
       if (lfh[0] + lfh[1] + lfh[2] + lfh[3] >= 4u << 11 ||  // (by the first four's sum, as before the fifth;
           lfh[6] + lfh[7] + lfh[8] + lfh[9] >= 4u << 11)    // or theirs half a step up)
         for (int k = 0; k < 12; k++) lfh[k] >>= 1;
+      for (int k = 0; k < 12; k++) lfc[cx][k] += hk[k] << 4;
+      if (++lfcn[cx] >= LFC_N) {
+        for (int k = 0; k < 12; k++) lfc[cx][k] >>= 1;
+        lfcn[cx] >>= 1;
+      }
+      lsw[0] += hk[lb], lsw[1] += hk[kc];
+      if (++lswn >= LSW_N) lsw[0] >>= 1, lsw[1] >>= 1, lswn >>= 1;
     }
     for (int k = LFE_NP - 1; k > 0; k--) lfe_past[k] = lfe_past[k - 1];
     lfe_past[0] = v * lfe_st;
