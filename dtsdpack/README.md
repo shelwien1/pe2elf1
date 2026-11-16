@@ -197,9 +197,9 @@ centre's and the surrounds' groups and vectors there, which hold little but the 
 4.5-6.7% of the fronts'; the model's noise there is as strong as it should be (half as strong or
 twice made those frames 0.4% and 1.0% bigger). Its LFE, 17 KB, is no fixed filter of the WAV's LFE:
 one of 128 taps at 6 kHz fitted to half of those frames misses the other half's values by 1.2 steps
-RMS (0.7 in its own), and one for each place in the frame, a gain that changes, or the other
-channels' low end do no better; where the WAV's LFE is under -70 dBFS, the core's has values of 5-28
-steps RMS.
+RMS (0.7 in its own), and one for each place in the frame or a gain that changes does no better;
+the other channels' low end explains none of it, even where the WAV's LFE is under -70 dBFS (the
+core's LFE there, 20 steps RMS at its small steps, is the WAV's LFE's but for 2.7).
 
 FATE's `dtsx_7.1.4_24bit.dts`, two frames of another DTS:X stream (7.1.4), is a cut, it seems: as
 with eight frames cut from the middle of the Cymatics stream, FFmpeg decodes its first frame as the
