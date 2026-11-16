@@ -16,7 +16,7 @@ void D9_abt_make( const M_abt_v & D, tcx & X ) {
   M_abt_VARS(M_LOCAL)
 
   a = 0;
-  a = a*6 + D9_abt_a_bd[__min(31,__max(0,(bd)-(1-1)))];
+  a = a*8 + D9_abt_a_bd[__min(31,__max(0,(bd)-(1-1)))];
   a = (a<<2) + ((((es)>>5)&3)); // 01100000
 
   b = 0;
@@ -86,7 +86,7 @@ void D9_abt_make( const M_abt_v & D, tcx & X ) {
   w = w*4 + D9_abt_w_st[__min(9,__max(0,(st)-(1-1)))];
 
   t = 0;
-  t = t*4 + D9_abt_t_bd[__min(31,__max(0,(bd)-(1-1)))];
+  t = t*5 + D9_abt_t_bd[__min(31,__max(0,(bd)-(1-1)))];
 
   n = 0;
   n = n*28 + D9_abt_n_la[__min(27,__max(0,(la)-(1-1)))];

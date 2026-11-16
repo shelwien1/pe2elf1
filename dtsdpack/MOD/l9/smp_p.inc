@@ -41,7 +41,7 @@ void D9_smp_make( const M_smp_v & D, tcx & X ) {
   e = e*8 + D9_smp_e_m2[__min(22,__max(0,(m2)-(1-1)))];
 
   h = 0;
-  h = h*13 + D9_smp_h_ab[__min(27,__max(0,(ab)-(1-1)))];
+  h = h*12 + D9_smp_h_ab[__min(27,__max(0,(ab)-(1-1)))];
   h = h*2 + (((nr)>5+(1-1)));
 
   i = 0;
@@ -69,9 +69,8 @@ void D9_smp_make( const M_smp_v & D, tcx & X ) {
   s = s*9 + D9_smp_s_nl[__min(15,__max(0,(nl)-(1-1)))];
 
   f = 0;
-  f = f*2 + (((pk)>0+(1-1)));
   f = f*4 + D9_smp_f_nl[__min(15,__max(0,(nl)-(1-1)))];
-  f = f*2 + (((nr)>9+(1-1)));
+  f = f*3 + (((nr)>5+(1-1))+((nr)>9+(1-1)));
 
   m = 0;
 

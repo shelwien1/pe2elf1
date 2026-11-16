@@ -20,18 +20,18 @@ Index a
 
 Index b
  b_kd: kd, 1!110
- b_mg: mg, 1!011110000000
- b_gn: gn, 1!111100000000000
+ b_mg: mg, 1!010110000000
+ b_gn: gn, 1!011100100000000
 
 Index c
  c_kd: kd, 1!000
  c_bd: bd, 1!0000000000000000000000000001111
- c_mg: mg, 1!001010001011
+ c_mg: mg, 1!001010001010
 
 Index d
  d_kd: kd, 1!000
  d_lh: lh, 1!10
- d_mg: mg, 1!010101000100
+ d_mg: mg, 1!010101000101
  d_gr: gr, 1!1110000
 
 Index e
@@ -41,29 +41,29 @@ Index e
 
 Index h
  h_kd: kd, 1!000
- h_gn: gn, 1!000111000000000
- h_lh: lh, 1!10
+ h_gn: gn, 1!000111001100000
+ h_lh: lh, 1!00
 
 Index i
  i_kd: kd, 1!010
  i_mg: mg, 1!101000100011
  i_lh: lh, 1!11
- i_gn: gn, 1!101101100000000
+ i_gn: gn, 1!101101001000000
 
 Index j
  j_kd: kd, 1!010
- j_bd: bd, 1!0000000000000000000000011000011
+ j_bd: bd, 1!0000000000000000000000011000111
  j_lh: lh, 1!01
 
 Index k
  k_kd: kd, 1!101
  k_cc: cc, 1!11
- k_mg: mg, 1!000110100001
+ k_mg: mg, 1!000111100000
 
 Index l
  l_mq: mq, 1!00000010
  l_kd: kd, 1!000
- l_gn: gn, 1!000000000000000
+ l_gn: gn, 1!000000100000000
 
 Index s
  s_kd: kd, 1!111
@@ -96,23 +96,23 @@ Index g
 Number rA, 1, 0!11111011
 Number mwA, 1, 0!00000010
 Number rB, 1, 0!11101100
-Number mwB, 1, 0!00110111
+Number mwB, 1, 0!00110101
 Number rC, 1, 0!11111101
 Number mwC, 1, 0!00010101
-Number rD, 1, 0!11111111
+Number rD, 1, 0!11111110
 Number mwD, 1, 0!00010000
 Number rE, 1, 0!00000000
 Number mwE, 1, 0!11101100
 Number rH, 1, 0!00000010
-Number mwH, 1, 0!11111111
-Number rI, 1, 0!11110110
-Number mwI, 1, 0!10010000
-Number rJ, 1, 0!11100100
+Number mwH, 1, 0!11100010
+Number rI, 1, 0!11111111
+Number mwI, 1, 0!10010111
+Number rJ, 1, 0!11101100
 Number mwJ, 1, 0!11111111
-Number rK, 1, 0!11001111
-Number mwK, 1, 0!10111000
-Number rL, 1, 0!00000000
-Number mwL, 1, 0!01101011
+Number rK, 1, 0!11001011
+Number mwK, 1, 0!11111010
+Number rL, 1, 0!00000010
+Number mwL, 1, 0!01100010
 Number lr, 1, 0!00110
 Number mb, 1, 0!01000111
 #  the mixers' initial weights, in 256ths (format 112): each counter's two probabilities' in the
@@ -123,10 +123,10 @@ Number mb, 1, 0!01000111
 Number wp, 1, 0!00010001
 Number wq, 1, 0!00001000
 Number wo, 1, 0!01001101
-Number wa, 1, 0!00011110
+Number wa, 1, 0!00011111
 Number wf, 1, 0!01010111
 Number lf, 1, 0!00010000
-Number bf, 1, 0!00000001
+Number bf, 1, 0!00000010
 Number l2, 1, 0!00010000
 Number l3, 1, 0!00010000
 Number b2, 1, 0!00010000

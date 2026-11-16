@@ -10,7 +10,7 @@ Debug 1
 Const 0
 
 Index a
- a_bd: bd, 1!1100010000000000000000001100000
+ a_bd: bd, 1!1100010000000000000000001100011
  a_es: es, &01100000
 
 Index b
@@ -43,7 +43,7 @@ Index h
 Index i
  i_es: es, &00001011
  i_nb: nb, 1!101100110
- i_la: la, 1!000000100011111101000100100
+ i_la: la, 1!000000100011111101000010100
 
 Index j
  j_es: es, &00000000
@@ -85,7 +85,7 @@ Index w
  w_st: st, 1!100000011
 
 Index t
- t_bd: bd, 1!0111000000000000000000000000000
+ t_bd: bd, 1!0111000000000000000000000001000
 
 Index n
 #  Frozen: the mantissa mixer it is for mixes only by a hint, and nothing gives this family one.
@@ -105,7 +105,7 @@ Number rD, 1, 0!11111101
 Number mwD, 1, 0!00000000
 Number rE, 1, 0!00000000
 Number mwE, 1, 0!10000010
-Number rH, 1, 0!11110101
+Number rH, 1, 0!11111001
 Number mwH, 1, 0!11111110
 Number rI, 1, 0!11011101
 Number mwI, 1, 0!11101111
@@ -145,7 +145,7 @@ Number mt, 1, 0!100
 ! Number lrm, 1, 0!11111
 ! Number mbm, 1, 0!00011001
 Number rG, 1, 0!00000010
-Number mwG, 1, 0!00111001
+Number mwG, 1, 0!00111000
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
 #  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.
