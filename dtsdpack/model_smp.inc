@@ -40,6 +40,14 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   S32 q1[NCH][NSUB], q2[NCH][NSUB];  // the subband's last two indexes (1 + their length, 0 none; with their signs in qs)
   S8 qs[NCH][NSUB];
   U8 miss[NCH][NSUB];      // the subband's last 8 indexes, a bit each: not the audio's
+  // the decoded values less the audio's, by subband: their running mean (halved each sample: in
+  // 2^-AQ_F), and how often the audio's index was the value, and the audio's with that mean added
+  // (but for half a step of it), halved at 256: where the encoder's input had more than the WAV (the
+  // Cymatics DTS:X stream's surround channels: its height channels, it seems, not in the WAV's
+  // 7.1), slow, the last values tell it where it is more than the step (their bottom subband,
+  // finely quantized, missed 9% of the time, 70% where it's loud; 20% there with the mean)
+  S64 qcar[NCH][NSUB];
+  U32 qcn[NCH][NSUB][2];
   U32 chm[NCH];            // and the channel's last 32 (those coded against the audio)
   int ac[NCH][NSUB], es[NCH][NSUB], ec[NCH][NSUB];  // the subframe's subbands' autocorrelation, energy, its change
   int eq[NCH][NSUB];       // and where in its scale factor's bucket the energy lies (scale_quarter())
@@ -282,14 +290,19 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // decimates its LFE by another filter at each (once learned, the fits at each place make 93% of
   // its values, the best of the rest 30%), refitted only where the first five missed more than a
   // quarter of the values since the last refit (lfe_poor(): refitted every time, they'd cost
-  // nearly as much as all the others)
+  // nearly as much as all the others); the third leaves out the values far from its prediction
+  // (LfeFit's RJ: the Cymatics stream's LFE 659 bytes smaller, where the others gained nothing)
   static constexpr int LFE_PL = 16;  // (a frame's values: 8 a 512-sample frame's)
-  LfeFit<LFE_N2, LFE_K2, 7> lfit3, lfit4[LFE_PL];
+  LfeFit<LFE_N2, LFE_K2, 7, true> lfit3;
+  LfeFit<LFE_N2, LFE_K2, 7> lfit4[LFE_PL];
   U32 lfe_nsf;
   U8 lfe_pn[LFE_PL];        // (whether lfit4's has taken values since its last refit)
   int lfe_pl[4 * NSSF];     // (each value's place in its frame)
-  U32 lfh[6];               // how often each one's prediction was the value (halved as they grow)
-  U32 lfw[5], lfwn;         // (the first five's since the last refit, and the values)
+  // (and each one's half a step up, rounded: a DTS:X stream's encoder rounded its LFE values up, to
+  // the integer at or above, so that their prediction, the nearest, was half a step low: the third
+  // fit's 50% of its loud LFE values, half a step up 81%)
+  U32 lfh[12];              // how often each one's prediction was the value (halved as they grow)
+  U32 lfw[10], lfwn;        // (the first five's since the last refit, and the values)
   // X96's, where the frame has it and the WAV is at twice the core's rate: each bound channel's
   // 64-band analysis by block of the frame, and the core's decoded samples (X96's residuals are the
   // one less the other: model_x96.inc)
@@ -1037,7 +1050,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         if (lfe_poor())
           for (int k = 0; k < LFE_PL; k++)
             if (lfe_pn[k]) lfit4[k].refit(), lfe_pn[k] = 0;
-        for (int k = 0; k < 5; k++) lfw[k] = 0;
+        for (int k = 0; k < 10; k++) lfw[k] = 0;
         lfwn = 0;
       }
     }
@@ -4101,6 +4114,20 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       S64 ac;
       qc = requant(xv - shl64(pred, AQ_F), ss, lo, hi, &dc, &ac);
     }
+    // (the audio's with the decoded values' running difference from it added, but for half a step
+    // of it (a step is ss / 64 in 2^-AQ_F), where that has been the index more often by 16 (by 0,
+    // the short streams 92 bytes bigger, the noise at `3-1.dts`'s start enough to switch; by 16,
+    // as they were, the Cymatics stream 1455 bytes smaller): not a twin's sure one)
+    const int cq = bnd && dist != (S128)1 << 100;
+    S64 qk = 0;
+    const S64 qp0 = qp;
+    if (cq) {
+      S128 dk;
+      S64 ak;
+      const S64 u = ss >> 7, c = qcar[ch][b], cc = c > u ? c - u : c < -u ? c + u : 0;
+      qk = cc ? requant(xv + cc - shl64(pred, AQ_F), ss, lo, hi, &dk, &ak) : qp;
+      if (cc && qcn[ch][b][1] > qcn[ch][b][0] + 16) qp = qk, dist = dk, alt = ak;
+    }
     M_smp_v D;
     D.ab = a;
     D.hw = sample_coding(r, ch, a);
@@ -4161,6 +4188,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     q1[ch][b] = 1 + bit_len((U64)(v < 0 ? -v : v));
     qs[ch][b] = (S8)svar(v);
     const S32 y = clip23((S64)dequantize((S32)v, ss) + pred);
+    if (cq) {
+      U32* const n = qcn[ch][b];
+      n[0] += qp0 == v, n[1] += qk == v;
+      if (n[0] + n[1] >= 1u << 8) n[0] >>= 1, n[1] >>= 1;
+      qcar[ch][b] += (shl64(y, AQ_F) - xv - qcar[ch][b]) >> 1;
+    }
     push_y(ch, b, y);
     tw_y[ch][b][j & 7] = y;
     if (tq && qa != qt) {
@@ -4427,19 +4460,24 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // the LFE's prediction from its features f: the fit's that has predicted the values more often
   // (with the last values the better against a decoded WAV, and for some lossless ones)
   // (the fixed one's on a tie: so from the stream's start)
+  // (6-11: those half a step up, where better)
   int lfe_best() const {
     int k = 3;
     for (int j = 0; j < 3; j++)
       if (lfh[j] > lfh[k]) k = j;
     if (lfh[4] > lfh[k]) k = 4;
     if (lfh[5] > lfh[k]) k = 5;
+    for (int j = 6; j < 12; j++)
+      if (lfh[j] > lfh[k]) k = j;
     return k;
   }
   bool lfe_poor() const {
     U32 b = lfw[0];
-    for (int k = 1; k < 5; k++) b = lfw[k] > b ? lfw[k] : b;
+    for (int k = 1; k < 10; k++) b = lfw[k] > b ? lfw[k] : b;
     return 4 * (U64)b < 3 * (U64)lfwn;
   }
+  // half a step less a unit: a prediction half a step up rounds up (an exact one, to itself)
+  S64 lfe_half() const { return lfe_st > 0 ? lfe_st / 2 - 1 : 0; }
   // the DTS-HD MA encoders' filter's (LFE_W2, in 2^-30), FFmpeg's decodes' (LFE_W2D, in 2^-24: d)
   S64 lfe_fixed(int i, bool d = false) const {
     const S32* const w = d ? LFE_W2D : LFE_W2;
@@ -4448,7 +4486,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     return (S64)(p >> (d ? 24 : 30));
   }
   S64 lfe_pred(int i) const {
-    const int k = lfe_best();
+    const int k = lfe_best() % 6;  // (the step not yet known: as is)
     return k == 5 ? lfit4[lfe_pl[i]].predict(lfe_f3[i])
          : k >= 3 ? lfe_fixed(i, k == 4)
          : k == 2 ? lfit3.predict(lfe_f3[i])
@@ -4463,8 +4501,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int k = 0; k < LFE_NP; k++) lfe_f[i][LFE_NT + k] = lfe_past[k];  // (the values decoded)
     const S64 p1 = lfit.predict(lfe_f[i]), p2 = lfit2.predict(lfe_f[i]), p3 = lfit3.predict(lfe_f3[i]), p4 = lfe_fixed(i),
               p5 = lfe_fixed(i, true), p6 = lfit4[lfe_pl[i]].predict(lfe_f3[i]);
-    const int lb = lfe_best();
-    lfe_p[i] = lb == 5 ? p6 : lb == 4 ? p5 : lb == 3 ? p4 : lb == 2 ? p3 : lb == 1 ? p2 : p1;
+    const int lb = lfe_best(), lk = lb % 6;
+    lfe_p[i] = (lk == 5 ? p6 : lk == 4 ? p5 : lk == 3 ? p4 : lk == 2 ? p3 : lk == 1 ? p2 : p1) + (lb >= 6 ? lfe_half() : 0);
     const S64 qp = requant(lfe_p[i], lfe_st << 6, -128, 127, &dist, &alt);
     M_smp_v D;
     D.ab = 27;
@@ -4500,12 +4538,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       const S64 pk[6] = {p1, p2, p3, p4, p5, p6};
       for (int k = 0; k < 6; k++) {
         const U32 h = requant(pk[k], lfe_st << 6, -128, 127, &dd, &al) == v;
+        const U32 h2 = requant(pk[k] + lfe_half(), lfe_st << 6, -128, 127, &dd, &al) == v;
         lfh[k] += h;
-        if (k < 5) lfw[k] += h;
+        lfh[6 + k] += h2;
+        if (k < 5) lfw[k] += h, lfw[5 + k] += h2;
       }
       lfwn++;
-      if (lfh[0] + lfh[1] + lfh[2] + lfh[3] >= 4u << 11)  // (by the first four's sum, as before the fifth)
-        for (int k = 0; k < 6; k++) lfh[k] >>= 1;
+      if (lfh[0] + lfh[1] + lfh[2] + lfh[3] >= 4u << 11 ||  // (by the first four's sum, as before the fifth;
+          lfh[6] + lfh[7] + lfh[8] + lfh[9] >= 4u << 11)    // or theirs half a step up)
+        for (int k = 0; k < 12; k++) lfh[k] >>= 1;
     }
     for (int k = LFE_NP - 1; k > 0; k--) lfe_past[k] = lfe_past[k - 1];
     lfe_past[0] = v * lfe_st;

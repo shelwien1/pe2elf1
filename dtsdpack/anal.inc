@@ -1901,8 +1901,8 @@ static void wav_run(const WavIn& w, int c, S64 E, const S64* q, S64 qa, S32* out
 // scale squared (what the coder pays for is the error in steps), the older ones forgotten (by
 // 2^-FS a subframe), ridged toward no correction. Plain data, zeroed (the model's memory): add()
 // each sample, refit() each subframe. (K0: the tap the correction's identity is, ridged toward;
-// -1 none, ridged toward 0.)
-template <int NF, int K0 = LFE_K, int FS = 5>
+// -1 none, ridged toward 0. RJ: outliers left out, below.)
+template <int NF, int K0 = LFE_K, int FS = 5, bool RJ = false>
 struct LfeFit {
   S128 G[NF][NF], c[NF];  // the sums of f f' and f y
   S64 w[NF];              // the correction (Q30), less its identity (2^30 at K0): 0s the identity
@@ -1915,8 +1915,23 @@ struct LfeFit {
   // (st: y's step, 0 (nothing to fit) or 2^22 up: f and y divided by it (Q20, by its reciprocal
   // 2^82 / st, within 2^60) weight each by 1 / st^2; f within 2^52, so within 2^50 in steps, the
   // terms within 2^80)
+  // (RJ: a value further from the prediction than 4 times the error's running RMS (in steps, of
+  // the last 64 or so, 1 at the least), once it has had 64, left out, so that the few the fit
+  // can't explain don't pull it from the rest; the RMS takes in those too, but at most 100 times
+  // the mean square, so that where the fit goes wrong for long, the RMS rising, it learns again)
+  S64 er2;  // the error's running mean square (in steps, Q8)
+  U32 ne;   // the values seen (to 64)
   void add(const S64* f, S64 y, S64 st) {
     if (st <= 0) return;
+    if (RJ) {
+      S128 e = shl128(y - predict(f), 8) / st;
+      e = e > (S128)1 << 20 ? (S128)1 << 20 : e < -((S128)1 << 20) ? -((S128)1 << 20) : e;
+      const S64 e2 = (S64)(e * e >> 8), m2 = er2 > 256 ? er2 : 256;
+      const bool out = ne >= 64 && e2 > 16 * m2;
+      er2 += ((e2 < 100 * m2 ? e2 : 100 * m2) - er2) >> 6;
+      if (ne < 64) ne++;
+      if (out) return;
+    }
     const S64 iv = (S64)(((S128)1 << 82) / (st > (S64)1 << 22 ? st : (S64)1 << 22));
     S64 fs[NF];
     for (int i = 0; i < NF; i++) fs[i] = (S64)((S128)f[i] * iv >> 62);
