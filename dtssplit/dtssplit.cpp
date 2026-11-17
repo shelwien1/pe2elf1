@@ -50,9 +50,13 @@
 // goes to prefix.dtsx as it is, frame after frame. The join takes prefix.x.wav and prefix.dtsx only
 // where the meta file says there is object data.
 //
-// The meta file: "DTSSPLIT", a version byte (4; the join reads 3, the format before prefix.x.wav,
-// and 2, the format before prefix.dtsx, too), then records, each a tag byte and its fields (numbers
-// as LEB128 varints, signed ones zigzagged):
+// The meta file: "DTSSPLIT", a version byte (5; the join reads 4, with the headers as they are, 3,
+// the format before prefix.x.wav, and 2, the format before prefix.dtsx, too), then records, each a
+// tag byte and its fields (numbers as LEB128 varints, signed ones zigzagged). Its EXSS and XLL
+// header bytes are the stream's but for what the join computes again: their CRC-16s are 0s, and the
+// EXSS frame size, the NAVI tables' sizes and the reflection coefficients' codes are XORed with
+// those the join will compute (the frame's size, the bytes each segment's coding takes, and
+// rc_predict()'s codes from the WAV's samples), so that they are mostly 0s too:
 //   R n bytes          bytes that aren't a frame
 //   C n                a core frame: the next n bytes of prefix.dtsc
 //   E n bytes          an extension substream frame kept as bytes
@@ -82,6 +86,7 @@
 // Build: g++ -O2 -o dtssplit dtssplit.cpp
 //        x86_64-w64-mingw32-g++ -O2 -s -static -o dtssplit.exe dtssplit.cpp
 
+#include <math.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -589,6 +594,35 @@ static int exss_frame(const U8* p, size_t av) {
   return fs;
 }
 
+// n bits of p from bit pos, and an XOR of them
+static U32 bits_at(const U8* p, int pos, int n) {
+  U32 v = 0;
+  for (int i = 0; i < n; i++) v = v << 1 | (p[(pos + i) >> 3] >> (7 - ((pos + i) & 7)) & 1);
+  return v;
+}
+static void bits_xor(U8* p, int pos, int n, U32 v) {
+  for (int i = 0; i < n; i++)
+    if (v >> (n - 1 - i) & 1) p[(pos + i) >> 3] ^= (U8)(0x80 >> ((pos + i) & 7));
+}
+
+// The EXSS frame header in e (len bytes of it, the frame n bytes): its frame size XORed with the
+// frame's (less 1) and its CRC-16 zeroed, as the meta file keeps them (put: 1); or back, as the
+// join puts them (put: 0)
+static void exss_fields(U8* e, size_t len, int n, int put) {
+  if (len < 8) return;
+  const int wide = bits_at(e, 42, 1), hw = wide ? 12 : 8, fw = wide ? 20 : 16;
+  const int hs = (int)bits_at(e, 43, hw) + 1;
+  if (hs < 8 || (size_t)hs > len) return;
+  bits_xor(e, 43 + hw, fw, (U32)(n - 1) & ((1u << fw) - 1));
+  if (put) {
+    e[hs - 2] = e[hs - 1] = 0;
+  } else {
+    const U16 c = crc16(e + 5, hs - 7);
+    e[hs - 2] = (U8)(c >> 8);
+    e[hs - 1] = (U8)c;
+  }
+}
+
 // what the extension substream headers have said in their static fields (which need not be in
 // every header), for the headers without them
 struct ExssState {
@@ -821,6 +855,7 @@ struct Band {  // a channel set's coding in a frequency band (its part of the su
   int decor, order[XCH], dcoeff[XCH / 2];
   int aorder[XCH], forder[XCH], highest;
   int rc[XCH][XORD];
+  int rcat[XCH];  // where a channel's reflection coefficients' codes start in the header (bits)
   int dmix_embedded;
   int lsb_size, nlsb[XCH], adj[XCH];  // lsb_size: the bytes at the end of a segment's data the LSB part takes
 };
@@ -840,6 +875,8 @@ struct Xll {
   Chset cs[XCS];
   std::vector<int> navi;  // band data sizes in bytes: [band][segment][channel set]
   int data_start;         // where the band data starts
+  int ncrc, crcat[XCS + 2];  // where the headers' CRC-16s are (their 2 bytes; the meta file has 0s there)
+  int navi_at;               // where the NAVI table starts (its sizes against navi_pred()'s in the meta file)
 };
 
 // a segment of a channel set's band data: what isn't samples
@@ -849,6 +886,7 @@ struct Chunk {
   std::vector<U16> iso[XCH];  // per channel, where hybrid Rice codes put their isolated samples
   U8 g1, g2;                  // the bits after the MSB part and after the LSB part: 0 zeros, 1 as kept
   U32 g1n, g2n;
+  U32 mbits;                  // the MSB part's bits (the split's)
   std::vector<U8> g1b, g2b;
   int dh_code;     // band 1, segment 0: the decimator history's width (less 1)
   S32 dh[XCH][XDH];  // and its samples, [1-7] of each channel
@@ -858,12 +896,27 @@ static inline S32 sat23(S32 a) { return a < -(1 << 23) ? -(1 << 23) : a > (1 << 
 static inline S32 mul16(S32 a, S32 b) { return (S32)(((S64)a * b + (1 << 15)) >> 16); }
 static inline S32 mulq(S32 a, S32 b, int q) { return (S32)(((S64)a * b + (1LL << (q - 1))) >> q); }
 
+// the CRC-16 of the bytes of p from a to b, its last 2: whether it holds (fix: written there instead,
+// where the join puts back the meta file's 0s); where it is, into x
+static bool crc_here(Xll& x, const U8* p, U8* fix, int a, int b) {
+  if (x.ncrc < XCS + 2) x.crcat[x.ncrc++] = b - 2;
+  if (!fix) return !crc16(p + a, b - a);
+  const U16 c = crc16(p + a, b - a - 2);
+  fix[b - 2] = (U8)(c >> 8);
+  fix[b - 1] = (U8)c;
+  return true;
+}
+
 // the common header, the channel set sub-headers and the NAVI table of the XLL frame p (n bytes,
 // PAD more): 0, or why they can't be followed; with base, p is DTS:X object data (obj_split()), its
-// channel set's sub-header at off0 and the frame's common header base's
-static const char* xll_headers(Xll& x, const U8* p, int n, int one2one, const Xll* base = 0, int off0 = 0) {
+// channel set's sub-header at off0 and the frame's common header base's; with fix (p itself), the
+// CRC-16s are written rather than checked (the meta file keeps them as 0s); lax: a reflection
+// coefficient's code out of range taken as 0 (the meta file keeps the codes against rc_predict()'s)
+static const char* xll_headers(Xll& x, const U8* p, int n, int one2one, const Xll* base = 0, int off0 = 0,
+                               U8* fix = 0, bool lax = false) {
   BitReader r;
   r.init(p, 0, (U64)n * 8);
+  x.ncrc = 0;
   if (base) {  // (DTS:X object data: one channel set from off0, by base's common header)
     if (off0 + 3 > n) return "DTS:X object data too short";
     x.hsize = off0;
@@ -882,7 +935,7 @@ static const char* xll_headers(Xll& x, const U8* p, int n, int one2one, const Xl
     if (n < 16 || r.get(32) != SYNC_XLL) return "no XLL sync word";
     if (r.get(4) + 1 > 1) return "an XLL version above 1";
     x.hsize = r.get(8) + 1;
-    if (x.hsize < 12 || x.hsize > n || crc16(p + 4, x.hsize - 4)) return "an XLL header whose CRC fails";
+    if (x.hsize < 12 || x.hsize > n || !crc_here(x, p, fix, 4, x.hsize)) return "an XLL header whose CRC fails";
     const int fsnb = r.get(5) + 1;
     x.frame_size = (int)((U64)r.get(fsnb) + 1);
     if (x.frame_size > n || x.frame_size < x.hsize) return "an XLL frame larger than its asset";
@@ -909,7 +962,7 @@ static const char* xll_headers(Xll& x, const U8* p, int n, int one2one, const Xl
     memset(&s, 0, sizeof s);
     r.init(p, (U64)off * 8, (U64)n * 8);
     const int hs = r.get(10) + 1;
-    if (off + hs > n || hs < 3 || crc16(p + off, hs)) return "a channel set header whose CRC fails";
+    if (off + hs > n || hs < 3 || !crc_here(x, p, fix, off, off + hs)) return "a channel set header whose CRC fails";
     s.nch = r.get(4) + 1;
     s.resenc = r.get(s.nch);
     s.pcm_res = r.get(5) + 1;
@@ -978,12 +1031,14 @@ static const char* xll_headers(Xll& x, const U8* p, int n, int one2one, const Xl
       }
       if (d.highest > x.nsegsamples) return "a prediction order above the segment's samples";
       for (int ch = 0; ch < s.nch; ch++) d.forder[ch] = d.aorder[ch] ? 0 : r.get(2);
-      for (int ch = 0; ch < s.nch; ch++)
+      for (int ch = 0; ch < s.nch; ch++) {
+        d.rcat[ch] = (int)r.pos;
         for (int j = 0; j < d.aorder[ch]; j++) {
           const int q = unzig(r.get(8));
-          if (q == -128) return "a reflection coefficient out of range";
-          d.rc[ch][j] = q >= 0 ? RC_TAB[q] : -(int)RC_TAB[-q];
+          if (q == -128 && !lax) return "a reflection coefficient out of range";
+          d.rc[ch][j] = q >= 0 ? RC_TAB[q] : q > -128 ? -(int)RC_TAB[-q] : 0;
         }
+      }
       d.dmix_embedded = s.dmix_embedded && (b == 0 || r.get(1));
       if ((b == 0 && x.scalable) || (b && r.get(1))) {
         d.lsb_size = (int)r.get(x.seg_nbits);
@@ -1006,6 +1061,7 @@ static const char* xll_headers(Xll& x, const U8* p, int n, int one2one, const Xl
   }
   x.chofs[x.nchsets] = x.nch;
   // NAVI
+  x.navi_at = off;
   r.init(p, (U64)off * 8, (U64)n * 8);
   x.navi.assign((size_t)x.nbands * x.nsegs * x.nchsets, 0);
   int* nv = &x.navi[0];
@@ -1016,7 +1072,7 @@ static const char* xll_headers(Xll& x, const U8* p, int n, int one2one, const Xl
   r.get(16);
   if (r.over) return "a NAVI table past the frame";
   x.data_start = (int)(r.pos >> 3);
-  if (crc16(p + off, x.data_start - off)) return "a NAVI table whose CRC fails";
+  if (!crc_here(x, p, fix, off, x.data_start)) return "a NAVI table whose CRC fails";
   return 0;
 }
 
@@ -1194,6 +1250,7 @@ static const char* xll_data(Xll& x, const U8* p, std::vector<Chunk>& ck, BandDat
         const U64 lstart = cend - (U64)d.lsb_size * 8;
         if (d.lsb_size && lstart < at) return "an LSB part larger than its segment";
         if (r.pos > lstart) return "an MSB part that runs into the LSB part";
+        k.mbits = (U32)(r.pos - at);
         gap_of(p, r.pos, lstart, k.g1, k.g1n, k.g1b);
         k.g2 = 0;
         k.g2n = 0;
@@ -1350,10 +1407,11 @@ static void xll_decode(const Xll& x, const std::vector<Chunk>& ck, const BandDat
   }
 }
 
-// The residuals and LSBs that decode to val (xll_decode's inverse); false where val doesn't, with
-// the frame's header and what the meta file kept
-static bool xll_encode_samples(const Xll& x, const std::vector<Chunk>& ck, const S32* val, const Extra& ex,
-                               BandData& res, BandData& lsb, std::vector<U32>& tmp) {
+// The decorrelated MSB signals of the frame's samples val (xll_decode()'s inverse, as far as its
+// prediction: the LPC's input) into msb ([band][channel, a set's as its band data has them]), the
+// LSBs into lsb; false where val doesn't decode so, with the frame's header and what the meta file kept
+static bool xll_msb(const Xll& x, const std::vector<Chunk>& ck, const S32* val, const Extra& ex, BandData& msb,
+                    BandData& lsb) {
   const int N = x.nframesamples, NB = x.nbands;
   BandData in;
   in.init(N, x.nch);
@@ -1380,7 +1438,8 @@ static bool xll_encode_samples(const Xll& x, const std::vector<Chunk>& ck, const
       }
     }
   }
-  tmp.resize((size_t)2 * XCH * N);
+  msb.init(N, x.nch);
+  lsb.init(N, x.nch);
   std::vector<U8> ovb(ex.ovl.v);  // the overlapping LSB bits, as xll_decode wrote them
   ovb.resize(ovb.size() + PAD);
   BitReader ov;
@@ -1391,7 +1450,7 @@ static bool xll_encode_samples(const Xll& x, const std::vector<Chunk>& ck, const
       const Band& d = s.band[b];
       for (int i = 0; i < s.nch; i++) {
         const int oc = d.order[i];
-        U32* bb = &tmp[(size_t)i * N];
+        U32* bb = (U32*)msb.at(b, x.chofs[c] + i);
         const S32* v = in.at(b, x.chofs[c] + oc);
         const int sh = lsb_shift(x, d, oc), a = d.adj[oc], nl = d.nlsb[oc], k = lsb_overlap(x, d, oc);
         S32* l = lsb.at(b, x.chofs[c] + oc);
@@ -1416,12 +1475,25 @@ static bool xll_encode_samples(const Xll& x, const std::vector<Chunk>& ck, const
       if (d.decor)
         for (int i = 0; i < s.nch / 2; i++)
           if (d.dcoeff[i]) {
-            const U32* b0 = &tmp[(size_t)(2 * i) * N];
-            U32* b1 = &tmp[(size_t)(2 * i + 1) * N];
+            const U32* b0 = (const U32*)msb.at(b, x.chofs[c] + 2 * i);
+            U32* b1 = (U32*)msb.at(b, x.chofs[c] + 2 * i + 1);
             for (int n = 0; n < N; n++) b1[n] -= (U32)decor_term(b0[n], d.dcoeff[i]);
           }
+    }
+  return !ov.over && ov.end - ov.pos < 8;  // (all the overlapping bits taken, but a byte's padding)
+}
+
+// the residuals of the decorrelated MSB signals msb (xll_msb()'s) by the frame's prediction
+static void xll_residuals(const Xll& x, const BandData& msb, BandData& res, std::vector<U32>& tmp) {
+  const int N = x.nframesamples;
+  res.init(N, x.nch);
+  tmp.resize((size_t)N);
+  for (int b = 0; b < x.nbands; b++)
+    for (int c = 0; c < x.nchsets; c++) {
+      const Chset& s = x.cs[c];
+      const Band& d = s.band[b];
       for (int ch = 0; ch < s.nch; ch++) {
-        const U32* bb = &tmp[(size_t)ch * N];
+        const U32* bb = (const U32*)msb.at(b, x.chofs[c] + ch);
         S32* e = res.at(b, x.chofs[c] + ch);
         const int o = d.aorder[ch];
         if (o) {
@@ -1430,7 +1502,7 @@ static bool xll_encode_samples(const Xll& x, const std::vector<Chunk>& ck, const
           for (int n = 0; n < o && n < N; n++) e[n] = (S32)bb[n];
           for (int n = o; n < N; n++) e[n] = (S32)(bb[n] + (U32)lpc_pred(bb, n, o, co));
         } else {
-          U32* dd = &tmp[(size_t)(XCH + ch) * N];
+          U32* dd = &tmp[0];
           memcpy(dd, bb, (size_t)N * sizeof *dd);
           for (int j = 0; j < d.forder[ch]; j++)
             for (int n = N - 1; n > 0; n--) dd[n] -= dd[n - 1];
@@ -1438,7 +1510,152 @@ static bool xll_encode_samples(const Xll& x, const std::vector<Chunk>& ck, const
         }
       }
     }
-  return !ov.over && ov.end - ov.pos < 8;  // (all the overlapping bits taken, but a byte's padding)
+}
+
+// --- the reflection coefficients as the encoders' analysis makes them (the meta file keeps the
+// stream's codes XORed with these)
+
+// sin^2(pi n / (N - 1)), n < N (Hann's window), in Q30: in integers, the same everywhere
+static const std::vector<S32>& hann_q30(int N) {
+  static std::vector<S32> w;
+  static int wn = -1;
+  if (wn == N) return w;
+  w.assign((size_t)N, 0);
+  wn = N;
+  typedef unsigned __int128 U128;
+  const U128 PI61 = 7244019458077122842ull;  // (pi in Q61)
+  for (int n = 1; n < N - 1; n++) {
+    const int m = n <= (N - 1) / 2 ? n : N - 1 - n;  // (the angle to pi/2 at most)
+    const U128 x = PI61 * (U64)m / (U64)(N - 1), x2 = (x * x) >> 61;
+    U128 t = x, sn = x;  // (sin x by its series: the terms alternate and fall)
+    for (int k = 1; k <= 12; k++) {
+      t = ((t * x2) >> 61) / (U64)((2 * k) * (2 * k + 1));
+      if (k & 1) sn -= t;
+      else sn += t;
+    }
+    w[n] = (S32)((sn * sn + ((U128)1 << 91)) >> 92);
+  }
+  return w;
+}
+
+// single precision, each operation rounded where it is (no fused or wider arithmetic)
+static inline float f32mul(float a, float b) {
+  volatile float r = a * b;
+  return r;
+}
+static inline float f32add(float a, float b) {
+  volatile float r = a + b;
+  return r;
+}
+static inline float f32div(float a, float b) {
+  volatile float r = a / b;
+  return r;
+}
+
+// a 128-bit integer (|v| < 2^127) as the nearest double, ties to even: the same everywhere
+static double i128_double(__int128 v) {
+  typedef unsigned __int128 U128;
+  const bool neg = v < 0;
+  U128 u = neg ? (U128)0 - (U128)v : (U128)v;
+  int sh = 0;
+  while (u >> (53 + sh)) sh++;
+  if (sh) {
+    U128 q = u >> sh;
+    const U128 rem = u - (q << sh), half = (U128)1 << (sh - 1);
+    if (rem > half || (rem == half && (q & 1))) q++;
+    u = q;
+  }
+  const double d = ldexp((double)(U64)u, sh);
+  return neg ? -d : d;
+}
+
+// the code of reflection coefficient k: the nearest of RC_TAB (cap at most), zigzagged
+static int rc_code(float k, int cap) {
+  const double a = fabs((double)k) * 65536.0;
+  int best = 0;
+  double bd = fabs(a - RC_TAB[0]);
+  for (int i = 1; i < 128; i++) {
+    const double d = fabs(a - RC_TAB[i]);
+    if (d < bd) bd = d, best = i;
+  }
+  if (best > cap) best = cap;
+  return k < 0 && best ? 2 * best - 1 : 2 * best;
+}
+
+// The codes of the o reflection coefficients the encoders' analysis gives the decorrelated MSB
+// signal bb (N samples): its autocorrelation under Hann's window (in integers, each sample to 31
+// bits), Levinson's recursion in single precision, each coefficient the nearest of RC_TAB, from
+// the second on 121 at most (the DTS:X encoder's: 95% of Nigel_Stanford_Cymatics_DTS-X.dts's codes
+// so); 0s where the recursion breaks down
+static void rc_predict(const S32* bb, int N, int o, int* code) {
+  for (int j = 0; j < o; j++) code[j] = 0;
+  const std::vector<S32>& w = hann_q30(N);
+  static std::vector<S64> xs;
+  xs.resize((size_t)N);
+  U64 mx = 0;
+  for (int n = 0; n < N; n++) {
+    xs[n] = (S64)bb[n] * w[n];
+    mx |= (U64)(xs[n] < 0 ? -xs[n] : xs[n]);
+  }
+  int sh = 0;
+  while (mx >> (31 + sh)) sh++;
+  if (sh)
+    for (int n = 0; n < N; n++) xs[n] = (xs[n] + ((S64)1 << (sh - 1))) >> sh;
+  float R[XORD + 1];
+  for (int l = 0; l <= o; l++) {
+    __int128 acc = 0;
+    for (int n = 0; n + l < N; n++) acc += xs[n] * xs[n + l];
+    R[l] = (float)i128_double(acc);
+  }
+  float a[XORD + 1], an[XORD + 1];
+  a[0] = 1;
+  float E = R[0];
+  for (int j = 1; j <= o; j++) {
+    if (!(E > 0)) return;
+    float acc = R[j];
+    for (int i = 1; i < j; i++) acc = f32add(acc, f32mul(a[i], R[j - i]));
+    const float k = -f32div(acc, E);
+    code[j - 1] = rc_code(k, j > 1 ? 121 : 127);
+    for (int i = 1; i < j; i++) an[i] = f32add(a[i], f32mul(k, a[j - i]));
+    for (int i = 1; i < j; i++) a[i] = an[i];
+    a[j] = k;
+    E = f32mul(E, f32add(1.0f, -f32mul(k, k)));
+  }
+}
+
+// the reflection coefficients' codes in the header h (x's) XORed with rc_predict()'s from the
+// decorrelated MSB signals msb (xll_msb()'s), as the meta file keeps them (and back)
+static void rc_xor(U8* h, const Xll& x, const BandData& msb) {
+  int code[XORD];
+  for (int b = 0; b < x.nbands; b++)
+    for (int c = 0; c < x.nchsets; c++) {
+      const Chset& s = x.cs[c];
+      if (s.nbands <= b) continue;
+      const Band& d = s.band[b];
+      for (int ch = 0; ch < s.nch; ch++) {
+        if (!d.aorder[ch]) continue;
+        rc_predict(msb.at(b, x.chofs[c] + ch), x.nframesamples, d.aorder[ch], code);
+        for (int j = 0; j < d.aorder[ch]; j++) bits_xor(h, d.rcat[ch] + 8 * j, 8, (U32)code[j]);
+      }
+    }
+}
+
+// A segment's size as the NAVI table would have it from its MSB part's bits (mbits), the bits kept
+// after them and its LSB part: the bytes they take (the meta file keeps the table's sizes against these)
+static int navi_size(U64 mbits, const Chunk& k, const Band& d) {
+  return (int)((mbits + (k.g1 ? k.g1n : 0) + 7) >> 3) + d.lsb_size;
+}
+
+// the NAVI table's sizes in the header h (x's) XORed with pred's, as the meta file keeps them (and
+// back): each less 1, in its seg_nbits
+static void navi_xor(U8* h, const Xll& x, const std::vector<int>& pred) {
+  int pos = x.navi_at * 8;
+  for (size_t i = 0; i < pred.size(); i++) {
+    const int c = (int)(i % x.nchsets), b = (int)(i / x.nchsets / x.nsegs);
+    if (x.cs[c].nbands <= b) continue;
+    bits_xor(h, pos, x.seg_nbits, (U32)(pred[i] - 1) & (U32)(((U64)1 << x.seg_nbits) - 1));
+    pos += x.seg_nbits;
+  }
 }
 
 static inline bool wr_lin(BitWriter& w, const S32* v, int n, int bits) {
@@ -1467,10 +1684,12 @@ static inline bool wr_rice1(BitWriter& w, S32 v, int k, U64 lim) {
   return true;
 }
 
-// x's band data from its residuals and LSBs, coded as ck says; 0 or why it can't be
+// x's band data from its residuals and LSBs, coded as ck says; 0 or why it can't be. With pred, each
+// segment at the size its coding takes (navi_size()), those sizes into pred, none past nmax bytes
 static const char* xll_write_data(Xll& x, const std::vector<Chunk>& ck, const BandData& res, const BandData& lsb,
-                                  BitWriter& w) {
+                                  BitWriter& w, std::vector<int>* pred = 0, int nmax = 0) {
   const int S = x.nsegsamples;
+  if (pred) pred->assign(x.navi.size(), 0);
   for (int b = 0; b < x.nbands; b++)
     for (int seg = 0; seg < x.nsegs; seg++)
       for (int c = 0; c < x.nchsets; c++) {
@@ -1479,8 +1698,9 @@ static const char* xll_write_data(Xll& x, const std::vector<Chunk>& ck, const Ba
         if (s.nbands <= b) continue;
         const Band& d = s.band[b];
         const Chunk& k = ck[ci];
-        const U64 start = w.bits(), cend = start + (U64)x.navi[ci] * 8;
-        const U64 lstart = cend - (U64)d.lsb_size * 8;
+        const U64 start = w.bits();
+        U64 cend = start + (U64)(pred ? nmax : x.navi[ci]) * 8;
+        U64 lstart = pred ? cend : cend - (U64)d.lsb_size * 8;
         if (seg) w.put(k.reuse, 1);
         if (!k.reuse) {
           s.seg_common = k.seg_common;
@@ -1553,6 +1773,11 @@ static const char* xll_write_data(Xll& x, const std::vector<Chunk>& ck, const Ba
               if (nbits < 32 && (v < -(1 << (nbits - 1)) || v >= 1 << (nbits - 1))) return "a decimator sample its width can't hold";
               w.put((U32)v, nbits);
             }
+        }
+        if (pred) {  // (navi_pred()'s size)
+          (*pred)[ci] = navi_size(w.bits() - start, k, d);
+          cend = start + (U64)(*pred)[ci] * 8;
+          lstart = cend - (U64)d.lsb_size * 8;
         }
         if (w.bits() > lstart) return "an MSB part longer than its place";
         if (k.g1) {
@@ -1870,12 +2095,31 @@ static const char* get_exc(RecIn& in, std::vector<S32>& wv) {
   return 0;
 }
 
+// a header's bytes (p, x.data_start of them) into o, its CRC-16s as 0s (xll_headers() puts them
+// back), its NAVI table's sizes against those the segments' coding parameters say (ck's), its
+// reflection coefficients' codes against those its samples' decorrelated MSB signals (msb) say
+static void put_hdr(Rec& o, const U8* p, const Xll& x, const std::vector<Chunk>& ck, const BandData* msb) {
+  std::vector<U8> h(p, p + x.data_start);
+  if (msb) rc_xor(&h[0], x, *msb);
+  for (int i = 0; i < x.ncrc; i++) h[x.crcat[i]] = h[x.crcat[i] + 1] = 0;
+  std::vector<int> pred(x.navi.size(), 0);
+  for (size_t i = 0; i < pred.size(); i++) {
+    const int c = (int)(i % x.nchsets), b = (int)(i / x.nchsets / x.nsegs);
+    if (x.cs[c].nbands > b) pred[i] = navi_size(ck[i].mbits, ck[i], x.cs[c].band[b]);
+  }
+  navi_xor(&h[0], x, pred);
+  o.blob(&h[0], h.size());
+}
+
 // an X record's part for the object data obj_split() split (ob, n bytes): its bytes before its band
 // data, its segments' coding parameters, its bytes after its band data, its band 0's delayed
 // samples, overlapping LSB bits and values clipped in prefix.x.wav (exc)
 static void put_obj(Rec& o, const Split& sp, const U8* ob, int n, const std::vector<std::pair<U64, S32> >& exc) {
   Xll x = sp.ox;
-  o.blob(ob, x.data_start);
+  x.crcat[x.ncrc++] = OBJ_HEAD - 3;  // (and its header's: obj_split() has found it holds)
+  BandData msb, lsb;
+  const bool m = xll_msb(x, sp.ock, &sp.oval[0], sp.oex, msb, lsb);
+  put_hdr(o, ob, x, sp.ock, m ? &msb : 0);
   for (int b = 0; b < x.nbands; b++)
     for (int seg = 0; seg < x.nsegs; seg++) put_chunk(o, x, b, seg, 0, sp.ock[(size_t)b * x.nsegs + seg]);
   o.blob(ob + sp.oend, n - sp.oend);
@@ -1891,10 +2135,16 @@ static void put_x(Rec& o, int wi, const U8* e, int n, int xoff, const U8* xf, in
   Xll& x = sp.x;
   o.u8('X');
   o.uv(wi);
-  o.blob(e, xoff);
+  std::vector<U8> pre(e, e + xoff);
+  exss_fields(&pre[0], pre.size(), n, 1);
+  o.blob(&pre[0], pre.size());
   o.u8(one2one);
   o.uv(x.frame_size);
-  o.blob(xf, x.data_start);
+  {
+    BandData msb, lsb;
+    const bool m = xll_msb(x, sp.ck, &sp.val[0], sp.ex, msb, lsb);
+    put_hdr(o, xf, x, sp.ck, m ? &msb : 0);
+  }
   for (int b = 0; b < x.nbands; b++)
     for (int seg = 0; seg < x.nsegs; seg++)
       for (int c = 0; c < x.nchsets; c++)
@@ -1929,18 +2179,67 @@ struct Samples {
 
 static const char* const WHY_DTSX = "the DTS:X object data ends early";
 
+// The join's reflection coefficients' codes: back into the header hdr from the meta file's (against
+// rc_predict()'s from the decorrelated MSB signals msb; ver: the meta file's version, as they are
+// before 5), x the header's again (n, one2one, base, off0: xll_headers()'s)
+static const char* rc_join(Xll& x, const BandData& msb, std::vector<U8>& hdr, int n, int one2one, const Xll* base,
+                           int off0, int ver) {
+  if (ver >= 5) rc_xor(&hdr[0], x, msb);
+  std::vector<U8> fb((size_t)n + PAD, 0);
+  memcpy(&fb[0], &hdr[0], hdr.size());
+  const char* why = xll_headers(x, &fb[0], n, one2one, base, off0, &fb[0]);
+  if (why) return why;
+  if ((size_t)x.data_start != hdr.size()) return "a damaged record";
+  memcpy(&hdr[0], &fb[0], hdr.size());
+  return 0;
+}
+
+// The join's header and band data into w: the band data at the sizes its coding takes, the NAVI
+// table's sizes from the meta file's (against those; as they are before version 5, ver) put back
+// into the header hdr, its CRC-16s then (xll_headers()), the band data again where a size isn't the
+// least (n, one2one, base, off0: xll_headers()'s)
+static const char* navi_join(Xll& x, const std::vector<Chunk>& ck, const BandData& res, const BandData& lsb,
+                             std::vector<U8>& hdr, int n, int one2one, const Xll* base, int off0, int ver, BitWriter& w) {
+  BitWriter d;
+  d.reset();
+  std::vector<int> pred;
+  Xll x1 = x;
+  const char* why = xll_write_data(x1, ck, res, lsb, d, &pred, n);
+  if (why) return why;
+  if (ver >= 5) navi_xor(&hdr[0], x, pred);
+  std::vector<U8> fb((size_t)n + PAD, 0);
+  memcpy(&fb[0], &hdr[0], hdr.size());
+  if ((why = xll_headers(x, &fb[0], n, one2one, base, off0, &fb[0]))) return why;
+  if ((size_t)x.data_start != hdr.size()) return "a damaged record";
+  memcpy(&hdr[0], &fb[0], hdr.size());
+  w.reset();
+  w.bytes(&hdr[0], hdr.size());
+  if (x.navi == pred) {
+    w.v.insert(w.v.end(), d.v.begin(), d.v.end());
+    w.acc = d.acc;
+    w.nacc = d.nacc;
+    return 0;
+  }
+  return xll_write_data(x, ck, res, lsb, w);
+}
+
 // an X record's part for split object data (put_obj()'s), joined onto out (n bytes) by the frame
 // x's common header, its samples from smp in the layout L (none: no prefix.x.wav): 0, or why it can't be
 static const char* join_obj(RecIn& in, const Xll& x, int n, const Layout* L, Samples* smp, Split& sp,
-                            std::vector<U8>& out) {
+                            std::vector<U8>& out, int ver) {
   std::vector<U8> hdr, tail;
   if (!in.blob(hdr, (size_t)n)) return "a damaged record";
   std::vector<U8> ob((size_t)n + PAD, 0);
   memcpy(&ob[0], &hdr[0], hdr.size());
   Xll& ox = sp.ox;
-  const char* why = xll_headers(ox, &ob[0], n, 0, &x, OBJ_HEAD);
+  if (hdr.size() < OBJ_HEAD) return "a damaged record";
+  const U16 hc = crc16(&ob[0], OBJ_HEAD - 3);
+  ob[OBJ_HEAD - 3] = (U8)(hc >> 8);
+  ob[OBJ_HEAD - 2] = (U8)hc;
+  const char* why = xll_headers(ox, &ob[0], n, 0, &x, OBJ_HEAD, &ob[0], true);
   if (why) return why;
   if ((size_t)ox.data_start != hdr.size()) return "a damaged record";
+  memcpy(&hdr[0], &ob[0], hdr.size());
   if ((why = xll_supported(ox))) return why;
   Layout fl;
   layout_of(ox, fl);
@@ -1967,14 +2266,12 @@ static const char* join_obj(RecIn& in, const Xll& x, int n, const Layout* L, Sam
   sp.oval.resize((size_t)NS * W);
   for (int t = 0; t < NS; t++)
     for (int w = 0; w < W; w++) sp.oval[(size_t)L->perm[w] * NS + t] = wv[(size_t)t * W + w];
-  sp.ores.init(ox.nframesamples, ox.nch);
-  sp.olsb.init(ox.nframesamples, ox.nch);
-  if (!xll_encode_samples(ox, sp.ock, &sp.oval[0], sp.oex, sp.ores, sp.olsb, sp.tmp))
-    return "prefix.x.wav samples the DTS:X object data can't code";
+  BandData msb;
+  if (!xll_msb(ox, sp.ock, &sp.oval[0], sp.oex, msb, sp.olsb)) return "prefix.x.wav samples the DTS:X object data can't code";
+  if ((why = rc_join(ox, msb, hdr, n, 0, &x, OBJ_HEAD, ver))) return why;
+  xll_residuals(ox, msb, sp.ores, sp.tmp);
   BitWriter w;
-  w.reset();
-  w.bytes(&hdr[0], hdr.size());
-  if ((why = xll_write_data(ox, sp.ock, sp.ores, sp.olsb, w))) return why;
+  if ((why = navi_join(ox, sp.ock, sp.ores, sp.olsb, hdr, n, 0, &x, OBJ_HEAD, ver, w))) return why;
   w.bytes(tail.empty() ? (const U8*)"" : &tail[0], tail.size());
   if (w.v.size() != (size_t)n || w.nacc) return "DTS:X object data of another size";
   out.insert(out.end(), w.v.begin(), w.v.end());
@@ -1993,9 +2290,10 @@ static const char* join_x(RecIn& in, const Layout* L, Samples& smp, std::vector<
   Xll& x = sp.x;
   std::vector<U8> fb(fsize + PAD, 0);  // the header, as the frame's start: what xll_headers reads it from
   memcpy(&fb[0], &hdr[0], hdr.size());
-  const char* why = xll_headers(x, &fb[0], (int)fsize, one2one);
+  const char* why = xll_headers(x, &fb[0], (int)fsize, one2one, 0, 0, &fb[0], true);
   if (why) return why;
   if ((size_t)x.data_start != hdr.size() || (U64)x.frame_size != fsize) return "a damaged record";
+  memcpy(&hdr[0], &fb[0], hdr.size());
   if ((why = xll_supported(x))) return why;
   Layout fl;
   layout_of(x, fl);
@@ -2019,7 +2317,7 @@ static const char* join_x(RecIn& in, const Layout* L, Samples& smp, std::vector<
     sp.obj = nx && ver >= 4 ? in.u8() : 0;
     if (in.bad || sp.obj > 1) return "a damaged record";
     if (sp.obj) {
-      if ((why = join_obj(in, x, (int)nx, OL, osmp, sp, tail))) return why;
+      if ((why = join_obj(in, x, (int)nx, OL, osmp, sp, tail, ver))) return why;
     } else {
       tail.resize(hl + nx);
       if (nx) xs->bytes(&tail[hl], nx);
@@ -2044,15 +2342,15 @@ static const char* join_x(RecIn& in, const Layout* L, Samples& smp, std::vector<
   sp.val.resize((size_t)NS * W);
   for (int n = 0; n < NS; n++)
     for (int w = 0; w < W; w++) sp.val[(size_t)L->perm[w] * NS + n] = wv[(size_t)n * W + w];
-  sp.res.init(x.nframesamples, x.nch);
-  sp.lsb.init(x.nframesamples, x.nch);
-  if (!xll_encode_samples(x, sp.ck, &sp.val[0], sp.ex, sp.res, sp.lsb, sp.tmp)) return "WAV samples the XLL frame can't code";
+  BandData msb;
+  if (!xll_msb(x, sp.ck, &sp.val[0], sp.ex, msb, sp.lsb)) return "WAV samples the XLL frame can't code";
+  if ((why = rc_join(x, msb, hdr, (int)fsize, one2one, 0, 0, ver))) return why;
+  xll_residuals(x, msb, sp.res, sp.tmp);
   BitWriter w;
-  w.reset();
-  w.bytes(&hdr[0], hdr.size());
-  if ((why = xll_write_data(x, sp.ck, sp.res, sp.lsb, w))) return why;
+  if ((why = navi_join(x, sp.ck, sp.res, sp.lsb, hdr, (int)fsize, one2one, 0, 0, ver, w))) return why;
   w.bytes(&tail[0], tail.size());
   if (w.v.size() != fsize || w.nacc) return "an XLL frame of another size";
+  if (ver >= 5 && !pre.empty()) exss_fields(&pre[0], pre.size(), (int)(pre.size() + fsize + post.size()), 0);
   out.clear();
   out.insert(out.end(), pre.begin(), pre.end());
   out.insert(out.end(), w.v.begin(), w.v.end());
@@ -2121,7 +2419,8 @@ struct FileOut {
 };
 
 static const U8 MAGIC[8] = {'D', 'T', 'S', 'S', 'P', 'L', 'I', 'T'};
-enum { VERSION = 4 };  // (the join reads 3 too, without prefix.x.wav, and 2, without prefix.dtsx)
+enum { VERSION = 5 };  // (the join reads 4 too, with the headers as they are, 3, without prefix.x.wav,
+                       // and 2, without prefix.dtsx)
 
 static std::string wav_name(const std::string& prefix, int w) {
   if (!w) return prefix + ".wav";
@@ -2450,7 +2749,7 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
   U8 h[9];
   in.bytes(h, 9);
   if (in.bad || memcmp(h, MAGIC, 8)) die(EX_DATA, "%s: not a dtssplit meta file", mname.c_str());
-  if (h[8] != VERSION && h[8] != 3 && h[8] != 2)
+  if (h[8] < 2 || h[8] > VERSION)
     die(EX_DATA, "%s: format version %d, which this dtssplit (version %d) doesn't read", mname.c_str(), h[8], VERSION);
   // (the DTS:X object data, where there is the file: a stream without has none; a version 2 meta file
   // keeps it in its records)
