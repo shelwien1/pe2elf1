@@ -50,14 +50,16 @@
 // goes to prefix.dtsx as it is, frame after frame. The join takes prefix.x.wav and prefix.dtsx only
 // where the meta file says there is object data.
 //
-// The meta file: "DTSSPLIT", a version byte (7; the join reads 6, with the XLL frame sizes, 5, with
-// the code widths as they are, 4, with the headers as they are, 3, the format before prefix.x.wav,
-// and 2, the format before prefix.dtsx, too), then records, each a tag byte and its fields (numbers
-// as LEB128 varints, signed ones zigzagged). Its EXSS and XLL header bytes are the stream's but for
-// what the join computes again: their CRC-16s are 0s, and the EXSS frame size, the XLL frame size,
-// the NAVI tables' sizes and the reflection coefficients' codes are XORed with those the join will
-// compute (the frames' sizes, the bytes each segment's coding takes, and rc_predict()'s codes from
-// the WAV's samples), so that they are mostly 0s too; so are the segments' Rice and binary code
+// The meta file: "DTSSPLIT", a version byte (8; the join reads 7, with the channel set header sizes
+// and the reflection coefficients' codes XORed, 6, with the XLL frame sizes, 5, with the code widths
+// as they are, 4, with the headers as they are, 3, the format before prefix.x.wav, and 2, the format
+// before prefix.dtsx, too), then records, each a tag byte and its fields (numbers as LEB128 varints,
+// signed ones zigzagged). Its EXSS and XLL header bytes are the stream's but for what the join
+// computes again: their CRC-16s are 0s, and the EXSS frame size, the XLL frame size, the channel set
+// header sizes and the NAVI tables' sizes are XORed with those the join will compute (the frames'
+// sizes, the bytes the headers' fields take and those each segment's coding takes), the reflection
+// coefficients' codes kept as their table indexes' difference from rc_predict()'s (from the WAV's
+// samples), so that they are mostly 0s too; so are the segments' Rice and binary code
 // widths, XORed with those their residuals give (ck_xor()), and the EXSS header's fields that hold
 // the XLL frame's size or the DTS:X object data's offset or size, less those (an F record says
 // where they are). The join computes the XLL frame's size and the object data's from their parts:
@@ -881,6 +883,7 @@ struct Chset {  // a channel set: its sub-header, and the coding parameters as t
 };
 
 struct Xll {
+  int csoff[XCS], csnat[XCS];  // each channel set header's offset, and the size its fields take (with the CRC)
   int hsize, frame_size, nchsets, nsegs, nseg_log2, nsegsamples, nframesamples, seg_nbits, band_crc, scalable,
       chmask_nbits, fixed_lsb, nbands;
   int nch;  // all channel sets'
@@ -926,7 +929,7 @@ static bool crc_here(Xll& x, const U8* p, U8* fix, int a, int b) {
 // CRC-16s are written rather than checked (the meta file keeps them as 0s); lax: a reflection
 // coefficient's code out of range taken as 0 (the meta file keeps the codes against rc_predict()'s)
 static const char* xll_headers(Xll& x, const U8* p, int n, int one2one, const Xll* base = 0, int off0 = 0,
-                               U8* fix = 0, bool lax = false, bool nofs = false) {
+                               U8* fix = 0, bool lax = false, bool nofs = false, bool hsx = false) {
   BitReader r;
   r.init(p, 0, (U64)n * 8);
   x.ncrc = 0;
@@ -977,8 +980,9 @@ static const char* xll_headers(Xll& x, const U8* p, int n, int one2one, const Xl
     Chset& s = x.cs[c];
     memset(&s, 0, sizeof s);
     r.init(p, (U64)off * 8, (U64)n * 8);
-    const int hs = r.get(10) + 1;
-    if (off + hs > n || hs < 3 || !crc_here(x, p, fix, off, off + hs)) return "a channel set header whose CRC fails";
+    int hs = r.get(10) + 1;  // (hsx: the join's, XORed with the size its fields take, put back below)
+    if (!hsx && (off + hs > n || hs < 3 || !crc_here(x, p, fix, off, off + hs)))
+      return "a channel set header whose CRC fails";
     s.nch = r.get(4) + 1;
     s.resenc = r.get(s.nch);
     s.pcm_res = r.get(5) + 1;
@@ -1066,6 +1070,14 @@ static const char* xll_headers(Xll& x, const U8* p, int n, int one2one, const Xl
       }
       if ((b == 0 && x.scalable) || (b && r.get(1)))
         for (int ch = 0; ch < s.nch; ch++) d.adj[ch] = r.get(4);
+    }
+    x.csoff[c] = off;
+    x.csnat[c] = (int)((r.pos - (U64)off * 8 + 7) >> 3) + 2;
+    if (hsx) {
+      if (!fix || r.over || x.csnat[c] > 1024) return "a damaged channel set header";
+      hs = ((hs - 1) ^ (x.csnat[c] - 1)) + 1;
+      bits_xor(fix, off * 8, 10, (U32)(x.csnat[c] - 1));
+      if (off + hs > n || hs < 3 || !crc_here(x, p, fix, off, off + hs)) return "a channel set header whose CRC fails";
     }
     if (r.over || r.pos > (U64)(off + hs - 2) * 8) return "a channel set header too short";
     s.nabits = s.storage_res > 16 ? 5 : s.storage_res > 8 ? 4 : 3;
@@ -1639,9 +1651,11 @@ static void rc_predict(const S32* bb, int N, int o, int* code) {
   }
 }
 
-// the reflection coefficients' codes in the header h (x's) XORed with rc_predict()'s from the
-// decorrelated MSB signals msb (xll_msb()'s), as the meta file keeps them (and back)
-static void rc_xor(U8* h, const Xll& x, const BandData& msb) {
+// The reflection coefficients' codes in the header h (x's) against rc_predict()'s from the
+// decorrelated MSB signals msb (xll_msb()'s), as the meta file keeps them (dir 1) and back (-1): the
+// difference of their table indexes, zigzagged (as 8 bits: from version 8), or (dir 0) XORed with
+// them (versions 5 to 7)
+static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir) {
   int code[XORD];
   for (int b = 0; b < x.nbands; b++)
     for (int c = 0; c < x.nchsets; c++) {
@@ -1651,7 +1665,16 @@ static void rc_xor(U8* h, const Xll& x, const BandData& msb) {
       for (int ch = 0; ch < s.nch; ch++) {
         if (!d.aorder[ch]) continue;
         rc_predict(msb.at(b, x.chofs[c] + ch), x.nframesamples, d.aorder[ch], code);
-        for (int j = 0; j < d.aorder[ch]; j++) bits_xor(h, d.rcat[ch] + 8 * j, 8, (U32)code[j]);
+        for (int j = 0; j < d.aorder[ch]; j++) {
+          const int at = d.rcat[ch] + 8 * j;
+          const U32 v = bits_at(h, at, 8);
+          U32 nv = v ^ (U32)code[j];
+          if (dir) {
+            const int q = unzig(v) + (dir > 0 ? -unzig((U32)code[j]) : unzig((U32)code[j]));
+            nv = zig((S32)(S8)(U8)q);  // (within -128..127, as 8 bits wrap)
+          }
+          bits_xor(h, at, 8, v ^ nv);
+        }
       }
     }
 }
@@ -1756,7 +1779,8 @@ static inline bool wr_rice1(BitWriter& w, S32 v, int k, U64 lim) {
 }
 
 // x's band data from its residuals and LSBs, coded as ck says; 0 or why it can't be. With pred, each
-// segment at the size its coding takes (navi_size()), those sizes into pred, none past nmax bytes
+// segment at the size its coding takes (navi_size()), those sizes into pred, all of them within nmax
+// bytes (w empty at first)
 static const char* xll_write_data(Xll& x, const std::vector<Chunk>& ck, const BandData& res, const BandData& lsb,
                                   BitWriter& w, std::vector<int>* pred = 0, int nmax = 0) {
   const int S = x.nsegsamples;
@@ -1770,7 +1794,8 @@ static const char* xll_write_data(Xll& x, const std::vector<Chunk>& ck, const Ba
         const Band& d = s.band[b];
         const Chunk& k = ck[ci];
         const U64 start = w.bits();
-        U64 cend = start + (U64)(pred ? nmax : x.navi[ci]) * 8;
+        U64 cend = pred ? (U64)nmax * 8 : start + (U64)x.navi[ci] * 8;
+        if (!pred && (U64)x.navi[ci] < (U64)d.lsb_size) return "a segment smaller than its LSB part";
         U64 lstart = pred ? cend : cend - (U64)d.lsb_size * 8;
         if (seg) w.put(k.reuse, 1);
         if (!k.reuse) {
@@ -2203,7 +2228,8 @@ static void xf_apply(const Split& sp, std::vector<U8>& pre, int fs, int nx, int 
 static void put_hdr(Rec& o, const U8* p, const Xll& x, const std::vector<Chunk>& ck, const BandData* msb, int fs = 0) {
   std::vector<U8> h(p, p + x.data_start);
   if (fs) fs_xor(&h[0], fs);
-  if (msb) rc_xor(&h[0], x, *msb);
+  for (int c = 0; c < x.nchsets; c++) bits_xor(&h[0], x.csoff[c] * 8, 10, (U32)(x.csnat[c] - 1) & 1023);
+  if (msb) rc_xor(&h[0], x, *msb, 1);
   for (int i = 0; i < x.ncrc; i++) h[x.crcat[i]] = h[x.crcat[i] + 1] = 0;
   std::vector<int> pred(x.navi.size(), 0);
   for (size_t i = 0; i < pred.size(); i++) {
@@ -2306,7 +2332,7 @@ static const char* const WHY_DTSX = "the DTS:X object data ends early";
 // before 5), x the header's again (n, one2one, base, off0: xll_headers()'s)
 static const char* rc_join(Xll& x, const BandData& msb, std::vector<U8>& hdr, int n, int one2one, const Xll* base,
                            int off0, int ver) {
-  if (ver >= 5) rc_xor(&hdr[0], x, msb);
+  if (ver >= 5) rc_xor(&hdr[0], x, msb, ver >= 8 ? -1 : 0);
   std::vector<U8> fb((size_t)n + PAD, 0);
   memcpy(&fb[0], &hdr[0], hdr.size());
   const char* why = xll_headers(x, &fb[0], n, one2one, base, off0, &fb[0], false, ver >= 7 && !base);
@@ -2379,7 +2405,7 @@ static const char* join_obj(RecIn& in, const Xll& x, int n, const Layout* L, Sam
   const U16 hc = crc16(&ob[0], OBJ_HEAD - 3);
   ob[OBJ_HEAD - 3] = (U8)(hc >> 8);
   ob[OBJ_HEAD - 2] = (U8)hc;
-  const char* why = xll_headers(ox, &ob[0], n, 0, &x, OBJ_HEAD, &ob[0], true);
+  const char* why = xll_headers(ox, &ob[0], n, 0, &x, OBJ_HEAD, &ob[0], true, false, ver >= 8);
   if (why) return why;
   if ((size_t)ox.data_start != hdr.size()) return "a damaged record";
   memcpy(&hdr[0], &ob[0], hdr.size());
@@ -2448,7 +2474,7 @@ static const char* join_x(RecIn& in, const Layout* L, Samples& smp, std::vector<
   Xll& x = sp.x;
   std::vector<U8> fb(fsize + PAD, 0);  // the header, as the frame's start: what xll_headers reads it from
   memcpy(&fb[0], &hdr[0], hdr.size());
-  const char* why = xll_headers(x, &fb[0], (int)fsize, one2one, 0, 0, &fb[0], true, ver >= 7);
+  const char* why = xll_headers(x, &fb[0], (int)fsize, one2one, 0, 0, &fb[0], true, ver >= 7, ver >= 8);
   if (why) return why;
   if ((size_t)x.data_start != hdr.size() || (U64)x.frame_size != fsize) return "a damaged record";
   memcpy(&hdr[0], &fb[0], hdr.size());
@@ -2607,9 +2633,9 @@ struct FileOut {
 };
 
 static const U8 MAGIC[8] = {'D', 'T', 'S', 'S', 'P', 'L', 'I', 'T'};
-enum { VERSION = 7 };  // (the join reads 6 too, with the frame sizes, 5, with the code widths as they
-                       // are, 4, with the headers as they are, 3, without prefix.x.wav, and 2, without
-                       // prefix.dtsx)
+enum { VERSION = 8 };  // (the join reads 7 too, with the channel set header sizes, 6, with the frame
+                       // sizes, 5, with the code widths as they are, 4, with the headers as they are, 3,
+                       // without prefix.x.wav, and 2, without prefix.dtsx)
 
 static std::string wav_name(const std::string& prefix, int w) {
   if (!w) return prefix + ".wav";
