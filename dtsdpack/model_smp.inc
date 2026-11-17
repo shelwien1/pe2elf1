@@ -313,7 +313,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // (and each one's half a step up, rounded: a DTS:X stream's encoder rounded its LFE values up, to
   // the integer at or above, so that their prediction, the nearest, was half a step low: the third
   // fit's 50% of its loud LFE values, half a step up 81%)
-  U32 lfh[12];              // how often each one's prediction was the value (halved as they grow)
+  U32 lfh[24];              // how often each one's prediction was the value (halved as they grow)
   U32 lfw[10], lfwn;        // (the first five's since the last refit, and the values)
   // (and since format 123 the same by the class of the best's prediction, its sign and how many
   // steps it is from 0, under 4, 16, 32 or more: lfc, 16 a value, halved at LFC_N values of the
@@ -322,8 +322,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // Cymatics stream's fits err by sign and size differently: its best was the value 85.2% of the
   // time, the classes' 88.6%; `Master Audio 7.1.dts`'s 89.2% and 89.3%, the others' the same)
   static constexpr int LFC_N = 32, LSW_N = 256, LSW_M = 4;
-  U32 lfc[8][12], lfcn[8];
+  U32 lfc[8][24], lfcn[8];
   U32 lsw[2], lswn;
+  // (and since format 127 each of the twelve again, less its error as a linear function of it, a +
+  // b x / 64 in steps, for each sign of it (lfl, a and b in 2^-16): least mean squares, normalized,
+  // learning at 1/LFL_R from the values within 2 steps of it; the 24 taken as the twelve were,
+  // those as they are first. The Cymatics stream's fits err by sign and size: their values are a
+  // little more than 0.7% bigger than the predictions, those near 0 a sixth of a step less)
+  static constexpr int LFL_R = 32, LFE_NC = 24;
+  S64 lfl[2][12][2];
   // X96's, where the frame has it and the WAV is at twice the core's rate: each bound channel's
   // 64-band analysis by block of the frame, and the core's decoded samples (X96's residuals are the
   // one less the other: model_x96.inc)
@@ -4585,7 +4592,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (lfh[j] > lfh[k]) k = j;
     if (lfh[4] > lfh[k]) k = 4;
     if (lfh[5] > lfh[k]) k = 5;
-    for (int j = 6; j < 12; j++)
+    for (int j = 6; j < LFE_NC; j++)
       if (lfh[j] > lfh[k]) k = j;
     return k;
   }
@@ -4621,13 +4628,22 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
               p5 = lfe_fixed(i, true), p6 = lfit4[lfe_pl[i]].predict(lfe_f3[i]);
     const S64 pk[6] = {p1, p2, p3, p4, p5, p6};
     const int lb = lfe_best();
-    const S64 pg = pk[lb % 6] + (lb >= 6 ? lfe_half() : 0), ag = pg < 0 ? -pg : pg;
+    const S64 pg = pk[lb % 6] + (lb % 12 >= 6 ? lfe_half() : 0), ag = pg < 0 ? -pg : pg;
     const int cx = 2 * (ag < 4 * lfe_st ? 0 : ag < 16 * lfe_st ? 1 : ag < 32 * lfe_st ? 2 : 3) + (pg < 0);
+    S64 pc[LFE_NC], lu[12], lc[12];  // (the twelve, and less their error's fit; each x / 64 and the fit's
+    for (int k = 0; k < 12; k++) {    // value, in 2^-16 of a step)
+      pc[k] = pk[k % 6] + (k >= 6 ? lfe_half() : 0);
+      lu[k] = lfe_st > 0 ? (S64)((S128)pc[k] * 1024 / lfe_st) : 0;
+      lu[k] = lu[k] > 1 << 20 ? 1 << 20 : lu[k] < -(1 << 20) ? -(1 << 20) : lu[k];
+      const S64* const w = lfl[pc[k] < 0][k];
+      lc[k] = w[0] + w[1] * lu[k] / 65536;
+      pc[12 + k] = pc[k] - (S64)((S128)lc[k] * lfe_st / 65536);
+    }
     int kc = lb;  // (the class's best, the best where none is better there)
-    for (int k = 0; k < 12; k++)
+    for (int k = 0; k < LFE_NC; k++)
       if (lfc[cx][k] > lfc[cx][kc]) kc = k;
     const int kk = lsw[1] > lsw[0] + LSW_M ? kc : lb;
-    lfe_p[i] = pk[kk % 6] + (kk >= 6 ? lfe_half() : 0);
+    lfe_p[i] = pc[kk];
     const S64 qp = requant(lfe_p[i], lfe_st << 6, -128, 127, &dist, &alt);
     M_smp_v D;
     D.ab = 27;
@@ -4660,24 +4676,31 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     {  // (whether each prediction's index was the value)
       S128 dd;
       S64 al;
-      U32 hk[12];
-      for (int k = 0; k < 6; k++) {
-        const U32 h = requant(pk[k], lfe_st << 6, -128, 127, &dd, &al) == v;
-        const U32 h2 = requant(pk[k] + lfe_half(), lfe_st << 6, -128, 127, &dd, &al) == v;
-        lfh[k] += h;
-        lfh[6 + k] += h2;
-        hk[k] = h, hk[6 + k] = h2;
-        if (k < 5) lfw[k] += h, lfw[5 + k] += h2;
+      U32 hk[LFE_NC];
+      for (int k = 0; k < LFE_NC; k++) {
+        hk[k] = requant(pc[k], lfe_st << 6, -128, 127, &dd, &al) == v;
+        lfh[k] += hk[k];
       }
+      for (int k = 0; k < 5; k++) lfw[k] += hk[k], lfw[5 + k] += hk[6 + k];
       lfwn++;
-      if (lfh[0] + lfh[1] + lfh[2] + lfh[3] >= 4u << 11 ||  // (by the first four's sum, as before the fifth;
-          lfh[6] + lfh[7] + lfh[8] + lfh[9] >= 4u << 11)    // or theirs half a step up)
-        for (int k = 0; k < 12; k++) lfh[k] >>= 1;
-      for (int k = 0; k < 12; k++) lfc[cx][k] += hk[k] << 4;
+      bool hv = false;  // (by the first four's sums, as before the fifth; or theirs half a step up, or
+      for (int g = 0; g < LFE_NC; g += 6)  // less their error's fit)
+        hv |= lfh[g] + lfh[g + 1] + lfh[g + 2] + lfh[g + 3] >= 4u << 11;
+      if (hv)
+        for (int k = 0; k < LFE_NC; k++) lfh[k] >>= 1;
+      for (int k = 0; k < LFE_NC; k++) lfc[cx][k] += hk[k] << 4;
       if (++lfcn[cx] >= LFC_N) {
-        for (int k = 0; k < 12; k++) lfc[cx][k] >>= 1;
+        for (int k = 0; k < LFE_NC; k++) lfc[cx][k] >>= 1;
         lfcn[cx] >>= 1;
       }
+      if (lfe_st > 0)
+        for (int k = 0; k < 12; k++) {
+          const S128 d = (S128)pc[k] - (S128)v * lfe_st;
+          if ((d < 0 ? -d : d) >= 2 * (S128)lfe_st) continue;
+          S64* const w = lfl[pc[k] < 0][k];
+          const S64 er = (S64)(d * 65536 / lfe_st) - lc[k], nm = 65536 + lu[k] * lu[k] / 65536;
+          w[0] += er * 65536 / nm / LFL_R, w[1] += er * lu[k] / nm / LFL_R;
+        }
       lsw[0] += hk[lb], lsw[1] += hk[kc];
       if (++lswn >= LSW_N) lsw[0] >>= 1, lsw[1] >>= 1, lswn >>= 1;
     }
