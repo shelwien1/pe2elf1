@@ -50,8 +50,9 @@
 // goes to prefix.dtsx as it is, frame after frame. The join takes prefix.x.wav and prefix.dtsx only
 // where the meta file says there is object data.
 //
-// The meta file: "DTSSPLIT", a version byte (10; the join reads 9, with the reflection
-// coefficients' predictions the nearest of the table's entries, 8, with the prediction orders as
+// The meta file: "DTSSPLIT", a version byte (11; the join reads 10, with hybrid Rice codes' isolated
+// samples kept as they are, 9, with the reflection coefficients' predictions the nearest of the
+// table's entries, 8, with the prediction orders as
 // they are, 7, with the channel set header sizes and the reflection coefficients' codes XORed, 6,
 // with the XLL frame sizes, 5, with the code widths as they are, 4, with the headers as they are,
 // 3, the format before prefix.x.wav, and 2, the format before prefix.dtsx, too), then records, each
@@ -905,6 +906,7 @@ struct Chunk {
   U8 reuse, seg_common;
   U8 rice[XCH], hyb[XCH], aux_code[XCH], a_code[XCH], b_code[XCH];
   std::vector<U16> iso[XCH];  // per channel, where hybrid Rice codes put their isolated samples
+  U8 isopred[XCH] = {};       // (from version 11) the isolated samples are those ck_xor()'s rule says
   U8 g1, g2;                  // the bits after the MSB part and after the LSB part: 0 zeros, 1 as kept
   U32 g1n, g2n;
   U32 mbits;                  // the MSB part's bits (the split's)
@@ -1976,59 +1978,123 @@ static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir, bool fl) {
     }
 }
 
+enum { VERSION = 11 };  // (the join reads 10 too, with the isolated samples kept, 9, with
+                        // rc_code()'s nearest entries, 8, with the prediction orders as they are, 7,
+                        // with the channel set header sizes, 6, with the frame sizes, 5, with the code
+                        // widths as they are, 4, with the headers as they are, 3, without
+                        // prefix.x.wav, and 2, without prefix.dtsx)
+
 // The segments' code widths (a_code, b_code) XORed with those their residuals res say, as the meta
-// file keeps them (and back): a Rice code's, floor(log2) of the mean of the zigzagged residuals it
+// file keeps them (join: back): a Rice code's, floor(log2) of the mean of the zigzagged residuals it
 // codes (a hybrid Rice code's but for its isolated samples); a binary code's the least that holds
 // them. The encoders' rule, it seems: 99.2% of the Rice widths of s.2.dts and of the Cymatics stream
 // past a segment's first residuals (those before the prediction's order), 98-99% of the first
-// ones' (96% in master_audio_7.1_24bit.dts), and all but a few binary widths
-static void ck_xor(const Xll& x, std::vector<Chunk>& ck, const BandData& res) {
+// ones' (96% in master_audio_7.1_24bit.dts), and all but a few binary widths. From version 11
+// (ver) a hybrid Rice code's isolated samples are those whose Rice code, (z >> k) + 1 + k bits,
+// would be longer than theirs, aux bits and the position's nseg_log2 (all of those of the Cymatics
+// stream and master_audio_7.1_24bit.dts): where they are so (isopred), the meta file keeps none of
+// them, and the join puts them back here, after the widths. Their width aux is XORed with that of the
+// largest residual (99.2%), and the Rice width with that of the residuals but those a first guess
+// would isolate (k the floor of the log2 of the mean of them all): it needs no isolated samples.
+static int iso_rule(const S32* e, int n, int k, int aux, int lg, std::vector<U16>& iso) {
+  iso.clear();
+  for (int j = 0; j < n; j++)
+    if ((U64)(zig(e[j]) >> k) + 1 + (U64)k > (U64)aux + (U64)lg) iso.push_back((U16)j);
+  return (int)iso.size();
+}
+static void ck_xor(const Xll& x, std::vector<Chunk>& ck, const BandData& res, int ver, bool join) {
   const int S = x.nsegsamples;
+  std::vector<U16> rule;
   for (int b = 0; b < x.nbands; b++)
-    for (int seg = 0; seg < x.nsegs; seg++)
-      for (int c = 0; c < x.nchsets; c++) {
-        const Chset& s = x.cs[c];
-        if (s.nbands <= b) continue;
-        const Band& d = s.band[b];
+    for (int c = 0; c < x.nchsets; c++) {
+      const Chset& s = x.cs[c];
+      if (s.nbands <= b) continue;
+      const Band& d = s.band[b];
+      int rice[XCH] = {0}, kb[XCH] = {0}, aux[XCH] = {0};  // (the last chunk's not reused: the widths)
+      for (int seg = 0; seg < x.nsegs; seg++) {
         Chunk& k = ck[((size_t)b * x.nsegs + seg) * x.nchsets + c];
-        if (k.reuse) continue;
-        const int np = k.seg_common ? 1 : s.nch, top = (1 << s.nabits) - 1;
-        for (int i = 0; i < np; i++)
-          for (int part = seg ? 1 : 0; part < 2; part++) {  // (0 the residuals before the order, 1 the rest)
-            U64 sum = 0, n = 0;
-            U32 mx = 0;
-            for (int ch = 0; ch < s.nch; ch++) {
-              if (!k.seg_common && ch != i) continue;
-              const int na = seg ? 0 : k.seg_common ? d.highest : d.aorder[ch];
-              const S32* e = res.at(b, x.chofs[c] + ch) + (size_t)seg * S;
-              U8 iso[XSEG];
-              memset(iso, 0, sizeof iso);
-              if (part && k.rice[i] && k.hyb[i])
-                for (size_t j = 0; j < k.iso[ch].size(); j++)
-                  if (k.iso[ch][j] < XSEG) iso[k.iso[ch][j]] = 1;
-              const int j0 = part ? na : 0, j1 = part ? S : na < S ? na : S;
-              for (int j = j0; j < j1; j++) {
-                if (part && iso[j - na]) continue;
-                const U32 u = zig(e[j]);
-                sum += u, n++;
-                if (u > mx) mx = u;
-              }
-            }
-            int pred;
-            if (k.rice[i]) {
-              const U64 mean = n ? sum / n : 0;
-              pred = 0;
-              while (mean >> (pred + 1)) pred++;
-            } else {
+        if (!k.reuse) {
+          const int np = k.seg_common ? 1 : s.nch, top = (1 << s.nabits) - 1;
+          for (int i = 0; i < np; i++) {
+            const bool hy = k.rice[i] && k.hyb[i] && !k.seg_common, h11 = hy && ver >= 11;
+            int ax = 0;
+            if (h11) {  // (the isolated samples' width: the largest residual's)
+              const int na = seg ? 0 : d.aorder[i];
+              const S32* e = res.at(b, x.chofs[c] + i) + (size_t)seg * S;
+              U32 mx = 0;
+              for (int j = na; j < S; j++)
+                if (zig(e[j]) > mx) mx = zig(e[j]);
               int w = 0;
               while (w < 32 && (mx >> w)) w++;
-              pred = w >= 2 ? w - 1 : w;
+              int pa = w ? w - 1 : 0;
+              if (pa > top) pa = top;
+              ax = (join ? k.aux_code[i] ^ pa : k.aux_code[i]) + 1;
+              k.aux_code[i] ^= (U8)pa;
             }
-            if (pred > top) pred = top;
-            if (part) k.b_code[i] ^= (U8)pred;
-            else k.a_code[i] ^= (U8)pred;
+            for (int part = seg ? 1 : 0; part < 2; part++) {  // (0 the residuals before the order, 1 the rest)
+              U64 sum = 0, n = 0;
+              U32 mx = 0;
+              for (int ch = 0; ch < s.nch; ch++) {
+                if (!k.seg_common && ch != i) continue;
+                const int na = seg ? 0 : k.seg_common ? d.highest : d.aorder[ch];
+                const S32* e = res.at(b, x.chofs[c] + ch) + (size_t)seg * S;
+                U8 iso[XSEG];
+                memset(iso, 0, sizeof iso);
+                const int j0 = part ? na : 0, j1 = part ? S : na < S ? na : S;
+                if (part && h11) {  // (the first guess's isolated samples)
+                  U64 s0 = 0;
+                  for (int j = j0; j < j1; j++) s0 += zig(e[j]);
+                  const U64 m0 = j1 > j0 ? s0 / (U64)(j1 - j0) : 0;
+                  int k0 = 0;
+                  while (m0 >> (k0 + 1)) k0++;
+                  iso_rule(e + j0, j1 - j0, k0, ax, x.nseg_log2, rule);
+                  for (size_t j = 0; j < rule.size(); j++) iso[rule[j]] = 1;
+                } else if (part && hy) {
+                  for (size_t j = 0; j < k.iso[ch].size(); j++)
+                    if (k.iso[ch][j] < XSEG) iso[k.iso[ch][j]] = 1;
+                }
+                for (int j = j0; j < j1; j++) {
+                  if (part && iso[j - na]) continue;
+                  const U32 u = zig(e[j]);
+                  sum += u, n++;
+                  if (u > mx) mx = u;
+                }
+              }
+              int pred;
+              if (k.rice[i]) {
+                const U64 mean = n ? sum / n : 0;
+                pred = 0;
+                while (mean >> (pred + 1)) pred++;
+              } else {
+                int w = 0;
+                while (w < 32 && (mx >> w)) w++;
+                pred = w >= 2 ? w - 1 : w;
+              }
+              if (pred > top) pred = top;
+              if (part) {
+                kb[i] = join ? k.b_code[i] ^ pred : k.b_code[i];
+                k.b_code[i] ^= (U8)pred;
+              } else {
+                k.a_code[i] ^= (U8)pred;
+              }
+            }
+            rice[i] = k.rice[i];
+            aux[i] = h11 ? ax : 0;
+          }
+        }
+        if (ver >= 11)  // (where the isolated samples are those the rule says)
+          for (int ch = 0; ch < s.nch; ch++) {
+            if (k.seg_common || !rice[ch] || !aux[ch]) continue;
+            const int na = seg ? 0 : d.aorder[ch];
+            iso_rule(res.at(b, x.chofs[c] + ch) + (size_t)seg * S + na, S - na, kb[ch], aux[ch], x.nseg_log2, rule);
+            if (join) {
+              if (k.isopred[ch]) k.iso[ch] = rule;
+            } else {
+              k.isopred[ch] = k.iso[ch] == rule;
+            }
           }
       }
+    }
 }
 
 // A segment's size as the NAVI table would have it from its MSB part's bits (mbits), the bits kept
@@ -2322,9 +2388,10 @@ static void put_chunk(Rec& o, Xll& x, int b, int seg, int c, const Chunk& k) {
   }
   for (int ch = 0; ch < s.nch; ch++) {
     const int i = s.seg_common ? 0 : ch;
-    if (s.rice[i] && s.aux[i]) {
-      o.uv(k.iso[ch].size());
-      for (size_t j = 0; j < k.iso[ch].size(); j++) o.uv(k.iso[ch][j]);
+    if (s.rice[i] && s.aux[i]) {  // (0 where they are those ck_xor()'s rule says, else their count and 1)
+      o.uv(k.isopred[ch] ? 0 : k.iso[ch].size() + 1);
+      if (!k.isopred[ch])
+        for (size_t j = 0; j < k.iso[ch].size(); j++) o.uv(k.iso[ch][j]);
     }
   }
   if (seg == 0 && b == 1) {
@@ -2336,7 +2403,7 @@ static void put_chunk(Rec& o, Xll& x, int b, int seg, int c, const Chunk& k) {
   if (k.g2) o.blob(&k.g2b[0], k.g2b.size()), o.uv(k.g2n);
 }
 
-static bool get_chunk(RecIn& in, Xll& x, int b, int seg, int c, Chunk& k) {
+static bool get_chunk(RecIn& in, Xll& x, int b, int seg, int c, Chunk& k, int ver) {
   Chset& s = x.cs[c];
   const int f = in.u8();
   if (f >> 4 || (seg == 0 && (f & 1))) return false;
@@ -2364,8 +2431,16 @@ static bool get_chunk(RecIn& in, Xll& x, int b, int seg, int c, Chunk& k) {
   for (int ch = 0; ch < s.nch; ch++) {
     const int i = s.seg_common ? 0 : ch;
     k.iso[ch].clear();
+    k.isopred[ch] = 0;
     if (s.rice[i] && s.aux[i]) {
-      const U64 n = in.uv();
+      U64 n = in.uv();
+      if (ver >= 11) {
+        if (!n) {
+          k.isopred[ch] = 1;
+          continue;
+        }
+        n--;
+      }
       if (n >> x.nseg_log2) return false;
       k.iso[ch].resize(n);
       for (U64 j = 0; j < n; j++) k.iso[ch][j] = (U16)in.uv();
@@ -2607,7 +2682,7 @@ static void put_obj(Rec& o, const Split& sp, const U8* ob, int n, const std::vec
   ac.np = 0;
   put_hdr(o, ob, x, sp.ock, m ? &msb : 0, 0, &ac, XCS);
   std::vector<Chunk> kx = sp.ock;  // (the code widths against the residuals')
-  ck_xor(x, kx, sp.ores);
+  ck_xor(x, kx, sp.ores, VERSION, false);
   for (int b = 0; b < x.nbands; b++)
     for (int seg = 0; seg < x.nsegs; seg++) put_chunk(o, x, b, seg, 0, kx[(size_t)b * x.nsegs + seg]);
   {  // (the bytes after its band data: 0, where they are opad_std()'s 0s, else their count and 1, and them)
@@ -2651,7 +2726,7 @@ static void put_x(Rec& o, int wi, const U8* e, int n, int xoff, const U8* xf, in
     put_hdr(o, xf, x, sp.ck, m ? &msb : 0, x.frame_size, &ac, 0);
   }
   std::vector<Chunk> kx = sp.ck;  // (the code widths against the residuals')
-  ck_xor(x, kx, sp.res);
+  ck_xor(x, kx, sp.res, VERSION, false);
   for (int b = 0; b < x.nbands; b++)
     for (int seg = 0; seg < x.nsegs; seg++)
       for (int c = 0; c < x.nchsets; c++)
@@ -2790,7 +2865,7 @@ static const char* join_obj(RecIn& in, const Xll& x, int n, const Layout* L, Sam
   sp.ock.assign((size_t)ox.nbands * ox.nsegs, Chunk());
   for (int b = 0; b < ox.nbands; b++)
     for (int seg = 0; seg < ox.nsegs; seg++)
-      if (!get_chunk(in, ox, b, seg, 0, sp.ock[(size_t)b * ox.nsegs + seg])) return "a damaged record";
+      if (!get_chunk(in, ox, b, seg, 0, sp.ock[(size_t)b * ox.nsegs + seg], ver)) return "a damaged record";
   bool pstd = false;  // (version 7: the 0s after the band data as opad_std() has them)
   if (ver >= 7) {
     const U64 pc = in.uv();
@@ -2829,7 +2904,7 @@ static const char* join_obj(RecIn& in, const Xll& x, int n, const Layout* L, Sam
   if (!xll_msb(ox, sp.ock, &sp.oval[0], sp.oex, msb, sp.olsb)) return "prefix.x.wav samples the DTS:X object data can't code";
   if ((why = rc_join(ox, msb, hdr, n, 0, &x, OBJ_HEAD, ver))) return why;
   xll_residuals(ox, msb, sp.ores, sp.tmp);
-  if (ver >= 6) ck_xor(ox, sp.ock, sp.ores);
+  if (ver >= 6) ck_xor(ox, sp.ock, sp.ores, ver, true);
   BitWriter w;
   if ((why = navi_join(ox, sp.ock, sp.ores, sp.olsb, hdr, n, 0, &x, OBJ_HEAD, ver, w))) return why;
   if (pstd) tail.assign(opad_std((int)w.v.size()), 0);
@@ -2878,7 +2953,7 @@ static const char* join_x(RecIn& in, const Layout* L, Samples& smp, std::vector<
   for (int b = 0; b < x.nbands; b++)
     for (int seg = 0; seg < x.nsegs; seg++)
       for (int c = 0; c < x.nchsets; c++)
-        if (x.cs[c].nbands > b && !get_chunk(in, x, b, seg, c, sp.ck[((size_t)b * x.nsegs + seg) * x.nchsets + c]))
+        if (x.cs[c].nbands > b && !get_chunk(in, x, b, seg, c, sp.ck[((size_t)b * x.nsegs + seg) * x.nchsets + c], ver))
           return "a damaged record";
   FrameEnd fe = {false, 0, 0, 0};
   if (!xs) {
@@ -2951,7 +3026,7 @@ static const char* join_x(RecIn& in, const Layout* L, Samples& smp, std::vector<
   if (!xll_msb(x, sp.ck, &sp.val[0], sp.ex, msb, sp.lsb)) return "WAV samples the XLL frame can't code";
   if ((why = rc_join(x, msb, hdr, (int)fsize, one2one, 0, 0, ver))) return why;
   xll_residuals(x, msb, sp.res, sp.tmp);
-  if (ver >= 6) ck_xor(x, sp.ck, sp.res);
+  if (ver >= 6) ck_xor(x, sp.ck, sp.res, ver, true);
   BitWriter w;
   if ((why = navi_join(x, sp.ck, sp.res, sp.lsb, hdr, (int)fsize, one2one, 0, 0, ver, w, ver >= 7 && xs ? &fe : 0)))
     return why;
@@ -3031,11 +3106,6 @@ struct FileOut {
 };
 
 static const U8 MAGIC[8] = {'D', 'T', 'S', 'S', 'P', 'L', 'I', 'T'};
-enum { VERSION = 10 };  // (the join reads 9 too, with rc_code()'s nearest entries, 8, with the
-                        // prediction orders as they are, 7, with the channel set header sizes, 6,
-                        // with the frame sizes, 5, with the code widths as they are, 4, with the
-                        // headers as they are, 3, without prefix.x.wav, and 2, without prefix.dtsx)
-
 static std::string wav_name(const std::string& prefix, int w) {
   if (!w) return prefix + ".wav";
   char b[32];
