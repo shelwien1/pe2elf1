@@ -50,16 +50,8 @@
 // goes to prefix.dtsx as it is, frame after frame. The join takes prefix.x.wav and prefix.dtsx only
 // where the meta file says there is object data.
 //
-// The meta file: "DTSSPLIT", a version byte (17; the join reads 16, with the prediction orders as
-// their difference, 15, with its sections one stream, 14, with the reflection coefficients' and the
-// prediction orders' autocorrelation in integers, 13, with ao_pred()'s 18 candidates and counts
-// that don't decay, 12, with the prediction orders and the code widths XORed with their
-// predictions, 11, with the XLL headers' sizes, 10, with hybrid Rice codes' isolated samples kept
-// as they are, 9, with the reflection coefficients' predictions the nearest of the table's entries,
-// 8, with the prediction orders as they are, 7, with the channel set header sizes and the
-// reflection coefficients' codes XORed, 6, with the XLL frame sizes, 5, with the code widths as
-// they are, 4, with the headers as they are, 3, the format before prefix.x.wav, and 2, the format
-// before prefix.dtsx, too), then records, each a tag byte and its fields (numbers as LEB128
+// The meta file: "DTSSPLIT", a version byte (VERSION's; the join reads the earlier ones too, back
+// to 2, as VERSION's note says), then records, each a tag byte and its fields (numbers as LEB128
 // varints, signed ones zigzagged). Its EXSS and XLL header bytes are the stream's but for what the
 // join computes again: their CRC-16s are 0s, and the EXSS frame size, the XLL frame size, the
 // channel set header sizes and the NAVI tables' sizes are XORed with those the join will compute
@@ -2670,8 +2662,10 @@ static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir, bool fl, b
     }
 }
 
-enum { VERSION = 20 };  // (the join reads 19 too, with the coding parameters as bytes, 18, with the
-                        // headers as their bytes, 17, with the ranks
+enum { VERSION = 21 };  // (the join reads 20 too, with the common flags as they are, format 17's
+                        // Rice and hybrid rules and the Rice widths by one rule, 19, with the
+                        // coding parameters as bytes, 18, with
+                        // the headers as their bytes, 17, with the ranks
                         // and the pairs' flags in the headers, 16, with the orders as their
                         // difference, 15, with its
                         // sections one stream, 14, with the autocorrelation in integers, 13, with
@@ -2695,6 +2689,13 @@ enum { VERSION = 20 };  // (the join reads 19 too, with the coding parameters as
 // them, and the join puts them back here, after the widths. Their width aux is against that of the
 // largest residual (99.2%), and the Rice width against that of the residuals but those a first guess
 // would isolate (k the floor of the log2 of the mean of them all): it needs no isolated samples.
+// From version 21 the width of a Rice code of the residuals before the order (the samples
+// themselves) is by the mean of 2|r| - 1, 0s as 0 (their sum less the count of the positive ones):
+// the Cymatics stream's misses there 3066 -> 987, s2_mid.dts's 8 -> 0; past them a second rule, by
+// their sum less half the count of the positive and 0 ones (a hybrid code's: less the positive
+// ones'), is the context of the widths where it differs (the misses it would make 3751 of the
+// first rule's 5257 there in the Cymatics stream; the misses are where the mean is just past a
+// power of 2, more of them the smaller it is, as if the encoders' sum were a little smaller).
 static int iso_rule(const S32* e, int n, int k, int aux, int lg, std::vector<U16>& iso) {
   iso.clear();
   for (int j = 0; j < n; j++)
@@ -2760,7 +2761,7 @@ static void ck_xor(const Xll& x, std::vector<Chunk>& ck, const BandData& res, in
               if (hc && !join) hc->wcode(akey, s.nabits, k.aux_code[i], true, 0x3FF);
             }
             for (int part = seg ? 1 : 0; part < 2; part++) {  // (0 the residuals before the order, 1 the rest)
-              U64 sum = 0, n = 0;
+              U64 sum = 0, n = 0, npos = 0, nzero = 0;  // (npos, nzero: from version 21, the second rule's)
               U32 mx = 0;
               uu.clear();
               for (int ch = 0; ch < s.nch; ch++) {
@@ -2786,15 +2787,26 @@ static void ck_xor(const Xll& x, std::vector<Chunk>& ck, const BandData& res, in
                   if (part && iso[j - na]) continue;
                   const U32 u = zig(e[j]);
                   sum += u, n++;
+                  npos += u && !(u & 1), nzero += !u;
                   if (hc) uu.push_back(u);
                   if (u > mx) mx = u;
                 }
               }
-              int pred;
+              int pred, alt = -1;  // (alt: from version 21, a second rule's, for the context)
               if (k.rice[i]) {
-                const U64 mean = n ? sum / n : 0;
+                // (from version 21 the residuals before the order as 2|r| - 1, but 0s as 0: their sum
+                // less the positive ones' count; past them a second rule, their sum less half the
+                // positive and 0 ones' count, a hybrid code's less the positive ones', for the context)
+                const bool fw = ver >= 21;
+                const U64 sp = fw && !part ? sum - npos : sum, mean = n ? sp / n : 0;
                 pred = 0;
                 while (mean >> (pred + 1)) pred++;
+                if (fw && part) {
+                  const U64 ds = hy ? npos : (npos + nzero) / 2, sa = sum > ds ? sum - ds : 0, ma = n ? sa / n : 0;
+                  alt = 0;
+                  while (ma >> (alt + 1)) alt++;
+                  if (alt > top) alt = top;
+                }
               } else {
                 int w = 0;
                 while (w < 32 && (mx >> w)) w++;
@@ -2805,7 +2817,8 @@ static void ck_xor(const Xll& x, std::vector<Chunk>& ck, const BandData& res, in
               U32 wm = 0;
               const U32 wkey = (U32)HL_WID << 16 | (U32)(c & 15) << 12 | (U32)((b & 3) << 2 | part) << 8 | (U32)i;
               if (hc) {  // (from version 20 range-coded, by the rule's margins)
-                wm = (U32)part | (U32)(k.rice[i] ? 1 : 0) << 1 | (k.rice[i] ? w_margin(uu, pred, top) : 10u | 10u << 4) << 2;
+                wm = (U32)part | (U32)(k.rice[i] ? 1 : 0) << 1 | (k.rice[i] ? w_margin(uu, pred, top) : 10u | 10u << 4) << 2 |
+                     (U32)(alt >= 0 && alt != pred) << 10;
                 if (join) f = (U8)hc->wcode(wkey, s.nabits, 0, false, wm);
               }
               const int act = !join ? f : dif ? (int)dif_back(f, (U32)pred, s.nabits) : f ^ pred;
@@ -3119,14 +3132,59 @@ static inline bool get_layout(RecIn& in, Layout& L) {
 // stream's first 60 MB, 99.1% of master_audio_7.1_24bit.dts's); hybrid, of a set's own, where the
 // isolated samples iso_rule() would take at that width save bits, counting their count and width
 // (864 of the former's 1152 hybrid codes, and 41 that aren't; 567 of the latter's 586, and none
-// that aren't). (Whether the parameters are common to the set's channels follows no rule as well:
-// its flag is as it is.) The join takes these parameters after the residuals, as the flags say
-// which follow; those of a set of two bands before them, as before version 17: the band filter
-// needs band 1's history.
+// that aren't). From version 21 (f21) a binary code's bits are those of its true width (a width of
+// 1 takes 2), a Rice code of a channel's own pays its hybrid flag, ties go to the binary code
+// (the Rice flags' misses on the Cymatics stream 272 -> 210, master_audio_7.1_24bit.dts's 174 ->
+// 12), and a hybrid code's bits are hyb_bits()', at the width of the residuals but those a first
+// guess would isolate (the hybrid flags' misses 1630 -> 784 and 19 -> 2). The join takes these
+// parameters after the residuals, as the flags say which follow; those of a set of two bands
+// before them, as before version 17: the band filter needs band 1's history.
 struct FpSet {
   int rice, hyb;
 };
-static void fp_set(const Xll& x, const BandData& res, int b, int c, int seg, int i, bool common, FpSet& o) {
+// (from version 21) a binary code's width for residuals whose largest is w bits (zigzagged): the
+// code's field holds the width less 1 (0: no bits), so a width of 1 takes 2; at most top + 1
+static int lin_width(int w, int top) {
+  int p = w >= 2 ? w - 1 : w;
+  if (p > top) p = top;
+  return p ? p + 1 : 0;
+}
+// (from version 21) a hybrid Rice code's bits for a channel's residuals e[0..n), as ck_xor()'s rule
+// codes them: its width that of the residuals but those a first guess would isolate, its isolated
+// samples iso_rule()'s at that width (each aux + lg bits, aux the largest's width), and their count
+static U64 hyb_bits(const S32* e, int n, int lg, int top) {
+  if (n <= 0) return (U64)lg;
+  U32 mx = 0;
+  U64 sum = 0;
+  for (int j = 0; j < n; j++) {
+    const U32 z = zig(e[j]);
+    sum += z;
+    if (z > mx) mx = z;
+  }
+  int w = 0;
+  while (w < 32 && (mx >> w)) w++;
+  const U64 aux = (U64)(w ? (w - 1 > top ? top + 1 : w) : 1), cap = aux + (U64)lg;
+  const U64 m0 = sum / (U64)n;
+  int k0 = 0;
+  while (m0 >> (k0 + 1)) k0++;
+  U64 s2 = 0, n2 = 0;
+  for (int j = 0; j < n; j++) {
+    const U32 z = zig(e[j]);
+    if ((U64)(z >> k0) + 1 + (U64)k0 <= cap) s2 += z, n2++;
+  }
+  const U64 m = n2 ? s2 / n2 : 0;
+  int k = 0;
+  while (m >> (k + 1)) k++;
+  if (k > top) k = top;
+  U64 t = (U64)lg;
+  for (int j = 0; j < n; j++) {
+    const U64 rb = (U64)(zig(e[j]) >> k) + 1 + (U64)k;
+    t += rb < cap ? rb : cap;
+  }
+  return t;
+}
+static void fp_set(const Xll& x, const BandData& res, int b, int c, int seg, int i, bool common, FpSet& o,
+                   bool f21) {
   const int S = x.nsegsamples;
   const Chset& s = x.cs[c];
   const Band& d = s.band[b];
@@ -3166,12 +3224,79 @@ static void fp_set(const Xll& x, const BandData& res, int b, int c, int seg, int
       for (int j = na; j < S; j++) t1 += zig(e[j]) >> kr;
   }
   const U64 rb = t1 + n * one;
+  if (f21) {  // (a binary code's true width; a Rice code of its own pays its hybrid flag; ties binary)
+    const int top = (1 << s.nabits) - 1;
+    o.rice = rb + (own ? 1 : 0) < n * (U64)(bw >= 2 ? bw : bw ? 2 : 0);
+    o.hyb = 0;
+    if (o.rice && own) {
+      const int na = seg ? 0 : d.aorder[i] < S ? d.aorder[i] : S;
+      o.hyb = (U64)s.nabits + hyb_bits(res.at(b, x.chofs[c] + i) + (size_t)seg * S + na, S - na, (int)lg, top) < rb;
+    }
+    return;
+  }
   o.rice = rb <= n * (U64)bw;
   o.hyb = 0;
   if (o.rice && own) {
     const U64 hb = lg + (U64)s.nabits + (aux + lg > one ? t2 + n * one : n * (aux + lg));
     o.hyb = hb < rb;
   }
+}
+// (from version 21) the bits of a part of nc channels' residuals, es[ch][j0..j1), under one code:
+// binary (rice 0) of the largest's width, or Rice at ck_xor()'s width, floor(log2) of their mean
+static U64 part_bits(const S32* const* es, int nc, int j0, int j1, int rice, int top) {
+  if (j1 <= j0) return 0;
+  U64 sum = 0;
+  U32 mx = 0;
+  for (int ch = 0; ch < nc; ch++)
+    for (int j = j0; j < j1; j++) {
+      const U32 z = zig(es[ch][j]);
+      sum += z;
+      if (z > mx) mx = z;
+    }
+  const U64 n = (U64)nc * (U64)(j1 - j0);
+  if (!rice) {
+    int w = 0;
+    while (w < 32 && (mx >> w)) w++;
+    return n * (U64)lin_width(w, top);
+  }
+  const U64 m = sum / n;
+  int k = 0;
+  while (m >> (k + 1)) k++;
+  if (k > top) k = top;
+  U64 t = n * (U64)(1 + k);
+  for (int ch = 0; ch < nc; ch++)
+    for (int j = j0; j < j1; j++) t += zig(es[ch][j]) >> k;
+  return t;
+}
+// From version 21 whether a segment's parameters are common to its channels is kept against the
+// encoders' choice, it seems: common where the segment takes fewer bits so, its parameters and its
+// residuals by fp_set()'s codes at ck_xor()'s widths, than with each channel's own (ties their own;
+// 99.8% of the Cymatics stream's segments). cm_rule(): that choice, and (mg) a bucket of how many
+// bits it is by: 0 more than 32, 1 more than 8, 2 more than 2, 3 1-2, 4 none.
+static int cm_rule(const Xll& x, const BandData& res, int b, int c, int seg, U32* mg) {
+  const int S = x.nsegsamples, lg = x.nseg_log2;
+  const Chset& s = x.cs[c];
+  const Band& d = s.band[b];
+  const int top = (1 << s.nabits) - 1, nab = s.nabits;
+  const S32* es[XCH];
+  U64 own = 0;
+  for (int ch = 0; ch < s.nch; ch++) {
+    es[ch] = res.at(b, x.chofs[c] + ch) + (size_t)seg * S;
+    const int na = seg ? 0 : d.aorder[ch] < S ? d.aorder[ch] : S;
+    FpSet fp = {0, 0};
+    fp_set(x, res, b, c, seg, ch, false, fp, true);
+    own += 1 + (U64)(fp.rice ? 1 : 0) + (U64)(fp.hyb ? nab : 0) + (U64)(seg ? 0 : nab) + (U64)nab;
+    own += part_bits(&es[ch], 1, 0, na, fp.rice, top);
+    own += fp.hyb ? hyb_bits(es[ch] + na, S - na, lg, top) : part_bits(&es[ch], 1, na, S, fp.rice, top);
+  }
+  FpSet fc = {0, 0};
+  fp_set(x, res, b, c, seg, 0, true, fc, true);
+  const int nc = seg ? 0 : d.highest < S ? d.highest : S;
+  const U64 com = 1 + (U64)(seg ? 0 : nab) + (U64)nab + part_bits(es, s.nch, 0, nc, fc.rice, top) +
+                  part_bits(es, s.nch, nc, S, fc.rice, top);
+  const U64 g = com < own ? own - com : com - own;
+  *mg = g > 32 ? 0 : g > 8 ? 1 : g > 2 ? 2 : g ? 3 : 4;
+  return com < own;
 }
 // (into o[q[0]], o[q[1]] and o[q[2]] the segment's flags, code widths, and isolated samples and the
 // rest: from version 16 sections of their own, MS_PAR's or MS_OPAR's; res: the residuals, the flags
@@ -3181,15 +3306,17 @@ static void put_chunk(Rec* o, const int* q, Xll& x, int b, int seg, int c, const
   Chset& s = x.cs[c];
   Rec &fl = o[q[0]], &wd = o[q[1]], &is = o[q[2]];
   const U32 kb = (U32)HL_CHK << 16 | (U32)(c & 15) << 12 | (U32)((b & 3) << 1 | (seg ? 1 : 0)) << 8;  // (hc: from version 20)
-  const U32 f0 = (U32)(k.reuse | (k.reuse ? 0 : k.seg_common << 1) | k.g1 << 2 | k.g2 << 3);
-  if (hc) hc->code(kb, 4, f0, true);
+  U32 mg = 0;  // (from version 21 the common flag against cm_rule()'s, in the context of its margin)
+  const int pc = hc && res ? cm_rule(x, *res, b, c, seg, &mg) : 0;
+  const U32 f0 = (U32)(k.reuse | (k.reuse ? 0 : (k.seg_common ^ pc) << 1) | k.g1 << 2 | k.g2 << 3);
+  if (hc) hc->code(kb | (mg ? 0x80 | mg : 0), 4, f0, true);
   else fl.u8((int)f0);
   if (!k.reuse) {
     s.seg_common = k.seg_common;
     const int np = s.seg_common ? 1 : s.nch;
     for (int i = 0; i < np; i++) {
       FpSet fp = {0, 0};
-      if (res) fp_set(x, *res, b, c, seg, i, s.seg_common, fp);
+      if (res) fp_set(x, *res, b, c, seg, i, s.seg_common, fp, hc != 0);
       const U32 f1 = (U32)((k.rice[i] ^ fp.rice) | (k.hyb[i] ^ fp.hyb) << 1);
       if (hc) {  // (from version 20 the widths are ck_xor()'s to code)
         hc->code(kb | (U32)(1 + i), 2, f1, true);
@@ -3227,17 +3354,20 @@ static bool get_chunk(MetaIn& m, const int* q, Xll& x, int b, int seg, int c, Ch
   Chset& s = x.cs[c];
   RecIn &fl = *m.s[q[0]], &wd = *m.s[q[1]], &is = *m.s[q[2]];
   const U32 kb = (U32)HL_CHK << 16 | (U32)(c & 15) << 12 | (U32)((b & 3) << 1 | (seg ? 1 : 0)) << 8;  // (hc: from version 20)
-  const int f = hc ? (int)hc->code(kb, 4, 0, false) : fl.u8();
+  U32 mg = 0;
+  const bool f21 = hc && ver >= 21;
+  const int pc = f21 && res ? cm_rule(x, *res, b, c, seg, &mg) : 0;
+  const int f = hc ? (int)hc->code(kb | (mg ? 0x80 | mg : 0), 4, 0, false) : fl.u8();
   if (f >> 4 || (seg == 0 && (f & 1))) return false;
   k.reuse = f & 1;
   k.g1 = f >> 2 & 1;
   k.g2 = f >> 3 & 1;
   if (!k.reuse) {
-    s.seg_common = k.seg_common = f >> 1 & 1;
+    s.seg_common = k.seg_common = (f >> 1 & 1) ^ pc;
     const int np = s.seg_common ? 1 : s.nch;
     for (int i = 0; i < np; i++) {
       FpSet fp = {0, 0};
-      if (res) fp_set(x, *res, b, c, seg, i, s.seg_common, fp);
+      if (res) fp_set(x, *res, b, c, seg, i, s.seg_common, fp, f21);
       const int v = hc ? (int)hc->code(kb | (U32)(1 + i), 2, 0, false) : fl.u8();
       k.rice[i] = (v & 1) ^ fp.rice;
       k.hyb[i] = (v >> 1 & 1) ^ fp.hyb;
