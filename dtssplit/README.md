@@ -86,10 +86,19 @@ the prediction residuals with Rice, hybrid Rice and binary codes, segment by seg
   segment's coding takes. The reflection coefficients' codes (the prediction's) are kept as the
   difference of their table indexes from those an analysis of the WAV's samples gives
   (`rc_predict()`: their autocorrelation under Hann's window, Levinson's recursion in single
-  precision, each coefficient the nearest of the table, from the second on 121 at most; a miss is
-  mostly by one, which the difference keeps small where XOR, as format 7 has it, didn't). That
-  analysis is the DTS:X encoder's, it seems: 95% of the codes of `Nigel_Stanford_Cymatics_DTS-X.dts`
-  come out the same (the codes were about two thirds of what its XLL headers took with xz). It runs
+  precision, each coefficient's size quantized, from the second on to 121 at most; a miss is mostly
+  by one, which the difference keeps small where XOR, as format 7 has it, didn't). The table's
+  entries are tanh((i + 1/2)/32), and the encoders' code is floor(32 atanh(|k|)), the last i whose
+  tanh(i/32) the size reaches, not the nearest entry (format 10). That analysis is the encoders',
+  it seems: all the codes of `3-1.dts` come out the same, 99.9% of those of the first channel sets
+  of `Nigel_Stanford_Cymatics_DTS-X.dts` and `master_audio_7.1_24bit.dts` (98.5% and 98.2% with the
+  nearest entries), 98.8% of those of `s.2.dts`. The Cymatics stream's second set and object audio
+  come to 92.5% and 93.5% (of its first 60 MB; the codes were about two thirds of what its XLL
+  headers took with xz): the second set's misses mostly where the first coefficient is all but -1,
+  where single precision falls apart, the object audio's anywhere; the analysis in double precision,
+  with exact sums, by Schur's recursion, with other orders of the operations, from other parts of
+  the samples, R(0) raised or a lag window misses more of them. Format 10 takes the meta file of
+  `s.2.dts` from 89028 bytes with xz to 78872, the Cymatics stream's from 427644 to 392200. It runs
   in integers but for the recursion, whose single precision operations are each rounded where they
   are (no fused or wider arithmetic), so the split and the join compute the same codes on any
   machine. With the bytes they are XORed with mostly 0s, the meta file is no smaller, but it
@@ -251,9 +260,10 @@ the Cymatics stream, `xll_71_24_48_768_0`) with `c -v` and 600 damaged split fil
 `xll_51_16_192_768_1` with its two bands, `xll_xch_61_24_48_768`): the same, and so did 800 more
 with format 6's code widths, 800 with format 7's computed sizes (`s2_mid.dts`, 3 MB of
 `s.2.dts`, for `xll_xch_61_24_48_768`), 800 with format 8's (`master_audio_7.1_24bit.dts` for
-`s2_mid.dts`) and 800 with format 9's (`s2_mid.dts` again for `master_audio_7.1_24bit.dts`).
-Builds with `-O0`, `-O2` and `-O3 -march=native -ffp-contract=fast` (fused multiply-adds) write the
-same meta files, and each joins the others'.
+`s2_mid.dts`), 800 with format 9's (`s2_mid.dts` again for `master_audio_7.1_24bit.dts`) and 800
+with format 10's (`master_audio_7.1_24bit.dts` and `3-1.dts` for `xll_51_16_192_768_1` and
+`s2_mid.dts`). Builds with `-O0`, `-O2` and `-O3 -march=native -ffp-contract=fast` (fused
+multiply-adds) write the same meta files, and each joins the others'.
 
 On `s.2.dts`, `c -v` takes 11.1 s and `d` 3.8 s (format 8: 8.4 s and 3.1 s; format 4: 5.6 s and
 2.0 s); on the Cymatics stream, `c -v` 29 s (format 8: 23 s).
@@ -267,18 +277,18 @@ For `s.2.dts`, with xz `-9e` and FLAC (ffmpeg, `-compression_level 12`):
 | `s.2.dts` | 130554771 | 100% |
 | `s.2.dts`, xz | 124891928 | 95.66% |
 | `s2.dtsc` (the core), xz | 44109856 | 33.79% |
-| `s2.meta`, xz | 89028 | 0.07% |
+| `s2.meta`, xz | 78872 | 0.06% |
 | `s2.wav`, FLAC | 78014446 | 59.76% |
-| the three | 122213330 | 93.61% |
+| the three | 122203174 | 93.60% |
 
 (The meta file's format 4 came to 1243884 bytes with xz, format 5's to 386896, format 6's to
-282692, format 7's to 204176, format 8's to 200204.)
+282692, format 7's to 204176, format 8's to 200204, format 9's to 89028.)
 
 The Cymatics stream's DTS:X object data, 96021900 bytes as it is, xz no smaller: as `prefix.x.wav`
 (188590184 bytes) through WavPack (ffmpeg, `-compression_level 3`), 92545003 bytes (FLAC
-`-compression_level 12`, 97067662), and 3.1 MB more of the meta file (9933209 bytes; with xz 427644,
+`-compression_level 12`, 97067662), and 3.1 MB more of the meta file (9933209 bytes; with xz 392200,
 where format 3's was 2665280 without them, format 4's 4104040 with them, format 5's 1446656, format
-6's 1054156, format 7's 722100 and format 8's 678020). Of its 4 channels, two follow the other two's
+6's 1054156, format 7's 722100, format 8's 678020 and format 9's 427644). Of its 4 channels, two follow the other two's
 pair closely (correlation 1.00), and the second pair the WAV's back surrounds (0.70 and 0.77; a
 linear fit of the WAV's channels leaves 40% and 50% of their energy), which a compressor that sees
 both WAVs can use.
@@ -387,7 +397,7 @@ codeword, of 64 the encoder keeps, is nearest the LPC of the subframe and the 4 
 the VQ vector the best of a group of 32 that a learned score picks),
 how it decimated the LFE, and how its bit allocations follow one table of the subbands' energies
 (a transient's from the transient on) at the level its rate control sets, filling its frames; the
-core takes 95344 bytes (0.19%).
+core takes 76413 bytes (0.15%).
 
 That doesn't help dtssplit as it is. There the audio isn't stored: the WAV holds the residual,
 which is the audio less the core's decode, and the core is what predicts the audio. It helps a
@@ -395,10 +405,10 @@ compressor that stores the audio and derives the core from it:
 
 | `s.2.dts` | Bytes | |
 |---|---:|---:|
-| the core (xz), the residual (FLAC), the meta file (xz) | 122213330 | 93.61% |
+| the core (xz), the residual (FLAC), the meta file (xz) | 122203174 | 93.60% |
 | the same, the core by a model of its fields (78.8%) | about 118.7 MB | 90.9% |
 | the audio (FLAC), the core given the audio, the meta file | about 110.4 MB | 84.5% |
-| the audio (FLAC), the core by dtsdpack, the meta file (xz) | 107165850 | 82.08% |
+| the audio (FLAC), the core by dtsdpack, the meta file (xz) | 107155658 | 82.08% |
 
 The audio costs 29 MB more than the residual (106981478 against 78014446 bytes with FLAC), but
 the core costs 37-42 MB less. In such a compressor:
@@ -438,22 +448,22 @@ show. `s.2.dts` takes 13 s.
 
 ## The meta file's format
 
-`DTSSPLIT`, a version byte (9; `d` reads 8 too, which keeps the pairwise decorrelation's channel
-order and coefficients and the prediction orders as they are, 7, which keeps the channel set
-sub-header sizes as they are and the reflection coefficients' codes XORed with `rc_predict()`'s, 6,
-which keeps the XLL frame sizes, 5, which keeps the code widths as they are, 4, which keeps the EXSS
-and XLL headers as they are, 3, whose `X` records keep all DTS:X object data in `prefix.dtsx` and
-whose `Z` record ends with its size, and 2, whose `X` records keep the XLL bytes after the band data
-whole and whose `Z` record ends after the WAVs), then records. Each record is a tag byte and its
-fields; numbers are LEB128 varints, signed ones zigzagged. The EXSS and XLL header bytes are as the
-stream has them but for their CRC-16s (0s), the EXSS and XLL frame sizes (XORed with the frames',
-less 1), the channel set sub-headers' sizes (XORed with those their fields take, less 1), the
-pairwise decorrelation's channel order and coefficients (XORed with `dc_order()`'s and
-`dc_code()`'s) and the prediction orders (XORed with `ao_pred()`'s) of a set of one band, the NAVI
-tables' sizes (XORed with those the segments' coding takes, less 1), the reflection coefficients'
-codes (their table indexes less `rc_predict()`'s, zigzagged, as 8 bits) and the EXSS fields an `F`
-record names (less the sizes they hold); the segments' Rice and binary code widths are XORed with
-`ck_xor()`'s.
+`DTSSPLIT`, a version byte (10; `d` reads 9 too, which keeps the reflection coefficients' codes
+against the nearest table entries, 8, which keeps the pairwise decorrelation's channel order and
+coefficients and the prediction orders as they are, 7, which keeps the channel set sub-header sizes
+as they are and the reflection coefficients' codes XORed with `rc_predict()`'s, 6, which keeps the
+XLL frame sizes, 5, which keeps the code widths as they are, 4, which keeps the EXSS and XLL headers
+as they are, 3, whose `X` records keep all DTS:X object data in `prefix.dtsx` and whose `Z` record
+ends with its size, and 2, whose `X` records keep the XLL bytes after the band data whole and whose
+`Z` record ends after the WAVs), then records. Each record is a tag byte and its fields; numbers are
+LEB128 varints, signed ones zigzagged. The EXSS and XLL header bytes are as the stream has them but
+for their CRC-16s (0s), the EXSS and XLL frame sizes (XORed with the frames', less 1), the channel
+set sub-headers' sizes (XORed with those their fields take, less 1), the pairwise decorrelation's
+channel order and coefficients (XORed with `dc_order()`'s and `dc_code()`'s) and the prediction
+orders (XORed with `ao_pred()`'s) of a set of one band, the NAVI tables' sizes (XORed with those the
+segments' coding takes, less 1), the reflection coefficients' codes (their table indexes less
+`rc_predict()`'s, zigzagged, as 8 bits) and the EXSS fields an `F` record names (less the sizes they
+hold); the segments' Rice and binary code widths are XORed with `ck_xor()`'s.
 
 | Record | Fields |
 |---|---|

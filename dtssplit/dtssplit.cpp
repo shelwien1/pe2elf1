@@ -50,7 +50,8 @@
 // goes to prefix.dtsx as it is, frame after frame. The join takes prefix.x.wav and prefix.dtsx only
 // where the meta file says there is object data.
 //
-// The meta file: "DTSSPLIT", a version byte (9; the join reads 8, with the prediction orders as
+// The meta file: "DTSSPLIT", a version byte (10; the join reads 9, with the reflection
+// coefficients' predictions the nearest of the table's entries, 8, with the prediction orders as
 // they are, 7, with the channel set header sizes and the reflection coefficients' codes XORed, 6,
 // with the XLL frame sizes, 5, with the code widths as they are, 4, with the headers as they are,
 // 3, the format before prefix.x.wav, and 2, the format before prefix.dtsx, too), then records, each
@@ -1656,14 +1657,57 @@ static double i128_double(__int128 v) {
   return neg ? -d : d;
 }
 
-// the code of reflection coefficient k: the nearest of RC_TAB (cap at most), zigzagged
-static int rc_code(float k, int cap) {
-  const double a = fabs((double)k) * 65536.0;
+// tanh(i/32), the bounds of the encoders' quantization of a reflection coefficient's size (RC_TAB's
+// entries are tanh((i + 1/2)/32) but the first, 0)
+static const double RC_THR[128] = {
+    0.0, 0.031239831446031256, 0.062418746747512514, 0.09347630396922774, 0.12435300177159621,
+    0.1549907303716235, 0.1853331999081395, 0.21532633966578324, 0.24491866240370913,
+    0.2740615889607664, 0.3027097293321085, 0.330821117493628, 0.35835739835078595,
+    0.3852839662694723, 0.41157005567402244, 0.43718878514171233, 0.46211715726000974,
+    0.48633601722496234, 0.5098299737352566, 0.5325872861719194, 0.5545997223493823,
+    0.5758623912857893, 0.5963735554792423, 0.6161344271055263, 0.6351489523872873,
+    0.6534235881413468, 0.6709670742068736, 0.6877902051090852, 0.703905603936621,
+    0.7193275010198336, 0.7340715196043415, 0.7481544703297354, 0.7615941559557649,
+    0.7744091874342136, 0.7866188121086977, 0.7982427545398869, 0.809301070201781,
+    0.8198140120760964, 0.8298019099859595, 0.8392850623555859, 0.8482836399575129,
+    0.8568176011108951, 0.8649066177207418, 0.8725700114960693, 0.8798266996519848,
+    0.8866951493840524, 0.8931933404003515, 0.8993387348050462, 0.9051482536448664,
+    0.9106382594546996, 0.9158245441687624, 0.9207223217980599, 0.925346225311741,
+    0.9297103071984135, 0.9338280432225917, 0.937712338930443, 0.9413755384972874,
+    0.9448294355464201, 0.9480852856044063, 0.9511538198917856, 0.9540452601799487,
+    0.9567693344747047, 0.9593352933146825, 0.9617519264982222, 0.9640275800758169,
+    0.966170173466547, 0.9681872165763705, 0.9700858268137, 0.971872745913509, 0.9735543564953897,
+    0.9751366982936284, 0.9766254840086112, 0.9780261147388136, 0.9793436949613896,
+    0.9805830470370519, 0.9817487252216389, 0.982845029172576, 0.9838760169434567,
+    0.9848455174642784, 0.9857571425085297, 0.9866142981514303, 0.9874201957262151,
+    0.9881778622875124, 0.9888901505926178, 0.9895597486128832, 0.990189188588556,
+    0.9907808556412516, 0.991336995958872, 0.9918597245682077, 0.9923510327107256,
+    0.9928127948371598, 0.993246775236521, 0.9936546343150297, 0.9940379345402902,
+    0.994398146065758, 0.9947366520502309, 0.9950547536867305, 0.9953536749547375,
+    0.9956345671093096, 0.9958985129201653, 0.996146530673345, 0.9963795779475947,
+    0.9965985551771295, 0.9968043090119653, 0.996997635486526, 0.997179283006764,
+    0.9973499551655737, 0.9975103133958233, 0.997660979469889, 0.9978025378541507,
+    0.9979355379264904, 0.9980604960644348, 0.9981778976111987, 0.9982881987265095,
+    0.9983918281287415, 0.998489188734541, 0.9985806592017988, 0.9986665953815128,
+    0.9987473316837812, 0.9988231823628861, 0.9988944427261528, 0.9989613902710102,
+    0.9990242857544355, 0.99908337419873, 0.9991388858373508, 0.9991910370043159,
+    0.9992400309704963, 0.9992860587299247
+};
+
+// the code of reflection coefficient k, zigzagged: the encoders', it seems (fl, from version 10),
+// floor(32 atanh(|k|)), that is, the last i with tanh(i/32) at most |k|; before, the nearest of
+// RC_TAB; cap at most
+static int rc_code(float k, int cap, bool fl) {
+  const double a = fabs((double)k);
   int best = 0;
-  double bd = fabs(a - RC_TAB[0]);
-  for (int i = 1; i < 128; i++) {
-    const double d = fabs(a - RC_TAB[i]);
-    if (d < bd) bd = d, best = i;
+  if (fl) {
+    while (best < 127 && RC_THR[best + 1] <= a) best++;
+  } else {
+    double bd = fabs(a * 65536.0 - RC_TAB[0]);
+    for (int i = 1; i < 128; i++) {
+      const double d = fabs(a * 65536.0 - RC_TAB[i]);
+      if (d < bd) bd = d, best = i;
+    }
   }
   if (best > cap) best = cap;
   return k < 0 && best ? 2 * best - 1 : 2 * best;
@@ -1671,10 +1715,10 @@ static int rc_code(float k, int cap) {
 
 // The codes of the o reflection coefficients the encoders' analysis gives the decorrelated MSB
 // signal bb (N samples): its autocorrelation under Hann's window (in integers, each sample to 31
-// bits), Levinson's recursion in single precision, each coefficient the nearest of RC_TAB, from
+// bits), Levinson's recursion in single precision, each coefficient's code rc_code()'s (fl), from
 // the second on 121 at most (the DTS:X encoder's: 95% of Nigel_Stanford_Cymatics_DTS-X.dts's codes
 // so); 0s where the recursion breaks down
-static void rc_predict(const S32* bb, int N, int o, int* code) {
+static void rc_predict(const S32* bb, int N, int o, int* code, bool fl) {
   for (int j = 0; j < o; j++) code[j] = 0;
   const std::vector<S32>& w = hann_q30(N);
   static std::vector<S64> xs;
@@ -1702,7 +1746,7 @@ static void rc_predict(const S32* bb, int N, int o, int* code) {
     float acc = R[j];
     for (int i = 1; i < j; i++) acc = f32add(acc, f32mul(a[i], R[j - i]));
     const float k = -f32div(acc, E);
-    code[j - 1] = rc_code(k, j > 1 ? 121 : 127);
+    code[j - 1] = rc_code(k, j > 1 ? 121 : 127, fl);
     for (int i = 1; i < j; i++) an[i] = f32add(a[i], f32mul(k, a[j - i]));
     for (int i = 1; i < j; i++) a[i] = an[i];
     a[j] = k;
@@ -1908,7 +1952,7 @@ static void ao_count(AoCtx& ac) {
 // decorrelated MSB signals msb (xll_msb()'s), as the meta file keeps them (dir 1) and back (-1): the
 // difference of their table indexes, zigzagged (as 8 bits: from version 8), or (dir 0) XORed with
 // them (versions 5 to 7)
-static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir) {
+static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir, bool fl) {
   int code[XORD];
   for (int b = 0; b < x.nbands; b++)
     for (int c = 0; c < x.nchsets; c++) {
@@ -1917,7 +1961,7 @@ static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir) {
       const Band& d = s.band[b];
       for (int ch = 0; ch < s.nch; ch++) {
         if (!d.aorder[ch]) continue;
-        rc_predict(msb.at(b, x.chofs[c] + ch), x.nframesamples, d.aorder[ch], code);
+        rc_predict(msb.at(b, x.chofs[c] + ch), x.nframesamples, d.aorder[ch], code, fl);
         for (int j = 0; j < d.aorder[ch]; j++) {
           const int at = d.rcat[ch] + 8 * j;
           const U32 v = bits_at(h, at, 8);
@@ -2536,7 +2580,7 @@ static void put_hdr(Rec& o, const U8* p, const Xll& x, const std::vector<Chunk>&
       for (int ch = 0; ch < s.nch; ch++) bits_xor(&h[0], s.band[0].aoat + 4 * ch, 4, (U32)pred[ch]);
     }
   for (int c = 0; c < x.nchsets; c++) bits_xor(&h[0], x.csoff[c] * 8, 10, (U32)(x.csnat[c] - 1) & 1023);
-  if (msb) rc_xor(&h[0], x, *msb, 1);
+  if (msb) rc_xor(&h[0], x, *msb, 1, true);
   for (int i = 0; i < x.ncrc; i++) h[x.crcat[i]] = h[x.crcat[i] + 1] = 0;
   std::vector<int> pred(x.navi.size(), 0);
   for (size_t i = 0; i < pred.size(); i++) {
@@ -2651,7 +2695,7 @@ static const char* const WHY_DTSX = "the DTS:X object data ends early";
 // before 5), x the header's again (n, one2one, base, off0: xll_headers()'s)
 static const char* rc_join(Xll& x, const BandData& msb, std::vector<U8>& hdr, int n, int one2one, const Xll* base,
                            int off0, int ver) {
-  if (ver >= 5) rc_xor(&hdr[0], x, msb, ver >= 8 ? -1 : 0);
+  if (ver >= 5) rc_xor(&hdr[0], x, msb, ver >= 8 ? -1 : 0, ver >= 10);
   std::vector<U8> fb((size_t)n + PAD, 0);
   memcpy(&fb[0], &hdr[0], hdr.size());
   const char* why = xll_headers(x, &fb[0], n, one2one, base, off0, &fb[0], false, ver >= 7 && !base);
@@ -2987,10 +3031,10 @@ struct FileOut {
 };
 
 static const U8 MAGIC[8] = {'D', 'T', 'S', 'S', 'P', 'L', 'I', 'T'};
-enum { VERSION = 9 };  // (the join reads 8 too, with the prediction orders as they are, 7, with the
-                       // channel set header sizes, 6, with the frame sizes, 5, with the code widths as
-                       // they are, 4, with the headers as they are, 3, without prefix.x.wav, and 2,
-                       // without prefix.dtsx)
+enum { VERSION = 10 };  // (the join reads 9 too, with rc_code()'s nearest entries, 8, with the
+                        // prediction orders as they are, 7, with the channel set header sizes, 6,
+                        // with the frame sizes, 5, with the code widths as they are, 4, with the
+                        // headers as they are, 3, without prefix.x.wav, and 2, without prefix.dtsx)
 
 static std::string wav_name(const std::string& prefix, int w) {
   if (!w) return prefix + ".wav";
