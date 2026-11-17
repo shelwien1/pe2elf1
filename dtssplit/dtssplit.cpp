@@ -50,29 +50,31 @@
 // goes to prefix.dtsx as it is, frame after frame. The join takes prefix.x.wav and prefix.dtsx only
 // where the meta file says there is object data.
 //
-// The meta file: "DTSSPLIT", a version byte (16; the join reads 15, with its sections one stream,
-// 14, with the reflection coefficients' and the prediction orders' autocorrelation in integers, 13,
-// with ao_pred()'s 18 candidates and counts that don't decay, 12, with the prediction orders and
-// the code widths XORed with their predictions, 11, with the XLL headers' sizes, 10, with hybrid
-// Rice codes' isolated samples kept as they are, 9, with the reflection coefficients' predictions
-// the nearest of the table's entries, 8, with the prediction orders as they are, 7, with the
-// channel set header sizes and the reflection coefficients' codes XORed, 6, with the XLL frame
-// sizes, 5, with the code widths as they are, 4, with the headers as they are, 3, the format before
-// prefix.x.wav, and 2, the format before prefix.dtsx, too), then records, each a tag byte and its
-// fields (numbers as LEB128 varints, signed ones zigzagged). Its EXSS and XLL header bytes are the
-// stream's but for what the join computes again: their CRC-16s are 0s, and the EXSS frame size, the
-// XLL frame size, the channel set header sizes and the NAVI tables' sizes are XORed with those the
-// join will compute (the frames' sizes, the bytes the headers' fields take and those each segment's
-// coding takes), the prediction orders of a set of one band kept as their difference from
-// ao_pred()'s (mod 16, zigzagged; from version 13) and the reflection coefficients' codes as their
-// table indexes' difference from rc_predict()'s (both from the WAV's samples, which the join reads
-// before the header), so that they are mostly 0s too; so are the segments' Rice and binary code
-// widths, kept as their difference from those their residuals give (ck_xor(); mod the field's size,
-// zigzagged, from version 13), and the EXSS header's fields that hold the XLL frame's size or the
-// DTS:X object data's offset or size, less those (an F record says where they are). The join
-// computes the XLL frame's size and the object data's from their parts: where the bytes after the
-// band data are 0s to the DWORD boundary, and those after the object data's band data 0s to the
-// boundary past 2 more bytes (opad_std()), the meta file keeps neither:
+// The meta file: "DTSSPLIT", a version byte (17; the join reads 16, with the prediction orders as
+// their difference, 15, with its sections one stream, 14, with the reflection coefficients' and the
+// prediction orders' autocorrelation in integers, 13, with ao_pred()'s 18 candidates and counts
+// that don't decay, 12, with the prediction orders and the code widths XORed with their
+// predictions, 11, with the XLL headers' sizes, 10, with hybrid Rice codes' isolated samples kept
+// as they are, 9, with the reflection coefficients' predictions the nearest of the table's entries,
+// 8, with the prediction orders as they are, 7, with the channel set header sizes and the
+// reflection coefficients' codes XORed, 6, with the XLL frame sizes, 5, with the code widths as
+// they are, 4, with the headers as they are, 3, the format before prefix.x.wav, and 2, the format
+// before prefix.dtsx, too), then records, each a tag byte and its fields (numbers as LEB128
+// varints, signed ones zigzagged). Its EXSS and XLL header bytes are the stream's but for what the
+// join computes again: their CRC-16s are 0s, and the EXSS frame size, the XLL frame size, the
+// channel set header sizes and the NAVI tables' sizes are XORed with those the join will compute
+// (the frames' sizes, the bytes the headers' fields take and those each segment's coding takes),
+// the prediction orders of a set of one band kept as their rank among the orders by ao_pred()'s
+// cost (from version 17; before, from version 13, as their difference from its order, mod 16,
+// zigzagged) and the reflection coefficients' codes as their table indexes' difference from
+// rc_predict()'s (both from the WAV's samples, which the join reads before the header), so that
+// they are mostly 0s too; so are the segments' Rice and binary code widths, kept as their
+// difference from those their residuals give (ck_xor(); mod the field's size, zigzagged, from
+// version 13), and the EXSS header's fields that hold the XLL frame's size or the DTS:X object
+// data's offset or size, less those (an F record says where they are). The join computes the XLL
+// frame's size and the object data's from their parts: where the bytes after the band data are 0s
+// to the DWORD boundary, and those after the object data's band data 0s to the boundary past 2 more
+// bytes (opad_std()), the meta file keeps neither:
 //   R n bytes          bytes that aren't a frame
 //   C n                a core frame: the next n bytes of prefix.dtsc
 //   E n bytes          an extension substream frame kept as bytes
@@ -290,9 +292,10 @@ struct BitWriter {
   void align() { put(0, (8 - nacc) & 7); }
 };
 
-// the signed value of a code's unsigned word, and back
-static inline S32 unzig(U32 u) { return u & 1 ? -(S32)(u >> 1) - 1 : (S32)(u >> 1); }
-static inline U32 zig(S32 v) { return v < 0 ? (((U32)(-(v + 1))) << 1) | 1 : (U32)v << 1; }
+// the signed value of a code's unsigned word, and back (without branches: to a branch predictor the
+// residuals' signs are noise)
+static inline S32 unzig(U32 u) { return (S32)((u >> 1) ^ (U32)-(S32)(u & 1)); }
+static inline U32 zig(S32 v) { return ((U32)v << 1) ^ (U32)-(S32)(v < 0); }
 // a bits-bit field v against its prediction p, as the meta file keeps it (from version 13): their
 // difference mod 2^bits, from -2^(bits-1), zigzagged; and v from that (dif_back())
 static inline U32 dif_of(U32 v, U32 p, int bits) {
@@ -326,14 +329,17 @@ struct Rec {
   }
 };
 
-// From version 16 the meta file after its version byte is blocks: each the sizes (LEB128) of its eight
+// From version 16 the meta file after its version byte is blocks: each the sizes (LEB128) of its
 // sections, then their bytes, a record's parts all in one block: the records (MS_REC), and apart from
 // them the XLL headers' bytes (MS_HDR), the DTS:X object data's (MS_OHDR), the segments' coding
 // parameters' flags (MS_PFLG), the object data's (MS_OPFLG), their code widths (MS_PWID, MS_OPWID),
-// and both's isolated samples and the rest (MS_PISO), which compress better so than mixed in
-// together. META_BLOCK: the bytes held after which the split ends a block
-enum { MS_REC, MS_HDR, MS_OHDR, MS_PFLG, MS_OPFLG, MS_PWID, MS_OPWID, MS_PISO, MS_N, META_BLOCK = 1 << 24 };
-static const int MS_PAR[3] = {MS_PFLG, MS_PWID, MS_PISO}, MS_OPAR[3] = {MS_OPFLG, MS_OPWID, MS_PISO};
+// and their isolated samples and the rest (MS_PISO, from version 17 the object data's apart in
+// MS_OPISO: version 16 has the eight before), which compress better so than mixed in together.
+// META_BLOCK: the bytes held after which the split ends a block
+enum { MS_REC, MS_HDR, MS_OHDR, MS_PFLG, MS_OPFLG, MS_PWID, MS_OPWID, MS_PISO, MS_OPISO, MS_N, MS_N16 = MS_OPISO,
+       META_BLOCK = 1 << 24 };
+static const int MS_PAR[3] = {MS_PFLG, MS_PWID, MS_PISO}, MS_OPAR[3] = {MS_OPFLG, MS_OPWID, MS_OPISO},
+                 MS_OPAR16[3] = {MS_OPFLG, MS_OPWID, MS_PISO};
 
 // a reader of records: from memory (for the split's check) or a file (the join)
 struct RecIn {
@@ -994,7 +1000,7 @@ static bool crc_here(Xll& x, const U8* p, U8* fix, int a, int b) {
 enum { AO_NL = 12, AO_NF = 5, AO_NR = AO_NL * AO_NF, AO_K = 10, AO_DEF = 2 * AO_NL + 3, AO_LIM = 64 };
 struct AoState {
   U32 n[XCS + 1][XCH][AO_NR];
-  int v14, v15;
+  int v14, v15, v17;  // (v17: the orders kept as their rank under the rule's cost, from version 17)
 };
 struct AoCtx {
   const S32* val;  // the frame's samples as the WAV has them ([XLL channel][sample]): 0, none
@@ -1006,7 +1012,7 @@ struct AoCtx {
     U8 set, oc, pos, act, out[AO_NR];
   } pend[XCS * XCH];
 };
-static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, int* pred, bool keep);
+static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, int* pred, bool keep, U8 (*rank)[16] = 0);
 static void dc_order(AoCtx& ac, int g0, int nch, int* order);
 static int dc_code(const AoCtx& ac, int nch, int a, int b);
 
@@ -1156,10 +1162,13 @@ static const char* xll_headers(Xll& x, const U8* p, int n, int one2one, const Xl
       for (int ch = 0; ch < s.nch; ch++) d.aorder[ch] = r.get(4);
       if (ao && ao->val && fix && b == 0 && s.nbands == 1) {  // (the join's: the orders against ao_pred()'s)
         int pred[XCH];
+        U8 rank[XCH][16];
         const int p0 = ao->np;
-        ao_pred(*ao, base ? XCS : c, x.nch, s, d, pred, true);
-        for (int ch = 0; ch < s.nch; ch++) {  // (dif: as their difference, from version 13; before, XORed)
-          const int act = dif ? (int)dif_back((U32)d.aorder[ch], (U32)pred[ch], 4) : d.aorder[ch] ^ pred[ch];
+        ao_pred(*ao, base ? XCS : c, x.nch, s, d, pred, true, rank);
+        for (int ch = 0; ch < s.nch; ch++) {  // (from version 17 their rank; dif: from 13 their difference; before, XORed)
+          const int act = ao->st->v17 ? rank[ch][d.aorder[ch]]
+                          : dif       ? (int)dif_back((U32)d.aorder[ch], (U32)pred[ch], 4)
+                                      : d.aorder[ch] ^ pred[ch];
           bits_xor(fix, d.aoat + 4 * ch, 4, (U32)(d.aorder[ch] ^ act));
           d.aorder[ch] = act;
         }
@@ -2028,7 +2037,7 @@ static bool ao_old(int j) {
   const int f = j / AO_NL, l = j % AO_NL;
   return (f == 0 || f == 2 || f == 4) && (l & 1);
 }
-static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, int* pred, bool keep) {
+static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, int* pred, bool keep, U8 (*rank)[16]) {
   const int N = ac.N;
   static std::vector<S32> sig[2];
   static std::vector<S64> xs;
@@ -2040,6 +2049,8 @@ static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, i
   const S64 lim = (S64)1 << ((62 - nb) / 2);  // (the autocorrelation in 64 bits: |xs| under it)
   for (int i = 0; i < s.nch; i++) {
     pred[i] = 0;
+    if (rank)  // (as they are where there are no samples to weigh them by)
+      for (int k = 0; k < 16; k++) rank[i][k] = (U8)k;
     const int oc = d.order[i], g = g0 + oc;
     if (g >= ac.nch) continue;
     S32* bb = &sig[i & 1][0];
@@ -2074,6 +2085,8 @@ static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, i
     }
     U8 out[AO_NR];
     memset(out, 0, sizeof out);
+    S64 Lk[AO_K + 1];  // (rank's: the variance's log2 at each order, K the last order there is one for)
+    int Kv = -1;
     if (R[0] > 0) {
       // log2 of the samples' variance: E's under the window (Q30, shifted by sh) less log2(3N/8)
       const S64 off = (S64)(2 * sh - 60) * (1 << 20) - log2_q20((float)(3 * N) / 8.0f);
@@ -2094,6 +2107,8 @@ static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, i
         L[j] = log2_q20(E) + off;
         K = j;
       }
+      Kv = K;
+      for (int k = 0; k <= K; k++) Lk[k] = L[k];
       for (int f = 0; f < AO_NF; f++)
         for (int l = 0; l < AO_NL; l++) {
           int bk = 0;
@@ -2111,6 +2126,25 @@ static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, i
     for (int j = 0; j < AO_NR; j++)
       if (cnt[j] > cnt[bi] && (ac.st->v14 || ao_old(j))) bi = j;
     pred[i] = out[bi];
+    if (rank) {  // (the orders by the cost under candidate bi, the smaller first of equals, then those past K)
+      S64 J[16];
+      const int f = bi / AO_NL, l = bi % AO_NL;
+      for (int k = 0; k <= Kv; k++) {
+        const S64 lv = Lk[k] > (S64)AO_FLO[f] * (1 << 20) ? Lk[k] : (S64)AO_FLO[f] * (1 << 20);
+        J[k] = lv * (N / 2) + (S64)AO_LAM[l] * k * (1 << 19);
+      }
+      int nr = 0;
+      bool used[16] = {false};
+      for (int t = 0; t <= Kv; t++) {
+        int bk = -1;
+        for (int k = 0; k <= Kv; k++)
+          if (!used[k] && (bk < 0 || J[k] < J[bk])) bk = k;
+        used[bk] = true;
+        rank[i][nr++] = (U8)bk;
+      }
+      for (int k = 0; k < 16; k++)
+        if (!used[k]) rank[i][nr++] = (U8)k;
+    }
     if (keep && ac.np < XCS * XCH) {
       ac.pend[ac.np].set = (U8)set;
       ac.pend[ac.np].oc = (U8)oc;
@@ -2164,13 +2198,14 @@ static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir, bool fl, b
     }
 }
 
-enum { VERSION = 16 };  // (the join reads 15 too, with its sections one stream, 14, with the
-                        // autocorrelation in integers, 13, with ao_pred()'s first rule, 12, with the
-                        // orders and widths XORed, 11, with the headers' sizes, 10, with the isolated
-                        // samples kept, 9, with rc_code()'s nearest entries, 8, with the prediction
-                        // orders as they are, 7, with the channel set header sizes, 6, with the frame
-                        // sizes, 5, with the code widths as they are, 4, with the headers as they are,
-                        // 3, without prefix.x.wav, and 2, without prefix.dtsx)
+enum { VERSION = 17 };  // (the join reads 16 too, with the orders as their difference, 15, with its
+                        // sections one stream, 14, with the autocorrelation in integers, 13, with
+                        // ao_pred()'s first rule, 12, with the orders and widths XORed, 11, with the
+                        // headers' sizes, 10, with the isolated samples kept, 9, with rc_code()'s
+                        // nearest entries, 8, with the prediction orders as they are, 7, with the
+                        // channel set header sizes, 6, with the frame sizes, 5, with the code widths
+                        // as they are, 4, with the headers as they are, 3, without prefix.x.wav, and
+                        // 2, without prefix.dtsx)
 
 // The segments' code widths (a_code, b_code) against those their residuals res say, as the meta file
 // keeps them (join: back), from version 13 (ver) as their difference (dif_of()), before XORed with
@@ -2566,9 +2601,71 @@ static inline bool get_layout(RecIn& in, Layout& L) {
 // ---------------------------------------------------------------------------------------------
 // an X record: an extension substream frame with its XLL frame split
 
+// From version 17 the Rice and hybrid flags of a set of one band are kept XORed with those its
+// segment's residuals give (fp_set()), as the encoders choose them, it seems: a parameter set's
+// Rice code where its bits, k the floor of the log2 of the residuals' mean (as ck_xor()'s), are no
+// more than a binary code's of the largest's width (99.94% of the Rice flags of the Cymatics
+// stream's first 60 MB, 99.1% of master_audio_7.1_24bit.dts's); hybrid, of a set's own, where the
+// isolated samples iso_rule() would take at that width save bits, counting their count and width
+// (864 of the former's 1152 hybrid codes, and 41 that aren't; 567 of the latter's 586, and none
+// that aren't). (Whether the parameters are common to the set's channels follows no rule as well:
+// its flag is as it is.) The join takes these parameters after the residuals, as the flags say
+// which follow; those of a set of two bands before them, as before version 17: the band filter
+// needs band 1's history.
+struct FpSet {
+  int rice, hyb;
+};
+static void fp_set(const Xll& x, const BandData& res, int b, int c, int seg, int i, bool common, FpSet& o) {
+  const int S = x.nsegsamples;
+  const Chset& s = x.cs[c];
+  const Band& d = s.band[b];
+  const int c0 = common ? 0 : i, c1 = common ? s.nch : i + 1;
+  U64 sum = 0, n = 0;
+  U32 any = 0;  // (the largest one's width is that of them all ORed)
+  for (int ch = c0; ch < c1; ch++) {
+    const int na = seg ? 0 : common ? d.highest : d.aorder[ch];
+    const S32* e = res.at(b, x.chofs[c] + ch) + (size_t)seg * S;
+    for (int j = na; j < S; j++) {
+      const U32 u = zig(e[j]);
+      sum += u;
+      any |= u;
+    }
+    if (na < S) n += (U64)(S - na);
+  }
+  const U64 mean = n ? sum / n : 0;
+  int kr = 0, bw = 0;
+  while (mean >> (kr + 1)) kr++;
+  while (bw < 32 && (any >> bw)) bw++;
+  // (a Rice code's bits: (z >> kr) + 1 + kr each; a hybrid one's: those but at most aux + lg, an
+  // isolated sample's, and its count's and width's)
+  const U64 aux = bw ? (U64)bw : 1, lg = (U64)x.nseg_log2, one = 1 + (U64)kr;
+  const bool own = !common;
+  const U64 cap = aux + lg > one ? aux + lg - one : 0;  // (z >> kr at most this; past it, aux + lg)
+  U64 t1 = 0, t2 = 0;
+  for (int ch = c0; ch < c1; ch++) {
+    const int na = seg ? 0 : common ? d.highest : d.aorder[ch];
+    const S32* e = res.at(b, x.chofs[c] + ch) + (size_t)seg * S;
+    if (own)
+      for (int j = na; j < S; j++) {
+        const U64 t = zig(e[j]) >> kr;
+        t1 += t;
+        t2 += t < cap ? t : cap;
+      }
+    else
+      for (int j = na; j < S; j++) t1 += zig(e[j]) >> kr;
+  }
+  const U64 rb = t1 + n * one;
+  o.rice = rb <= n * (U64)bw;
+  o.hyb = 0;
+  if (o.rice && own) {
+    const U64 hb = lg + (U64)s.nabits + (aux + lg > one ? t2 + n * one : n * (aux + lg));
+    o.hyb = hb < rb;
+  }
+}
 // (into o[q[0]], o[q[1]] and o[q[2]] the segment's flags, code widths, and isolated samples and the
-// rest: from version 16 sections of their own, MS_PAR's or MS_OPAR's)
-static void put_chunk(Rec* o, const int* q, Xll& x, int b, int seg, int c, const Chunk& k) {
+// rest: from version 16 sections of their own, MS_PAR's or MS_OPAR's; res: the residuals, the flags
+// against fp_set()'s, from version 17)
+static void put_chunk(Rec* o, const int* q, Xll& x, int b, int seg, int c, const Chunk& k, const BandData* res = 0) {
   Chset& s = x.cs[c];
   Rec &fl = o[q[0]], &wd = o[q[1]], &is = o[q[2]];
   fl.u8(k.reuse | (k.reuse ? 0 : k.seg_common << 1) | k.g1 << 2 | k.g2 << 3);
@@ -2576,7 +2673,9 @@ static void put_chunk(Rec* o, const int* q, Xll& x, int b, int seg, int c, const
     s.seg_common = k.seg_common;
     const int np = s.seg_common ? 1 : s.nch;
     for (int i = 0; i < np; i++) {
-      fl.u8(k.rice[i] | k.hyb[i] << 1);
+      FpSet fp = {0, 0};
+      if (res) fp_set(x, *res, b, c, seg, i, s.seg_common, fp);
+      fl.u8((k.rice[i] ^ fp.rice) | (k.hyb[i] ^ fp.hyb) << 1);
       if (k.hyb[i]) wd.u8(k.aux_code[i]);
       if (!seg) wd.u8(k.a_code[i]);
       wd.u8(k.b_code[i]);
@@ -2601,8 +2700,9 @@ static void put_chunk(Rec* o, const int* q, Xll& x, int b, int seg, int c, const
   if (k.g2) is.blob(&k.g2b[0], k.g2b.size()), is.uv(k.g2n);
 }
 
-// (from m's sections q[0], q[1] and q[2], put_chunk()'s; before version 16 all one stream)
-static bool get_chunk(MetaIn& m, const int* q, Xll& x, int b, int seg, int c, Chunk& k, int ver) {
+// (from m's sections q[0], q[1] and q[2], put_chunk()'s; before version 16 all one stream; res: the
+// residuals the flags are against, from version 17)
+static bool get_chunk(MetaIn& m, const int* q, Xll& x, int b, int seg, int c, Chunk& k, int ver, const BandData* res = 0) {
   Chset& s = x.cs[c];
   RecIn &fl = *m.s[q[0]], &wd = *m.s[q[1]], &is = *m.s[q[2]];
   const int f = fl.u8();
@@ -2614,9 +2714,11 @@ static bool get_chunk(MetaIn& m, const int* q, Xll& x, int b, int seg, int c, Ch
     s.seg_common = k.seg_common = f >> 1 & 1;
     const int np = s.seg_common ? 1 : s.nch;
     for (int i = 0; i < np; i++) {
+      FpSet fp = {0, 0};
+      if (res) fp_set(x, *res, b, c, seg, i, s.seg_common, fp);
       const int v = fl.u8();
-      k.rice[i] = v & 1;
-      k.hyb[i] = v >> 1 & 1;
+      k.rice[i] = (v & 1) ^ fp.rice;
+      k.hyb[i] = (v >> 1 & 1) ^ fp.hyb;
       if (v >> 2 || (k.hyb[i] && (s.seg_common || !k.rice[i]))) return false;
       k.aux_code[i] = k.hyb[i] ? (U8)wd.u8() : 0;
       k.a_code[i] = !seg ? (U8)wd.u8() : 0;
@@ -2852,11 +2954,14 @@ static void put_hdr(Rec& o, const U8* p, const Xll& x, const std::vector<Chunk>&
           if (d.dcat[i] >= 0) bits_xor(&h[0], d.dcat[i], 7, (U32)dc_code(*ao, s.nch, d.order[2 * i], d.order[2 * i + 1]));
       }
       int pred[XCH];
-      ao_pred(*ao, set0 + c, x.chofs[c], s, s.band[0], pred, false);
-      for (int ch = 0; ch < s.nch; ch++) {  // (as their difference from those)
+      U8 rank[XCH][16];
+      ao_pred(*ao, set0 + c, x.chofs[c], s, s.band[0], pred, false, rank);
+      for (int ch = 0; ch < s.nch; ch++) {  // (as their rank among the orders by the rule's cost)
         const int at = s.band[0].aoat + 4 * ch;
         const U32 v = bits_at(&h[0], at, 4);
-        bits_xor(&h[0], at, 4, v ^ dif_of(v, (U32)pred[ch], 4));
+        U32 r = 0;
+        while (r < 15 && rank[ch][r] != v) r++;
+        bits_xor(&h[0], at, 4, v ^ r);
       }
     }
   for (int c = 0; c < x.nchsets; c++) bits_xor(&h[0], x.csoff[c] * 8, 10, (U32)(x.csnat[c] - 1) & 1023);
@@ -2889,7 +2994,7 @@ static void put_obj(Rec* o, const Split& sp, const U8* ob, int n, const std::vec
   std::vector<Chunk> kx = sp.ock;  // (the code widths against the residuals')
   ck_xor(x, kx, sp.ores, VERSION, false);
   for (int b = 0; b < x.nbands; b++)
-    for (int seg = 0; seg < x.nsegs; seg++) put_chunk(o, MS_OPAR, x, b, seg, 0, kx[(size_t)b * x.nsegs + seg]);
+    for (int seg = 0; seg < x.nsegs; seg++) put_chunk(o, MS_OPAR, x, b, seg, 0, kx[(size_t)b * x.nsegs + seg], x.nbands == 1 ? &sp.ores : 0);
   {  // (the bytes after its band data: 0, where they are opad_std()'s 0s, else their count and 1, and them)
     const int pl = n - sp.oend;
     bool z = true;
@@ -2936,7 +3041,8 @@ static void put_x(Rec* o, int wi, const U8* e, int n, int xoff, const U8* xf, in
   for (int b = 0; b < x.nbands; b++)
     for (int seg = 0; seg < x.nsegs; seg++)
       for (int c = 0; c < x.nchsets; c++)
-        if (x.cs[c].nbands > b) put_chunk(o, MS_PAR, x, b, seg, c, kx[((size_t)b * x.nsegs + seg) * x.nchsets + c]);
+        if (x.cs[c].nbands > b)
+          put_chunk(o, MS_PAR, x, b, seg, c, kx[((size_t)b * x.nsegs + seg) * x.nchsets + c], x.nbands == 1 ? &sp.res : 0);
   // the bytes after the band data up to the DTS:X object data or the frame's end: their count and
   // they, or (sg) none, where they are 0s to the DWORD boundary; whether the object data follows
   bool z = true;
@@ -3102,9 +3208,12 @@ static const char* join_obj(MetaIn& m, const Xll& x, int n, const Layout* L, Sam
   layout_of(ox, fl);
   if (!L || !smp || !layout_same(*L, fl)) return "DTS:X object data unlike prefix.x.wav";
   sp.ock.assign((size_t)ox.nbands * ox.nsegs, Chunk());
-  for (int b = 0; b < ox.nbands; b++)
-    for (int seg = 0; seg < ox.nsegs; seg++)
-      if (!get_chunk(m, MS_OPAR, ox, b, seg, 0, sp.ock[(size_t)b * ox.nsegs + seg], ver)) return "a damaged record";
+  const bool late = ver >= 17 && ox.nbands == 1;  // (from version 17 after the residuals: fp_set())
+  if (!late)
+    for (int b = 0; b < ox.nbands; b++)
+      for (int seg = 0; seg < ox.nsegs; seg++)
+        if (!get_chunk(m, ver >= 17 ? MS_OPAR : MS_OPAR16, ox, b, seg, 0, sp.ock[(size_t)b * ox.nsegs + seg], ver))
+          return "a damaged record";
   bool pstd = false;  // (version 7: the 0s after the band data as opad_std() has them)
   if (ver >= 7) {
     const U64 pc = in.uv();
@@ -3143,6 +3252,9 @@ static const char* join_obj(MetaIn& m, const Xll& x, int n, const Layout* L, Sam
   if (!xll_msb(ox, sp.ock, &sp.oval[0], sp.oex, msb, sp.olsb)) return "prefix.x.wav samples the DTS:X object data can't code";
   if ((why = rc_join(ox, msb, hdr, n, 0, &x, OBJ_HEAD, ver))) return why;
   xll_residuals(ox, msb, sp.ores, sp.tmp);
+  if (late)
+    for (int seg = 0; seg < ox.nsegs; seg++)
+      if (!get_chunk(m, MS_OPAR, ox, 0, seg, 0, sp.ock[seg], ver, &sp.ores)) return "a damaged record";
   if (ver >= 6) ck_xor(ox, sp.ock, sp.ores, ver, true);
   BitWriter w;
   if ((why = navi_join(ox, sp.ock, sp.ores, sp.olsb, hdr, n, 0, &x, OBJ_HEAD, ver, w))) return why;
@@ -3212,11 +3324,13 @@ static const char* join_x(MetaIn& m, const Layout* L, Samples& smp, std::vector<
   layout_of(x, fl);
   if (!L || !layout_same(*L, fl)) return "an XLL frame unlike its WAV";
   sp.ck.assign((size_t)x.nbands * x.nsegs * x.nchsets, Chunk());
-  for (int b = 0; b < x.nbands; b++)
-    for (int seg = 0; seg < x.nsegs; seg++)
-      for (int c = 0; c < x.nchsets; c++)
-        if (x.cs[c].nbands > b && !get_chunk(m, MS_PAR, x, b, seg, c, sp.ck[((size_t)b * x.nsegs + seg) * x.nchsets + c], ver))
-          return "a damaged record";
+  const bool late = ver >= 17 && x.nbands == 1;  // (from version 17 after the residuals: fp_set())
+  if (!late)
+    for (int b = 0; b < x.nbands; b++)
+      for (int seg = 0; seg < x.nsegs; seg++)
+        for (int c = 0; c < x.nchsets; c++)
+          if (x.cs[c].nbands > b && !get_chunk(m, MS_PAR, x, b, seg, c, sp.ck[((size_t)b * x.nsegs + seg) * x.nchsets + c], ver))
+            return "a damaged record";
   FrameEnd fe = {false, 0, 0, 0};
   if (!xs) {
     if (!in.blob(tail, fsize)) return "a damaged record";
@@ -3288,6 +3402,10 @@ static const char* join_x(MetaIn& m, const Layout* L, Samples& smp, std::vector<
   if (!xll_msb(x, sp.ck, &sp.val[0], sp.ex, msb, sp.lsb)) return "WAV samples the XLL frame can't code";
   if ((why = rc_join(x, msb, hdr, (int)fsize, one2one, 0, 0, ver))) return why;
   xll_residuals(x, msb, sp.res, sp.tmp);
+  if (late)
+    for (int seg = 0; seg < x.nsegs; seg++)
+      for (int c = 0; c < x.nchsets; c++)
+        if (!get_chunk(m, MS_PAR, x, 0, seg, c, sp.ck[(size_t)seg * x.nchsets + c], ver, &sp.res)) return "a damaged record";
   if (ver >= 6) ck_xor(x, sp.ck, sp.res, ver, true);
   BitWriter w;
   if ((why = navi_join(x, sp.ck, sp.res, sp.lsb, hdr, (int)fsize, one2one, 0, 0, ver, w, ver >= 7 && xs ? &fe : 0)))
@@ -3704,7 +3822,7 @@ struct Splitter {
     xwav_on = false;
     xf_done = false;
     memset(&chk.ao, 0, sizeof chk.ao);
-    chk.ao.v14 = chk.ao.v15 = 1;
+    chk.ao.v14 = chk.ao.v15 = chk.ao.v17 = 1;
     chk.aost = sp.aost = &chk.ao;
     Rec hr;
     hr.bytes(MAGIC, 8);
@@ -3847,6 +3965,7 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
   memset(&sp.ao, 0, sizeof sp.ao);
   sp.ao.v14 = h[8] >= 14;
   sp.ao.v15 = h[8] >= 15;
+  sp.ao.v17 = h[8] >= 17;
   sp.aost = &sp.ao;
   std::vector<S32> wv;
   std::vector<U8> buf;
@@ -3868,8 +3987,9 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
       for (int k = 1; k < MS_N; k++)
         if (!bin[k].at_end()) damaged("a damaged block", b0);
       if (fin.at_end()) damaged("the meta file ends early", b0);
-      U64 len[MS_N];
-      for (int k = 0; k < MS_N; k++) {
+      U64 len[MS_N] = {0};
+      const int ns = h[8] >= 17 ? MS_N : MS_N16;  // (version 16: eight sections)
+      for (int k = 0; k < ns; k++) {
         len[k] = fin.uv();
         if (fin.bad || len[k] > ((U64)1 << 30) || (!k && !len[k])) damaged("a damaged block", b0);
       }
