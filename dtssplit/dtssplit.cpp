@@ -50,20 +50,21 @@
 // goes to prefix.dtsx as it is, frame after frame. The join takes prefix.x.wav and prefix.dtsx only
 // where the meta file says there is object data.
 //
-// The meta file: "DTSSPLIT", a version byte (14; the join reads 13, with ao_pred()'s 18 candidates
-// and counts that don't decay, 12, with the prediction orders and the code widths XORed with their
-// predictions, 11, with the XLL headers' sizes, 10, with hybrid Rice codes' isolated samples kept
-// as they are, 9, with the reflection coefficients' predictions the nearest of the table's entries,
-// 8, with the prediction orders as they are, 7, with the channel set header sizes and the
-// reflection coefficients' codes XORed, 6, with the XLL frame sizes, 5, with the code widths as
-// they are, 4, with the headers as they are, 3, the format before prefix.x.wav, and 2, the format
-// before prefix.dtsx, too), then records, each a tag byte and its fields (numbers as LEB128
-// varints, signed ones zigzagged). Its EXSS and XLL header bytes are the stream's but for what the
-// join computes again: their CRC-16s are 0s, and the EXSS frame size, the XLL frame size, the
-// channel set header sizes and the NAVI tables' sizes are XORed with those the join will compute
-// (the frames' sizes, the bytes the headers' fields take and those each segment's coding takes),
-// the prediction orders of a set of one band kept as their difference from ao_pred()'s (mod 16,
-// zigzagged; from version 13) and the reflection coefficients' codes as their table indexes'
+// The meta file: "DTSSPLIT", a version byte (15; the join reads 14, with the reflection
+// coefficients' and the prediction orders' autocorrelation in integers, 13, with ao_pred()'s 18
+// candidates and counts that don't decay, 12, with the prediction orders and the code widths XORed
+// with their predictions, 11, with the XLL headers' sizes, 10, with hybrid Rice codes' isolated
+// samples kept as they are, 9, with the reflection coefficients' predictions the nearest of the
+// table's entries, 8, with the prediction orders as they are, 7, with the channel set header sizes
+// and the reflection coefficients' codes XORed, 6, with the XLL frame sizes, 5, with the code
+// widths as they are, 4, with the headers as they are, 3, the format before prefix.x.wav, and 2,
+// the format before prefix.dtsx, too), then records, each a tag byte and its fields (numbers as
+// LEB128 varints, signed ones zigzagged). Its EXSS and XLL header bytes are the stream's but for
+// what the join computes again: their CRC-16s are 0s, and the EXSS frame size, the XLL frame size,
+// the channel set header sizes and the NAVI tables' sizes are XORed with those the join will
+// compute (the frames' sizes, the bytes the headers' fields take and those each segment's coding
+// takes), the prediction orders of a set of one band kept as their difference from ao_pred()'s (mod
+// 16, zigzagged; from version 13) and the reflection coefficients' codes as their table indexes'
 // difference from rc_predict()'s (both from the WAV's samples, which the join reads before the
 // header), so that they are mostly 0s too; so are the segments' Rice and binary code widths, kept
 // as their difference from those their residuals give (ck_xor(); mod the field's size, zigzagged,
@@ -979,7 +980,7 @@ static bool crc_here(Xll& x, const U8* p, U8* fix, int a, int b) {
 enum { AO_NL = 12, AO_NF = 5, AO_NR = AO_NL * AO_NF, AO_K = 10, AO_DEF = 2 * AO_NL + 3, AO_LIM = 64 };
 struct AoState {
   U32 n[XCS + 1][XCH][AO_NR];
-  int v14;
+  int v14, v15;
 };
 struct AoCtx {
   const S32* val;  // the frame's samples as the WAV has them ([XLL channel][sample]): 0, none
@@ -1756,31 +1757,10 @@ static int rc_code(float k, int cap, bool fl) {
   return k < 0 && best ? 2 * best - 1 : 2 * best;
 }
 
-// The codes of the o reflection coefficients the encoders' analysis gives the decorrelated MSB
-// signal bb (N samples): its autocorrelation under Hann's window (in integers, each sample to 31
-// bits), Levinson's recursion in single precision, each coefficient's code rc_code()'s (fl), from
-// the second on 121 at most (the DTS:X encoder's: 95% of Nigel_Stanford_Cymatics_DTS-X.dts's codes
-// so); 0s where the recursion breaks down
-static void rc_predict(const S32* bb, int N, int o, int* code, bool fl) {
-  for (int j = 0; j < o; j++) code[j] = 0;
-  const std::vector<S32>& w = hann_q30(N);
-  static std::vector<S64> xs;
-  xs.resize((size_t)N);
-  U64 mx = 0;
-  for (int n = 0; n < N; n++) {
-    xs[n] = (S64)bb[n] * w[n];
-    mx |= (U64)(xs[n] < 0 ? -xs[n] : xs[n]);
-  }
-  int sh = 0;
-  while (mx >> (31 + sh)) sh++;
-  if (sh)
-    for (int n = 0; n < N; n++) xs[n] = (xs[n] + ((S64)1 << (sh - 1))) >> sh;
-  float R[XORD + 1];
-  for (int l = 0; l <= o; l++) {
-    __int128 acc = 0;
-    for (int n = 0; n + l < N; n++) acc += xs[n] * xs[n + l];
-    R[l] = (float)i128_double(acc);
-  }
+static void rc_autocorr(const S32* bb, int N, int o, float* R);
+// the codes of the o reflection coefficients Levinson's recursion in single precision gives the
+// autocorrelation R (as rc_predict()'s)
+static void rc_levinson(const float* R, int o, int* code, bool fl) {
   float a[XORD + 1], an[XORD + 1];
   a[0] = 1;
   float E = R[0];
@@ -1796,6 +1776,39 @@ static void rc_predict(const S32* bb, int N, int o, int* code, bool fl) {
     E = f32mul(E, f32add(1.0f, -f32mul(k, k)));
   }
 }
+// The codes of the o reflection coefficients the encoders' analysis gives the decorrelated MSB
+// signal bb (N samples): its autocorrelation under Hann's window, Levinson's recursion in single
+// precision, each coefficient's code rc_code()'s (fl), from the second on 121 at most (the DTS:X
+// encoder's: 95% of Nigel_Stanford_Cymatics_DTS-X.dts's codes so); 0s where the recursion breaks
+// down. The autocorrelation (f15, from version 15) as the encoders compute it, rc_autocorr()'s,
+// else in integers, each sample to 31 bits
+static void rc_predict(const S32* bb, int N, int o, int* code, bool fl, bool f15) {
+  for (int j = 0; j < o; j++) code[j] = 0;
+  float R[XORD + 1];
+  if (f15) {
+    rc_autocorr(bb, N, o, R);
+    rc_levinson(R, o, code, fl);
+    return;
+  }
+  const std::vector<S32>& w = hann_q30(N);
+  static std::vector<S64> xs;
+  xs.resize((size_t)N);
+  U64 mx = 0;
+  for (int n = 0; n < N; n++) {
+    xs[n] = (S64)bb[n] * w[n];
+    mx |= (U64)(xs[n] < 0 ? -xs[n] : xs[n]);
+  }
+  int sh = 0;
+  while (mx >> (31 + sh)) sh++;
+  if (sh)
+    for (int n = 0; n < N; n++) xs[n] = (xs[n] + ((S64)1 << (sh - 1))) >> sh;
+  for (int l = 0; l <= o; l++) {
+    __int128 acc = 0;
+    for (int n = 0; n + l < N; n++) acc += xs[n] * xs[n + l];
+    R[l] = (float)i128_double(acc);
+  }
+  rc_levinson(R, o, code, fl);
+}
 
 static inline double f64mul(double a, double b) {
   volatile double r = a * b;
@@ -1804,6 +1817,105 @@ static inline double f64mul(double a, double b) {
 static inline double f64div(double a, double b) {
   volatile double r = a / b;
   return r;
+}
+static inline double f64sub(double a, double b) {
+  volatile double r = a - b;
+  return r;
+}
+
+// cos(x) of a double x in [0, 2 pi], rounded to the nearest double, in 124-bit fixed point (a
+// platform's own cos needn't round so: glibc's misses 54 of the 32764 angles of hann_cos()'s
+// windows of 4, 8, ... 16384 samples, by one unit; this one's results, checked in 60-digit decimals
+// where they differ, are the nearest)
+namespace fxcos {
+typedef unsigned __int128 U128;
+const int FB = 124;
+const U128 PI = ((U128)0x3243F6A8885A308DULL << 64) | (U128)0x313198A2E0370734ULL;  // (pi in Q124)
+// a b >> 124, a and b under 2^127
+inline U128 mul(U128 a, U128 b) {
+  const U64 a1 = (U64)(a >> 64), a0 = (U64)a, b1 = (U64)(b >> 64), b0 = (U64)b;
+  const U128 p00 = (U128)a0 * b0, p01 = (U128)a0 * b1, p10 = (U128)a1 * b0, p11 = (U128)a1 * b1;
+  U128 lo = p00, hi = p11;
+  const U128 mid = p01 + p10, midc = mid < p01 ? (U128)1 << 64 : 0, ml = mid << 64;
+  lo += ml;
+  hi += (mid >> 64) + (lo < ml) + midc;
+  return (hi << (128 - FB)) | (lo >> FB);
+}
+// the series of cos y and sin y, y in [0, pi/4]
+inline U128 cos_s(U128 y) {
+  const U128 y2 = mul(y, y);
+  U128 t = (U128)1 << FB, s = t;
+  for (int k = 1; k <= 30 && t; k++) {
+    t = mul(t, y2) / (U64)((2 * k - 1) * (2 * k));
+    s = k & 1 ? s - t : s + t;
+  }
+  return s;
+}
+inline U128 sin_s(U128 y) {
+  const U128 y2 = mul(y, y);
+  U128 t = y, s = y;
+  for (int k = 1; k <= 30 && t; k++) {
+    t = mul(t, y2) / (U64)((2 * k) * (2 * k + 1));
+    s = k & 1 ? s - t : s + t;
+  }
+  return s;
+}
+inline double cos_rn(double x) {
+  int e;
+  const double m = frexp(x, &e);  // (x = m 2^e exactly, m in [1/2, 1) or 0)
+  U128 q = 0;
+  if (m != 0) {
+    const U64 mi = (U64)ldexp(m, 53);
+    const int sh = e - 53 + FB;
+    q = sh >= 0 ? (U128)mi << sh : (U128)mi >> -sh;
+  }
+  bool neg = false;
+  if (q > PI) q = (PI << 1) > q ? (PI << 1) - q : q - (PI << 1);  // (cos(2 pi - x))
+  if (q > (PI >> 1)) q = PI - q, neg = true;                        // (-cos(pi - x))
+  const U128 v = q > (PI >> 2) ? sin_s((PI >> 1) - q) : cos_s(q);
+  if (!v) return 0;
+  int top = 127;
+  while (!((v >> top) & 1)) top--;
+  const int drop = top - 52;  // (53 bits kept, the rest rounded to nearest, ties to even)
+  U128 r = drop > 0 ? v >> drop : v << -drop;
+  if (drop > 0) {
+    const U128 rem = v - (r << drop), half = (U128)1 << (drop - 1);
+    if (rem > half || (rem == half && (r & 1))) r++;
+  }
+  const double d = ldexp((double)(U64)r, drop - FB);
+  return neg ? -d : d;
+}
+}  // namespace fxcos
+
+// the encoders' Hann window of N samples as their analysis has it, in double precision: 0.5 - 0.5
+// cos(2 pi n / (N - 1)), the angle and the rest rounded at each step (from version 15)
+static const std::vector<double>& hann_cos(int N) {
+  static std::vector<double> w;
+  static int wn = -1;
+  if (wn == N) return w;
+  w.assign((size_t)N, 0);
+  wn = N;
+  const double twopi = 6.283185307179586476925286766559;  // (2 pi as a double, as 2 * M_PI)
+  for (int n = 1; n < N - 1; n++) w[n] = f64sub(0.5, f64mul(0.5, fxcos::cos_rn(f64div(f64mul(twopi, n), N - 1))));
+  return w;
+}
+// The autocorrelation R[0..o] of bb (N samples) under Hann's window as the encoders compute it, it
+// seems: each windowed sample rounded to single precision (the product in double precision), each
+// lag's products in single precision, summed in double precision, the sum rounded to single
+// precision. With it (from version 15) the reflection coefficients' codes come out the same in all
+// of the Cymatics stream's first channel set and all but 44 of the 885113 of s.2.dts (99.9% and
+// 99.3% with the integers' before), in 99.3% of the Cymatics stream's second set's (92.5%) and
+// 99.8% of its object audio's (93.5%)
+static void rc_autocorr(const S32* bb, int N, int o, float* R) {
+  const std::vector<double>& w = hann_cos(N);
+  static std::vector<float> xf;
+  xf.resize((size_t)N);
+  for (int n = 0; n < N; n++) xf[n] = (float)f64mul((double)bb[n], w[n]);
+  for (int l = 0; l <= o; l++) {
+    double acc = 0;
+    for (int n = 0; n + l < N; n++) acc += (double)f32mul(xf[n], xf[n + l]);
+    R[l] = (float)acc;
+  }
 }
 
 // The order of the nch channels of the set whose first is g0 of ac's samples, as the encoders' pairwise
@@ -1904,7 +2016,6 @@ static bool ao_old(int j) {
 }
 static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, int* pred, bool keep) {
   const int N = ac.N;
-  const std::vector<S32>& w = hann_q30(N);
   static std::vector<S32> sig[2];
   static std::vector<S64> xs;
   sig[0].resize((size_t)N);
@@ -1925,21 +2036,27 @@ static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, i
     } else {
       memcpy(bb, v, (size_t)N * sizeof *bb);
     }
-    S64 mx = 0;
-    for (int n = 0; n < N; n++) {
-      xs[n] = (S64)bb[n] * w[n];
-      const S64 a = xs[n] < 0 ? -xs[n] : xs[n];
-      if (a > mx) mx = a;
-    }
-    int sh = 0;
-    while ((mx >> sh) >= lim) sh++;
-    if (sh)
-      for (int n = 0; n < N; n++) xs[n] = (xs[n] + ((S64)1 << (sh - 1))) >> sh;
     float R[AO_K + 1];
-    for (int l = 0; l <= AO_K; l++) {
-      S64 acc = 0;
-      for (int n = 0; n + l < N; n++) acc += xs[n] * xs[n + l];
-      R[l] = (float)acc;  // (exactly so in any float environment: an integer, rounded once)
+    int sh = 30;
+    if (ac.st->v15) {
+      rc_autocorr(bb, N, AO_K, R);  // (from version 15 as the encoders compute it, in the samples' units)
+    } else {
+      const std::vector<S32>& w = hann_q30(N);
+      S64 mx = 0;
+      for (int n = 0; n < N; n++) {
+        xs[n] = (S64)bb[n] * w[n];
+        const S64 a = xs[n] < 0 ? -xs[n] : xs[n];
+        if (a > mx) mx = a;
+      }
+      sh = 0;
+      while ((mx >> sh) >= lim) sh++;
+      if (sh)
+        for (int n = 0; n < N; n++) xs[n] = (xs[n] + ((S64)1 << (sh - 1))) >> sh;
+      for (int l = 0; l <= AO_K; l++) {
+        S64 acc = 0;
+        for (int n = 0; n + l < N; n++) acc += xs[n] * xs[n + l];
+        R[l] = (float)acc;  // (exactly so in any float environment: an integer, rounded once)
+      }
     }
     U8 out[AO_NR];
     memset(out, 0, sizeof out);
@@ -2009,7 +2126,7 @@ static void ao_count(AoCtx& ac) {
 // decorrelated MSB signals msb (xll_msb()'s), as the meta file keeps them (dir 1) and back (-1): the
 // difference of their table indexes, zigzagged (as 8 bits: from version 8), or (dir 0) XORed with
 // them (versions 5 to 7)
-static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir, bool fl) {
+static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir, bool fl, bool f15) {
   int code[XORD];
   for (int b = 0; b < x.nbands; b++)
     for (int c = 0; c < x.nchsets; c++) {
@@ -2018,7 +2135,7 @@ static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir, bool fl) {
       const Band& d = s.band[b];
       for (int ch = 0; ch < s.nch; ch++) {
         if (!d.aorder[ch]) continue;
-        rc_predict(msb.at(b, x.chofs[c] + ch), x.nframesamples, d.aorder[ch], code, fl);
+        rc_predict(msb.at(b, x.chofs[c] + ch), x.nframesamples, d.aorder[ch], code, fl, f15);
         for (int j = 0; j < d.aorder[ch]; j++) {
           const int at = d.rcat[ch] + 8 * j;
           const U32 v = bits_at(h, at, 8);
@@ -2033,12 +2150,13 @@ static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir, bool fl) {
     }
 }
 
-enum { VERSION = 14 };  // (the join reads 13 too, with ao_pred()'s first rule, 12, with the orders
-                        // and widths XORed, 11, with the headers' sizes, 10, with the isolated samples
-                        // kept, 9, with rc_code()'s nearest entries, 8, with the prediction orders as
-                        // they are, 7, with the channel set header sizes, 6, with the frame sizes, 5,
-                        // with the code widths as they are, 4, with the headers as they are, 3,
-                        // without prefix.x.wav, and 2, without prefix.dtsx)
+enum { VERSION = 15 };  // (the join reads 14 too, with the autocorrelation in integers, 13, with
+                        // ao_pred()'s first rule, 12, with the orders and widths XORed, 11, with the
+                        // headers' sizes, 10, with the isolated samples kept, 9, with rc_code()'s
+                        // nearest entries, 8, with the prediction orders as they are, 7, with the
+                        // channel set header sizes, 6, with the frame sizes, 5, with the code widths
+                        // as they are, 4, with the headers as they are, 3, without prefix.x.wav, and
+                        // 2, without prefix.dtsx)
 
 // The segments' code widths (a_code, b_code) against those their residuals res say, as the meta file
 // keeps them (join: back), from version 13 (ver) as their difference (dif_of()), before XORed with
@@ -2717,7 +2835,7 @@ static void put_hdr(Rec& o, const U8* p, const Xll& x, const std::vector<Chunk>&
       }
     }
   for (int c = 0; c < x.nchsets; c++) bits_xor(&h[0], x.csoff[c] * 8, 10, (U32)(x.csnat[c] - 1) & 1023);
-  if (msb) rc_xor(&h[0], x, *msb, 1, true);
+  if (msb) rc_xor(&h[0], x, *msb, 1, true, true);
   for (int i = 0; i < x.ncrc; i++) h[x.crcat[i]] = h[x.crcat[i] + 1] = 0;
   std::vector<int> pred(x.navi.size(), 0);
   for (size_t i = 0; i < pred.size(); i++) {
@@ -2832,7 +2950,7 @@ static const char* const WHY_DTSX = "the DTS:X object data ends early";
 // before 5), x the header's again (n, one2one, base, off0: xll_headers()'s)
 static const char* rc_join(Xll& x, const BandData& msb, std::vector<U8>& hdr, int n, int one2one, const Xll* base,
                            int off0, int ver) {
-  if (ver >= 5) rc_xor(&hdr[0], x, msb, ver >= 8 ? -1 : 0, ver >= 10);
+  if (ver >= 5) rc_xor(&hdr[0], x, msb, ver >= 8 ? -1 : 0, ver >= 10, ver >= 15);
   std::vector<U8> fb((size_t)n + PAD, 0);
   memcpy(&fb[0], &hdr[0], hdr.size());
   const char* why = xll_headers(x, &fb[0], n, one2one, base, off0, &fb[0], false, ver >= 7 && !base);
@@ -3506,7 +3624,7 @@ struct Splitter {
     xwav_on = false;
     xf_done = false;
     memset(&chk.ao, 0, sizeof chk.ao);
-    chk.ao.v14 = 1;
+    chk.ao.v14 = chk.ao.v15 = 1;
     chk.aost = sp.aost = &chk.ao;
     Rec hr;
     hr.bytes(MAGIC, 8);
@@ -3648,6 +3766,7 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
   static Split sp;
   memset(&sp.ao, 0, sizeof sp.ao);
   sp.ao.v14 = h[8] >= 14;
+  sp.ao.v15 = h[8] >= 15;
   sp.aost = &sp.ao;
   std::vector<S32> wv;
   std::vector<U8> buf;
