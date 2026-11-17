@@ -41,7 +41,7 @@ says what it found and where it went:
 s.2.dts: 130554771 bytes: 24855 core frames, 24855 extension substream frames (24855 with XLL split), 2443 bytes between frames
 s2.dtsc: 50008260 bytes, the core frames
 s2.wav: 229063784 bytes: 12725760 samples a channel, 6 channels, 24-bit, 48000 Hz
-s2.meta: 1813550 bytes: extension substream headers 795360, XLL headers 44096, XLL coding parameters 897011, DTS:X object headers and coding parameters 0, frames kept as bytes 0, bytes between frames 2446, the rest 74637; 0 values clipped, 0 overlapping LSB bits
+s2.meta: 1081901 bytes: extension substream headers 795360, XLL headers 43368, XLL coding parameters 166093, DTS:X object headers and coding parameters 0, frames kept as bytes 0, bytes between frames 2446, the rest 74634; 0 values clipped, 0 overlapping LSB bits
 verify: OK
 ```
 
@@ -52,7 +52,7 @@ Nigel_Stanford_Cymatics_DTS-X.dts: 321415780 bytes: 30695 core frames, 30695 ext
 cym.dtsc: 61758340 bytes, the core frames
 cym.wav: 502906984 bytes: 15715840 samples a channel, 8 channels, 32-bit, 48000 Hz
 cym.x.wav: 188590184 bytes: 15715840 samples a channel, 4 channels, 24-bit, 48000 Hz: the DTS:X object audio of 30695 XLL frames
-cym.meta: 3767434 bytes: extension substream headers 1227800, XLL headers 85948, XLL coding parameters 1584910, DTS:X object headers and coding parameters 776581, frames kept as bytes 0, bytes between frames 0, the rest 92195; 0 values clipped, 0 overlapping LSB bits
+cym.meta: 1745166 bytes: extension substream headers 1227800, XLL headers 73896, XLL coding parameters 254689, DTS:X object headers and coding parameters 96592, frames kept as bytes 0, bytes between frames 0, the rest 92189; 0 values clipped, 0 overlapping LSB bits
 verify: OK
 ```
 
@@ -298,6 +298,28 @@ headers from 20536 to 1616), the Cymatics stream's from 137392 to 68224 (its hea
 data's from 87396 to 16288) and the 27 streams of the regression set from 97292 to 73388; those of
 the smallest FATE streams come to 4-12 bytes more.
 
+From format 20 the coding parameters are range-coded too, as fields keyed as the headers' are: each
+segment's flags (its parameters the last segment's or not, common to its channels or not, its
+padding bits kept or not) and each channel's (the code, hybrid or not, XORed with `fp_set()`'s),
+then the code widths, as their difference from `ck_xor()`'s rule, coded where the join computes the
+rule, as whether it is 0, then its bits by a binary tree, in the context of the part (the residuals
+before the prediction's order or the rest), the code and how near the rule's Rice width is to its
+neighbours: the bits a Rice code of those residuals takes at one less and one more than at it, each
+as fewer, or as how many sixteenths of a bit a residual more (to 7 and past), or no such width. The
+rule's misses are nearly all one less, where that is fewer bits or nearly as few: in `s.2.dts`, past
+the prediction's order, 12% of the segments where one less is fewer bits, 4.0% where it is under a
+sixteenth of a bit a residual more, 1.1% under 2/16 and 0.07% under 3/16, next to none further
+(where a few miss by one more). The frame's go to the fourth section, the object data's to the
+fifth; the widths' sections are empty. Format 20 also takes the reflection coefficients' recursion
+on past where it breaks down (the error no more than 0, a coefficient past 1), as the encoders do,
+the codes from the second at most 121 where they are positive and 127 where they are negative: so
+are all 320 channels of the Cymatics stream's first 60 MB where format 19's codes missed (it stopped
+there, and capped the negative at 121). And its coders' estimates count fewer decisions, which all
+three sections took less with: 30 for the ranks and pairs, 30 for the coding parameters, 14 for the
+headers' fields (4096 before). Format 20 takes the meta file of `s.2.dts` from 16600 bytes with xz
+to 13340, the Cymatics stream's from 68224 to 48604 and the 27 streams of the regression set from
+73388 to 68804.
+
 ## Tests
 
 Each stream below joins back byte for byte (`-v`, and `d` and `cmp`):
@@ -361,9 +383,9 @@ format 11's (`xll_71_24_96_768` and `xll_xch_61_24_48_768` for `xll_71_24_48_768
 stream, `s2_mid.dts`, `master_audio_7.1_24bit.dts`, `Master_Audio_5.0_96khz.dts` and
 `xll_51_16_192_768_1`), 800 with format 15's (400 KB from the middle of the Cymatics stream,
 `s2_mid.dts`, `Master_Audio_7.1.dts`, `3-1.dts` and `xll_71_24_96_768`), 800 with format 16's
-(the same five), 800 with format 17's (the same five), 800 with format 18's (the same five) and 800
-with format 19's (the same five). Builds with `-O0`, `-O2` and
-`-O3 -march=native -ffp-contract=fast` (fused multiply-adds) write the same meta files, and each
+(the same five), 800 with format 17's (the same five), 800 with format 18's (the same five), 800
+with format 19's (the same five) and 800 with format 20's (the same five). Builds with `-O0`, `-O2`
+and `-O3 -march=native -ffp-contract=fast` (fused multiply-adds) write the same meta files, and each
 joins the others'.
 
 On `s.2.dts`, `c -v` takes 11.5 s and `d` 4.2 s, as with format 14 (format 8: 8.4 s and 3.1 s;
@@ -379,25 +401,25 @@ For `s.2.dts`, with xz `-9e` and FLAC (ffmpeg, `-compression_level 12`):
 | `s.2.dts` | 130554771 | 100% |
 | `s.2.dts`, xz | 124891928 | 95.66% |
 | `s2.dtsc` (the core), xz | 44109856 | 33.79% |
-| `s2.meta`, xz | 16600 | 0.01% |
+| `s2.meta`, xz | 13340 | 0.01% |
 | `s2.wav`, FLAC | 78014446 | 59.76% |
-| the three | 122140902 | 93.56% |
+| the three | 122137642 | 93.55% |
 
 (The meta file's format 4 came to 1243884 bytes with xz, format 5's to 386896, format 6's to 282692,
 format 7's to 204176, format 8's to 200204, format 9's to 89028, format 10's to 78872, format 11's
 to 77536, format 12's to 65596, format 13's to 63744, format 14's to 61180, format 15's to 51912,
-format 16's to 43852, format 17's to 41672, format 18's to 35560.)
+format 16's to 43852, format 17's to 41672, format 18's to 35560, format 19's to 16600.)
 
 The Cymatics stream's DTS:X object data, 96021900 bytes as it is, xz no smaller: as `prefix.x.wav`
 (188590184 bytes) through WavPack (ffmpeg, `-compression_level 3`), 92545003 bytes (FLAC
-`-compression_level 12`, 97067662), and 0.8 MB more of the meta file (3767434 bytes; with xz 68224,
+`-compression_level 12`, 97067662), and 96 KB more of the meta file (1745166 bytes; with xz 48604,
 where format 3's was 2665280 without them, format 4's 4104040 with them, format 5's 1446656, format
 6's 1054156, format 7's 722100, format 8's 678020, format 9's 427644, format 10's 392200, format
 11's 360700, format 12's 309328, format 13's 303912, format 14's 292292, format 15's 205592, format
-16's 169712, format 17's 153936 and format 18's 137392). Of its 4 channels, two follow the other
-two's pair closely (correlation 1.00), and the second pair the WAV's back surrounds (0.70 and 0.77;
-a linear fit of the WAV's channels leaves 40% and 50% of their energy), which a compressor that sees
-both WAVs can use.
+16's 169712, format 17's 153936, format 18's 137392 and format 19's 68224). Of its 4 channels, two
+follow the other two's pair closely (correlation 1.00), and the second pair the WAV's back surrounds
+(0.70 and 0.77; a linear fit of the WAV's channels leaves 40% and 50% of their energy), which a
+compressor that sees both WAVs can use.
 
 FLAC on the residual comes to almost exactly what XLL's own band data takes (78014222 bytes): the
 residual is close to noise, and XLL's per-frame LPC and Rice codes already do about what FLAC does.
@@ -511,10 +533,10 @@ compressor that stores the audio and derives the core from it:
 
 | `s.2.dts` | Bytes | |
 |---|---:|---:|
-| the core (xz), the residual (FLAC), the meta file (xz) | 122140902 | 93.56% |
+| the core (xz), the residual (FLAC), the meta file (xz) | 122137642 | 93.55% |
 | the same, the core by a model of its fields (78.8%) | about 118.7 MB | 90.9% |
 | the audio (FLAC), the core given the audio, the meta file | about 110.4 MB | 84.5% |
-| the audio (FLAC), the core by dtsdpack, the meta file (xz) | 107074491 | 82.01% |
+| the audio (FLAC), the core by dtsdpack, the meta file (xz) | 107071231 | 82.01% |
 
 The audio costs 29 MB more than the residual (106981478 against 78014446 bytes with FLAC), but
 the core costs 37-42 MB less. In such a compressor:
@@ -554,42 +576,45 @@ show. `s.2.dts` takes 13 s.
 
 ## The meta file's format
 
-`DTSSPLIT`, a version byte (19; `d` reads 18 too, which keeps the XLL headers as their bytes and the
-ranks' and pairs' decisions by LZMA's coder, 17, which keeps the prediction orders' ranks and the
-pairs' flags in the headers, 16, which keeps the prediction orders as their difference from
-`ao_pred()`'s, the Rice and hybrid flags as they are and the isolated samples in one section, 15,
-which keeps its sections one stream, 14, which keeps the reflection coefficients' and the prediction
-orders' autocorrelation in integers, 13, which keeps `ao_pred()`'s 18 pairs and counts that aren't
-halved, 12, which keeps the prediction orders and the code widths XORed with their predictions, 11,
-which keeps the XLL headers' sizes, 10, which keeps hybrid Rice codes' isolated samples as they are,
-9, which keeps the reflection coefficients' codes against the nearest table entries, 8, which keeps
-the pairwise decorrelation's channel order and coefficients and the prediction orders as they are,
-7, which keeps the channel set sub-header sizes as they are and the reflection coefficients' codes
-XORed with `rc_predict()`'s, 6, which keeps the XLL frame sizes, 5, which keeps the code widths as
-they are, 4, which keeps the EXSS and XLL headers as they are, 3, whose `X` records keep all DTS:X
-object data in `prefix.dtsx` and whose `Z` record ends with its size, and 2, whose `X` records keep
-the XLL bytes after the band data whole and whose `Z` record ends after the WAVs), then blocks: each
-the sizes of its eleven sections (LEB128 varints), then their bytes: the records, the frames' XLL
-header bytes, those of their DTS:X object data, the segments' coding parameters' flags, the object
-data's, their code widths, the object data's, their isolated samples and the rest, the object
-data's, the prediction orders' ranks and the pairs' flags, range-coded, and the headers' fields,
-range-coded, a record's parts all in one block. Each record is a tag byte and its fields; numbers
-are LEB128 varints, signed ones zigzagged. The EXSS and XLL header bytes are as the stream has them
-but for their CRC-16s (0s), the EXSS and XLL frame sizes (XORed with the frames', less 1), the
-channel set sub-headers' sizes (XORed with those their fields take, less 1), the pairwise
-decorrelation's channel order and coefficients (XORed with `dc_order()`'s and `dc_code()`'s; the
-pairs' flags 0s, range-coded in the tenth section) and the prediction orders (0s, their rank among
-the orders by `ao_pred()`'s cost range-coded in the tenth section) of a set of one band, the NAVI
-tables' sizes (XORed with those the segments' coding takes, less 1), the reflection coefficients'
-codes (their table indexes less `rc_predict()`'s, zigzagged, as 8 bits) and the EXSS fields an `F`
-record names (less the sizes they hold); a set of one band's segments' Rice and hybrid flags are
-XORed with `fp_set()`'s; the segments' Rice and binary code widths and hybrid Rice codes' isolated
-samples' widths are kept as their difference from `ck_xor()`'s (mod the field's size, zigzagged),
-and their isolated samples' count is 0 where they are those `ck_xor()`'s rule gives, else their
-count and 1. The XLL header bytes, the frame's and the DTS:X object data's, go without their count,
-which the join's parse of them gives; from format 19 as their fields so changed, range-coded in the
-eleventh section as that parse reads them, the bits no field takes after them (the two header
-sections empty).
+`DTSSPLIT`, a version byte (20; `d` reads 19 too, which keeps the coding parameters as bytes and the
+reflection coefficients' codes against those of the recursion stopped where it breaks down, 18,
+which keeps the XLL headers as their bytes and the ranks' and pairs' decisions by LZMA's coder, 17,
+which keeps the prediction orders' ranks and the pairs' flags in the headers, 16, which keeps the
+prediction orders as their difference from `ao_pred()`'s, the Rice and hybrid flags as they are and
+the isolated samples in one section, 15, which keeps its sections one stream, 14, which keeps the
+reflection coefficients' and the prediction orders' autocorrelation in integers, 13, which keeps
+`ao_pred()`'s 18 pairs and counts that aren't halved, 12, which keeps the prediction orders and the
+code widths XORed with their predictions, 11, which keeps the XLL headers' sizes, 10, which keeps
+hybrid Rice codes' isolated samples as they are, 9, which keeps the reflection coefficients' codes
+against the nearest table entries, 8, which keeps the pairwise decorrelation's channel order and
+coefficients and the prediction orders as they are, 7, which keeps the channel set sub-header sizes
+as they are and the reflection coefficients' codes XORed with `rc_predict()`'s, 6, which keeps the
+XLL frame sizes, 5, which keeps the code widths as they are, 4, which keeps the EXSS and XLL headers
+as they are, 3, whose `X` records keep all DTS:X object data in `prefix.dtsx` and whose `Z` record
+ends with its size, and 2, whose `X` records keep the XLL bytes after the band data whole and whose
+`Z` record ends after the WAVs), then blocks: each the sizes of its eleven sections (LEB128
+varints), then their bytes: the records, the frames' XLL header bytes, those of their DTS:X object
+data, the segments' coding parameters' flags, the object data's, their code widths, the object
+data's, their isolated samples and the rest, the object data's, the prediction orders' ranks and the
+pairs' flags, range-coded, and the headers' fields, range-coded, a record's parts all in one block.
+Each record is a tag byte and its fields; numbers are LEB128 varints, signed ones zigzagged. The
+EXSS and XLL header bytes are as the stream has them but for their CRC-16s (0s), the EXSS and XLL
+frame sizes (XORed with the frames', less 1), the channel set sub-headers' sizes (XORed with those
+their fields take, less 1), the pairwise decorrelation's channel order and coefficients (XORed with
+`dc_order()`'s and `dc_code()`'s; the pairs' flags 0s, range-coded in the tenth section) and the
+prediction orders (0s, their rank among the orders by `ao_pred()`'s cost range-coded in the tenth
+section) of a set of one band, the NAVI tables' sizes (XORed with those the segments' coding takes,
+less 1), the reflection coefficients' codes (their table indexes less `rc_predict()`'s, zigzagged,
+as 8 bits) and the EXSS fields an `F` record names (less the sizes they hold); a set of one band's
+segments' Rice and hybrid flags are XORed with `fp_set()`'s; the segments' Rice and binary code
+widths and hybrid Rice codes' isolated samples' widths are kept as their difference from
+`ck_xor()`'s (mod the field's size, zigzagged), and their isolated samples' count is 0 where they
+are those `ck_xor()`'s rule gives, else their count and 1; from format 20 the flags and the widths
+so changed are range-coded, the frame's in the fourth section and the object data's in the fifth,
+the sixth and seventh sections empty. The XLL header bytes, the frame's and the DTS:X object data's,
+go without their count, which the join's parse of them gives; from format 19 as their fields so
+changed, range-coded in the eleventh section as that parse reads them, the bits no field takes after
+them (the two header sections empty).
 
 | Record | Fields |
 |---|---|

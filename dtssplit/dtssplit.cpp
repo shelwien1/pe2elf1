@@ -1103,11 +1103,17 @@ struct AcDec {
     return b;
   }
 };
-// From version 19 the range coders' model (MS_AC's and MS_HAC's apart): each context's probability by
-// the decisions it has had, as many as HC_LIM of them (Krichevsky-Trofimov's estimate, then a running
-// one), a new one's its parent's (1/2: no decision trains a parent)
-enum { HC_N = 1 << 18, HC_LIM = 4096 };
+// From version 19 the range coders' model (each section's its own): each context's probability by
+// the decisions it has had, as many as lim of them (Krichevsky-Trofimov's estimate, then a running
+// one), a new one's its parent's (1/2: no decision trains a parent). Version 19's lim is HC_LIM;
+// from version 20 MS_AC's is HC_LIMA, MS_HAC's HC_LIMH and the coding parameters' HC_LIMC: they
+// all came out smaller the shorter their memory, to those (MS_AC's 22239 bytes of the Cymatics
+// stream at 4096, 22092 at 30; MS_HAC's 16228 at 4096, 13146 at 14 (the rules of version 19); the
+// coding parameters' 21536 at 4096, 19767 at 30)
+enum { HC_N = 1 << 18, HC_LIM = 4096, HC_LIMA = 30, HC_LIMC = 30, HC_LIMH = 14 };
 struct HacModel {
+  int lim;  // (the decisions a context's estimate counts)
+  HacModel() : lim(HC_LIM) {}
   std::vector<U32> p;  // P(0) in 2^-24ths
   std::vector<U16> n;
   std::vector<U64> pend;  // the record's decisions (context | parent << 24 | bit << 48), for commit()
@@ -1126,7 +1132,7 @@ struct HacModel {
       if (!n[c]) p[c] = p[par];
       const S64 d = (pend[i] >> 48 & 1 ? 0 : (S64)1 << 24) - (S64)p[c];
       p[c] = (U32)((S64)p[c] + d / (n[c] + 2));
-      if (n[c] < HC_LIM) n[c]++;
+      if (n[c] < lim) n[c]++;
     }
     pend.clear();
   }
@@ -1211,7 +1217,7 @@ static U32 ac_dcf(int set, int i, int hist, int last, int pc) {
 // last wasn't); if not, its bits: by a binary tree for up to 8 of them, else MSB first by place and
 // whether a 1 came before, in the contexts of the part (the key less its place) and the width. The
 // contexts are hashed into HC_N of them, a field's first decision by its part's.
-enum { HL_FRM = 1, HL_SET, HL_BAND, HL_DCP, HL_AO, HL_FO, HL_RC, HL_LSB, HL_NAVI, HL_GAP };
+enum { HL_FRM = 1, HL_SET, HL_BAND, HL_DCP, HL_AO, HL_FO, HL_RC, HL_LSB, HL_NAVI, HL_GAP, HL_CHK, HL_WID };
 static inline U32 hmix(U32 a, U32 b) {
   U32 h = a * 0x9E3779B1u ^ (b * 0x85EBCA77u + 0x632BE5ABu);
   h ^= h >> 16;
@@ -1309,6 +1315,20 @@ struct HdrCoder {
     }
     if (!put) st->pend.push_back(std::make_pair(slot, v));
     return v;
+  }
+  // (from version 20) a code width's difference from its rule's (ck_xor(); key, n bits), in the
+  // context m of the part, the code and how near the rule's width is to the next ones by their bits
+  // (w_margin()): whether it is 0, then its bits by a binary tree
+  U32 wcode(U32 key, int n, U32 v, bool put, U32 m) {
+    const U32 k = key | obj << 20, lab = (k & 0xF0000u) | obj << 20;
+    if (bit(hctx(k, 0x20000 + m), hctx(lab, 0x20000 + m), v == 0, put)) return 0;
+    const U32 g = lab | (U32)n << 24;
+    U32 node = 1;
+    for (int i = n - 1; i >= 0; i--) {
+      const U32 c = hctx(g, 0x40000 + (m << 8) + node);
+      node = node << 1 | (U32)bit(c, c, (int)(v >> i & 1), put);
+    }
+    return node - (1u << n);
   }
 };
 
@@ -2221,17 +2241,20 @@ static int rc_code(float k, int cap, bool fl) {
 
 static void rc_autocorr(const S32* bb, int N, int o, float* R);
 // the codes of the o reflection coefficients Levinson's recursion in single precision gives the
-// autocorrelation R (as rc_predict()'s)
-static void rc_levinson(const float* R, int o, int* code, bool fl) {
+// autocorrelation R (as rc_predict()'s); from version 20 (f20) as the encoders take it on where it
+// breaks down (the error no more than 0, a coefficient past 1), a code from the second on at most
+// 121 where it is positive and 127 where it is negative (all 320 channels of the Cymatics stream's
+// first 60 MB where format 19's rule missed: there it stopped, 0s, and capped the negative at 121)
+static void rc_levinson(const float* R, int o, int* code, bool fl, bool f20) {
   float a[XORD + 1], an[XORD + 1];
   a[0] = 1;
   float E = R[0];
   for (int j = 1; j <= o; j++) {
-    if (!(E > 0)) return;
+    if (!f20 && !(E > 0)) return;
     float acc = R[j];
     for (int i = 1; i < j; i++) acc = f32add(acc, f32mul(a[i], R[j - i]));
     const float k = -f32div(acc, E);
-    code[j - 1] = rc_code(k, j > 1 ? 121 : 127, fl);
+    code[j - 1] = rc_code(k, j > 1 && !(f20 && k < 0) ? 121 : 127, fl);
     for (int i = 1; i < j; i++) an[i] = f32add(a[i], f32mul(k, a[j - i]));
     for (int i = 1; i < j; i++) a[i] = an[i];
     a[j] = k;
@@ -2244,12 +2267,12 @@ static void rc_levinson(const float* R, int o, int* code, bool fl) {
 // encoder's: 95% of Nigel_Stanford_Cymatics_DTS-X.dts's codes so); 0s where the recursion breaks
 // down. The autocorrelation (f15, from version 15) as the encoders compute it, rc_autocorr()'s,
 // else in integers, each sample to 31 bits
-static void rc_predict(const S32* bb, int N, int o, int* code, bool fl, bool f15) {
+static void rc_predict(const S32* bb, int N, int o, int* code, bool fl, bool f15, bool f20 = false) {
   for (int j = 0; j < o; j++) code[j] = 0;
   float R[XORD + 1];
   if (f15) {
     rc_autocorr(bb, N, o, R);
-    rc_levinson(R, o, code, fl);
+    rc_levinson(R, o, code, fl, f20);
     return;
   }
   const std::vector<S32>& w = hann_q30(N);
@@ -2269,7 +2292,7 @@ static void rc_predict(const S32* bb, int N, int o, int* code, bool fl, bool f15
     for (int n = 0; n + l < N; n++) acc += xs[n] * xs[n + l];
     R[l] = (float)i128_double(acc);
   }
-  rc_levinson(R, o, code, fl);
+  rc_levinson(R, o, code, fl, false);
 }
 
 static inline double f64mul(double a, double b) {
@@ -2623,7 +2646,7 @@ static void ao_count(AoCtx& ac) {
 // decorrelated MSB signals msb (xll_msb()'s), as the meta file keeps them (dir 1) and back (-1): the
 // difference of their table indexes, zigzagged (as 8 bits: from version 8), or (dir 0) XORed with
 // them (versions 5 to 7)
-static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir, bool fl, bool f15) {
+static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir, bool fl, bool f15, bool f20) {
   int code[XORD];
   for (int b = 0; b < x.nbands; b++)
     for (int c = 0; c < x.nchsets; c++) {
@@ -2632,7 +2655,7 @@ static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir, bool fl, b
       const Band& d = s.band[b];
       for (int ch = 0; ch < s.nch; ch++) {
         if (!d.aorder[ch]) continue;
-        rc_predict(msb.at(b, x.chofs[c] + ch), x.nframesamples, d.aorder[ch], code, fl, f15);
+        rc_predict(msb.at(b, x.chofs[c] + ch), x.nframesamples, d.aorder[ch], code, fl, f15, f20);
         for (int j = 0; j < d.aorder[ch]; j++) {
           const int at = d.rcat[ch] + 8 * j;
           const U32 v = bits_at(h, at, 8);
@@ -2647,7 +2670,8 @@ static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir, bool fl, b
     }
 }
 
-enum { VERSION = 19 };  // (the join reads 18 too, with the headers as their bytes, 17, with the ranks
+enum { VERSION = 20 };  // (the join reads 19 too, with the coding parameters as bytes, 18, with the
+                        // headers as their bytes, 17, with the ranks
                         // and the pairs' flags in the headers, 16, with the orders as their
                         // difference, 15, with its
                         // sections one stream, 14, with the autocorrelation in integers, 13, with
@@ -2677,10 +2701,34 @@ static int iso_rule(const S32* e, int n, int k, int aux, int lg, std::vector<U16
     if ((U64)(zig(e[j]) >> k) + 1 + (U64)k > (U64)aux + (U64)lg) iso.push_back((U16)j);
   return (int)iso.size();
 }
-static void ck_xor(const Xll& x, std::vector<Chunk>& ck, const BandData& res, int ver, bool join) {
+// (from version 20) the bits a Rice code of the residuals uu takes at the widths pred-1 and pred+1
+// against pred's, each as a bucket of 16ths of a bit a residual: 0 fewer, 1-8 more (8: 7/16 or more),
+// 9 where there is no such width
+static U32 w_bucket(S64 d, U64 n) {
+  if (d < 0) return 0;
+  const U64 q = (U64)d * 16 / n;
+  return 1 + (U32)(q < 7 ? q : 7);
+}
+static U32 w_margin(const std::vector<U32>& uu, int pred, int top) {
+  const U64 n = uu.size();
+  if (!n) return 9 | 9 << 4;
+  U64 c0 = 0, cm = 0, cp = 0;
+  for (size_t j = 0; j < n; j++) {
+    const U32 u = uu[j];
+    c0 += u >> pred;
+    if (pred) cm += u >> (pred - 1);
+    if (pred < top && pred < 31) cp += u >> (pred + 1);
+  }
+  const S64 b0 = (S64)c0 + (S64)n * (pred + 1);
+  const U32 bm = pred ? w_bucket((S64)cm + (S64)n * pred - b0, n) : 9;
+  const U32 bp = pred < top && pred < 31 ? w_bucket((S64)cp + (S64)n * (pred + 2) - b0, n) : 9;
+  return bm | bp << 4;
+}
+static void ck_xor(const Xll& x, std::vector<Chunk>& ck, const BandData& res, int ver, bool join, HdrCoder* hc = 0) {
   const int S = x.nsegsamples;
   const bool dif = ver >= 13;
   std::vector<U16> rule;
+  std::vector<U32> uu;  // (from version 20: the residuals a width is by, for its margins)
   for (int b = 0; b < x.nbands; b++)
     for (int c = 0; c < x.nchsets; c++) {
       const Chset& s = x.cs[c];
@@ -2704,13 +2752,17 @@ static void ck_xor(const Xll& x, std::vector<Chunk>& ck, const BandData& res, in
               while (w < 32 && (mx >> w)) w++;
               int pa = w ? w - 1 : 0;
               if (pa > top) pa = top;
+              const U32 akey = (U32)HL_WID << 16 | (U32)(c & 15) << 12 | (U32)((b & 3) << 2 | 3) << 8 | (U32)i;
+              if (hc && join) k.aux_code[i] = (U8)hc->wcode(akey, s.nabits, 0, false, 0x3FF);  // (from version 20)
               const int act = !join ? k.aux_code[i] : dif ? (int)dif_back(k.aux_code[i], (U32)pa, s.nabits) : k.aux_code[i] ^ pa;
               ax = act + 1;
               k.aux_code[i] = (U8)(join ? act : dif ? (int)dif_of((U32)act, (U32)pa, s.nabits) : act ^ pa);
+              if (hc && !join) hc->wcode(akey, s.nabits, k.aux_code[i], true, 0x3FF);
             }
             for (int part = seg ? 1 : 0; part < 2; part++) {  // (0 the residuals before the order, 1 the rest)
               U64 sum = 0, n = 0;
               U32 mx = 0;
+              uu.clear();
               for (int ch = 0; ch < s.nch; ch++) {
                 if (!k.seg_common && ch != i) continue;
                 const int na = seg ? 0 : k.seg_common ? d.highest : d.aorder[ch];
@@ -2734,6 +2786,7 @@ static void ck_xor(const Xll& x, std::vector<Chunk>& ck, const BandData& res, in
                   if (part && iso[j - na]) continue;
                   const U32 u = zig(e[j]);
                   sum += u, n++;
+                  if (hc) uu.push_back(u);
                   if (u > mx) mx = u;
                 }
               }
@@ -2749,9 +2802,16 @@ static void ck_xor(const Xll& x, std::vector<Chunk>& ck, const BandData& res, in
               }
               if (pred > top) pred = top;
               U8& f = part ? k.b_code[i] : k.a_code[i];  // (dif: as their difference, from version 13; before, XORed)
+              U32 wm = 0;
+              const U32 wkey = (U32)HL_WID << 16 | (U32)(c & 15) << 12 | (U32)((b & 3) << 2 | part) << 8 | (U32)i;
+              if (hc) {  // (from version 20 range-coded, by the rule's margins)
+                wm = (U32)part | (U32)(k.rice[i] ? 1 : 0) << 1 | (k.rice[i] ? w_margin(uu, pred, top) : 10u | 10u << 4) << 2;
+                if (join) f = (U8)hc->wcode(wkey, s.nabits, 0, false, wm);
+              }
               const int act = !join ? f : dif ? (int)dif_back(f, (U32)pred, s.nabits) : f ^ pred;
               if (part) kb[i] = act;
               f = (U8)(join ? act : dif ? (int)dif_of((U32)act, (U32)pred, s.nabits) : act ^ pred);
+              if (hc && !join) hc->wcode(wkey, s.nabits, f, true, wm);
             }
             rice[i] = k.rice[i];
             aux[i] = h11 ? ax : 0;
@@ -3116,20 +3176,29 @@ static void fp_set(const Xll& x, const BandData& res, int b, int c, int seg, int
 // (into o[q[0]], o[q[1]] and o[q[2]] the segment's flags, code widths, and isolated samples and the
 // rest: from version 16 sections of their own, MS_PAR's or MS_OPAR's; res: the residuals, the flags
 // against fp_set()'s, from version 17)
-static void put_chunk(Rec* o, const int* q, Xll& x, int b, int seg, int c, const Chunk& k, const BandData* res = 0) {
+static void put_chunk(Rec* o, const int* q, Xll& x, int b, int seg, int c, const Chunk& k, const BandData* res = 0,
+                      HdrCoder* hc = 0) {
   Chset& s = x.cs[c];
   Rec &fl = o[q[0]], &wd = o[q[1]], &is = o[q[2]];
-  fl.u8(k.reuse | (k.reuse ? 0 : k.seg_common << 1) | k.g1 << 2 | k.g2 << 3);
+  const U32 kb = (U32)HL_CHK << 16 | (U32)(c & 15) << 12 | (U32)((b & 3) << 1 | (seg ? 1 : 0)) << 8;  // (hc: from version 20)
+  const U32 f0 = (U32)(k.reuse | (k.reuse ? 0 : k.seg_common << 1) | k.g1 << 2 | k.g2 << 3);
+  if (hc) hc->code(kb, 4, f0, true);
+  else fl.u8((int)f0);
   if (!k.reuse) {
     s.seg_common = k.seg_common;
     const int np = s.seg_common ? 1 : s.nch;
     for (int i = 0; i < np; i++) {
       FpSet fp = {0, 0};
       if (res) fp_set(x, *res, b, c, seg, i, s.seg_common, fp);
-      fl.u8((k.rice[i] ^ fp.rice) | (k.hyb[i] ^ fp.hyb) << 1);
-      if (k.hyb[i]) wd.u8(k.aux_code[i]);
-      if (!seg) wd.u8(k.a_code[i]);
-      wd.u8(k.b_code[i]);
+      const U32 f1 = (U32)((k.rice[i] ^ fp.rice) | (k.hyb[i] ^ fp.hyb) << 1);
+      if (hc) {  // (from version 20 the widths are ck_xor()'s to code)
+        hc->code(kb | (U32)(1 + i), 2, f1, true);
+      } else {
+        fl.u8((int)f1);
+        if (k.hyb[i]) wd.u8(k.aux_code[i]);
+        if (!seg) wd.u8(k.a_code[i]);
+        wd.u8(k.b_code[i]);
+      }
       s.rice[i] = k.rice[i];
       s.aux[i] = k.hyb[i];
     }
@@ -3153,10 +3222,12 @@ static void put_chunk(Rec* o, const int* q, Xll& x, int b, int seg, int c, const
 
 // (from m's sections q[0], q[1] and q[2], put_chunk()'s; before version 16 all one stream; res: the
 // residuals the flags are against, from version 17)
-static bool get_chunk(MetaIn& m, const int* q, Xll& x, int b, int seg, int c, Chunk& k, int ver, const BandData* res = 0) {
+static bool get_chunk(MetaIn& m, const int* q, Xll& x, int b, int seg, int c, Chunk& k, int ver, const BandData* res = 0,
+                      HdrCoder* hc = 0) {
   Chset& s = x.cs[c];
   RecIn &fl = *m.s[q[0]], &wd = *m.s[q[1]], &is = *m.s[q[2]];
-  const int f = fl.u8();
+  const U32 kb = (U32)HL_CHK << 16 | (U32)(c & 15) << 12 | (U32)((b & 3) << 1 | (seg ? 1 : 0)) << 8;  // (hc: from version 20)
+  const int f = hc ? (int)hc->code(kb, 4, 0, false) : fl.u8();
   if (f >> 4 || (seg == 0 && (f & 1))) return false;
   k.reuse = f & 1;
   k.g1 = f >> 2 & 1;
@@ -3167,14 +3238,18 @@ static bool get_chunk(MetaIn& m, const int* q, Xll& x, int b, int seg, int c, Ch
     for (int i = 0; i < np; i++) {
       FpSet fp = {0, 0};
       if (res) fp_set(x, *res, b, c, seg, i, s.seg_common, fp);
-      const int v = fl.u8();
+      const int v = hc ? (int)hc->code(kb | (U32)(1 + i), 2, 0, false) : fl.u8();
       k.rice[i] = (v & 1) ^ fp.rice;
       k.hyb[i] = (v >> 1 & 1) ^ fp.hyb;
       if (v >> 2 || (k.hyb[i] && (s.seg_common || !k.rice[i]))) return false;
-      k.aux_code[i] = k.hyb[i] ? (U8)wd.u8() : 0;
-      k.a_code[i] = !seg ? (U8)wd.u8() : 0;
-      k.b_code[i] = (U8)wd.u8();
-      if (k.aux_code[i] >> s.nabits || k.a_code[i] >> s.nabits || k.b_code[i] >> s.nabits) return false;
+      if (hc) {  // (from version 20 ck_xor() takes the widths)
+        k.aux_code[i] = k.a_code[i] = k.b_code[i] = 0;
+      } else {
+        k.aux_code[i] = k.hyb[i] ? (U8)wd.u8() : 0;
+        k.a_code[i] = !seg ? (U8)wd.u8() : 0;
+        k.b_code[i] = (U8)wd.u8();
+        if (k.aux_code[i] >> s.nabits || k.a_code[i] >> s.nabits || k.b_code[i] >> s.nabits) return false;
+      }
       s.rice[i] = k.rice[i];
       s.aux[i] = k.hyb[i];
     }
@@ -3256,6 +3331,8 @@ struct Split {
   AoCtx aoc, aoco;
   AcIo* acput;  // (the split's: where put_hdr() puts the headers' decisions)
   HacIo* hput;   // (and from version 19 the headers' fields)
+  HacIo* cput[2];  // (from version 20 the split's: the coding parameters', the frame's and the object data's)
+  HacIo* cio[2];   // (the check's and the join's)
   HdrState* hst;
   bool hauto;  // (the join's: the fields' last values once a frame is through; the check's are the split's)
 };
@@ -3435,7 +3512,7 @@ static void put_hdr(Rec& o, const U8* p, const Xll& x, const std::vector<Chunk>&
       }
     }
   for (int c = 0; c < x.nchsets; c++) bits_xor(&h[0], x.csoff[c] * 8, 10, (U32)(x.csnat[c] - 1) & 1023);
-  if (msb) rc_xor(&h[0], x, *msb, 1, true, true);
+  if (msb) rc_xor(&h[0], x, *msb, 1, true, true, true);
   for (int i = 0; i < x.ncrc; i++) h[x.crcat[i]] = h[x.crcat[i] + 1] = 0;
   std::vector<int> pred(x.navi.size(), 0);
   for (size_t i = 0; i < pred.size(); i++) {
@@ -3479,9 +3556,17 @@ static void put_obj(Rec* o, const Split& sp, const U8* ob, int n, const std::vec
   ac.pre = 0;
   put_hdr(o[MS_OHDR], ob, x, sp.ock, m ? &msb : 0, 0, &ac, XCS);
   std::vector<Chunk> kx = sp.ock;  // (the code widths against the residuals')
-  ck_xor(x, kx, sp.ores, VERSION, false);
+  std::vector<U64> wt;  // (from version 20 the widths' decisions, after the flags')
+  HacIo wio;
+  wio.init(&wt, 0, 0, 0);
+  HdrCoder hw, hf;
+  hw.start(&wio, sp.hst, true);
+  hf.start(sp.cput[1], sp.hst, true);
+  ck_xor(x, kx, sp.ores, VERSION, false, sp.cput[1] ? &hw : 0);
   for (int b = 0; b < x.nbands; b++)
-    for (int seg = 0; seg < x.nsegs; seg++) put_chunk(o, MS_OPAR, x, b, seg, 0, kx[(size_t)b * x.nsegs + seg], x.nbands == 1 ? &sp.ores : 0);
+    for (int seg = 0; seg < x.nsegs; seg++)
+      put_chunk(o, MS_OPAR, x, b, seg, 0, kx[(size_t)b * x.nsegs + seg], x.nbands == 1 ? &sp.ores : 0, sp.cput[1] ? &hf : 0);
+  if (sp.cput[1] && sp.cput[1]->put_to) sp.cput[1]->put_to->insert(sp.cput[1]->put_to->end(), wt.begin(), wt.end());
   {  // (the bytes after its band data: 0, where they are opad_std()'s 0s, else their count and 1, and them)
     const int pl = n - sp.oend;
     bool z = true;
@@ -3529,12 +3614,20 @@ static void put_x(Rec* o, int wi, const U8* e, int n, int xoff, const U8* xf, in
     put_hdr(o[MS_HDR], xf, x, sp.ck, m ? &msb : 0, x.frame_size, &ac, 0);
   }
   std::vector<Chunk> kx = sp.ck;  // (the code widths against the residuals')
-  ck_xor(x, kx, sp.res, VERSION, false);
+  std::vector<U64> wt;  // (from version 20 the widths' decisions, after the flags')
+  HacIo wio;
+  wio.init(&wt, 0, 0, 0);
+  HdrCoder hw, hf;
+  hw.start(&wio, sp.hst, false);
+  hf.start(sp.cput[0], sp.hst, false);
+  ck_xor(x, kx, sp.res, VERSION, false, sp.cput[0] ? &hw : 0);
   for (int b = 0; b < x.nbands; b++)
     for (int seg = 0; seg < x.nsegs; seg++)
       for (int c = 0; c < x.nchsets; c++)
         if (x.cs[c].nbands > b)
-          put_chunk(o, MS_PAR, x, b, seg, c, kx[((size_t)b * x.nsegs + seg) * x.nchsets + c], x.nbands == 1 ? &sp.res : 0);
+          put_chunk(o, MS_PAR, x, b, seg, c, kx[((size_t)b * x.nsegs + seg) * x.nchsets + c], x.nbands == 1 ? &sp.res : 0,
+                    sp.cput[0] ? &hf : 0);
+  if (sp.cput[0] && sp.cput[0]->put_to) sp.cput[0]->put_to->insert(sp.cput[0]->put_to->end(), wt.begin(), wt.end());
   // the bytes after the band data up to the DTS:X object data or the frame's end: their count and
   // they, or (sg) none, where they are 0s to the DWORD boundary; whether the object data follows
   bool z = true;
@@ -3577,7 +3670,7 @@ static const char* const WHY_DTSX = "the DTS:X object data ends early";
 // before 5), x the header's again (n, one2one, base, off0: xll_headers()'s)
 static const char* rc_join(Xll& x, const BandData& msb, std::vector<U8>& hdr, int n, int one2one, const Xll* base,
                            int off0, int ver) {
-  if (ver >= 5) rc_xor(&hdr[0], x, msb, ver >= 8 ? -1 : 0, ver >= 10, ver >= 15);
+  if (ver >= 5) rc_xor(&hdr[0], x, msb, ver >= 8 ? -1 : 0, ver >= 10, ver >= 15, ver >= 20);
   std::vector<U8> fb((size_t)n + PAD, 0);
   memcpy(&fb[0], &hdr[0], hdr.size());
   const char* why = xll_headers(x, &fb[0], n, one2one, base, off0, &fb[0], false, ver >= 7 && !base);
@@ -3714,11 +3807,17 @@ static const char* join_obj(MetaIn& m, const Xll& x, int n, const Layout* L, Sam
   layout_of(ox, fl);
   if (!L || !smp || !layout_same(*L, fl)) return "DTS:X object data unlike prefix.x.wav";
   sp.ock.assign((size_t)ox.nbands * ox.nsegs, Chunk());
+  HdrCoder hcc;  // (from version 20 the coding parameters' coder)
+  HdrCoder* hcp = 0;
+  if (ver >= 20 && sp.cio[1]) {
+    hcc.start(sp.cio[1], sp.hst, true);
+    hcp = &hcc;
+  }
   const bool late = ver >= 17 && ox.nbands == 1;  // (from version 17 after the residuals: fp_set())
   if (!late)
     for (int b = 0; b < ox.nbands; b++)
       for (int seg = 0; seg < ox.nsegs; seg++)
-        if (!get_chunk(m, ver >= 17 ? MS_OPAR : MS_OPAR16, ox, b, seg, 0, sp.ock[(size_t)b * ox.nsegs + seg], ver))
+        if (!get_chunk(m, ver >= 17 ? MS_OPAR : MS_OPAR16, ox, b, seg, 0, sp.ock[(size_t)b * ox.nsegs + seg], ver, 0, hcp))
           return "a damaged record";
   bool pstd = false;  // (version 7: the 0s after the band data as opad_std() has them)
   if (ver >= 7) {
@@ -3760,8 +3859,8 @@ static const char* join_obj(MetaIn& m, const Xll& x, int n, const Layout* L, Sam
   xll_residuals(ox, msb, sp.ores, sp.tmp);
   if (late)
     for (int seg = 0; seg < ox.nsegs; seg++)
-      if (!get_chunk(m, MS_OPAR, ox, 0, seg, 0, sp.ock[seg], ver, &sp.ores)) return "a damaged record";
-  if (ver >= 6) ck_xor(ox, sp.ock, sp.ores, ver, true);
+      if (!get_chunk(m, MS_OPAR, ox, 0, seg, 0, sp.ock[seg], ver, &sp.ores, hcp)) return "a damaged record";
+  if (ver >= 6) ck_xor(ox, sp.ock, sp.ores, ver, true, hcp);
   BitWriter w;
   if ((why = navi_join(ox, sp.ock, sp.ores, sp.olsb, hdr, n, 0, &x, OBJ_HEAD, ver, w))) return why;
   if (pstd) tail.assign(opad_std((int)w.v.size()), 0);
@@ -3866,12 +3965,19 @@ static const char* join_x(MetaIn& m, const Layout* L, Samples& smp, std::vector<
   layout_of(x, fl);
   if (!L || !layout_same(*L, fl)) return "an XLL frame unlike its WAV";
   sp.ck.assign((size_t)x.nbands * x.nsegs * x.nchsets, Chunk());
+  HdrCoder hcc;  // (from version 20 the coding parameters' coder)
+  HdrCoder* hcp = 0;
+  if (ver >= 20 && sp.cio[0]) {
+    hcc.start(sp.cio[0], sp.hst, false);
+    hcp = &hcc;
+  }
   const bool late = ver >= 17 && x.nbands == 1;  // (from version 17 after the residuals: fp_set())
   if (!late)
     for (int b = 0; b < x.nbands; b++)
       for (int seg = 0; seg < x.nsegs; seg++)
         for (int c = 0; c < x.nchsets; c++)
-          if (x.cs[c].nbands > b && !get_chunk(m, MS_PAR, x, b, seg, c, sp.ck[((size_t)b * x.nsegs + seg) * x.nchsets + c], ver))
+          if (x.cs[c].nbands > b &&
+              !get_chunk(m, MS_PAR, x, b, seg, c, sp.ck[((size_t)b * x.nsegs + seg) * x.nchsets + c], ver, 0, hcp))
             return "a damaged record";
   FrameEnd fe = {false, 0, 0, 0};
   if (!xs) {
@@ -3947,8 +4053,8 @@ static const char* join_x(MetaIn& m, const Layout* L, Samples& smp, std::vector<
   if (late)
     for (int seg = 0; seg < x.nsegs; seg++)
       for (int c = 0; c < x.nchsets; c++)
-        if (!get_chunk(m, MS_PAR, x, 0, seg, c, sp.ck[(size_t)seg * x.nchsets + c], ver, &sp.res)) return "a damaged record";
-  if (ver >= 6) ck_xor(x, sp.ck, sp.res, ver, true);
+        if (!get_chunk(m, MS_PAR, x, 0, seg, c, sp.ck[(size_t)seg * x.nchsets + c], ver, &sp.res, hcp)) return "a damaged record";
+  if (ver >= 6) ck_xor(x, sp.ck, sp.res, ver, true, hcp);
   BitWriter w;
   if ((why = navi_join(x, sp.ck, sp.res, sp.lsb, hdr, (int)fsize, one2one, 0, 0, ver, w, ver >= 7 && xs ? &fe : 0)))
     return why;
@@ -4036,9 +4142,16 @@ struct MetaOut {
   size_t held;
   AcEnc enc, henc;  // (MS_AC's: a record's decisions, coded once it is through; from version 19 MS_HAC's)
   HacModel amodel, hmodel;  // (from version 19 MS_AC's KT too)
+  AcEnc cenc[2];  // (from version 20 the coding parameters', the frames' in MS_PFLG, the object data's in MS_OPFLG)
+  HacModel cmodel[2];
+  U64 nc[2];
   U64 nac, nhac;
-  U64 acbytes;  // (the range-coded sections' bytes, all blocks')
+  U64 acbytes;   // (the range-coded sections' bytes, all blocks': the headers')
+  U64 cbytes[2];  // (and the coding parameters', the frames' and the object data's)
   void open(const std::string& path) {
+    amodel.lim = HC_LIMA;
+    hmodel.lim = HC_LIMH;
+    cmodel[0].lim = cmodel[1].lim = HC_LIMC;
     f.open(path);
     for (int k = 0; k < MS_N; k++) s[k].clear();
     held = 0;
@@ -4046,12 +4159,13 @@ struct MetaOut {
     henc.reset();
     amodel.reset();
     hmodel.reset();
+    for (int j = 0; j < 2; j++) cenc[j].reset(), cmodel[j].reset(), nc[j] = 0;
     nac = nhac = 0;
-    acbytes = 0;
+    acbytes = cbytes[0] = cbytes[1] = 0;
   }
   // an X record's decisions, before write_x(): the orders' and the pairs' (MS_AC), the headers' fields
   // (MS_HAC)
-  void ac(const std::vector<U32>& t, const std::vector<U64>& th) {
+  void ac(const std::vector<U32>& t, const std::vector<U64>& th, const std::vector<U64>* tc) {
     amodel.pend.clear();
     for (size_t i = 0; i < t.size(); i++) {
       const U32 c = t[i] >> 1;
@@ -4065,6 +4179,14 @@ struct MetaOut {
     hmodel.commit();
     nac += t.size();
     nhac += th.size();
+    for (int j = 0; j < 2; j++) {
+      const std::vector<U64>& c = tc[j];
+      for (size_t i = 0; i < c.size(); i++)
+        cenc[j].bit16(cmodel[j].p16((U32)(c[i] & 0xFFFFFF), (U32)(c[i] >> 24 & 0xFFFFFF)), (int)(c[i] >> 48 & 1));
+      cmodel[j].pend.assign(c.begin(), c.end());
+      cmodel[j].commit();
+      nc[j] += c.size();
+    }
   }
   void head(const Rec& r) { f.write(r); }
   void write(const Rec& r) {  // a record of the MS_REC section's alone
@@ -4089,11 +4211,18 @@ struct MetaOut {
       henc.finish();
       s[MS_HAC].bytes(&henc.out[0], henc.out.size());
     }
+    for (int j = 0; j < 2; j++)
+      if (nc[j]) {
+        cenc[j].finish();
+        s[j ? MS_OPFLG : MS_PFLG].bytes(&cenc[j].out[0], cenc[j].out.size());
+        cbytes[j] += cenc[j].out.size();
+      }
     acbytes += s[MS_AC].b.size() + s[MS_HAC].b.size();
     enc.reset();
     henc.reset();
     amodel.reset();
     hmodel.reset();
+    for (int j = 0; j < 2; j++) cenc[j].reset(), cmodel[j].reset(), nc[j] = 0;
     nac = nhac = 0;
     Rec h;
     for (int k = 0; k < MS_N; k++) h.uv(s[k].b.size());
@@ -4169,6 +4298,8 @@ struct Splitter {
   AcIo acw, acr;
   std::vector<U64> htape;  // (from version 19 its headers' fields: hw puts them, hrd takes them back)
   HacIo hw, hrd;
+  std::vector<U64> ctape[2];  // (from version 20 its coding parameters', the frame's and the object data's)
+  HacIo cw[2], crd[2];
   HdrState hst;
   std::vector<S32> wv, wv2;
   static CoreFrame cf;
@@ -4289,12 +4420,14 @@ struct Splitter {
     for (int k = 0; k < MS_N; k++) o[k].clear();
     actape.clear();
     htape.clear();
+    for (int j = 0; j < 2; j++) ctape[j].clear();
     hst.pend.clear();
     put_x(o, wi, e, n, off, &xf[0], one2one, sp, exc, xpay, obj, oexc);
     acr.pos = 0;
     acr.bad = false;
     hrd.pos = 0;
     hrd.bad = false;
+    for (int j = 0; j < 2; j++) crd[j].pos = 0, crd[j].bad = false;
     // the check: the record joined back as the join will
     static const U8 none = 0;
     RecIn sec[MS_N];
@@ -4326,6 +4459,8 @@ struct Splitter {
       if (!why && sec[k].mpos != sec[k].msize) why = "an XLL frame that doesn't join back the same";
     if (!why && (acr.bad || acr.pos != actape.size())) why = "an XLL frame that doesn't join back the same";
     if (!why && (hrd.bad || hrd.pos != htape.size())) why = "an XLL frame that doesn't join back the same";
+    for (int j = 0; j < 2; j++)
+      if (!why && (crd[j].bad || crd[j].pos != ctape[j].size())) why = "an XLL frame that doesn't join back the same";
     if (why) {
       chk.ao = aosave;
       hst.pend.clear();
@@ -4383,7 +4518,7 @@ struct Splitter {
       for (int t = one2one < 0 ? 1 : one2one; t >= (one2one < 0 ? 0 : one2one); t--)  // (unknown: 1, then 0)
         if (!(why = try_split(e, n, off, size, t, o, wi))) break;
       if (!why) {
-        meta.ac(actape, htape);
+        meta.ac(actape, htape, ctape);
         meta.write_x(o);
         stt.xsplit++;
         if (xpay.size()) {
@@ -4446,6 +4581,14 @@ struct Splitter {
     chk.aoc.hio = chk.aoco.hio = &hrd;
     sp.aoc.hst = sp.aoco.hst = chk.aoc.hst = chk.aoco.hst = &hst;
     sp.aoc.pre = sp.aoco.pre = chk.aoc.pre = chk.aoco.pre = 0;
+    for (int j = 0; j < 2; j++) {
+      cw[j].init(&ctape[j], 0, 0, 0);
+      crd[j].init(0, &ctape[j], 0, 0);
+      sp.cput[j] = &cw[j];
+      chk.cput[j] = 0;
+      sp.cio[j] = 0;
+      chk.cio[j] = &crd[j];
+    }
     Rec hr;
     hr.bytes(MAGIC, 8);
     hr.u8(VERSION);
@@ -4593,6 +4736,9 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
   static AcDec acdec, hacdec;  // (from version 18, MS_AC's: a block's decisions; from 19 MS_HAC's)
   static AcModel acmodel;
   static HacModel hacmodel, kacmodel;  // (from version 19 MS_HAC's, and MS_AC's in acmodel's place)
+  static AcDec cdec[2];  // (from version 20 the coding parameters', MS_PFLG's and MS_OPFLG's)
+  static HacModel cmodel[2];
+  static HacIo cio[2];
   static AcIo acio;
   static HacIo hacio;
   static HdrState hst;
@@ -4601,8 +4747,18 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
   acmodel.reset();
   hacmodel.reset();
   kacmodel.reset();
+  kacmodel.lim = h[8] >= 20 ? HC_LIMA : HC_LIM;  // (version 19: HC_LIM)
+  hacmodel.lim = h[8] >= 20 ? HC_LIMH : HC_LIM;
   acio.init(0, 0, &acdec, &acmodel);
   if (h[8] >= 19) acio.kmodel = &kacmodel;
+  for (int j = 0; j < 2; j++) {
+    cdec[j].init(&none, 0);
+    cmodel[j].reset();
+    cmodel[j].lim = HC_LIMC;
+    cio[j].init(0, 0, &cdec[j], &cmodel[j]);
+    sp.cput[j] = 0;
+    sp.cio[j] = h[8] >= 20 ? &cio[j] : 0;
+  }
   hacio.init(0, 0, &hacdec, &hacmodel);
   hst.reset();
   sp.acput = 0;
@@ -4631,7 +4787,8 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
     if (blocks && bin[MS_REC].at_end()) {  // (the next block, its records and their parts)
       const U64 b0 = fin.nread;
       for (int k = 1; k < MS_N; k++)
-        if (k != MS_AC && k != MS_HAC && !bin[k].at_end()) damaged("a damaged block", b0);
+        if (k != MS_AC && k != MS_HAC && !(h[8] >= 20 && (k == MS_PFLG || k == MS_OPFLG)) && !bin[k].at_end())
+          damaged("a damaged block", b0);
       if (fin.at_end()) damaged("the meta file ends early", b0);
       U64 len[MS_N] = {0};
       const int ns = h[8] >= 19 ? MS_N : h[8] >= 18 ? MS_N18 : h[8] >= 17 ? MS_N17 : MS_N16;  // (version 18: ten sections, 17: nine, 16: eight)
@@ -4653,6 +4810,11 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
       }
       acdec.init(blk[MS_AC].empty() ? &none : &blk[MS_AC][0], blk[MS_AC].size());  // (from version 18)
       hacdec.init(blk[MS_HAC].empty() ? &none : &blk[MS_HAC][0], blk[MS_HAC].size());  // (from version 19)
+      for (int j = 0; j < 2; j++) {  // (from version 20)
+        const int q = j ? MS_OPFLG : MS_PFLG;
+        cdec[j].init(blk[q].empty() ? &none : &blk[q][0], blk[q].size());
+        cmodel[j].reset();
+      }
       acmodel.reset();
       hacmodel.reset();
       kacmodel.reset();
@@ -4716,6 +4878,7 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
       acmodel.commit();  // (the record's decisions to the probabilities)
       hacmodel.commit();
       kacmodel.commit();
+      for (int j = 0; j < 2; j++) cmodel[j].commit();
       wsamples[w] += (U64)sp.x.nframesamples * sp.x.nbands;
       if (sp.obj) osamples += (U64)sp.ox.nframesamples * sp.ox.nbands;
     } else if (tag == 'Z') {
@@ -4729,7 +4892,8 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
       if (in.bad || !in.at_end()) damaged("a damaged end record", at);
       if (blocks) {  // (the block's sections all taken, and no block after it)
         for (int k = 1; k < MS_N; k++)  // (but MS_AC and MS_HAC: their decoders read no more than they need)
-          if (k != MS_AC && k != MS_HAC && !bin[k].at_end()) damaged("a damaged end record", at);
+          if (k != MS_AC && k != MS_HAC && !(h[8] >= 20 && (k == MS_PFLG || k == MS_OPFLG)) && !bin[k].at_end())
+            damaged("a damaged end record", at);
         if (!fin.at_end()) damaged("a damaged end record", at);
       }
       if (xb && !xin.at_end()) die(EX_DATA, "%s: more than the meta file takes", xname.c_str());
@@ -4858,10 +5022,11 @@ int main(int argc, char** argv) {
               "DTS:X object headers and coding parameters %llu, frames kept as bytes %llu, bytes between frames "
               "%llu, the rest %llu; %llu values clipped, %llu overlapping LSB bits\n",
               sp.meta.f.name.c_str(), (unsigned long long)sp.meta.f.size, (unsigned long long)st.m_exss,
-              (unsigned long long)(st.m_xhdr + sp.meta.acbytes), (unsigned long long)st.m_param, (unsigned long long)st.m_obj,
+              (unsigned long long)(st.m_xhdr + sp.meta.acbytes), (unsigned long long)(st.m_param + sp.meta.cbytes[0]),
+              (unsigned long long)(st.m_obj + sp.meta.cbytes[1]),
               (unsigned long long)st.m_kept, (unsigned long long)st.m_raw,
-              (unsigned long long)(sp.meta.f.size - st.m_exss - st.m_xhdr - sp.meta.acbytes - st.m_param - st.m_obj - st.m_kept -
-                                   st.m_raw),
+              (unsigned long long)(sp.meta.f.size - st.m_exss - st.m_xhdr - sp.meta.acbytes - st.m_param - sp.meta.cbytes[0] -
+                                   st.m_obj - sp.meta.cbytes[1] - st.m_kept - st.m_raw),
               (unsigned long long)st.exceptions, (unsigned long long)st.ovl_bits);
     }
     if (verify) {
