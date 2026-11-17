@@ -10,40 +10,40 @@ Debug 1
 Const 0
 
 Index a
- a_bd: bd, 1!1100010000000000000000001100011
- a_es: es, &01100000
+ a_bd: bd, 1!1100010000000000000000001100110
+ a_es: es, &01001000
 
 Index b
- b_la: la, 1!001101101111010010010000100
+ b_la: la, 1!001101011111100010010000100
  b_lb: lb, 1!100100100000000000000000100
 
 Index c
- c_sn: sn, 1!001111000011100001010010101
- c_la: la, 1!001010000101100001000000000
+ c_sn: sn, 1!001110000011101010000100101
+ c_la: la, 1!001010000100000010000100000
 
 Index d
- d_sn: sn, 1!101000001000000000000000000
+ d_sn: sn, 1!001000001000000000000000000
  d_sd: sd, 1!10
  d_de: de, 1!000000000
  d_sc: sc, 1!10000101000000
- d_sm: sm, 1!0011000010110100
+ d_sm: sm, 1!0010000010110100
  d_bg: bg, 1!1001000
  d_ag: ag, 1!1100
  d_sx: sx, 1!11101
 
 Index e
- e_bd: bd, 1!0011100000000000000000001000000
- e_sn: sn, 1!001111000001000001000000011
+ e_bd: bd, 1!0011100000000010001000010000000
+ e_sn: sn, 1!001101000001000001000000011
 
 Index h
- h_lb: lb, 1!101000110111111011001111100
+ h_lb: lb, 1!100010110111011011000001100
  h_es: es, &01011110
- h_bd: bd, 1!0000000001101101001001101010000
+ h_bd: bd, 1!0000000001100101101011101010101
 
 Index i
  i_es: es, &00001011
  i_nb: nb, 1!101100110
- i_la: la, 1!000000100011111101000010100
+ i_la: la, 1!000000100111110001000100100
 
 Index j
  j_es: es, &00000000
@@ -55,23 +55,23 @@ Index k
  k_nn: nn, 1!000000000000001
  k_sc: sc, 1!11110000001010
  k_eq: eq, 1!0000
- k_sm: sm, 1!1110100011100000
+ k_sm: sm, 1!1110001011110000
  k_bg: bg, 1!0001000
  k_ag: ag, 1!1010
- k_sx: sx, 1!01001
+ k_sx: sx, 1!00001
 
 Index l
- l_bd: bd, 1!1000000111110000000000111010000
+ l_bd: bd, 1!0000000111111000100000111110000
  l_cc: cc, 1!11
- l_la: la, 1!100100001111000100000010100
+ l_la: la, 1!100010011100001101000010100
 
 Index s
- s_sn: sn, 1!010110011100000000000000011
+ s_sn: sn, 1!000110011100000000000000011
  s_sd: sd, 1!10
  s_nn: nn, 1!000000000000000
  s_sc: sc, 1!01111110110000
- s_sm: sm, 1!0100100111001000
- s_bg: bg, 1!1010100
+ s_sm: sm, 1!0100100111001001
+ s_bg: bg, 1!1010101
  s_ag: ag, 1!0010
  s_sx: sx, 1!01000
 
@@ -97,24 +97,24 @@ Index g
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
 Number rA, 1, 0!00101101
 Number mwA, 1, 0!11111111
-Number rB, 1, 0!11111010
+Number rB, 1, 0!11111011
 Number mwB, 1, 0!11010010
-Number rC, 1, 0!11111011
-Number mwC, 1, 0!10001111
-Number rD, 1, 0!11111101
-Number mwD, 1, 0!00000000
+Number rC, 1, 0!11111111
+Number mwC, 1, 0!10001101
+Number rD, 1, 0!11111100
+Number mwD, 1, 0!00000011
 Number rE, 1, 0!00000000
 Number mwE, 1, 0!10000010
-Number rH, 1, 0!11111001
-Number mwH, 1, 0!11111110
+Number rH, 1, 0!11111100
+Number mwH, 1, 0!11111111
 Number rI, 1, 0!11011101
-Number mwI, 1, 0!11101111
+Number mwI, 1, 0!11010001
 Number rJ, 1, 0!00000000
-Number mwJ, 1, 0!10011111
-Number rK, 1, 0!10101011
+Number mwJ, 1, 0!10011110
+Number rK, 1, 0!11100011
 Number mwK, 1, 0!00011101
-Number rL, 1, 0!11101011
-Number mwL, 1, 0!11111001
+Number rL, 1, 0!10011111
+Number mwL, 1, 0!11111101
 Number lr, 1, 0!10111
 Number mb, 1, 0!01000100
 #  the mixers' initial weights, in 256ths (format 112): each counter's two probabilities' in the
@@ -123,15 +123,15 @@ Number mb, 1, 0!01000100
 #  others' (lf, bf, format 113), mixer 2's and 3's rates, in 16ths of mixer 1's (l2, l3, format 114)
 #  and boosts (b2, b3, format 115)
 Number wp, 1, 0!00011111
-Number wq, 1, 0!00001000
-Number wo, 1, 0!01000010
+Number wq, 1, 0!00000000
+Number wo, 1, 0!01000001
 Number wa, 1, 0!00000000
-Number wf, 1, 0!01101011
+Number wf, 1, 0!01101010
 Number lf, 1, 0!00010010
 Number bf, 1, 0!00010001
 Number l2, 1, 0!00010000
 Number l3, 1, 0!00010000
-Number b2, 1, 0!00010000
+Number b2, 1, 0!00010011
 Number b3, 1, 0!00010000
 Number rS1, 1, 0!01000
 Number rS2, 1, 0!01000
@@ -145,7 +145,7 @@ Number mt, 1, 0!100
 ! Number lrm, 1, 0!11111
 ! Number mbm, 1, 0!00011001
 Number rG, 1, 0!00000010
-Number mwG, 1, 0!00111000
+Number mwG, 1, 0!00100110
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
 #  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.
