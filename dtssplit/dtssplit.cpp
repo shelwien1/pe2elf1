@@ -50,21 +50,23 @@
 // goes to prefix.dtsx as it is, frame after frame. The join takes prefix.x.wav and prefix.dtsx only
 // where the meta file says there is object data.
 //
-// The meta file: "DTSSPLIT", a version byte (8; the join reads 7, with the channel set header sizes
-// and the reflection coefficients' codes XORed, 6, with the XLL frame sizes, 5, with the code widths
-// as they are, 4, with the headers as they are, 3, the format before prefix.x.wav, and 2, the format
-// before prefix.dtsx, too), then records, each a tag byte and its fields (numbers as LEB128 varints,
-// signed ones zigzagged). Its EXSS and XLL header bytes are the stream's but for what the join
-// computes again: their CRC-16s are 0s, and the EXSS frame size, the XLL frame size, the channel set
-// header sizes and the NAVI tables' sizes are XORed with those the join will compute (the frames'
-// sizes, the bytes the headers' fields take and those each segment's coding takes), the reflection
-// coefficients' codes kept as their table indexes' difference from rc_predict()'s (from the WAV's
-// samples), so that they are mostly 0s too; so are the segments' Rice and binary code
-// widths, XORed with those their residuals give (ck_xor()), and the EXSS header's fields that hold
-// the XLL frame's size or the DTS:X object data's offset or size, less those (an F record says
-// where they are). The join computes the XLL frame's size and the object data's from their parts:
-// where the bytes after the band data are 0s to the DWORD boundary, and those after the object
-// data's band data 0s to the boundary past 2 more bytes (opad_std()), the meta file keeps neither:
+// The meta file: "DTSSPLIT", a version byte (9; the join reads 8, with the prediction orders as
+// they are, 7, with the channel set header sizes and the reflection coefficients' codes XORed, 6,
+// with the XLL frame sizes, 5, with the code widths as they are, 4, with the headers as they are,
+// 3, the format before prefix.x.wav, and 2, the format before prefix.dtsx, too), then records, each
+// a tag byte and its fields (numbers as LEB128 varints, signed ones zigzagged). Its EXSS and XLL
+// header bytes are the stream's but for what the join computes again: their CRC-16s are 0s, and the
+// EXSS frame size, the XLL frame size, the channel set header sizes and the NAVI tables' sizes are
+// XORed with those the join will compute (the frames' sizes, the bytes the headers' fields take and
+// those each segment's coding takes), the prediction orders of a set of one band with ao_pred()'s
+// and the reflection coefficients' codes kept as their table indexes' difference from
+// rc_predict()'s (both from the WAV's samples, which the join reads before the header), so that
+// they are mostly 0s too; so are the segments' Rice and binary code widths, XORed with those their
+// residuals give (ck_xor()), and the EXSS header's fields that hold the XLL frame's size or the
+// DTS:X object data's offset or size, less those (an F record says where they are). The join
+// computes the XLL frame's size and the object data's from their parts: where the bytes after the
+// band data are 0s to the DWORD boundary, and those after the object data's band data 0s to the
+// boundary past 2 more bytes (opad_std()), the meta file keeps neither:
 //   R n bytes          bytes that aren't a frame
 //   C n                a core frame: the next n bytes of prefix.dtsc
 //   E n bytes          an extension substream frame kept as bytes
@@ -871,6 +873,8 @@ struct Band {  // a channel set's coding in a frequency band (its part of the su
   int aorder[XCH], forder[XCH], highest;
   int rc[XCH][XORD];
   int rcat[XCH];  // where a channel's reflection coefficients' codes start in the header (bits)
+  int aoat;       // where the prediction orders start in the header (bits)
+  int ordat, dcat[XCH / 2];  // where the channel order starts, each pair's coefficient (bits; -1: none)
   int dmix_embedded;
   int lsb_size, nlsb[XCH], adj[XCH];  // lsb_size: the bytes at the end of a segment's data the LSB part takes
 };
@@ -928,8 +932,28 @@ static bool crc_here(Xll& x, const U8* p, U8* fix, int a, int b) {
 // channel set's sub-header at off0 and the frame's common header base's; with fix (p itself), the
 // CRC-16s are written rather than checked (the meta file keeps them as 0s); lax: a reflection
 // coefficient's code out of range taken as 0 (the meta file keeps the codes against rc_predict()'s)
+// The prediction orders' rule (ao_pred()): its state, the counts of the candidates' hits ([channel
+// set, the DTS:X object data's last][channel]), and what a frame's prediction needs
+enum { AO_NL = 6, AO_NF = 3, AO_NR = AO_NL * AO_NF, AO_K = 10, AO_DEF = 7 };
+struct AoState {
+  U32 n[XCS + 1][XCH][AO_NR];
+};
+struct AoCtx {
+  const S32* val;  // the frame's samples as the WAV has them ([XLL channel][sample]): 0, none
+  int nch, N;      // its channels, samples a channel
+  AoState* st;
+  __int128 S[XCH][XCH];  // (dc_order()'s: the products of a channel set's channels)
+  int np;  // the join's candidates for the counts once the frame is through (ao_count())
+  struct {
+    U8 set, oc, pos, act, out[AO_NR];
+  } pend[XCS * XCH];
+};
+static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, int* pred, bool keep);
+static void dc_order(AoCtx& ac, int g0, int nch, int* order);
+static int dc_code(const AoCtx& ac, int nch, int a, int b);
+
 static const char* xll_headers(Xll& x, const U8* p, int n, int one2one, const Xll* base = 0, int off0 = 0,
-                               U8* fix = 0, bool lax = false, bool nofs = false, bool hsx = false) {
+                               U8* fix = 0, bool lax = false, bool nofs = false, bool hsx = false, AoCtx* ao = 0) {
   BitReader r;
   r.init(p, 0, (U64)n * 8);
   x.ncrc = 0;
@@ -1032,9 +1056,33 @@ static const char* xll_headers(Xll& x, const U8* p, int n, int one2one, const Xl
     for (int b = 0; b < s.nbands; b++) {
       Band& d = s.band[b];
       d.decor = r.get(1);
+      // (the join's from version 9, ao: the channel order and the coefficients against dc_order()'s and
+      // dc_code()'s)
+      const bool dp = ao && ao->val && fix && b == 0 && s.nbands == 1;
       if (d.decor && s.nch > 1) {
+        d.ordat = (int)r.pos;
         for (int ch = 0; ch < s.nch; ch++) d.order[ch] = r.get(chbits);
-        for (int i = 0; i < s.nch / 2; i++) d.dcoeff[i] = r.get(1) ? unzig(r.get(7)) : 0;
+        if (dp) {
+          int op[XCH];
+          dc_order(*ao, x.nch, s.nch, op);
+          for (int ch = 0; ch < s.nch; ch++) {
+            bits_xor(fix, d.ordat + chbits * ch, chbits, (U32)op[ch]);
+            d.order[ch] ^= op[ch];
+          }
+        }
+        for (int i = 0; i < s.nch / 2; i++) {
+          d.dcat[i] = -1;
+          d.dcoeff[i] = 0;
+          if (!r.get(1)) continue;
+          d.dcat[i] = (int)r.pos;
+          U32 code = r.get(7);
+          if (dp) {
+            const int pc = dc_code(*ao, s.nch, d.order[2 * i], d.order[2 * i + 1]);
+            bits_xor(fix, d.dcat[i], 7, (U32)pc);
+            code ^= (U32)pc;
+          }
+          d.dcoeff[i] = unzig(code);
+        }
       } else {
         for (int ch = 0; ch < s.nch; ch++) d.order[ch] = ch;
         for (int i = 0; i < s.nch / 2; i++) d.dcoeff[i] = 0;
@@ -1045,10 +1093,21 @@ static const char* xll_headers(Xll& x, const U8* p, int n, int one2one, const Xl
         seen |= 1 << d.order[ch];
       }
       d.highest = 0;
-      for (int ch = 0; ch < s.nch; ch++) {
-        d.aorder[ch] = r.get(4);
-        if (d.aorder[ch] > d.highest) d.highest = d.aorder[ch];
+      d.aoat = (int)r.pos;
+      for (int ch = 0; ch < s.nch; ch++) d.aorder[ch] = r.get(4);
+      if (ao && ao->val && fix && b == 0 && s.nbands == 1) {  // (the join's: the orders against ao_pred()'s)
+        int pred[XCH];
+        const int p0 = ao->np;
+        ao_pred(*ao, base ? XCS : c, x.nch, s, d, pred, true);
+        for (int ch = 0; ch < s.nch; ch++) {
+          const int act = d.aorder[ch] ^ pred[ch];
+          bits_xor(fix, d.aoat + 4 * ch, 4, (U32)pred[ch]);
+          d.aorder[ch] = act;
+        }
+        for (int i = p0; i < ao->np; i++) ao->pend[i].act = (U8)d.aorder[ao->pend[i].pos];
       }
+      for (int ch = 0; ch < s.nch; ch++)
+        if (d.aorder[ch] > d.highest) d.highest = d.aorder[ch];
       if (d.highest > x.nsegsamples) return "a prediction order above the segment's samples";
       for (int ch = 0; ch < s.nch; ch++) d.forder[ch] = d.aorder[ch] ? 0 : r.get(2);
       for (int ch = 0; ch < s.nch; ch++) {
@@ -1651,6 +1710,200 @@ static void rc_predict(const S32* bb, int N, int o, int* code) {
   }
 }
 
+static inline double f64mul(double a, double b) {
+  volatile double r = a * b;
+  return r;
+}
+static inline double f64div(double a, double b) {
+  volatile double r = a / b;
+  return r;
+}
+
+// The order of the nch channels of the set whose first is g0 of ac's samples, as the encoders' pairwise
+// decorrelation has it, it seems (every frame of nearly every stream tried): pair after pair, the two
+// channels left whose correlation is the largest in size (the first of equals, as the pairs come
+// first channel, then second), the less loud first (equals: the later), the one left over last;
+// their products into ac.S, for dc_code()
+static void dc_order(AoCtx& ac, int g0, int nch, int* order) {
+  const int N = ac.N;
+  for (int j = 0; j < nch; j++)
+    for (int k = j; k < nch; k++) {
+      __int128 acc = 0;
+      if (g0 + k < ac.nch) {
+        const S32* a = ac.val + (size_t)(g0 + j) * N;
+        const S32* b = ac.val + (size_t)(g0 + k) * N;
+        for (int n = 0; n < N; n++) acc += (__int128)((S64)a[n] * b[n]);
+      }
+      ac.S[j][k] = ac.S[k][j] = acc;
+    }
+  bool used[XCH] = {false};
+  int n = 0;
+  for (int t = 0; t < nch / 2; t++) {
+    int bj = -1, bk = -1;
+    double br = -1;
+    for (int j = 0; j < nch; j++)
+      for (int k = j + 1; k < nch; k++) {
+        if (used[j] || used[k]) continue;
+        double r2 = 0;  // (the correlation squared, in correctly rounded steps: the same everywhere)
+        if (ac.S[j][j] > 0 && ac.S[k][k] > 0) {
+          const double c = i128_double(ac.S[j][k]);
+          r2 = f64div(f64mul(c, c), f64mul(i128_double(ac.S[j][j]), i128_double(ac.S[k][k])));
+        }
+        if (r2 > br) br = r2, bj = j, bk = k;
+      }
+    if (ac.S[bj][bj] < ac.S[bk][bk]) {
+      order[n++] = bj;
+      order[n++] = bk;
+    } else {
+      order[n++] = bk;
+      order[n++] = bj;
+    }
+    used[bj] = used[bk] = true;
+  }
+  for (int j = 0; j < nch; j++)
+    if (!used[j]) order[n++] = j;
+}
+
+// The code of the pairwise decorrelation coefficient the encoders give the pair a (the base) and b
+// of the channels dc_order() has had: their least squares fit in 8ths, rounded (every coefficient
+// that isn't 0, in nearly every stream tried), zigzagged in 7 bits
+static int dc_code(const AoCtx& ac, int nch, int a, int b) {
+  if (a < 0 || b < 0 || a >= nch || b >= nch || !(ac.S[a][a] > 0)) return 0;
+  const __int128 num = 16 * ac.S[a][b] + ac.S[a][a], den = 2 * ac.S[a][a];
+  __int128 q = num / den;
+  if (num % den && (num < 0)) q--;  // (floor)
+  const int v = q < -64 ? -64 : q > 63 ? 63 : (int)q;
+  return (int)(zig(v) & 127);
+}
+
+// log2 of the finite float f > 0 in Q20, by squaring its mantissa: in integers, the same everywhere
+static S64 log2_q20(float f) {
+  U32 u;
+  memcpy(&u, &f, 4);
+  int e = (int)(u >> 23) & 255;
+  U64 m = u & 0x7FFFFF;
+  if (e) {
+    m |= 0x800000;
+  } else {
+    while (!(m & 0x800000)) m <<= 1, e--;
+    e++;
+  }
+  S64 r = (S64)(e - 127) * (1 << 20);
+  U64 v = m << 7;  // (1 to 2 in Q30)
+  for (int i = 19; i >= 0; i--) {
+    v = (v * v + (1ull << 29)) >> 30;
+    if (v >> 31) v >>= 1, r += (S64)1 << i;
+  }
+  return r;
+}
+
+// The prediction orders of the channels of channel set s (set: its index in the counts) in band 0,
+// its first channel g0 of ac's samples, decorrelated as the band d's header says (no LSBs taken off),
+// into pred: the encoders' choice, it seems, of the order k (0 to 10) least in (N/2) max(log2 E_k,
+// F) + L k, E_k the variance left after Levinson's recursion to order k (as rc_predict()'s, of the
+// samples under Hann's window), F a floor and L a coefficient's cost in bits. L and F go by the
+// channel (set and index in it, whatever place the decorrelation's order gives it): those of 6 by 3
+// that would have predicted its past orders best (L 8.5 and F 2 for most of the DTS:X encoder's
+// first channel set, its LFE too, L 15 for its second set and its object audio). keep: the
+// candidates' orders to ac's pending ones, for ao_count()
+static const int AO_LAM[AO_NL] = {12, 17, 22, 26, 30, 36};  // (L in halves of a bit)
+static const int AO_FLO[AO_NF] = {-1000, 2, 4};
+static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, int* pred, bool keep) {
+  const int N = ac.N;
+  const std::vector<S32>& w = hann_q30(N);
+  static std::vector<S32> sig[2];
+  static std::vector<S64> xs;
+  sig[0].resize((size_t)N);
+  sig[1].resize((size_t)N);
+  xs.resize((size_t)N);
+  int nb = 0;
+  while ((1 << nb) < N) nb++;
+  const S64 lim = (S64)1 << ((62 - nb) / 2);  // (the autocorrelation in 64 bits: |xs| under it)
+  for (int i = 0; i < s.nch; i++) {
+    pred[i] = 0;
+    const int oc = d.order[i], g = g0 + oc;
+    if (g >= ac.nch) continue;
+    S32* bb = &sig[i & 1][0];
+    const S32* v = ac.val + (size_t)g * N;
+    if ((i & 1) && d.decor && d.dcoeff[i / 2]) {
+      const S32* b0 = &sig[0][0];
+      for (int n = 0; n < N; n++) bb[n] = (S32)((U32)v[n] - (U32)decor_term((U32)b0[n], d.dcoeff[i / 2]));
+    } else {
+      memcpy(bb, v, (size_t)N * sizeof *bb);
+    }
+    S64 mx = 0;
+    for (int n = 0; n < N; n++) {
+      xs[n] = (S64)bb[n] * w[n];
+      const S64 a = xs[n] < 0 ? -xs[n] : xs[n];
+      if (a > mx) mx = a;
+    }
+    int sh = 0;
+    while ((mx >> sh) >= lim) sh++;
+    if (sh)
+      for (int n = 0; n < N; n++) xs[n] = (xs[n] + ((S64)1 << (sh - 1))) >> sh;
+    float R[AO_K + 1];
+    for (int l = 0; l <= AO_K; l++) {
+      S64 acc = 0;
+      for (int n = 0; n + l < N; n++) acc += xs[n] * xs[n + l];
+      R[l] = (float)acc;  // (exactly so in any float environment: an integer, rounded once)
+    }
+    U8 out[AO_NR];
+    memset(out, 0, sizeof out);
+    if (R[0] > 0) {
+      // log2 of the samples' variance: E's under the window (Q30, shifted by sh) less log2(3N/8)
+      const S64 off = (S64)(2 * sh - 60) * (1 << 20) - log2_q20((float)(3 * N) / 8.0f);
+      S64 L[AO_K + 1];
+      float a[AO_K + 1], an[AO_K + 1], E = R[0];
+      a[0] = 1;
+      int K = 0;
+      L[0] = log2_q20(E) + off;
+      for (int j = 1; j <= AO_K; j++) {
+        float acc = R[j];
+        for (int t = 1; t < j; t++) acc = f32add(acc, f32mul(a[t], R[j - t]));
+        const float k = -f32div(acc, E);
+        for (int t = 1; t < j; t++) an[t] = f32add(a[t], f32mul(k, a[j - t]));
+        for (int t = 1; t < j; t++) a[t] = an[t];
+        a[j] = k;
+        E = f32mul(E, f32add(1.0f, -f32mul(k, k)));
+        if (!(E > 0) || !(E < 3.0e38f)) break;
+        L[j] = log2_q20(E) + off;
+        K = j;
+      }
+      for (int f = 0; f < AO_NF; f++)
+        for (int l = 0; l < AO_NL; l++) {
+          int bk = 0;
+          S64 bj = 0;
+          for (int k = 0; k <= K; k++) {
+            const S64 lv = L[k] > (S64)AO_FLO[f] * (1 << 20) ? L[k] : (S64)AO_FLO[f] * (1 << 20);
+            const S64 j = lv * (N / 2) + (S64)AO_LAM[l] * k * (1 << 19);
+            if (k == 0 || j < bj) bj = j, bk = k;
+          }
+          out[f * AO_NL + l] = (U8)bk;
+        }
+    }
+    const U32* cnt = ac.st->n[set][oc];
+    int bi = AO_DEF;
+    for (int j = 0; j < AO_NR; j++)
+      if (cnt[j] > cnt[bi]) bi = j;
+    pred[i] = out[bi];
+    if (keep && ac.np < XCS * XCH) {
+      ac.pend[ac.np].set = (U8)set;
+      ac.pend[ac.np].oc = (U8)oc;
+      ac.pend[ac.np].pos = (U8)i;
+      memcpy(ac.pend[ac.np].out, out, AO_NR);
+      ac.np++;
+    }
+  }
+}
+
+// the counts of the orders the frame had (ac's pending ones)
+static void ao_count(AoCtx& ac) {
+  for (int i = 0; i < ac.np; i++)
+    for (int j = 0; j < AO_NR; j++)
+      if (ac.pend[i].out[j] == ac.pend[i].act) ac.st->n[ac.pend[i].set][ac.pend[i].oc][j]++;
+  ac.np = 0;
+}
+
 // The reflection coefficients' codes in the header h (x's) against rc_predict()'s from the
 // decorrelated MSB signals msb (xll_msb()'s), as the meta file keeps them (dir 1) and back (-1): the
 // difference of their table indexes, zigzagged (as 8 bits: from version 8), or (dir 0) XORed with
@@ -2122,6 +2375,13 @@ struct Split {
   // the EXSS header's fields that hold the XLL frame's size, the object data's offset in it or its
   // size (xfq 0, 1, 2), 16 bits from bit xfat (an F record's: xf_apply())
   std::vector<int> xfat, xfq;
+  // the prediction orders' rule (ao_pred()): its counts (aost: those it takes, the split's the
+  // check's), the frame's and the object data's samples as the WAVs have them (pv, opv: [XLL
+  // channel][sample]) and the join's contexts (the frame's, the object data's)
+  AoState ao;
+  AoState* aost;
+  std::vector<S32> pv, opv;
+  AoCtx aoc, aoco;
 };
 
 // the clipped values of the frame's samples, in WAV order (count: the frame's samples * nch)
@@ -2203,6 +2463,34 @@ static bool fs_xor(U8* h, int fs) {
   return true;
 }
 
+// the samples a channel of the XLL frame whose common header h (n bytes) has: 0 where it can't be one
+static int xll_nfs(const U8* h, size_t n) {
+  if (n < 16 || be32(h) != SYNC_XLL) return 0;
+  const int at = 49 + (int)bits_at(h, 44, 5) + 1;
+  if ((size_t)(at + 12 + 7) / 8 > n) return 0;
+  const int segl = (int)bits_at(h, at + 4, 4), sl = (int)bits_at(h, at + 8, 4);
+  if (!sl || segl > 10 || (1 << sl) > XSEG || ((1 << sl) << segl) > XFRAME) return 0;
+  return (1 << sl) << segl;
+}
+
+// ac (its samples val) for samples v ([sample][WAV channel], n a channel) in the layout L: false
+// where L isn't one to take them (but then ac has none)
+static bool ao_samples(AoCtx& ac, std::vector<S32>& pv, const S32* v, int n, const Layout& L, AoState* st) {
+  ac.val = 0;
+  ac.np = 0;
+  const int W = L.nch;
+  for (int w = 0; w < W; w++)
+    if (L.perm[w] < 0 || L.perm[w] >= W) return false;
+  pv.resize((size_t)n * W);
+  for (int t = 0; t < n; t++)
+    for (int w = 0; w < W; w++) pv[(size_t)L.perm[w] * n + t] = v[(size_t)t * W + w];
+  ac.val = pv.empty() ? 0 : &pv[0];
+  ac.nch = W;
+  ac.N = n;
+  ac.st = st;
+  return true;
+}
+
 // The 0s after DTS:X object data whose band data ends at oend, as its encoders put them: to the
 // DWORD boundary past 2 more bytes
 static int opad_std(int oend) { return 2 + ((-(oend + 2)) & 3); }
@@ -2225,9 +2513,28 @@ static void xf_apply(const Split& sp, std::vector<U8>& pre, int fs, int nx, int 
 // a header's bytes (p, x.data_start of them) into o, its CRC-16s as 0s (xll_headers() puts them
 // back), its NAVI table's sizes against those the segments' coding parameters say (ck's), its
 // reflection coefficients' codes against those its samples' decorrelated MSB signals (msb) say
-static void put_hdr(Rec& o, const U8* p, const Xll& x, const std::vector<Chunk>& ck, const BandData* msb, int fs = 0) {
+static void put_hdr(Rec& o, const U8* p, const Xll& x, const std::vector<Chunk>& ck, const BandData* msb, int fs = 0,
+                    AoCtx* ao = 0, int set0 = 0) {
   std::vector<U8> h(p, p + x.data_start);
   if (fs) fs_xor(&h[0], fs);
+  if (ao && ao->val)  // (the prediction orders XORed with ao_pred()'s, band 0's of a set of one band)
+    for (int c = 0; c < x.nchsets; c++) {
+      const Chset& s = x.cs[c];
+      if (s.nbands != 1) continue;
+      const Band& d = s.band[0];
+      if (d.decor && s.nch > 1) {  // (and the channel order with dc_order()'s, the coefficients with dc_code()'s)
+        int chbits = 0;
+        while ((1 << chbits) < s.nch) chbits++;
+        int op[XCH];
+        dc_order(*ao, x.chofs[c], s.nch, op);
+        for (int ch = 0; ch < s.nch; ch++) bits_xor(&h[0], d.ordat + chbits * ch, chbits, (U32)op[ch]);
+        for (int i = 0; i < s.nch / 2; i++)
+          if (d.dcat[i] >= 0) bits_xor(&h[0], d.dcat[i], 7, (U32)dc_code(*ao, s.nch, d.order[2 * i], d.order[2 * i + 1]));
+      }
+      int pred[XCH];
+      ao_pred(*ao, set0 + c, x.chofs[c], s, s.band[0], pred, false);
+      for (int ch = 0; ch < s.nch; ch++) bits_xor(&h[0], s.band[0].aoat + 4 * ch, 4, (U32)pred[ch]);
+    }
   for (int c = 0; c < x.nchsets; c++) bits_xor(&h[0], x.csoff[c] * 8, 10, (U32)(x.csnat[c] - 1) & 1023);
   if (msb) rc_xor(&h[0], x, *msb, 1);
   for (int i = 0; i < x.ncrc; i++) h[x.crcat[i]] = h[x.crcat[i] + 1] = 0;
@@ -2248,7 +2555,13 @@ static void put_obj(Rec& o, const Split& sp, const U8* ob, int n, const std::vec
   x.crcat[x.ncrc++] = OBJ_HEAD - 3;  // (and its header's: obj_split() has found it holds)
   BandData msb, lsb;
   const bool m = xll_msb(x, sp.ock, &sp.oval[0], sp.oex, msb, lsb);
-  put_hdr(o, ob, x, sp.ock, m ? &msb : 0);
+  AoCtx ac;
+  ac.val = sp.opv.empty() ? 0 : &sp.opv[0];
+  ac.nch = x.nch;
+  ac.N = x.nframesamples;
+  ac.st = sp.aost;
+  ac.np = 0;
+  put_hdr(o, ob, x, sp.ock, m ? &msb : 0, 0, &ac, XCS);
   std::vector<Chunk> kx = sp.ock;  // (the code widths against the residuals')
   ck_xor(x, kx, sp.ores);
   for (int b = 0; b < x.nbands; b++)
@@ -2285,7 +2598,13 @@ static void put_x(Rec& o, int wi, const U8* e, int n, int xoff, const U8* xf, in
   {
     BandData msb, lsb;
     const bool m = xll_msb(x, sp.ck, &sp.val[0], sp.ex, msb, lsb);
-    put_hdr(o, xf, x, sp.ck, m ? &msb : 0, x.frame_size);
+    AoCtx ac;
+    ac.val = sp.pv.empty() ? 0 : &sp.pv[0];
+    ac.nch = x.nch;
+    ac.N = x.nframesamples;
+    ac.st = sp.aost;
+    ac.np = 0;
+    put_hdr(o, xf, x, sp.ck, m ? &msb : 0, x.frame_size, &ac, 0);
   }
   std::vector<Chunk> kx = sp.ck;  // (the code widths against the residuals')
   ck_xor(x, kx, sp.res);
@@ -2405,7 +2724,18 @@ static const char* join_obj(RecIn& in, const Xll& x, int n, const Layout* L, Sam
   const U16 hc = crc16(&ob[0], OBJ_HEAD - 3);
   ob[OBJ_HEAD - 3] = (U8)(hc >> 8);
   ob[OBJ_HEAD - 2] = (U8)hc;
-  const char* why = xll_headers(ox, &ob[0], n, 0, &x, OBJ_HEAD, &ob[0], true, false, ver >= 8);
+  // (from version 9 the samples first: ao_pred() takes them)
+  std::vector<S32> wv;
+  bool early = false;
+  sp.aoco.val = 0;
+  sp.aoco.np = 0;
+  if (ver >= 9 && L && smp && L->nbands == 1) {
+    wv.resize((size_t)x.nframesamples * L->nch);
+    if (!smp->get(wv.empty() ? 0 : &wv[0], wv.size())) return "prefix.x.wav ends early";
+    early = true;
+    if (!ao_samples(sp.aoco, sp.opv, wv.empty() ? 0 : &wv[0], x.nframesamples, *L, sp.aost)) return "a damaged layout";
+  }
+  const char* why = xll_headers(ox, &ob[0], n, 0, &x, OBJ_HEAD, &ob[0], true, false, ver >= 8, ver >= 9 ? &sp.aoco : 0);
   if (why) return why;
   if ((size_t)ox.data_start != hdr.size()) return "a damaged record";
   memcpy(&hdr[0], &ob[0], hdr.size());
@@ -2441,8 +2771,12 @@ static const char* join_obj(RecIn& in, const Xll& x, int n, const Layout* L, Sam
   sp.oex.ovl.reset();
   sp.oex.ovl.v = ov;
   const int NS = ox.nframesamples * ox.nbands, W = L->nch;
-  std::vector<S32> wv((size_t)NS * W);
-  if (!smp->get(&wv[0], wv.size())) return "prefix.x.wav ends early";
+  if (!early) {
+    wv.resize((size_t)NS * W);
+    if (!smp->get(&wv[0], wv.size())) return "prefix.x.wav ends early";
+  } else if (wv.size() != (size_t)NS * W) {
+    return "a damaged record";
+  }
   if ((why = get_exc(in, wv))) return why;
   sp.oval.resize((size_t)NS * W);
   for (int t = 0; t < NS; t++)
@@ -2472,9 +2806,23 @@ static const char* join_x(RecIn& in, const Layout* L, Samples& smp, std::vector<
   const U64 fsize = ver >= 7 ? (U64)XLL_MAX : in.uv();
   if (in.bad || one2one > 1 || fsize > (1 << 20) || !in.blob(hdr, fsize)) return "a damaged record";
   Xll& x = sp.x;
+  // (from version 9 the samples first: ao_pred() takes them)
+  bool early = false;
+  sp.aoc.val = 0;
+  sp.aoc.np = 0;
+  sp.aoco.np = 0;
+  if (ver >= 9 && L && L->nbands == 1) {
+    const int nf = xll_nfs(&hdr[0], hdr.size());
+    if (!nf) return "a damaged record";
+    wv.resize((size_t)nf * L->nch);
+    if (!smp.get(wv.empty() ? 0 : &wv[0], wv.size())) return "the WAV ends early";
+    early = true;
+    if (!ao_samples(sp.aoc, sp.pv, wv.empty() ? 0 : &wv[0], nf, *L, sp.aost)) return "a damaged layout";
+  }
   std::vector<U8> fb(fsize + PAD, 0);  // the header, as the frame's start: what xll_headers reads it from
   memcpy(&fb[0], &hdr[0], hdr.size());
-  const char* why = xll_headers(x, &fb[0], (int)fsize, one2one, 0, 0, &fb[0], true, ver >= 7, ver >= 8);
+  const char* why = xll_headers(x, &fb[0], (int)fsize, one2one, 0, 0, &fb[0], true, ver >= 7, ver >= 8,
+                                ver >= 9 ? &sp.aoc : 0);
   if (why) return why;
   if ((size_t)x.data_start != hdr.size() || (U64)x.frame_size != fsize) return "a damaged record";
   memcpy(&hdr[0], &fb[0], hdr.size());
@@ -2545,8 +2893,12 @@ static const char* join_x(RecIn& in, const Layout* L, Samples& smp, std::vector<
   sp.ex.ovl.reset();
   sp.ex.ovl.v = ov;
   const int NS = x.nframesamples * x.nbands, W = L->nch;
-  wv.resize((size_t)NS * W);
-  if (!smp.get(&wv[0], wv.size())) return "the WAV ends early";
+  if (!early) {
+    wv.resize((size_t)NS * W);
+    if (!smp.get(&wv[0], wv.size())) return "the WAV ends early";
+  } else if (wv.size() != (size_t)NS * W) {
+    return "a damaged record";
+  }
   if ((why = get_exc(in, wv))) return why;
   sp.val.resize((size_t)NS * W);
   for (int n = 0; n < NS; n++)
@@ -2565,6 +2917,8 @@ static const char* join_x(RecIn& in, const Layout* L, Samples& smp, std::vector<
   if (w.v.size() != (ver >= 7 ? (size_t)fe.fs : fsize) || w.nacc) return "an XLL frame of another size";
   if (ver >= 7) xf_apply(sp, pre, fe.fs, fe.nx, -1);
   if (ver >= 5 && !pre.empty()) exss_fields(&pre[0], pre.size(), (int)(pre.size() + w.v.size() + post.size()), 0);
+  ao_count(sp.aoc);  // (the frame's orders to the counts)
+  ao_count(sp.aoco);
   out.clear();
   out.insert(out.end(), pre.begin(), pre.end());
   out.insert(out.end(), w.v.begin(), w.v.end());
@@ -2633,9 +2987,10 @@ struct FileOut {
 };
 
 static const U8 MAGIC[8] = {'D', 'T', 'S', 'S', 'P', 'L', 'I', 'T'};
-enum { VERSION = 8 };  // (the join reads 7 too, with the channel set header sizes, 6, with the frame
-                       // sizes, 5, with the code widths as they are, 4, with the headers as they are, 3,
-                       // without prefix.x.wav, and 2, without prefix.dtsx)
+enum { VERSION = 9 };  // (the join reads 8 too, with the prediction orders as they are, 7, with the
+                       // channel set header sizes, 6, with the frame sizes, 5, with the code widths as
+                       // they are, 4, with the headers as they are, 3, without prefix.x.wav, and 2,
+                       // without prefix.dtsx)
 
 static std::string wav_name(const std::string& prefix, int w) {
   if (!w) return prefix + ".wav";
@@ -2800,6 +3155,12 @@ struct Splitter {
       }
     }
     if (!xf_done && off >= 8) xf_probe(e, n, off, x.frame_size, xa < x.frame_size ? x.frame_size - xa : 0);
+    // (the samples as the WAVs have them, for the prediction orders' rule, as the join will take them)
+    sp.pv.clear();
+    sp.opv.clear();
+    AoCtx tmp;
+    if (fl.nbands == 1) ao_samples(tmp, sp.pv, &wv[0], x.nframesamples, fl, &chk.ao);
+    if (obj && ol.nbands == 1) ao_samples(tmp, sp.opv, &owv[0], sp.ox.nframesamples, ol, &chk.ao);
     o.clear();
     put_x(o, wi, e, n, off, &xf[0], one2one, sp, exc, xpay, obj, oexc);
     // the check: the record joined back as the join will
@@ -2817,9 +3178,15 @@ struct Splitter {
     MemSamples oms;
     oms.v = obj ? &owv[0] : 0;
     oms.n = obj ? owv.size() : 0;
-    if ((why = join_x(in, &fl, ms, back, chk, wv2, &xin, VERSION, obj ? &ol : 0, &oms))) return why;
-    if (back.size() != (size_t)n || memcmp(&back[0], e, n) || in.mpos != in.msize || xin.mpos != xin.msize)
-      return "an XLL frame that doesn't join back the same";
+    static AoState aosave;  // (the rule's counts as they were, where the check fails)
+    aosave = chk.ao;
+    if (!(why = join_x(in, &fl, ms, back, chk, wv2, &xin, VERSION, obj ? &ol : 0, &oms)) &&
+        (back.size() != (size_t)n || memcmp(&back[0], e, n) || in.mpos != in.msize || xin.mpos != xin.msize))
+      why = "an XLL frame that doesn't join back the same";
+    if (why) {
+      chk.ao = aosave;
+      return why;
+    }
     if (wi == nwav) {
       lay[nwav] = fl;
       wav[nwav].open(wav_name(prefix, nwav));
@@ -2911,6 +3278,8 @@ struct Splitter {
     nwav = 0;
     xwav_on = false;
     xf_done = false;
+    memset(&chk.ao, 0, sizeof chk.ao);
+    chk.aost = sp.aost = &chk.ao;
     Rec hr;
     hr.bytes(MAGIC, 8);
     hr.u8(VERSION);
@@ -3048,7 +3417,9 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
   FILE* fo = 0;
   U64 osamples = 0;
   const std::string oname = prefix + ".x.wav";
-  Split sp;
+  static Split sp;
+  memset(&sp.ao, 0, sizeof sp.ao);
+  sp.aost = &sp.ao;
   std::vector<S32> wv;
   std::vector<U8> buf;
   U32 crc = 0;
