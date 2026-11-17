@@ -50,13 +50,15 @@
 // goes to prefix.dtsx as it is, frame after frame. The join takes prefix.x.wav and prefix.dtsx only
 // where the meta file says there is object data.
 //
-// The meta file: "DTSSPLIT", a version byte (5; the join reads 4, with the headers as they are, 3,
-// the format before prefix.x.wav, and 2, the format before prefix.dtsx, too), then records, each a
-// tag byte and its fields (numbers as LEB128 varints, signed ones zigzagged). Its EXSS and XLL
-// header bytes are the stream's but for what the join computes again: their CRC-16s are 0s, and the
-// EXSS frame size, the NAVI tables' sizes and the reflection coefficients' codes are XORed with
-// those the join will compute (the frame's size, the bytes each segment's coding takes, and
-// rc_predict()'s codes from the WAV's samples), so that they are mostly 0s too:
+// The meta file: "DTSSPLIT", a version byte (6; the join reads 5, with the code widths as they are,
+// 4, with the headers as they are, 3, the format before prefix.x.wav, and 2, the format before
+// prefix.dtsx, too), then records, each a tag byte and its fields (numbers as LEB128 varints, signed
+// ones zigzagged). Its EXSS and XLL header bytes are the stream's but for what the join computes
+// again: their CRC-16s are 0s, and the EXSS frame size, the NAVI tables' sizes and the reflection
+// coefficients' codes are XORed with those the join will compute (the frame's size, the bytes each
+// segment's coding takes, and rc_predict()'s codes from the WAV's samples), so that they are mostly
+// 0s too; so are the segments' Rice and binary code widths, XORed with those their residuals give
+// (ck_xor()):
 //   R n bytes          bytes that aren't a frame
 //   C n                a core frame: the next n bytes of prefix.dtsc
 //   E n bytes          an extension substream frame kept as bytes
@@ -1640,6 +1642,61 @@ static void rc_xor(U8* h, const Xll& x, const BandData& msb) {
     }
 }
 
+// The segments' code widths (a_code, b_code) XORed with those their residuals res say, as the meta
+// file keeps them (and back): a Rice code's, floor(log2) of the mean of the zigzagged residuals it
+// codes (a hybrid Rice code's but for its isolated samples); a binary code's the least that holds
+// them. The encoders' rule, it seems: 99.2% of the Rice widths of s.2.dts and of the Cymatics stream
+// past a segment's first residuals (those before the prediction's order), 98-99% of the first
+// ones' (96% in master_audio_7.1_24bit.dts), and all but a few binary widths
+static void ck_xor(const Xll& x, std::vector<Chunk>& ck, const BandData& res) {
+  const int S = x.nsegsamples;
+  for (int b = 0; b < x.nbands; b++)
+    for (int seg = 0; seg < x.nsegs; seg++)
+      for (int c = 0; c < x.nchsets; c++) {
+        const Chset& s = x.cs[c];
+        if (s.nbands <= b) continue;
+        const Band& d = s.band[b];
+        Chunk& k = ck[((size_t)b * x.nsegs + seg) * x.nchsets + c];
+        if (k.reuse) continue;
+        const int np = k.seg_common ? 1 : s.nch, top = (1 << s.nabits) - 1;
+        for (int i = 0; i < np; i++)
+          for (int part = seg ? 1 : 0; part < 2; part++) {  // (0 the residuals before the order, 1 the rest)
+            U64 sum = 0, n = 0;
+            U32 mx = 0;
+            for (int ch = 0; ch < s.nch; ch++) {
+              if (!k.seg_common && ch != i) continue;
+              const int na = seg ? 0 : k.seg_common ? d.highest : d.aorder[ch];
+              const S32* e = res.at(b, x.chofs[c] + ch) + (size_t)seg * S;
+              U8 iso[XSEG];
+              memset(iso, 0, sizeof iso);
+              if (part && k.rice[i] && k.hyb[i])
+                for (size_t j = 0; j < k.iso[ch].size(); j++)
+                  if (k.iso[ch][j] < XSEG) iso[k.iso[ch][j]] = 1;
+              const int j0 = part ? na : 0, j1 = part ? S : na < S ? na : S;
+              for (int j = j0; j < j1; j++) {
+                if (part && iso[j - na]) continue;
+                const U32 u = zig(e[j]);
+                sum += u, n++;
+                if (u > mx) mx = u;
+              }
+            }
+            int pred;
+            if (k.rice[i]) {
+              const U64 mean = n ? sum / n : 0;
+              pred = 0;
+              while (mean >> (pred + 1)) pred++;
+            } else {
+              int w = 0;
+              while (w < 32 && (mx >> w)) w++;
+              pred = w >= 2 ? w - 1 : w;
+            }
+            if (pred > top) pred = top;
+            if (part) k.b_code[i] ^= (U8)pred;
+            else k.a_code[i] ^= (U8)pred;
+          }
+      }
+}
+
 // A segment's size as the NAVI table would have it from its MSB part's bits (mbits), the bits kept
 // after them and its LSB part: the bytes they take (the meta file keeps the table's sizes against these)
 static int navi_size(U64 mbits, const Chunk& k, const Band& d) {
@@ -2120,8 +2177,10 @@ static void put_obj(Rec& o, const Split& sp, const U8* ob, int n, const std::vec
   BandData msb, lsb;
   const bool m = xll_msb(x, sp.ock, &sp.oval[0], sp.oex, msb, lsb);
   put_hdr(o, ob, x, sp.ock, m ? &msb : 0);
+  std::vector<Chunk> kx = sp.ock;  // (the code widths against the residuals')
+  ck_xor(x, kx, sp.ores);
   for (int b = 0; b < x.nbands; b++)
-    for (int seg = 0; seg < x.nsegs; seg++) put_chunk(o, x, b, seg, 0, sp.ock[(size_t)b * x.nsegs + seg]);
+    for (int seg = 0; seg < x.nsegs; seg++) put_chunk(o, x, b, seg, 0, kx[(size_t)b * x.nsegs + seg]);
   o.blob(ob + sp.oend, n - sp.oend);
   for (size_t i = 0; i < sp.oex.tail.size(); i++) o.sv(sp.oex.tail[i]);
   o.blob(sp.oex.ovl.v.empty() ? (const U8*)"" : &sp.oex.ovl.v[0], sp.oex.ovl.v.size());
@@ -2145,10 +2204,12 @@ static void put_x(Rec& o, int wi, const U8* e, int n, int xoff, const U8* xf, in
     const bool m = xll_msb(x, sp.ck, &sp.val[0], sp.ex, msb, lsb);
     put_hdr(o, xf, x, sp.ck, m ? &msb : 0);
   }
+  std::vector<Chunk> kx = sp.ck;  // (the code widths against the residuals')
+  ck_xor(x, kx, sp.res);
   for (int b = 0; b < x.nbands; b++)
     for (int seg = 0; seg < x.nsegs; seg++)
       for (int c = 0; c < x.nchsets; c++)
-        if (x.cs[c].nbands > b) put_chunk(o, x, b, seg, c, sp.ck[((size_t)b * x.nsegs + seg) * x.nchsets + c]);
+        if (x.cs[c].nbands > b) put_chunk(o, x, b, seg, c, kx[((size_t)b * x.nsegs + seg) * x.nchsets + c]);
   const int xa = dtsx_at(xf, sp.data_end, x.frame_size), hl = xa - sp.data_end;
   o.uv((U64)hl * 2 + (xa < x.frame_size));  // (and whether DTS:X object data follows)
   o.bytes(xf + sp.data_end, hl);
@@ -2270,6 +2331,7 @@ static const char* join_obj(RecIn& in, const Xll& x, int n, const Layout* L, Sam
   if (!xll_msb(ox, sp.ock, &sp.oval[0], sp.oex, msb, sp.olsb)) return "prefix.x.wav samples the DTS:X object data can't code";
   if ((why = rc_join(ox, msb, hdr, n, 0, &x, OBJ_HEAD, ver))) return why;
   xll_residuals(ox, msb, sp.ores, sp.tmp);
+  if (ver >= 6) ck_xor(ox, sp.ock, sp.ores);
   BitWriter w;
   if ((why = navi_join(ox, sp.ock, sp.ores, sp.olsb, hdr, n, 0, &x, OBJ_HEAD, ver, w))) return why;
   w.bytes(tail.empty() ? (const U8*)"" : &tail[0], tail.size());
@@ -2346,6 +2408,7 @@ static const char* join_x(RecIn& in, const Layout* L, Samples& smp, std::vector<
   if (!xll_msb(x, sp.ck, &sp.val[0], sp.ex, msb, sp.lsb)) return "WAV samples the XLL frame can't code";
   if ((why = rc_join(x, msb, hdr, (int)fsize, one2one, 0, 0, ver))) return why;
   xll_residuals(x, msb, sp.res, sp.tmp);
+  if (ver >= 6) ck_xor(x, sp.ck, sp.res);
   BitWriter w;
   if ((why = navi_join(x, sp.ck, sp.res, sp.lsb, hdr, (int)fsize, one2one, 0, 0, ver, w))) return why;
   w.bytes(&tail[0], tail.size());
@@ -2419,8 +2482,8 @@ struct FileOut {
 };
 
 static const U8 MAGIC[8] = {'D', 'T', 'S', 'S', 'P', 'L', 'I', 'T'};
-enum { VERSION = 5 };  // (the join reads 4 too, with the headers as they are, 3, without prefix.x.wav,
-                       // and 2, without prefix.dtsx)
+enum { VERSION = 6 };  // (the join reads 5 too, with the code widths as they are, 4, with the headers
+                       // as they are, 3, without prefix.x.wav, and 2, without prefix.dtsx)
 
 static std::string wav_name(const std::string& prefix, int w) {
   if (!w) return prefix + ".wav";
