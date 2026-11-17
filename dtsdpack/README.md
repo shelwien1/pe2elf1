@@ -54,7 +54,7 @@ WAV is the one `c` had: its format, its size and the CRC of its first 64 KB are 
 
 ```
 $ dtsdpack c -s s2.dtsc s2_full.wav s2.dtsd
-s2.dtsc: 50008260 -> 76413 bytes (0.15%, -9); 24855 frames, 24855 packed; 0 bytes between frames; 5 channels and the LFE against the WAV (offset 512, correlation 1.0000)
+s2.dtsc: 50008260 -> 76412 bytes (0.15%, -9); 24855 frames, 24855 packed; 0 bytes between frames; 5 channels and the LFE against the WAV (offset 512, correlation 1.0000)
   bytes                             input     packed
   bytes kept as bytes                   0          3    0.00%
   headers, container              1059444         34    0.00%
@@ -71,7 +71,7 @@ s2.dtsc: 50008260 -> 76413 bytes (0.15%, -9); 24855 frames, 24855 packed; 0 byte
   the binding: core channel 0 = WAV 2; core channel 1 = WAV 0; core channel 2 = WAV 1; core channel 3 = WAV 4; core channel 4 = WAV 5; LFE = WAV 3
 ```
 
-(`-s`'s byte counts are the coder's estimate of its decisions' costs: for `s.2.dts`, 34 bytes short
+(`-s`'s byte counts are the coder's estimate of its decisions' costs: for `s.2.dts`, 33 bytes short
 of what it writes, 211 before format 103's coder took a decision's share of the range exactly (in
 `rc.inc`); before format 102 they took a probability by its top 12 bits, which put its subband
 samples at 22802 bytes.) Where stderr is a terminal, or with `-p`, a call shows what the audio is
@@ -92,10 +92,10 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76413 (0.15%) | 71.86% | 88.21% |
-| its first 3 MB (6.8 s) | 1275608 | 3516 (0.28%) | | |
-| 3 MB from its middle (5.7 s) | 1068372 | 4659 (0.44%) | | |
-| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2618 (0.11%) | | |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76412 (0.15%) | 71.86% | 88.21% |
+| its first 3 MB (6.8 s) | 1275608 | 3515 (0.28%) | | |
+| 3 MB from its middle (5.7 s) | 1068372 | 4658 (0.44%) | | |
+| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2617 (0.11%) | | |
 
 Compressing the whole of `s.2.dts`'s core takes 78 seconds (0.6 MB of core a second; 71 in format
 95, 38 before the HF VQ's sampling of format 93, below) and 42 MB of memory, decompressing it 80
@@ -155,12 +155,12 @@ allocations in):
 | Stream | Core | dtsdpack | The core is |
 |---|---:|---:|---|
 | `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 28564 (1.51%) | the 96 kHz decode's 64-band analysis's lower half (99.79% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
-| `Master Audio 5.0 96khz.dts` | 1768548 | 3497 (0.20%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
-| `Master Audio 7.1.dts` | 1945604 | 4180 (0.21%) | a downmix of its 7.1 |
+| `Master Audio 5.0 96khz.dts` | 1768548 | 3498 (0.20%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
+| `Master Audio 7.1.dts` | 1945604 | 4182 (0.21%) | a downmix of its 7.1 |
 | `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 3798 (0.14%) | its 3.1 |
-| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 2342 (0.04%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
-| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 1634 (0.32%) | the same (1.95%) |
-| `open bitrate.dts` (stereo, open rate) | 5242416 | 886 (0.02%) | decoded (99.99% of the indexes, 99.96% of the scale factors, 99.82% of the bit allocations, 99.99% of the HF VQ groups, 99.82% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
+| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 2341 (0.04%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
+| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 1633 (0.32%) | the same (1.95%) |
+| `open bitrate.dts` (stereo, open rate) | 5242416 | 883 (0.02%) | decoded (99.99% of the indexes, 99.96% of the scale factors, 99.82% of the bit allocations, 99.99% of the HF VQ groups, 99.82% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
 
 A DTS:X stream, `Nigel_Stanford_Cymatics_DTS-X.dts` (5:27; a 5.1 core at 1509 kbps beside DTS-HD
 MA's XLL, whose 7.1 bed FFmpeg decodes, and the DTS:X objects' data, which
@@ -168,7 +168,7 @@ MA's XLL, whose 7.1 bed FFmpeg decodes, and the DTS:X objects' data, which
 
 | Stream | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `Nigel_Stanford_Cymatics_DTS-X.dts` | 61758340 | 62024 (0.10%) | the bed's 5.1 downmix, every channel at -3 dB, each surround its side and back surround, the back's samples first times 32767/32768, rounded (67327 before format 127's LFE error fits, 76800 before format 125's transients, 89909 before format 124's allocation table for its encoder, 92266 before format 123's LFE predictions by class, 179247 before format 122's gains before the mix, below; 184951 before format 117's changes for this encoder's LFE) |
+| `Nigel_Stanford_Cymatics_DTS-X.dts` | 61758340 | 61943 (0.10%) | the bed's 5.1 downmix, every channel at -3 dB, each surround its side and back surround, the back's samples first times 32767/32768, rounded (62024 before format 128's sid retune, 67327 before format 127's LFE error fits, 76800 before format 125's transients, 89909 before format 124's allocation table for its encoder, 92266 before format 123's LFE predictions by class, 179247 before format 122's gains before the mix, below; 184951 before format 117's changes for this encoder's LFE) |
 
 Its surrounds' subband samples were 80 KB of its 180, their bottom subband 36 KB, missed 9% of the
 time, the more the louder: what seemed something more in the core than in the bed (white, in time
@@ -1604,14 +1604,19 @@ out: the Cymatics stream's sid output 2.5 times bigger with it, 2887 bytes. The 
 on format 125's dumps (four passes, 0.17% off its output there): the regression set 54 bytes
 smaller, the calibration set 43, the Cymatics stream's core 18. Its sid, tuned the same way (2.3%
 off its output there; the calibration set 79 bytes smaller again, the 28 short streams 63), is
-left out again: the Cymatics stream's core 141 bytes bigger with it.
+left out again: the Cymatics stream's core 141 bytes bigger with it. Format 128 retunes sid on
+format 127's dumps, the Cymatics stream's among them (weighed as two of 28 streams; part of a pass
+in two hours, 3.2% off its output there): the regression set 9 bytes smaller, the calibration set
+5, the 28 short streams 7, the Cymatics stream's core 81 (its transient modes 217 bytes to 143).
+Its hit, abt and vqr, tuned the same way (1.2%, 0.8% and 0.3% off theirs there), are left out:
+each made the Cymatics stream's core 140-160 bytes smaller and the other sets 9-41 bytes bigger.
 `./mk.sh check 9 stream wav ...`
 confirms that the tuning build, the shipping build and the build without AVX2 write the same
 files.
 
 ### The format
 
-"dtsdpack", the format's version (126), the level; what the WAV was (whether it was one, its
+"dtsdpack", the format's version (128), the level; what the WAV was (whether it was one, its
 channels and bytes a sample, its size and the CRC-32 of its first 64 KB) and the binding (the
 offset; the WAV's samples to the core's, 1, 2 or 4 (its lower band, then 2), and the lower band's
 resolution; the LFE's channel; each core channel's WAV channel, and where it isn't that channel
