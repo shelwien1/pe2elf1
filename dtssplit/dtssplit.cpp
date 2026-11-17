@@ -3,7 +3,7 @@
 //
 // Usage: dtssplit c [options] input.dts prefix
 //        dtssplit d [options] prefix restored.dts
-//   c    split the stream into prefix.dtsc, prefix.wav and prefix.meta (and prefix.dtsx)
+//   c    split the stream into prefix.dtsc, prefix.wav and prefix.meta (and prefix.x.wav)
 //   d    join them back into the stream, byte for byte
 //   -v   (c) join the files written and compare the result with the input
 //   -q   no statistics
@@ -14,8 +14,10 @@
 //                WAV of its own: prefix.2.wav, prefix.3.wav, ...
 //   prefix.meta  all else: the extension substream (EXSS) and XLL headers, each segment's coding
 //                parameters, every byte that is neither a core frame nor split, and where it all goes
-//   prefix.dtsx  a DTS:X stream's object data (its XLL frames' extension after the band data, from
-//                its sync word on), as it is: written where there is any
+//   prefix.x.wav a DTS:X stream's object audio: the samples of the channel set its XLL frames carry
+//                after their band data, as the WAV has the XLL's (written where there is any)
+//   prefix.dtsx  a DTS:X stream's object data that isn't such a channel set, as it is (written where
+//                there is any)
 //
 // A DTS-HD Master Audio stream is, frame by frame, a DTS core frame (subband ADPCM) and an EXSS frame
 // that carries the XLL frame: per channel the difference between the original PCM and the core's
@@ -39,28 +41,38 @@
 //
 // DTS:X streams' XLL frames go on past the band data: their object data, from a sync word of its
 // own at a DWORD boundary (0x02000850; 0xF14000D0 for IMAX's), which no published specification
-// describes (FFmpeg looks for the sync word only to name the profile). It goes to prefix.dtsx as it
-// is, frame after frame: in Nigel_Stanford_Cymatics_DTS-X.dts, 96 MB of its 321 (the meta file was
-// 103 MB with it). The join takes prefix.dtsx only where the meta file says there is object data.
+// describes (FFmpeg looks for the sync word only to name the profile). In
+// Nigel_Stanford_Cymatics_DTS-X.dts (96 MB of its 321) it is a header of 21 bytes with its CRC, the
+// same in every frame, a byte, then one more XLL channel set, by the frame's common header: its
+// sub-header (4 channels, 24-bit, without speaker positions), NAVI table and band data, then 0s to a
+// DWORD boundary (obj_split()). The split decodes it as the XLL's own sets, its samples to
+// prefix.x.wav (4 channels, 24-bit) and the rest to the meta file; object data that isn't such a set
+// goes to prefix.dtsx as it is, frame after frame. The join takes prefix.x.wav and prefix.dtsx only
+// where the meta file says there is object data.
 //
-// The meta file: "DTSSPLIT", a version byte (3; the join reads 2, the format before prefix.dtsx,
-// too), then records, each a tag byte and its fields (numbers as LEB128 varints, signed ones
-// zigzagged):
+// The meta file: "DTSSPLIT", a version byte (4; the join reads 3, the format before prefix.x.wav,
+// and 2, the format before prefix.dtsx, too), then records, each a tag byte and its fields (numbers
+// as LEB128 varints, signed ones zigzagged):
 //   R n bytes          bytes that aren't a frame
 //   C n                a core frame: the next n bytes of prefix.dtsc
 //   E n bytes          an extension substream frame kept as bytes
 //   W w ...            WAV w's layout (before its first X): its channels, width and rate, the
 //                      speaker mask, the XLL channel of each WAV channel, the channel sets, the bands
+//   O 0 ...            prefix.x.wav's layout, as W's (before the first X with object samples)
 //   X w ...            an extension substream frame with its XLL frame split, its samples in WAV w:
 //                      the EXSS bytes before the XLL frame, the XLL header bytes, the coding
 //                      parameters of each segment of each channel set in each band, the XLL bytes
 //                      after the band data up to the DTS:X object data (their count times 2, plus 1
 //                      where the object data follows, then the bytes) and the object data's size
-//                      where there is any (its bytes are the next of prefix.dtsx), the EXSS bytes
+//                      where there is any, then whether it is split: if so its bytes before its
+//                      band data, its segments' coding parameters, its bytes after its band data,
+//                      its band 0's delayed samples, overlapping LSB bits and values clipped in
+//                      prefix.x.wav (as the frame's below), its samples the next of prefix.x.wav;
+//                      else its bytes the next of prefix.dtsx; then the EXSS bytes
 //                      after the XLL frame, band 0's delayed samples, the overlapping LSB bits, the
 //                      WAV values written clipped
-//   Z n crc k s... x   the end: the input's size and CRC-32, the WAVs and their samples a channel,
-//                      the size of prefix.dtsx
+//   Z n crc k s... x o the end: the input's size and CRC-32, the WAVs and their samples a channel,
+//                      the size of prefix.dtsx, prefix.x.wav's samples a channel
 //
 // Written from ETSI TS 102 114 V1.6.1 (DTS Coherent Acoustics; Core and Extensions with Additional
 // Profiles), clauses 5, 7 and 8. The XLL band filter of two frequency bands, which the specification
@@ -847,31 +859,48 @@ static inline S32 mul16(S32 a, S32 b) { return (S32)(((S64)a * b + (1 << 15)) >>
 static inline S32 mulq(S32 a, S32 b, int q) { return (S32)(((S64)a * b + (1LL << (q - 1))) >> q); }
 
 // the common header, the channel set sub-headers and the NAVI table of the XLL frame p (n bytes,
-// PAD more): 0, or why they can't be followed
-static const char* xll_headers(Xll& x, const U8* p, int n, int one2one) {
+// PAD more): 0, or why they can't be followed; with base, p is DTS:X object data (obj_split()), its
+// channel set's sub-header at off0 and the frame's common header base's
+static const char* xll_headers(Xll& x, const U8* p, int n, int one2one, const Xll* base = 0, int off0 = 0) {
   BitReader r;
   r.init(p, 0, (U64)n * 8);
-  if (n < 16 || r.get(32) != SYNC_XLL) return "no XLL sync word";
-  if (r.get(4) + 1 > 1) return "an XLL version above 1";
-  x.hsize = r.get(8) + 1;
-  if (x.hsize < 12 || x.hsize > n || crc16(p + 4, x.hsize - 4)) return "an XLL header whose CRC fails";
-  const int fsnb = r.get(5) + 1;
-  x.frame_size = (int)((U64)r.get(fsnb) + 1);
-  if (x.frame_size > n || x.frame_size < x.hsize) return "an XLL frame larger than its asset";
-  x.nchsets = r.get(4) + 1;
-  const int segl = r.get(4);
-  x.nsegs = 1 << segl;
-  x.nseg_log2 = r.get(4);
-  x.nsegsamples = 1 << x.nseg_log2;
-  if (x.nsegs > 1024 || !x.nseg_log2 || x.nsegsamples > XSEG || (x.nsegsamples << segl) > XFRAME)
-    return "XLL segments out of range";
-  x.nframesamples = x.nsegsamples << segl;
-  x.seg_nbits = r.get(5) + 1;
-  x.band_crc = r.get(2);
-  x.scalable = r.get(1);
-  x.chmask_nbits = r.get(5) + 1;
-  x.fixed_lsb = x.scalable ? r.get(4) : 0;
-  if (r.pos > (U64)(x.hsize - 2) * 8) return "an XLL header too short";
+  if (base) {  // (DTS:X object data: one channel set from off0, by base's common header)
+    if (off0 + 3 > n) return "DTS:X object data too short";
+    x.hsize = off0;
+    x.frame_size = n;
+    x.nchsets = 1;
+    x.nsegs = base->nsegs;
+    x.nseg_log2 = base->nseg_log2;
+    x.nsegsamples = base->nsegsamples;
+    x.nframesamples = base->nframesamples;
+    x.seg_nbits = base->seg_nbits;
+    x.band_crc = base->band_crc;
+    x.scalable = base->scalable;
+    x.chmask_nbits = base->chmask_nbits;
+    x.fixed_lsb = base->fixed_lsb;
+  } else {
+    if (n < 16 || r.get(32) != SYNC_XLL) return "no XLL sync word";
+    if (r.get(4) + 1 > 1) return "an XLL version above 1";
+    x.hsize = r.get(8) + 1;
+    if (x.hsize < 12 || x.hsize > n || crc16(p + 4, x.hsize - 4)) return "an XLL header whose CRC fails";
+    const int fsnb = r.get(5) + 1;
+    x.frame_size = (int)((U64)r.get(fsnb) + 1);
+    if (x.frame_size > n || x.frame_size < x.hsize) return "an XLL frame larger than its asset";
+    x.nchsets = r.get(4) + 1;
+    const int segl = r.get(4);
+    x.nsegs = 1 << segl;
+    x.nseg_log2 = r.get(4);
+    x.nsegsamples = 1 << x.nseg_log2;
+    if (x.nsegs > 1024 || !x.nseg_log2 || x.nsegsamples > XSEG || (x.nsegsamples << segl) > XFRAME)
+      return "XLL segments out of range";
+    x.nframesamples = x.nsegsamples << segl;
+    x.seg_nbits = r.get(5) + 1;
+    x.band_crc = r.get(2);
+    x.scalable = r.get(1);
+    x.chmask_nbits = r.get(5) + 1;
+    x.fixed_lsb = x.scalable ? r.get(4) : 0;
+    if (r.pos > (U64)(x.hsize - 2) * 8) return "an XLL header too short";
+  }
   int off = x.hsize, hier = 0;
   x.nch = 0;
   x.nbands = 1;
@@ -1615,8 +1644,8 @@ static bool layout_same(const Layout& a, const Layout& b) {
   return true;
 }
 
-static void put_layout(Rec& o, int w, const Layout& L) {
-  o.u8('W');
+static void put_layout(Rec& o, int tag, int w, const Layout& L) {
+  o.u8(tag);
   o.uv(w);
   o.uv(L.nch);
   o.uv(L.bits);
@@ -1760,6 +1789,15 @@ struct Split {
   Extra ex;
   std::vector<U32> tmp;
   int data_end;
+  // the DTS:X object data as one more channel set (obj_split()): its frame, coding and samples
+  Xll ox;
+  std::vector<Chunk> ock;
+  BandData ores, olsb;
+  std::vector<S32> oval;
+  Extra oex;
+  int oend;       // where its band data ends
+  int obj;        // join_x(): whether the record had it split
+  size_t obytes;  // put_x(): its part of the record, in bytes
 };
 
 // the clipped values of the frame's samples, in WAV order (count: the frame's samples * nch)
@@ -1785,9 +1823,71 @@ static int dtsx_at(const U8* xf, int data_end, int size) {
   return w == SYNC_XLL_X || (w >> 1) == (SYNC_XLL_X_IMAX >> 1) ? a : size;
 }
 
+// DTS:X object data as Nigel_Stanford_Cymatics_DTS-X.dts has it: its sync word and 15 bytes with
+// their CRC-16 (21 bytes, the same in every frame there), a byte (2), then one more XLL channel set
+// by the frame's common header (its segments, their sizes' width, the band data CRCs, the LSBs): its
+// sub-header (as one without one-to-one speaker mapping), NAVI table and band data, then 0s to the
+// end (2 bytes and the DWORD boundary). OBJ_HEAD: the bytes before the sub-header
+enum { OBJ_HEAD = 22 };
+
+// the object data ob (n bytes, PAD more) of the XLL frame x as that channel set, its samples into
+// sp.oval ([channel][sample]): 0, or why it isn't one
+static const char* obj_split(const Xll& x, const U8* ob, int n, Split& sp) {
+  if (n < OBJ_HEAD + 3 || crc16(ob, OBJ_HEAD - 1)) return "DTS:X object data of another kind";
+  Xll& ox = sp.ox;
+  const char* why = xll_headers(ox, ob, n, 0, &x, OBJ_HEAD);
+  if (why || (why = xll_supported(ox))) return why;
+  sp.ores.init(ox.nframesamples, ox.nch);
+  sp.olsb.init(ox.nframesamples, ox.nch);
+  const Xll hx = ox;  // (the band data parse changes the coding state)
+  if ((why = xll_data(ox, ob, sp.ock, sp.ores, sp.olsb, sp.oend))) return why;
+  ox = hx;
+  sp.oval.assign((size_t)ox.nframesamples * ox.nbands * ox.nch, 0);
+  xll_decode(ox, sp.ock, sp.ores, sp.olsb, &sp.oval[0], sp.oex, sp.tmp);
+  return 0;
+}
+
+// the values clipped in a WAV (where in its samples, and the value), into o; and back into wv
+static void put_exc(Rec& o, const std::vector<std::pair<U64, S32> >& exc) {
+  o.uv(exc.size());
+  U64 last = 0;
+  for (size_t i = 0; i < exc.size(); i++) {
+    o.uv(exc[i].first - last);
+    o.sv(exc[i].second);
+    last = exc[i].first;
+  }
+}
+static const char* get_exc(RecIn& in, std::vector<S32>& wv) {
+  const U64 nexc = in.uv();
+  if (in.bad || nexc > wv.size()) return "a damaged record";
+  U64 at = 0;
+  for (U64 i = 0; i < nexc; i++) {
+    at += in.uv();
+    const S64 v = in.sv();
+    if (in.bad || at >= wv.size() || v != (S32)v) return "a damaged record";
+    wv[at] = (S32)v;
+  }
+  return 0;
+}
+
+// an X record's part for the object data obj_split() split (ob, n bytes): its bytes before its band
+// data, its segments' coding parameters, its bytes after its band data, its band 0's delayed
+// samples, overlapping LSB bits and values clipped in prefix.x.wav (exc)
+static void put_obj(Rec& o, const Split& sp, const U8* ob, int n, const std::vector<std::pair<U64, S32> >& exc) {
+  Xll x = sp.ox;
+  o.blob(ob, x.data_start);
+  for (int b = 0; b < x.nbands; b++)
+    for (int seg = 0; seg < x.nsegs; seg++) put_chunk(o, x, b, seg, 0, sp.ock[(size_t)b * x.nsegs + seg]);
+  o.blob(ob + sp.oend, n - sp.oend);
+  for (size_t i = 0; i < sp.oex.tail.size(); i++) o.sv(sp.oex.tail[i]);
+  o.blob(sp.oex.ovl.v.empty() ? (const U8*)"" : &sp.oex.ovl.v[0], sp.oex.ovl.v.size());
+  put_exc(o, exc);
+}
+
 // an X record into o, the frame's DTS:X object data into xs
 static void put_x(Rec& o, int wi, const U8* e, int n, int xoff, const U8* xf, int one2one, Split& sp,
-                  const std::vector<std::pair<U64, S32> >& exc, std::vector<U8>& xs) {
+                  const std::vector<std::pair<U64, S32> >& exc, std::vector<U8>& xs, int obj,
+                  const std::vector<std::pair<U64, S32> >& oexc) {
   Xll& x = sp.x;
   o.u8('X');
   o.uv(wi);
@@ -1802,18 +1902,23 @@ static void put_x(Rec& o, int wi, const U8* e, int n, int xoff, const U8* xf, in
   const int xa = dtsx_at(xf, sp.data_end, x.frame_size), hl = xa - sp.data_end;
   o.uv((U64)hl * 2 + (xa < x.frame_size));  // (and whether DTS:X object data follows)
   o.bytes(xf + sp.data_end, hl);
-  if (xa < x.frame_size) o.uv(x.frame_size - xa);
-  xs.assign(xf + xa, xf + x.frame_size);
+  xs.clear();
+  sp.obytes = 0;
+  if (xa < x.frame_size) {
+    o.uv(x.frame_size - xa);
+    o.u8(obj);  // (whether obj_split() split it: its samples in prefix.x.wav; else its bytes in prefix.dtsx)
+    if (obj) {
+      const size_t o0 = o.b.size();
+      put_obj(o, sp, xf + xa, x.frame_size - xa, oexc);
+      sp.obytes = o.b.size() - o0;
+    } else {
+      xs.assign(xf + xa, xf + x.frame_size);
+    }
+  }
   o.blob(e + xoff + x.frame_size, n - xoff - x.frame_size);
   for (size_t i = 0; i < sp.ex.tail.size(); i++) o.sv(sp.ex.tail[i]);
   o.blob(sp.ex.ovl.v.empty() ? (const U8*)"" : &sp.ex.ovl.v[0], sp.ex.ovl.v.size());
-  o.uv(exc.size());
-  U64 last = 0;
-  for (size_t i = 0; i < exc.size(); i++) {
-    o.uv(exc[i].first - last);
-    o.sv(exc[i].second);
-    last = exc[i].first;
-  }
+  put_exc(o, exc);
 }
 
 // where the join takes an X record's samples from
@@ -1823,10 +1928,63 @@ struct Samples {
 };
 
 static const char* const WHY_DTSX = "the DTS:X object data ends early";
+
+// an X record's part for split object data (put_obj()'s), joined onto out (n bytes) by the frame
+// x's common header, its samples from smp in the layout L (none: no prefix.x.wav): 0, or why it can't be
+static const char* join_obj(RecIn& in, const Xll& x, int n, const Layout* L, Samples* smp, Split& sp,
+                            std::vector<U8>& out) {
+  std::vector<U8> hdr, tail;
+  if (!in.blob(hdr, (size_t)n)) return "a damaged record";
+  std::vector<U8> ob((size_t)n + PAD, 0);
+  memcpy(&ob[0], &hdr[0], hdr.size());
+  Xll& ox = sp.ox;
+  const char* why = xll_headers(ox, &ob[0], n, 0, &x, OBJ_HEAD);
+  if (why) return why;
+  if ((size_t)ox.data_start != hdr.size()) return "a damaged record";
+  if ((why = xll_supported(ox))) return why;
+  Layout fl;
+  layout_of(ox, fl);
+  if (!L || !smp || !layout_same(*L, fl)) return "DTS:X object data unlike prefix.x.wav";
+  sp.ock.assign((size_t)ox.nbands * ox.nsegs, Chunk());
+  for (int b = 0; b < ox.nbands; b++)
+    for (int seg = 0; seg < ox.nsegs; seg++)
+      if (!get_chunk(in, ox, b, seg, 0, sp.ock[(size_t)b * ox.nsegs + seg])) return "a damaged record";
+  if (!in.blob(tail, (size_t)n)) return "a damaged record";
+  sp.oex.tail.assign(ox.nbands > 1 ? (size_t)ox.nch * 7 : 0, 0);
+  for (size_t i = 0; i < sp.oex.tail.size(); i++) {
+    const S64 v = in.sv();
+    if (v != (S32)v) return "a damaged record";
+    sp.oex.tail[i] = (S32)v;
+  }
+  std::vector<U8> ov;
+  if (!in.blob(ov, 1 << 26)) return "a damaged record";
+  sp.oex.ovl.reset();
+  sp.oex.ovl.v = ov;
+  const int NS = ox.nframesamples * ox.nbands, W = L->nch;
+  std::vector<S32> wv((size_t)NS * W);
+  if (!smp->get(&wv[0], wv.size())) return "prefix.x.wav ends early";
+  if ((why = get_exc(in, wv))) return why;
+  sp.oval.resize((size_t)NS * W);
+  for (int t = 0; t < NS; t++)
+    for (int w = 0; w < W; w++) sp.oval[(size_t)L->perm[w] * NS + t] = wv[(size_t)t * W + w];
+  sp.ores.init(ox.nframesamples, ox.nch);
+  sp.olsb.init(ox.nframesamples, ox.nch);
+  if (!xll_encode_samples(ox, sp.ock, &sp.oval[0], sp.oex, sp.ores, sp.olsb, sp.tmp))
+    return "prefix.x.wav samples the DTS:X object data can't code";
+  BitWriter w;
+  w.reset();
+  w.bytes(&hdr[0], hdr.size());
+  if ((why = xll_write_data(ox, sp.ock, sp.ores, sp.olsb, w))) return why;
+  w.bytes(tail.empty() ? (const U8*)"" : &tail[0], tail.size());
+  if (w.v.size() != (size_t)n || w.nacc) return "DTS:X object data of another size";
+  out.insert(out.end(), w.v.begin(), w.v.end());
+  return 0;
+}
 // An X record (its tag and WAV index read) joined into out: 0, or why it can't be. L: the WAV's
-// layout; xs: the DTS:X object data (null: a version 2 meta file, which keeps it in the record)
+// layout; xs: the DTS:X object data kept as bytes (null: a version 2 meta file, which keeps it in the
+// record); ver: the meta file's version; OL, osmp: prefix.x.wav's layout and samples (null: none)
 static const char* join_x(RecIn& in, const Layout* L, Samples& smp, std::vector<U8>& out, Split& sp,
-                          std::vector<S32>& wv, RecIn* xs) {
+                          std::vector<S32>& wv, RecIn* xs, int ver, const Layout* OL, Samples* osmp) {
   std::vector<U8> pre, hdr, tail, post;
   if (!in.blob(pre, 1 << 20)) return "a damaged record";
   const int one2one = in.u8();
@@ -1858,9 +2016,15 @@ static const char* join_x(RecIn& in, const Layout* L, Samples& smp, std::vector<
     tail.resize(hl);
     const U64 nx = hx & 1 ? in.uv() : 0;
     if (in.bad || nx > fsize - hl) return "a damaged record";
-    tail.resize(hl + nx);
-    if (nx) xs->bytes(&tail[hl], nx);
-    if (xs->bad) return WHY_DTSX;
+    sp.obj = nx && ver >= 4 ? in.u8() : 0;
+    if (in.bad || sp.obj > 1) return "a damaged record";
+    if (sp.obj) {
+      if ((why = join_obj(in, x, (int)nx, OL, osmp, sp, tail))) return why;
+    } else {
+      tail.resize(hl + nx);
+      if (nx) xs->bytes(&tail[hl], nx);
+      if (xs->bad) return WHY_DTSX;
+    }
   }
   if (!in.blob(post, 1 << 20)) return "a damaged record";
   sp.ex.tail.assign(x.nbands > 1 ? (size_t)x.nch * 7 : 0, 0);
@@ -1876,15 +2040,7 @@ static const char* join_x(RecIn& in, const Layout* L, Samples& smp, std::vector<
   const int NS = x.nframesamples * x.nbands, W = L->nch;
   wv.resize((size_t)NS * W);
   if (!smp.get(&wv[0], wv.size())) return "the WAV ends early";
-  const U64 nexc = in.uv();
-  if (in.bad || nexc > wv.size()) return "a damaged record";
-  U64 at = 0;
-  for (U64 i = 0; i < nexc; i++) {
-    at += in.uv();
-    const S64 v = in.sv();
-    if (in.bad || at >= wv.size() || v != (S32)v) return "a damaged record";
-    wv[at] = (S32)v;
-  }
+  if ((why = get_exc(in, wv))) return why;
   sp.val.resize((size_t)NS * W);
   for (int n = 0; n < NS; n++)
     for (int w = 0; w < W; w++) sp.val[(size_t)L->perm[w] * NS + n] = wv[(size_t)n * W + w];
@@ -1926,7 +2082,9 @@ struct WavSamples : Samples {
 
 struct Stats {
   U64 bytes, raw, core, exss, xsplit, exceptions, ovl_bits;
-  U64 x_bytes, x_frames;  // prefix.dtsx: the DTS:X object data, and the frames with it
+  U64 x_bytes, x_frames;  // prefix.dtsx: the DTS:X object data kept as bytes, and the frames with it
+  U64 o_frames;           // the frames whose object data went to prefix.x.wav
+  U64 m_obj;              // the meta file: their object data's headers and coding parameters
   U64 m_exss, m_xhdr, m_param, m_kept, m_raw;  // the meta file: EXSS headers, XLL headers, the rest of
                                                // X records, frames kept as bytes, bytes between frames
   std::vector<std::string> why;
@@ -1963,7 +2121,7 @@ struct FileOut {
 };
 
 static const U8 MAGIC[8] = {'D', 'T', 'S', 'S', 'P', 'L', 'I', 'T'};
-enum { VERSION = 3 };  // (the join reads 2 too: no DTS:X object data apart, nor its size at the end)
+enum { VERSION = 4 };  // (the join reads 3 too, without prefix.x.wav, and 2, without prefix.dtsx)
 
 static std::string wav_name(const std::string& prefix, int w) {
   if (!w) return prefix + ".wav";
@@ -2014,6 +2172,10 @@ struct Splitter {
   WavOut wav[XNWAV];
   Layout lay[XNWAV];
   int nwav;
+  WavOut xwav;  // prefix.x.wav: the object data's samples (xwav_on: opened, in the layout xlay)
+  Layout xlay;
+  bool xwav_on;
+  std::vector<S32> owv;
   ExssState st;
   Stats stt;
   Split sp, chk;
@@ -2048,8 +2210,22 @@ struct Splitter {
     std::vector<std::pair<U64, S32> > exc;
     wv.resize((size_t)NS * x.nch);
     wav_values(NS, fl, &sp.val[0], &wv[0], exc);
+    // (the DTS:X object data, as one more channel set where it is one, of prefix.x.wav's layout)
+    std::vector<std::pair<U64, S32> > oexc;
+    const int xa = dtsx_at(&xf[0], sp.data_end, x.frame_size);
+    int obj = 0;
+    Layout ol;
+    if (xa < x.frame_size && !obj_split(x, &xf[xa], x.frame_size - xa, sp)) {
+      layout_of(sp.ox, ol);
+      if (!xwav_on || layout_same(xlay, ol)) {
+        obj = 1;
+        const int ONS = sp.ox.nframesamples * sp.ox.nbands;
+        owv.resize((size_t)ONS * ol.nch);
+        wav_values(ONS, ol, &sp.oval[0], &owv[0], oexc);
+      }
+    }
     o.clear();
-    put_x(o, wi, e, n, off, &xf[0], one2one, sp, exc, xpay);
+    put_x(o, wi, e, n, off, &xf[0], one2one, sp, exc, xpay, obj, oexc);
     // the check: the record joined back as the join will
     RecIn in;
     in.init_mem(&o.b[0], o.b.size());
@@ -2062,7 +2238,10 @@ struct Splitter {
     RecIn xin;
     static const U8 none = 0;
     xin.init_mem(xpay.empty() ? &none : &xpay[0], xpay.size());
-    if ((why = join_x(in, &fl, ms, back, chk, wv2, &xin))) return why;
+    MemSamples oms;
+    oms.v = obj ? &owv[0] : 0;
+    oms.n = obj ? owv.size() : 0;
+    if ((why = join_x(in, &fl, ms, back, chk, wv2, &xin, VERSION, obj ? &ol : 0, &oms))) return why;
     if (back.size() != (size_t)n || memcmp(&back[0], e, n) || in.mpos != in.msize || xin.mpos != xin.msize)
       return "an XLL frame that doesn't join back the same";
     if (wi == nwav) {
@@ -2073,17 +2252,36 @@ struct Splitter {
       wav[nwav].rate = fl.rate;
       wav[nwav].mask = fl.mask;
       Rec lr;
-      put_layout(lr, nwav, fl);
+      put_layout(lr, 'W', nwav, fl);
       meta.write(lr);
       nwav++;
     }
     wav[wi].write(&wv[0], wv.size());
     stt.exceptions += exc.size();
     stt.ovl_bits += sp.ex.ovl.v.size() * 8;
-    const size_t tl = x.frame_size - sp.data_end - xpay.size();  // (the record's XLL bytes past the band data)
+    if (obj) {
+      if (!xwav_on) {
+        xlay = ol;
+        xwav.open(prefix + ".x.wav");
+        xwav.nch = ol.nch;
+        xwav.bits = ol.bits;
+        xwav.rate = ol.rate;
+        xwav.mask = ol.mask;
+        Rec lr;
+        put_layout(lr, 'O', 0, ol);
+        meta.write(lr);
+        xwav_on = true;
+      }
+      xwav.write(&owv[0], owv.size());
+      stt.exceptions += oexc.size();
+      stt.ovl_bits += sp.oex.ovl.v.size() * 8;
+      stt.o_frames++;
+    }
+    const size_t tl = xa - sp.data_end;  // (the record's XLL bytes between the band data and the object data)
     stt.m_exss += n - x.frame_size;
     stt.m_xhdr += x.data_start + tl;
-    stt.m_param += o.b.size() - (n - x.frame_size) - x.data_start - tl;
+    stt.m_obj += sp.obytes;
+    stt.m_param += o.b.size() - (n - x.frame_size) - x.data_start - tl - sp.obytes;
     return 0;
   }
 
@@ -2135,6 +2333,7 @@ struct Splitter {
     dts.open(prefix + ".dtsc");
     meta.open(prefix + ".meta");
     nwav = 0;
+    xwav_on = false;
     Rec hr;
     hr.bytes(MAGIC, 8);
     hr.u8(VERSION);
@@ -2188,8 +2387,10 @@ struct Splitter {
     zr.uv(nwav);
     for (int w = 0; w < nwav; w++) zr.uv(wav[w].frames);
     zr.uv(stt.x_bytes);
+    zr.uv(xwav_on ? xwav.frames : 0);
     meta.write(zr);
     for (int w = 0; w < nwav; w++) wav[w].finish();
+    if (xwav_on) xwav.finish();
     dts.close();
     meta.close();
     if (stt.x_frames) dtsx.close();
@@ -2249,7 +2450,8 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
   U8 h[9];
   in.bytes(h, 9);
   if (in.bad || memcmp(h, MAGIC, 8)) die(EX_DATA, "%s: not a dtssplit meta file", mname.c_str());
-  if (h[8] != VERSION && h[8] != 2) die(EX_DATA, "%s: format version %d, which this dtssplit (version %d) doesn't read", mname.c_str(), h[8], VERSION);
+  if (h[8] != VERSION && h[8] != 3 && h[8] != 2)
+    die(EX_DATA, "%s: format version %d, which this dtssplit (version %d) doesn't read", mname.c_str(), h[8], VERSION);
   // (the DTS:X object data, where there is the file: a stream without has none; a version 2 meta file
   // keeps it in its records)
   const std::string xname = prefix + ".dtsx";
@@ -2263,6 +2465,12 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
   WavIn wi[XNWAV];
   FILE* wf[XNWAV] = {0};
   U64 wsamples[XNWAV] = {0};
+  Layout olay;  // prefix.x.wav's (have_o: its O record read)
+  bool have_o = false;
+  WavIn owi;
+  FILE* fo = 0;
+  U64 osamples = 0;
+  const std::string oname = prefix + ".x.wav";
   Split sp;
   std::vector<S32> wv;
   std::vector<U8> buf;
@@ -2292,15 +2500,27 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
             wi[w].bits, wi[w].rate, lay[w].nch, lay[w].bits, lay[w].rate);
       have[w] = true;
       continue;
+    } else if (tag == 'O') {
+      if (h[8] < 4 || have_o || in.uv() != 0 || in.bad || !get_layout(in, olay)) damaged("a damaged layout record", at);
+      if (!(fo = fopen(oname.c_str(), "rb"))) die(EX_READ, "can't open %s", oname.c_str());
+      const char* why = owi.open(fo);
+      if (why) die(EX_DATA, "%s: %s", oname.c_str(), why);
+      if (owi.nch != olay.nch || owi.bits != olay.bits || owi.rate != olay.rate)
+        die(EX_DATA, "%s: %d channels, %d-bit, %d Hz, where the meta file has %d, %d-bit, %d Hz", oname.c_str(), owi.nch,
+            owi.bits, owi.rate, olay.nch, olay.bits, olay.rate);
+      have_o = true;
+      continue;
     } else if (tag == 'X') {
       const U64 w = in.uv();
       if (in.bad || w >= XNWAV || !have[w]) damaged("a damaged record", at);
-      WavSamples ws;
+      WavSamples ws, ows;
       ws.w = &wi[w];
-      const char* why = join_x(in, &lay[w], ws, buf, sp, wv, h[8] >= 3 ? &xin : 0);
+      ows.w = &owi;
+      const char* why = join_x(in, &lay[w], ws, buf, sp, wv, h[8] >= 3 ? &xin : 0, h[8], have_o ? &olay : 0, have_o ? &ows : 0);
       if (why == WHY_DTSX && !fx) die(EX_READ, "can't open %s", xname.c_str());
       if (why) damaged(why, at);
       wsamples[w] += (U64)sp.x.nframesamples * sp.x.nbands;
+      if (sp.obj) osamples += (U64)sp.ox.nframesamples * sp.ox.nbands;
     } else if (tag == 'Z') {
       const U64 n = in.uv(), c = in.uv(), nw = in.uv();
       if (in.bad || nw > XNWAV) damaged("a damaged end record", at);
@@ -2308,6 +2528,7 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
         if (in.uv() != wsamples[w]) damaged("sample counts unlike the WAVs'", at);
       const U64 xb = h[8] >= 3 ? in.uv() : 0;  // (prefix.dtsx's size: 0, and a file there is another split's)
       if (xb != xin.nread) damaged("DTS:X object data unlike the meta file's", at);
+      if ((h[8] >= 4 ? in.uv() : 0) != osamples) damaged("sample counts unlike prefix.x.wav's", at);
       if (in.bad || !in.at_end()) damaged("a damaged end record", at);
       if (xb && !xin.at_end()) die(EX_DATA, "%s: more than the meta file takes", xname.c_str());
       if (n != total || c != crc) damaged("the stream joined isn't the one split", at);
@@ -2316,6 +2537,11 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
         S32 extra;
         if (have[w] && wi[w].read(&extra, 1)) die(EX_DATA, "%s: more samples than the meta file takes", wav_name(prefix, (int)w).c_str());
         if (wf[w]) fclose(wf[w]);
+      }
+      if (have_o) {
+        S32 extra;
+        if (owi.read(&extra, 1)) die(EX_DATA, "%s: more samples than the meta file takes", oname.c_str());
+        fclose(fo);
       }
       break;
     } else {
@@ -2385,8 +2611,8 @@ int main(int argc, char** argv) {
     const std::string prefix = files[1];
     if (prefix == "-") die(EX_USAGE, "the prefix names files: not -");
     if (verify && !strcmp(files[0], "-")) die(EX_USAGE, "-v needs the input as a file, not -");
-    static const char* const ext[] = {".dtsc", ".meta", ".wav", ".dtsx"};
-    for (int i = 0; i < 4; i++)
+    static const char* const ext[] = {".dtsc", ".meta", ".wav", ".dtsx", ".x.wav"};
+    for (int i = 0; i < 5; i++)
       if (strcmp(files[0], "-") && (same_file(files[0], (prefix + ext[i]).c_str()) || prefix + ext[i] == files[0]))
         die(EX_USAGE, "%s would overwrite the input", (prefix + ext[i]).c_str());
     FILE* fi = stdin;
@@ -2401,8 +2627,8 @@ int main(int argc, char** argv) {
     sp.prefix = prefix;
     Stats& st = sp.stt;
     st.bytes = st.raw = st.core = st.exss = st.xsplit = st.exceptions = st.ovl_bits = 0;
-    st.x_bytes = st.x_frames = 0;
-    st.m_exss = st.m_xhdr = st.m_param = st.m_kept = st.m_raw = 0;
+    st.x_bytes = st.x_frames = st.o_frames = 0;
+    st.m_exss = st.m_xhdr = st.m_param = st.m_kept = st.m_raw = st.m_obj = 0;
     U32 crc;
     sp.run(fi, crc);
     if (fi != stdin) fclose(fi);
@@ -2418,17 +2644,21 @@ int main(int argc, char** argv) {
         fprintf(stderr, "%s: %llu bytes: %llu samples a channel, %d channels, %d-bit, %d Hz\n", sp.wav[w].name.c_str(),
                 (unsigned long long)sp.wav[w].size(), (unsigned long long)sp.wav[w].frames, sp.wav[w].nch,
                 sp.wav[w].bits, sp.wav[w].rate);
+      if (sp.xwav_on)
+        fprintf(stderr, "%s: %llu bytes: %llu samples a channel, %d channels, %d-bit, %d Hz: the DTS:X object audio of %llu XLL frames\n",
+                sp.xwav.name.c_str(), (unsigned long long)sp.xwav.size(), (unsigned long long)sp.xwav.frames,
+                sp.xwav.nch, sp.xwav.bits, sp.xwav.rate, (unsigned long long)st.o_frames);
       if (st.x_frames)
-        fprintf(stderr, "%s: %llu bytes: the DTS:X object data of %llu XLL frames\n", sp.dtsx.name.c_str(),
+        fprintf(stderr, "%s: %llu bytes: the DTS:X object data of %llu XLL frames, as it is\n", sp.dtsx.name.c_str(),
                 (unsigned long long)st.x_bytes, (unsigned long long)st.x_frames);
       fprintf(stderr,
               "%s: %llu bytes: extension substream headers %llu, XLL headers %llu, XLL coding parameters %llu, "
-              "frames kept as bytes %llu, bytes between frames %llu, the rest %llu; %llu values clipped, %llu "
-              "overlapping LSB bits\n",
+              "DTS:X object headers and coding parameters %llu, frames kept as bytes %llu, bytes between frames "
+              "%llu, the rest %llu; %llu values clipped, %llu overlapping LSB bits\n",
               sp.meta.name.c_str(), (unsigned long long)sp.meta.size, (unsigned long long)st.m_exss,
-              (unsigned long long)st.m_xhdr, (unsigned long long)st.m_param, (unsigned long long)st.m_kept,
-              (unsigned long long)st.m_raw,
-              (unsigned long long)(sp.meta.size - st.m_exss - st.m_xhdr - st.m_param - st.m_kept - st.m_raw),
+              (unsigned long long)st.m_xhdr, (unsigned long long)st.m_param, (unsigned long long)st.m_obj,
+              (unsigned long long)st.m_kept, (unsigned long long)st.m_raw,
+              (unsigned long long)(sp.meta.size - st.m_exss - st.m_xhdr - st.m_param - st.m_obj - st.m_kept - st.m_raw),
               (unsigned long long)st.exceptions, (unsigned long long)st.ovl_bits);
     }
     if (verify) {
