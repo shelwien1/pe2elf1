@@ -336,8 +336,8 @@ struct Rec {
 // and their isolated samples and the rest (MS_PISO, from version 17 the object data's apart in
 // MS_OPISO: version 16 has the eight before), which compress better so than mixed in together.
 // META_BLOCK: the bytes held after which the split ends a block
-enum { MS_REC, MS_HDR, MS_OHDR, MS_PFLG, MS_OPFLG, MS_PWID, MS_OPWID, MS_PISO, MS_OPISO, MS_N, MS_N16 = MS_OPISO,
-       META_BLOCK = 1 << 24 };
+enum { MS_REC, MS_HDR, MS_OHDR, MS_PFLG, MS_OPFLG, MS_PWID, MS_OPWID, MS_PISO, MS_OPISO, MS_AC, MS_N,
+       MS_N16 = MS_OPISO, MS_N17 = MS_AC, META_BLOCK = 1 << 24 };
 static const int MS_PAR[3] = {MS_PFLG, MS_PWID, MS_PISO}, MS_OPAR[3] = {MS_OPFLG, MS_OPWID, MS_OPISO},
                  MS_OPAR16[3] = {MS_OPFLG, MS_OPWID, MS_PISO};
 
@@ -936,6 +936,7 @@ struct Band {  // a channel set's coding in a frequency band (its part of the su
   int rcat[XCH];  // where a channel's reflection coefficients' codes start in the header (bits)
   int aoat;       // where the prediction orders start in the header (bits)
   int ordat, dcat[XCH / 2];  // where the channel order starts, each pair's coefficient (bits; -1: none)
+  int dfat[XCH / 2];         // where each pair's flag for a coefficient is (bits)
   int dmix_embedded;
   int lsb_size, nlsb[XCH], adj[XCH];  // lsb_size: the bytes at the end of a segment's data the LSB part takes
 };
@@ -1001,7 +1002,146 @@ enum { AO_NL = 12, AO_NF = 5, AO_NR = AO_NL * AO_NF, AO_K = 10, AO_DEF = 2 * AO_
 struct AoState {
   U32 n[XCS + 1][XCH][AO_NR];
   int v14, v15, v17;  // (v17: the orders kept as their rank under the rule's cost, from version 17)
+  int v18;            // (v18: the ranks and the pairs' flags in MS_AC, from version 18)
+  U8 dcp[XCS + 1][XCH / 2];  // (from version 18: each pair's flag in its set's last frame, ac_dcf()'s)
 };
+
+// The arithmetic-coded section (MS_AC, from version 18): binary decisions, each by an adaptive
+// probability of its context's, through a range coder (LZMA's, with 12-bit probabilities). The
+// probabilities are a block's from its start, and move 1/32 of the way to a decision once the
+// record it is in is through (AcModel::commit()): the split codes a record's decisions once the
+// check has joined it back, and the join can parse a header again (AcIo::mark(), rewind()).
+// Contexts: a prediction order's rank, 0 or not, then 1 or not, by its set and the bucket of
+// the rule's cost between its two cheapest orders (ac_rank()); ranks from 2 as 4 bits by the
+// set; a pair's flag for a coefficient by its set, the pair, the flags of the 3 pairs before it
+// in the frame, its own in the set's last frame and the size of the coefficient dc_code() gives
+// it (ac_dcf()).
+enum { AC_RK0 = 0, AC_RK1 = AC_RK0 + (XCS + 1) * 16, AC_RKT = AC_RK1 + (XCS + 1) * 16,
+       AC_DCF = AC_RKT + (XCS + 1) * 16, AC_NCTX = AC_DCF + (XCS + 1) * 8 * 8 * 2 * 4 };
+struct AcModel {
+  U16 p[AC_NCTX];         // P(0) in 4096ths
+  std::vector<U32> pend;  // the record's decisions (context << 1 | bit), for commit()
+  void reset() {
+    for (int i = 0; i < AC_NCTX; i++) p[i] = 2048;
+    pend.clear();
+  }
+  void commit() {
+    for (size_t i = 0; i < pend.size(); i++) {
+      U16& q = p[pend[i] >> 1];
+      if (pend[i] & 1) q = (U16)(q - (q >> 5));
+      else q = (U16)(q + ((4096 - q) >> 5));
+    }
+    pend.clear();
+  }
+};
+struct AcEnc {
+  U64 low, csize;
+  U32 range;
+  U8 cache;
+  std::vector<U8> out;
+  void reset() {
+    low = 0, csize = 1, range = 0xFFFFFFFFu, cache = 0;
+    out.clear();
+  }
+  void shift() {
+    if ((U32)low < 0xFF000000u || (low >> 32)) {
+      U8 c = cache;
+      do {
+        out.push_back((U8)(c + (U8)(low >> 32)));
+        c = 0xFF;
+      } while (--csize);
+      cache = (U8)(low >> 24);
+    }
+    csize++;
+    low = (low & 0x00FFFFFFu) << 8;
+  }
+  void bit(U32 p0, int b) {
+    const U32 bound = (range >> 12) * p0;
+    if (b) low += bound, range -= bound;
+    else range = bound;
+    while (range < (1u << 24)) range <<= 8, shift();
+  }
+  void finish() {
+    for (int i = 0; i < 5; i++) shift();
+  }
+};
+struct AcDec {
+  const U8* d;
+  size_t n, pos;
+  U32 range, code;
+  U32 next() { return pos < n ? d[pos++] : 0; }  // (0s past the end: a damaged section says nothing)
+  void init(const U8* p, size_t len) {
+    d = p, n = len, pos = 0, range = 0xFFFFFFFFu, code = 0;
+    for (int i = 0; i < 5; i++) code = code << 8 | next();
+  }
+  int bit(U32 p0) {
+    const U32 bound = (range >> 12) * p0;
+    int b;
+    if (code < bound) range = bound, b = 0;
+    else code -= bound, range -= bound, b = 1;
+    while (range < (1u << 24)) range <<= 8, code = code << 8 | next();
+    return b;
+  }
+};
+// the decisions of a record's headers: the split's (put(): to its tape), the check's (get(): back
+// from that tape, each in the context it was put in) and the join's (get(): from the section)
+struct AcIo {
+  std::vector<U32>* put_to;
+  const std::vector<U32>* tape;
+  AcDec* dec;
+  AcModel* model;
+  AcDec mdec;
+  size_t pos, mpos, mpend;
+  bool bad, mbad;
+  void init(std::vector<U32>* w, const std::vector<U32>* t, AcDec* d, AcModel* m) {
+    put_to = w, tape = t, dec = d, model = m, pos = mpos = mpend = 0, bad = mbad = false;
+  }
+  void put(U32 ctx, int b) {
+    if (put_to) put_to->push_back(ctx << 1 | (U32)b);
+  }
+  int get(U32 ctx) {
+    if (dec) {
+      const int b = dec->bit(model->p[ctx]);
+      model->pend.push_back(ctx << 1 | (U32)b);
+      return b;
+    }
+    if (!tape || pos >= tape->size() || ((*tape)[pos] >> 1) != ctx) {
+      bad = true;
+      return 0;
+    }
+    return (int)((*tape)[pos++] & 1);
+  }
+  void mark() {
+    mpos = pos, mbad = bad;
+    if (dec) mdec = *dec, mpend = model->pend.size();
+  }
+  void rewind() {
+    pos = mpos, bad = mbad;
+    if (dec) *dec = mdec, model->pend.resize(mpend);
+  }
+};
+static void ac_rank_put(AcIo& io, int set, int mb, int r) {
+  io.put(AC_RK0 + set * 16 + mb, r != 0);
+  if (!r) return;
+  io.put(AC_RK1 + set * 16 + mb, r != 1);
+  if (r == 1) return;
+  for (int i = 3, node = 1; i >= 0; i--) {
+    const int b = (r - 2) >> i & 1;
+    io.put(AC_RKT + set * 16 + node, b);
+    node = node * 2 + b;
+  }
+}
+static int ac_rank_get(AcIo& io, int set, int mb) {
+  if (!io.get(AC_RK0 + set * 16 + mb)) return 0;
+  if (!io.get(AC_RK1 + set * 16 + mb)) return 1;
+  int node = 1;
+  for (int i = 0; i < 4; i++) node = node * 2 + io.get(AC_RKT + set * 16 + node);
+  return (node - 16 + 2) & 15;  // (14 and 15 none are put as; a damaged section's, 0 and 1)
+}
+static U32 ac_dcf(int set, int i, int hist, int last, int pc) {
+  const int a = pc < 0 ? -pc : pc;
+  return AC_DCF + (U32)((((set * 8 + (i < 7 ? i : 7)) * 8 + (hist & 7)) * 2 + (last & 1)) * 4 + (a < 3 ? a : 3));
+}
 struct AoCtx {
   const S32* val;  // the frame's samples as the WAV has them ([XLL channel][sample]): 0, none
   int nch, N;      // its channels, samples a channel
@@ -1011,8 +1151,14 @@ struct AoCtx {
   struct {
     U8 set, oc, pos, act, out[AO_NR];
   } pend[XCS * XCH];
+  AcIo* io;  // (from version 18: the headers' decisions in MS_AC)
+  int ndp;   // (and the pairs' flags for AoState::dcp once the frame is through)
+  struct {
+    U8 set, i, f;
+  } dpend[XCS * XCH / 2];
 };
-static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, int* pred, bool keep, U8 (*rank)[16] = 0);
+static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, int* pred, bool keep, U8 (*rank)[16] = 0,
+                    U8* mbk = 0);
 static void dc_order(AoCtx& ac, int g0, int nch, int* order);
 static int dc_code(const AoCtx& ac, int nch, int a, int b);
 
@@ -1135,14 +1281,30 @@ static const char* xll_headers(Xll& x, const U8* p, int n, int one2one, const Xl
             d.order[ch] ^= op[ch];
           }
         }
+        const bool acf = dp && ao->st->v18 && ao->io;  // (from version 18 the flags in MS_AC: ac_dcf())
+        const int set = base ? XCS : c;
+        int hist = 0;
         for (int i = 0; i < s.nch / 2; i++) {
           d.dcat[i] = -1;
           d.dcoeff[i] = 0;
-          if (!r.get(1)) continue;
+          d.dfat[i] = (int)r.pos;
+          int fl = (int)r.get(1);
+          const int pc = dp ? dc_code(*ao, s.nch, d.order[2 * i], d.order[2 * i + 1]) : 0;
+          if (acf) {
+            const int f = fl ^ ao->io->get(ac_dcf(set, i, hist, ao->st->dcp[set][i], unzig((U32)pc)));
+            bits_xor(fix, d.dfat[i], 1, (U32)(fl ^ f));
+            fl = f;
+            if (ao->ndp < XCS * XCH / 2) {
+              ao->dpend[ao->ndp].set = (U8)set;
+              ao->dpend[ao->ndp].i = (U8)i;
+              ao->dpend[ao->ndp++].f = (U8)f;
+            }
+          }
+          hist = hist << 1 | fl;
+          if (!fl) continue;
           d.dcat[i] = (int)r.pos;
           U32 code = r.get(7);
           if (dp) {
-            const int pc = dc_code(*ao, s.nch, d.order[2 * i], d.order[2 * i + 1]);
             bits_xor(fix, d.dcat[i], 7, (U32)pc);
             code ^= (U32)pc;
           }
@@ -1162,11 +1324,13 @@ static const char* xll_headers(Xll& x, const U8* p, int n, int one2one, const Xl
       for (int ch = 0; ch < s.nch; ch++) d.aorder[ch] = r.get(4);
       if (ao && ao->val && fix && b == 0 && s.nbands == 1) {  // (the join's: the orders against ao_pred()'s)
         int pred[XCH];
-        U8 rank[XCH][16];
+        U8 rank[XCH][16], mbk[XCH];
         const int p0 = ao->np;
-        ao_pred(*ao, base ? XCS : c, x.nch, s, d, pred, true, rank);
+        ao_pred(*ao, base ? XCS : c, x.nch, s, d, pred, true, rank, mbk);
+        const bool acr = ao->st->v18 && ao->io;  // (from version 18 the ranks in MS_AC: ac_rank_get())
         for (int ch = 0; ch < s.nch; ch++) {  // (from version 17 their rank; dif: from 13 their difference; before, XORed)
-          const int act = ao->st->v17 ? rank[ch][d.aorder[ch]]
+          const int sym = acr ? d.aorder[ch] ^ ac_rank_get(*ao->io, base ? XCS : c, mbk[ch]) : d.aorder[ch];
+          const int act = ao->st->v17 ? rank[ch][sym]
                           : dif       ? (int)dif_back((U32)d.aorder[ch], (U32)pred[ch], 4)
                                       : d.aorder[ch] ^ pred[ch];
           bits_xor(fix, d.aoat + 4 * ch, 4, (U32)(d.aorder[ch] ^ act));
@@ -2037,7 +2201,8 @@ static bool ao_old(int j) {
   const int f = j / AO_NL, l = j % AO_NL;
   return (f == 0 || f == 2 || f == 4) && (l & 1);
 }
-static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, int* pred, bool keep, U8 (*rank)[16]) {
+static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, int* pred, bool keep, U8 (*rank)[16],
+                    U8* mbk) {
   const int N = ac.N;
   static std::vector<S32> sig[2];
   static std::vector<S64> xs;
@@ -2051,6 +2216,7 @@ static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, i
     pred[i] = 0;
     if (rank)  // (as they are where there are no samples to weigh them by)
       for (int k = 0; k < 16; k++) rank[i][k] = (U8)k;
+    if (mbk) mbk[i] = 15;
     const int oc = d.order[i], g = g0 + oc;
     if (g >= ac.nch) continue;
     S32* bb = &sig[i & 1][0];
@@ -2144,6 +2310,12 @@ static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, i
       }
       for (int k = 0; k < 16; k++)
         if (!used[k]) rank[i][nr++] = (U8)k;
+      if (mbk && Kv >= 1) {  // (the cost between the two cheapest, in bits: the bucket of its log2, to 14)
+        const U64 t = (U64)(J[rank[i][1]] - J[rank[i][0]]) >> 20;
+        int b = 0;
+        while (b < 14 && (t + 1) >> (b + 1)) b++;
+        mbk[i] = (U8)b;
+      }
     }
     if (keep && ac.np < XCS * XCH) {
       ac.pend[ac.np].set = (U8)set;
@@ -2168,6 +2340,8 @@ static void ao_count(AoCtx& ac) {
       for (int j = 0; j < AO_NR; j++) n[j] = (n[j] + 1) >> 1;
   }
   ac.np = 0;
+  for (int i = 0; i < ac.ndp; i++) ac.st->dcp[ac.dpend[i].set][ac.dpend[i].i] = ac.dpend[i].f;
+  ac.ndp = 0;
 }
 
 // The reflection coefficients' codes in the header h (x's) against rc_predict()'s from the
@@ -2198,7 +2372,8 @@ static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir, bool fl, b
     }
 }
 
-enum { VERSION = 17 };  // (the join reads 16 too, with the orders as their difference, 15, with its
+enum { VERSION = 18 };  // (the join reads 17 too, with the ranks and the pairs' flags in the headers,
+                        // 16, with the orders as their difference, 15, with its
                         // sections one stream, 14, with the autocorrelation in integers, 13, with
                         // ao_pred()'s first rule, 12, with the orders and widths XORed, 11, with the
                         // headers' sizes, 10, with the isolated samples kept, 9, with rc_code()'s
@@ -2803,6 +2978,7 @@ struct Split {
   AoState* aost;
   std::vector<S32> pv, opv;
   AoCtx aoc, aoco;
+  AcIo* acput;  // (the split's: where put_hdr() puts the headers' decisions)
 };
 
 // the clipped values of the frame's samples, in WAV order (count: the frame's samples * nch)
@@ -2899,6 +3075,7 @@ static int xll_nfs(const U8* h, size_t n) {
 static bool ao_samples(AoCtx& ac, std::vector<S32>& pv, const S32* v, int n, const Layout& L, AoState* st) {
   ac.val = 0;
   ac.np = 0;
+  ac.ndp = 0;
   const int W = L.nch;
   for (int w = 0; w < W; w++)
     if (L.perm[w] < 0 || L.perm[w] >= W) return false;
@@ -2950,18 +3127,32 @@ static void put_hdr(Rec& o, const U8* p, const Xll& x, const std::vector<Chunk>&
         int op[XCH];
         dc_order(*ao, x.chofs[c], s.nch, op);
         for (int ch = 0; ch < s.nch; ch++) bits_xor(&h[0], d.ordat + chbits * ch, chbits, (U32)op[ch]);
-        for (int i = 0; i < s.nch / 2; i++)
-          if (d.dcat[i] >= 0) bits_xor(&h[0], d.dcat[i], 7, (U32)dc_code(*ao, s.nch, d.order[2 * i], d.order[2 * i + 1]));
+        int hist = 0;  // (from version 18 the flags to MS_AC, their bits 0s: ac_dcf())
+        for (int i = 0; i < s.nch / 2; i++) {
+          const U32 pc = (U32)dc_code(*ao, s.nch, d.order[2 * i], d.order[2 * i + 1]);
+          const int fl = d.dcat[i] >= 0;
+          if (fl) bits_xor(&h[0], d.dcat[i], 7, pc);
+          if (ao->st->v18 && ao->io) {
+            ao->io->put(ac_dcf(set0 + c, i, hist, ao->st->dcp[set0 + c][i], unzig(pc)), fl);
+            bits_xor(&h[0], d.dfat[i], 1, (U32)fl);
+          }
+          hist = hist << 1 | fl;
+        }
       }
       int pred[XCH];
-      U8 rank[XCH][16];
-      ao_pred(*ao, set0 + c, x.chofs[c], s, s.band[0], pred, false, rank);
+      U8 rank[XCH][16], mbk[XCH];
+      ao_pred(*ao, set0 + c, x.chofs[c], s, s.band[0], pred, false, rank, mbk);
       for (int ch = 0; ch < s.nch; ch++) {  // (as their rank among the orders by the rule's cost)
         const int at = s.band[0].aoat + 4 * ch;
         const U32 v = bits_at(&h[0], at, 4);
         U32 r = 0;
         while (r < 15 && rank[ch][r] != v) r++;
-        bits_xor(&h[0], at, 4, v ^ r);
+        if (ao->st->v18 && ao->io) {  // (from version 18 to MS_AC, the field 0s: ac_rank_put())
+          ac_rank_put(*ao->io, set0 + c, mbk[ch], (int)r);
+          bits_xor(&h[0], at, 4, v);
+        } else {
+          bits_xor(&h[0], at, 4, v ^ r);
+        }
       }
     }
   for (int c = 0; c < x.nchsets; c++) bits_xor(&h[0], x.csoff[c] * 8, 10, (U32)(x.csnat[c] - 1) & 1023);
@@ -2990,6 +3181,8 @@ static void put_obj(Rec* o, const Split& sp, const U8* ob, int n, const std::vec
   ac.N = x.nframesamples;
   ac.st = sp.aost;
   ac.np = 0;
+  ac.io = sp.acput;
+  ac.ndp = 0;
   put_hdr(o[MS_OHDR], ob, x, sp.ock, m ? &msb : 0, 0, &ac, XCS);
   std::vector<Chunk> kx = sp.ock;  // (the code widths against the residuals')
   ck_xor(x, kx, sp.ores, VERSION, false);
@@ -3034,6 +3227,8 @@ static void put_x(Rec* o, int wi, const U8* e, int n, int xoff, const U8* xf, in
     ac.N = x.nframesamples;
     ac.st = sp.aost;
     ac.np = 0;
+    ac.io = sp.acput;
+    ac.ndp = 0;
     put_hdr(o[MS_HDR], xf, x, sp.ck, m ? &msb : 0, x.frame_size, &ac, 0);
   }
   std::vector<Chunk> kx = sp.ck;  // (the code widths against the residuals')
@@ -3174,7 +3369,7 @@ static const char* join_obj(MetaIn& m, const Xll& x, int n, const Layout* L, Sam
   std::vector<S32> wv;
   bool early = false;
   sp.aoco.val = 0;
-  sp.aoco.np = 0;
+  sp.aoco.np = sp.aoco.ndp = 0;
   if (ver >= 9 && L && smp && L->nbands == 1) {
     wv.resize((size_t)x.nframesamples * L->nch);
     if (!smp->get(wv.empty() ? 0 : &wv[0], wv.size())) return "prefix.x.wav ends early";
@@ -3182,11 +3377,14 @@ static const char* join_obj(MetaIn& m, const Xll& x, int n, const Layout* L, Sam
     if (!ao_samples(sp.aoco, sp.opv, wv.empty() ? 0 : &wv[0], x.nframesamples, *L, sp.aost)) return "a damaged layout";
   }
   const char* why = 0;
+  if (sp.aoco.io) sp.aoco.io->mark();
   for (int all = 0; all < 2; all++) {  // (version 12: the first part of what's ahead, then all of it)
     if (all) {
       if (ver < 12 || k < HDR_PART) break;
       k = hdr_ahead(ih, ob, (size_t)n, true);
       sp.aoco.np = 0;
+      sp.aoco.ndp = 0;
+      if (sp.aoco.io) sp.aoco.io->rewind();
     }
     const U16 hc = crc16(&ob[0], OBJ_HEAD - 3);
     ob[OBJ_HEAD - 3] = (U8)(hc >> 8);
@@ -3289,8 +3487,8 @@ static const char* join_x(MetaIn& m, const Layout* L, Samples& smp, std::vector<
   // (from version 9 the samples first: ao_pred() takes them)
   bool early = false;
   sp.aoc.val = 0;
-  sp.aoc.np = 0;
-  sp.aoco.np = 0;
+  sp.aoc.np = sp.aoc.ndp = 0;
+  sp.aoco.np = sp.aoco.ndp = 0;
   if (ver >= 9 && L && L->nbands == 1) {
     const int nf = xll_nfs(&fb[0], k);
     if (!nf) return "a damaged record";
@@ -3300,11 +3498,14 @@ static const char* join_x(MetaIn& m, const Layout* L, Samples& smp, std::vector<
     if (!ao_samples(sp.aoc, sp.pv, wv.empty() ? 0 : &wv[0], nf, *L, sp.aost)) return "a damaged layout";
   }
   const char* why = 0;
+  if (sp.aoc.io) sp.aoc.io->mark();
   for (int all = 0; all < 2; all++) {  // (version 12: the first part of what's ahead, then all of it)
     if (all) {
       if (ver < 12 || k < HDR_PART) break;
       k = hdr_ahead(ih, fb, (size_t)fsize, true);
       sp.aoc.np = 0;
+      sp.aoc.ndp = 0;
+      if (sp.aoc.io) sp.aoc.io->rewind();
     }
     why = xll_headers(x, &fb[0], (int)fsize, one2one, 0, 0, &fb[0], true, ver >= 7, ver >= 8, ver >= 9 ? &sp.aoc : 0,
                       ver >= 13);
@@ -3491,10 +3692,22 @@ struct MetaOut {
   FileOut f;
   Rec s[MS_N];
   size_t held;
+  AcEnc enc;  // (MS_AC's: a record's decisions, coded once it is through)
+  AcModel model;
+  U64 nac;
   void open(const std::string& path) {
     f.open(path);
     for (int k = 0; k < MS_N; k++) s[k].clear();
     held = 0;
+    enc.reset();
+    model.reset();
+    nac = 0;
+  }
+  void ac(const std::vector<U32>& t) {  // an X record's decisions, before write_x()
+    for (size_t i = 0; i < t.size(); i++) enc.bit(model.p[t[i] >> 1], (int)(t[i] & 1));
+    model.pend.assign(t.begin(), t.end());
+    model.commit();
+    nac += t.size();
   }
   void head(const Rec& r) { f.write(r); }
   void write(const Rec& r) {  // a record of the MS_REC section's alone
@@ -3511,6 +3724,13 @@ struct MetaOut {
   }
   void flush() {
     if (!held) return;
+    if (nac) {
+      enc.finish();
+      s[MS_AC].bytes(&enc.out[0], enc.out.size());
+    }
+    enc.reset();
+    model.reset();
+    nac = 0;
     Rec h;
     for (int k = 0; k < MS_N; k++) h.uv(s[k].b.size());
     f.write(h);
@@ -3581,6 +3801,8 @@ struct Splitter {
   ExssState st;
   Stats stt;
   Split sp, chk;
+  std::vector<U32> actape;  // (a record's decisions, put_hdr()'s; acw puts them, acr takes them back)
+  AcIo acw, acr;
   std::vector<S32> wv, wv2;
   static CoreFrame cf;
   // the EXSS header fields that hold the XLL frame's size, the DTS:X object data's offset or its size
@@ -3692,10 +3914,14 @@ struct Splitter {
     sp.pv.clear();
     sp.opv.clear();
     AoCtx tmp;
+    tmp.io = 0;
     if (fl.nbands == 1) ao_samples(tmp, sp.pv, &wv[0], x.nframesamples, fl, &chk.ao);
     if (obj && ol.nbands == 1) ao_samples(tmp, sp.opv, &owv[0], sp.ox.nframesamples, ol, &chk.ao);
     for (int k = 0; k < MS_N; k++) o[k].clear();
+    actape.clear();
     put_x(o, wi, e, n, off, &xf[0], one2one, sp, exc, xpay, obj, oexc);
+    acr.pos = 0;
+    acr.bad = false;
     // the check: the record joined back as the join will
     static const U8 none = 0;
     RecIn sec[MS_N];
@@ -3725,6 +3951,7 @@ struct Splitter {
       why = "an XLL frame that doesn't join back the same";
     for (int k = 0; k < MS_N; k++)  // (and every part of the record taken)
       if (!why && sec[k].mpos != sec[k].msize) why = "an XLL frame that doesn't join back the same";
+    if (!why && (acr.bad || acr.pos != actape.size())) why = "an XLL frame that doesn't join back the same";
     if (why) {
       chk.ao = aosave;
       return why;
@@ -3780,6 +4007,7 @@ struct Splitter {
       for (int t = one2one < 0 ? 1 : one2one; t >= (one2one < 0 ? 0 : one2one); t--)  // (unknown: 1, then 0)
         if (!(why = try_split(e, n, off, size, t, o, wi))) break;
       if (!why) {
+        meta.ac(actape);
         meta.write_x(o);
         stt.xsplit++;
         if (xpay.size()) {
@@ -3822,8 +4050,15 @@ struct Splitter {
     xwav_on = false;
     xf_done = false;
     memset(&chk.ao, 0, sizeof chk.ao);
-    chk.ao.v14 = chk.ao.v15 = chk.ao.v17 = 1;
+    chk.ao.v14 = chk.ao.v15 = chk.ao.v17 = chk.ao.v18 = 1;
     chk.aost = sp.aost = &chk.ao;
+    acw.init(&actape, 0, 0, 0);
+    acr.init(0, &actape, 0, 0);
+    sp.acput = &acw;
+    chk.acput = 0;
+    sp.aoc.io = sp.aoco.io = 0;
+    chk.aoc.io = chk.aoco.io = &acr;
+    sp.aoc.ndp = sp.aoco.ndp = chk.aoc.ndp = chk.aoco.ndp = 0;
     Rec hr;
     hr.bytes(MAGIC, 8);
     hr.u8(VERSION);
@@ -3966,7 +4201,17 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
   sp.ao.v14 = h[8] >= 14;
   sp.ao.v15 = h[8] >= 15;
   sp.ao.v17 = h[8] >= 17;
+  sp.ao.v18 = h[8] >= 18;
   sp.aost = &sp.ao;
+  static AcDec acdec;  // (from version 18, MS_AC's: a block's decisions)
+  static AcModel acmodel;
+  static AcIo acio;
+  acdec.init(&none, 0);
+  acmodel.reset();
+  acio.init(0, 0, &acdec, &acmodel);
+  sp.acput = 0;
+  sp.aoc.io = sp.aoco.io = h[8] >= 18 ? &acio : 0;
+  sp.aoc.ndp = sp.aoco.ndp = 0;
   std::vector<S32> wv;
   std::vector<U8> buf;
   U32 crc = 0;
@@ -3985,10 +4230,10 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
     if (blocks && bin[MS_REC].at_end()) {  // (the next block, its records and their parts)
       const U64 b0 = fin.nread;
       for (int k = 1; k < MS_N; k++)
-        if (!bin[k].at_end()) damaged("a damaged block", b0);
+        if (k != MS_AC && !bin[k].at_end()) damaged("a damaged block", b0);
       if (fin.at_end()) damaged("the meta file ends early", b0);
       U64 len[MS_N] = {0};
-      const int ns = h[8] >= 17 ? MS_N : MS_N16;  // (version 16: eight sections)
+      const int ns = h[8] >= 18 ? MS_N : h[8] >= 17 ? MS_N17 : MS_N16;  // (version 17: nine sections, 16: eight)
       for (int k = 0; k < ns; k++) {
         len[k] = fin.uv();
         if (fin.bad || len[k] > ((U64)1 << 30) || (!k && !len[k])) damaged("a damaged block", b0);
@@ -4005,6 +4250,8 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
         }
         bin[k].init_mem(blk[k].empty() ? &none : &blk[k][0], blk[k].size());
       }
+      acdec.init(blk[MS_AC].empty() ? &none : &blk[MS_AC][0], blk[MS_AC].size());  // (from version 18)
+      acmodel.reset();
     }
     RecIn& in = mi.r();
     const U64 at = (blocks ? base : 0) + in.nread;
@@ -4062,6 +4309,7 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
       const char* why = join_x(mi, &lay[w], ws, buf, sp, wv, h[8] >= 3 ? &xin : 0, h[8], have_o ? &olay : 0, have_o ? &ows : 0);
       if (why == WHY_DTSX && !fx) die(EX_READ, "can't open %s", xname.c_str());
       if (why) damaged(why, at);
+      acmodel.commit();  // (the record's decisions to the probabilities)
       wsamples[w] += (U64)sp.x.nframesamples * sp.x.nbands;
       if (sp.obj) osamples += (U64)sp.ox.nframesamples * sp.ox.nbands;
     } else if (tag == 'Z') {
@@ -4074,8 +4322,8 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
       if ((h[8] >= 4 ? in.uv() : 0) != osamples) damaged("sample counts unlike prefix.x.wav's", at);
       if (in.bad || !in.at_end()) damaged("a damaged end record", at);
       if (blocks) {  // (the block's sections all taken, and no block after it)
-        for (int k = 1; k < MS_N; k++)
-          if (!bin[k].at_end()) damaged("a damaged end record", at);
+        for (int k = 1; k < MS_N; k++)  // (but MS_AC: its decoder reads no more than it needs)
+          if (k != MS_AC && !bin[k].at_end()) damaged("a damaged end record", at);
         if (!fin.at_end()) damaged("a damaged end record", at);
       }
       if (xb && !xin.at_end()) die(EX_DATA, "%s: more than the meta file takes", xname.c_str());
