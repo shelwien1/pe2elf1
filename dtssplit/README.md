@@ -126,12 +126,15 @@ the prediction residuals with Rice, hybrid Rice and binary codes, segment by seg
   max(E, F) + L k, E the log2 of the variance Levinson's recursion leaves at order k: the residual's
   cost in bits against L bits a coefficient, with a floor F for quiet channels (`ao_pred()`). L and
   F go by the channel: the split and the join both count which of 18 pairs of them would have
-  predicted its past orders. The best of them predicts 96.2% of the orders of the Cymatics stream's
-  first channel set (those of its first 60 MB; 96.7% of its LFE's), 82.9% of its second set's,
-  84.7% of its object audio's. Format 9 takes the meta file of `s.2.dts` from 200204 bytes with xz
+  predicted its past orders (60 from format 14, below). The best of them predicts 96.2% of the
+  orders of the Cymatics stream's first channel set (those of its first 60 MB; 96.7% of its LFE's),
+  82.9% of its second set's, 84.7% of its object audio's. Format 9 takes the meta file of `s.2.dts` from 200204 bytes with xz
   to 89028, the Cymatics stream's from 678020 to 427644. From format 13 the orders are kept as their
   difference from those (mod 16, zigzagged), as the code widths are (below): a miss by one, the
-  usual kind, is then 1 or 2, where XOR made it anything from 1 to 15.
+  usual kind, is then 1 or 2, where XOR made it anything from 1 to 15. Format 14's pairs are L 5
+  to 18 bits in 12 steps by F none, 1, 2, 3 or 4, and a channel's counts are halved when one passes
+  64, so that they follow the orders' recent rule: it takes the meta file of `s.2.dts` from 63744
+  bytes with xz to 61180, the Cymatics stream's from 303912 to 292292.
   From format 12 the headers' bytes go to the meta file without their count: the join parses them
   from the bytes ahead, and their own fields say where they end. That count, which the prediction
   orders mostly set (each order a reflection coefficient's 8 bits), had come to a seventh of the
@@ -285,8 +288,10 @@ for `xll_xch_61_24_48_768`), 800 with format 8's (`master_audio_7.1_24bit.dts` f
 (`master_audio_7.1_24bit.dts` and `3-1.dts` for `xll_51_16_192_768_1` and `s2_mid.dts`), 800 with
 format 11's (`xll_71_24_96_768` and `xll_xch_61_24_48_768` for `xll_71_24_48_768_0` and `3-1.dts`),
 800 with format 12's (`s2_mid.dts`, `Master_Audio_7.1.dts` and `xll_51_16_192_768_1` for
-`master_audio_7.1_24bit.dts`, `xll_71_24_96_768` and `xll_xch_61_24_48_768`) and 800 with format
-13's (those three back for the three before them). Builds with `-O0`, `-O2` and `-O3 -march=native
+`master_audio_7.1_24bit.dts`, `xll_71_24_96_768` and `xll_xch_61_24_48_768`), 800 with format
+13's (those three back for the three before them) and 800 with format 14's (300 KB of the Cymatics
+stream, `s2_mid.dts`, `master_audio_7.1_24bit.dts`, `Master_Audio_5.0_96khz.dts` and
+`xll_51_16_192_768_1`). Builds with `-O0`, `-O2` and `-O3 -march=native
 -ffp-contract=fast` (fused multiply-adds) write the same meta files, and each joins the others'.
 
 On `s.2.dts`, `c -v` takes 11.1 s and `d` 3.8 s (format 8: 8.4 s and 3.1 s; format 4: 5.6 s and
@@ -301,20 +306,20 @@ For `s.2.dts`, with xz `-9e` and FLAC (ffmpeg, `-compression_level 12`):
 | `s.2.dts` | 130554771 | 100% |
 | `s.2.dts`, xz | 124891928 | 95.66% |
 | `s2.dtsc` (the core), xz | 44109856 | 33.79% |
-| `s2.meta`, xz | 63744 | 0.05% |
+| `s2.meta`, xz | 61180 | 0.05% |
 | `s2.wav`, FLAC | 78014446 | 59.76% |
-| the three | 122188046 | 93.59% |
+| the three | 122185482 | 93.59% |
 
 (The meta file's format 4 came to 1243884 bytes with xz, format 5's to 386896, format 6's to 282692,
 format 7's to 204176, format 8's to 200204, format 9's to 89028, format 10's to 78872, format 11's
-to 77536, format 12's to 65596.)
+to 77536, format 12's to 65596, format 13's to 63744.)
 
 The Cymatics stream's DTS:X object data, 96021900 bytes as it is, xz no smaller: as `prefix.x.wav`
 (188590184 bytes) through WavPack (ffmpeg, `-compression_level 3`), 92545003 bytes (FLAC
-`-compression_level 12`, 97067662), and 3.0 MB more of the meta file (9803875 bytes; with xz 303912,
+`-compression_level 12`, 97067662), and 3.0 MB more of the meta file (9803875 bytes; with xz 292292,
 where format 3's was 2665280 without them, format 4's 4104040 with them, format 5's 1446656, format
 6's 1054156, format 7's 722100, format 8's 678020, format 9's 427644, format 10's 392200, format
-11's 360700 and format 12's 309328). Of its 4 channels, two follow the other two's pair closely
+11's 360700, format 12's 309328 and format 13's 303912). Of its 4 channels, two follow the other two's pair closely
 (correlation 1.00), and the second pair the WAV's back surrounds (0.70 and 0.77; a linear fit of the
 WAV's channels leaves 40% and 50% of their energy), which a compressor that sees both WAVs can use.
 
@@ -430,10 +435,10 @@ compressor that stores the audio and derives the core from it:
 
 | `s.2.dts` | Bytes | |
 |---|---:|---:|
-| the core (xz), the residual (FLAC), the meta file (xz) | 122188046 | 93.59% |
+| the core (xz), the residual (FLAC), the meta file (xz) | 122185482 | 93.59% |
 | the same, the core by a model of its fields (78.8%) | about 118.7 MB | 90.9% |
 | the audio (FLAC), the core given the audio, the meta file | about 110.4 MB | 84.5% |
-| the audio (FLAC), the core by dtsdpack, the meta file (xz) | 107140530 | 82.07% |
+| the audio (FLAC), the core by dtsdpack, the meta file (xz) | 107137966 | 82.06% |
 
 The audio costs 29 MB more than the residual (106981478 against 78014446 bytes with FLAC), but
 the core costs 37-42 MB less. In such a compressor:
@@ -473,8 +478,9 @@ show. `s.2.dts` takes 13 s.
 
 ## The meta file's format
 
-`DTSSPLIT`, a version byte (13; `d` reads 12 too, which keeps the prediction orders and the code
-widths XORed with their predictions, 11, which keeps the XLL headers' sizes, 10, which keeps hybrid
+`DTSSPLIT`, a version byte (14; `d` reads 13 too, which keeps `ao_pred()`'s 18 pairs and counts
+that aren't halved, 12, which keeps the prediction orders and the code widths XORed with their
+predictions, 11, which keeps the XLL headers' sizes, 10, which keeps hybrid
 Rice codes' isolated samples as they are, 9, which keeps the reflection coefficients' codes against
 the nearest table entries, 8, which keeps the pairwise decorrelation's channel order and
 coefficients and the prediction orders as they are, 7, which keeps the channel set sub-header sizes

@@ -50,27 +50,28 @@
 // goes to prefix.dtsx as it is, frame after frame. The join takes prefix.x.wav and prefix.dtsx only
 // where the meta file says there is object data.
 //
-// The meta file: "DTSSPLIT", a version byte (13; the join reads 12, with the prediction orders and
-// the code widths XORed with their predictions, 11, with the XLL headers' sizes, 10, with hybrid
-// Rice codes' isolated samples kept as they are, 9, with the reflection coefficients' predictions
-// the nearest of the table's entries, 8, with the prediction orders as they are, 7, with the
-// channel set header sizes and the reflection coefficients' codes XORed, 6, with the XLL frame
-// sizes, 5, with the code widths as they are, 4, with the headers as they are, 3, the format before
-// prefix.x.wav, and 2, the format before prefix.dtsx, too), then records, each a tag byte and its
-// fields (numbers as LEB128 varints, signed ones zigzagged). Its EXSS and XLL header bytes are the
-// stream's but for what the join computes again: their CRC-16s are 0s, and the EXSS frame size, the
-// XLL frame size, the channel set header sizes and the NAVI tables' sizes are XORed with those the
-// join will compute (the frames' sizes, the bytes the headers' fields take and those each segment's
-// coding takes), the prediction orders of a set of one band kept as their difference from
-// ao_pred()'s (mod 16, zigzagged; from version 13) and the reflection coefficients' codes as their
-// table indexes' difference from rc_predict()'s (both from the WAV's samples, which the join reads
-// before the header), so that they are mostly 0s too; so are the segments' Rice and binary code
-// widths, kept as their difference from those their residuals give (ck_xor(); mod the field's size,
-// zigzagged, from version 13), and the EXSS header's fields that hold the XLL frame's size or the
-// DTS:X object data's offset or size, less those (an F record says where they are). The join
-// computes the XLL frame's size and the object data's from their parts: where the bytes after the
-// band data are 0s to the DWORD boundary, and those after the object data's band data 0s to the
-// boundary past 2 more bytes (opad_std()), the meta file keeps neither:
+// The meta file: "DTSSPLIT", a version byte (14; the join reads 13, with ao_pred()'s 18 candidates
+// and counts that don't decay, 12, with the prediction orders and the code widths XORed with their
+// predictions, 11, with the XLL headers' sizes, 10, with hybrid Rice codes' isolated samples kept
+// as they are, 9, with the reflection coefficients' predictions the nearest of the table's entries,
+// 8, with the prediction orders as they are, 7, with the channel set header sizes and the
+// reflection coefficients' codes XORed, 6, with the XLL frame sizes, 5, with the code widths as
+// they are, 4, with the headers as they are, 3, the format before prefix.x.wav, and 2, the format
+// before prefix.dtsx, too), then records, each a tag byte and its fields (numbers as LEB128
+// varints, signed ones zigzagged). Its EXSS and XLL header bytes are the stream's but for what the
+// join computes again: their CRC-16s are 0s, and the EXSS frame size, the XLL frame size, the
+// channel set header sizes and the NAVI tables' sizes are XORed with those the join will compute
+// (the frames' sizes, the bytes the headers' fields take and those each segment's coding takes),
+// the prediction orders of a set of one band kept as their difference from ao_pred()'s (mod 16,
+// zigzagged; from version 13) and the reflection coefficients' codes as their table indexes'
+// difference from rc_predict()'s (both from the WAV's samples, which the join reads before the
+// header), so that they are mostly 0s too; so are the segments' Rice and binary code widths, kept
+// as their difference from those their residuals give (ck_xor(); mod the field's size, zigzagged,
+// from version 13), and the EXSS header's fields that hold the XLL frame's size or the DTS:X object
+// data's offset or size, less those (an F record says where they are). The join computes the XLL
+// frame's size and the object data's from their parts: where the bytes after the band data are 0s
+// to the DWORD boundary, and those after the object data's band data 0s to the boundary past 2 more
+// bytes (opad_std()), the meta file keeps neither:
 //   R n bytes          bytes that aren't a frame
 //   C n                a core frame: the next n bytes of prefix.dtsc
 //   E n bytes          an extension substream frame kept as bytes
@@ -973,10 +974,12 @@ static bool crc_here(Xll& x, const U8* p, U8* fix, int a, int b) {
 // CRC-16s are written rather than checked (the meta file keeps them as 0s); lax: a reflection
 // coefficient's code out of range taken as 0 (the meta file keeps the codes against rc_predict()'s)
 // The prediction orders' rule (ao_pred()): its state, the counts of the candidates' hits ([channel
-// set, the DTS:X object data's last][channel]), and what a frame's prediction needs
-enum { AO_NL = 6, AO_NF = 3, AO_NR = AO_NL * AO_NF, AO_K = 10, AO_DEF = 7 };
+// set, the DTS:X object data's last][channel]; from version 14 (v14) all of them halved where one
+// passes AO_LIM), and what a frame's prediction needs
+enum { AO_NL = 12, AO_NF = 5, AO_NR = AO_NL * AO_NF, AO_K = 10, AO_DEF = 2 * AO_NL + 3, AO_LIM = 64 };
 struct AoState {
   U32 n[XCS + 1][XCH][AO_NR];
+  int v14;
 };
 struct AoCtx {
   const S32* val;  // the frame's samples as the WAV has them ([XLL channel][sample]): 0, none
@@ -1886,12 +1889,19 @@ static S64 log2_q20(float f) {
 // into pred: the encoders' choice, it seems, of the order k (0 to 10) least in (N/2) max(log2 E_k,
 // F) + L k, E_k the variance left after Levinson's recursion to order k (as rc_predict()'s, of the
 // samples under Hann's window), F a floor and L a coefficient's cost in bits. L and F go by the
-// channel (set and index in it, whatever place the decorrelation's order gives it): those of 6 by 3
-// that would have predicted its past orders best (L 8.5 and F 2 for most of the DTS:X encoder's
-// first channel set, its LFE too, L 15 for its second set and its object audio). keep: the
-// candidates' orders to ac's pending ones, for ao_count()
-static const int AO_LAM[AO_NL] = {12, 17, 22, 26, 30, 36};  // (L in halves of a bit)
-static const int AO_FLO[AO_NF] = {-1000, 2, 4};
+// channel (set and index in it, whatever place the decorrelation's order gives it): those of 12 by 5
+// that would have predicted its recent orders best (from version 14; 6 by 3 and all its past orders
+// before: L 8.5 and F 2 for most of the DTS:X encoder's first channel set, its LFE too, L 15 for its
+// second set and its object audio). keep: the candidates' orders to ac's pending ones, for
+// ao_count()
+// (the candidates: L in halves of a bit, F; before version 14, L 12, 17, 22, 26, 30 or 36 and F
+// none, 2 or 4 alone, AO_OLD)
+static const int AO_LAM[AO_NL] = {10, 12, 14, 17, 20, 22, 24, 26, 28, 30, 33, 36};
+static const int AO_FLO[AO_NF] = {-1000, 1, 2, 3, 4};
+static bool ao_old(int j) {
+  const int f = j / AO_NL, l = j % AO_NL;
+  return (f == 0 || f == 2 || f == 4) && (l & 1);
+}
 static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, int* pred, bool keep) {
   const int N = ac.N;
   const std::vector<S32>& w = hann_q30(N);
@@ -1968,7 +1978,7 @@ static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, i
     const U32* cnt = ac.st->n[set][oc];
     int bi = AO_DEF;
     for (int j = 0; j < AO_NR; j++)
-      if (cnt[j] > cnt[bi]) bi = j;
+      if (cnt[j] > cnt[bi] && (ac.st->v14 || ao_old(j))) bi = j;
     pred[i] = out[bi];
     if (keep && ac.np < XCS * XCH) {
       ac.pend[ac.np].set = (U8)set;
@@ -1982,9 +1992,16 @@ static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, i
 
 // the counts of the orders the frame had (ac's pending ones)
 static void ao_count(AoCtx& ac) {
-  for (int i = 0; i < ac.np; i++)
-    for (int j = 0; j < AO_NR; j++)
-      if (ac.pend[i].out[j] == ac.pend[i].act) ac.st->n[ac.pend[i].set][ac.pend[i].oc][j]++;
+  for (int i = 0; i < ac.np; i++) {
+    U32* n = ac.st->n[ac.pend[i].set][ac.pend[i].oc];
+    U32 mx = 0;
+    for (int j = 0; j < AO_NR; j++) {
+      if (ac.pend[i].out[j] == ac.pend[i].act) n[j]++;
+      if (n[j] > mx) mx = n[j];
+    }
+    if (ac.st->v14 && mx > AO_LIM)
+      for (int j = 0; j < AO_NR; j++) n[j] = (n[j] + 1) >> 1;
+  }
   ac.np = 0;
 }
 
@@ -2016,12 +2033,12 @@ static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir, bool fl) {
     }
 }
 
-enum { VERSION = 13 };  // (the join reads 12 too, with the orders and widths XORed, 11, with the
-                        // headers' sizes, 10, with the isolated samples kept, 9, with rc_code()'s
-                        // nearest entries, 8, with the prediction orders as they are, 7, with the
-                        // channel set header sizes, 6, with the frame sizes, 5, with the code widths
-                        // as they are, 4, with the headers as they are, 3, without prefix.x.wav, and
-                        // 2, without prefix.dtsx)
+enum { VERSION = 14 };  // (the join reads 13 too, with ao_pred()'s first rule, 12, with the orders
+                        // and widths XORed, 11, with the headers' sizes, 10, with the isolated samples
+                        // kept, 9, with rc_code()'s nearest entries, 8, with the prediction orders as
+                        // they are, 7, with the channel set header sizes, 6, with the frame sizes, 5,
+                        // with the code widths as they are, 4, with the headers as they are, 3,
+                        // without prefix.x.wav, and 2, without prefix.dtsx)
 
 // The segments' code widths (a_code, b_code) against those their residuals res say, as the meta file
 // keeps them (join: back), from version 13 (ver) as their difference (dif_of()), before XORed with
@@ -3489,6 +3506,7 @@ struct Splitter {
     xwav_on = false;
     xf_done = false;
     memset(&chk.ao, 0, sizeof chk.ao);
+    chk.ao.v14 = 1;
     chk.aost = sp.aost = &chk.ao;
     Rec hr;
     hr.bytes(MAGIC, 8);
@@ -3629,6 +3647,7 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
   const std::string oname = prefix + ".x.wav";
   static Split sp;
   memset(&sp.ao, 0, sizeof sp.ao);
+  sp.ao.v14 = h[8] >= 14;
   sp.aost = &sp.ao;
   std::vector<S32> wv;
   std::vector<U8> buf;
