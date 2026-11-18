@@ -82,7 +82,7 @@ PARCH=${PARCH--march=x86-64-v3 -ffp-contract=off}  # AVX2; PARCH= for the plain 
 LDLINK=${LDLINK--static-libstdc++ -static-libgcc}
 FAMS=$(sed -n 's/^#define DTSD_FAMS(X) //p' famvars.inc | sed 's/X(\([a-z0-9]*\))/\1/g')  # (the model's list)
 [ -n "$FAMS" ] || { echo "mk.sh: no DTSD_FAMS in famvars.inc" >&2; exit 1; }
-LEVELS="9"
+LEVELS="9 8"
 
 cleanup() {
   for l in $LEVELS; do

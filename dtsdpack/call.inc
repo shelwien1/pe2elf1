@@ -152,6 +152,7 @@ struct Call {
   Progress pr;
   RunCounts n;
   Bind bind;    // c: how the core lines up with the WAV
+  int level;    // c: the level it runs (pick_level()'s, or the one asked for)
   double corr;  // and how well its channel 0 correlates there
   bool lfe_few;  // (c: whether the LFE had too few samples that aren't 0 there: find_alignment())
   U8 chfew[NCH];  // (and which channels did: find_mixes())
@@ -871,6 +872,21 @@ struct Call {
       return r;
     }
   };
+  // c without a level: -8, the DTS:X encoders' parameters, where the binding mixes two WAV channels
+  // with a gain before the mix (their downmix's surrounds, a back surround times a Q15 unity's
+  // 32767/32768, above) and the build has -8; else the first level, dflt. (A channel scaled alone
+  // is not their sign: an FFmpeg encoder's stream whose surrounds are bound so, 0.01% bigger at -8.)
+  int pick_level(int dflt) const {
+    bool pre = false;
+    for (int ch = 0; ch < NCH; ch++)
+      if (bind.map[ch] >= 0 && bind.map2[ch] >= 0 &&
+          (bind.p1[ch] != BIND_Q15 || bind.p2[ch] != BIND_Q15 || bind.alt[ch]))
+        pre = true;
+    if (!pre) return dflt;
+    for (size_t i = 0; i < sizeof kLevels / sizeof kLevels[0]; i++)
+      if (kLevels[i] == 8) return 8;
+    return dflt;
+  }
   int compress_one(const Opts& o, Stats& st, rp<double> cost, rp<double> orig) {
     U8* pre = (U8*)xmalloc(PRE_READ + PAD);
     size_t got = 0;
@@ -881,7 +897,8 @@ struct Call {
     }
     memset(pre + got, 0, PAD);
     find_alignment(pre, got, got < PRE_READ);
-    const int r = with_level<CompressOne>(o.level, *this, o, st, cost, orig, (pcU8)pre, got);
+    level = o.level_set ? o.level : pick_level(o.level);
+    const int r = with_level<CompressOne>(level, *this, o, st, cost, orig, (pcU8)pre, got);
     free(pre);
     return r;
   }

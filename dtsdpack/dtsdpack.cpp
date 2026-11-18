@@ -5,7 +5,9 @@
 //        dtsdpack d [options] input.dtsd input.wav output.dtsc
 //   c    compress
 //   d    decompress, restoring the core stream byte for byte (with the same WAV)
-//   -9   (c) the model's level (the one this build has; d takes it from the file)
+//   -9   (c) the model's level; -8 the same model with the parameters tuned for a DTS:X encoder's
+//        streams, which c takes without a level where the binding mixes two WAV channels, one with
+//        a gain before the mix (Call::pick_level()); d takes it from the file
 //   -v   (c) afterwards decompress the output and compare it with the input
 //   -s   (c) input and output sizes per kind of syntax element
 //   -q   no statistics, no progress line
@@ -138,6 +140,7 @@ struct Opts {
   int quiet, verify, stats;
   int progress;  // -p: the progress line even where stderr is not a terminal (and with -q)
   int level;     // the model's
+  int level_set; // -L given: that level, else c takes the one its binding says (Call::pick_level())
 };
 
 // a call's file, "-" for stdin or stdout
@@ -236,7 +239,7 @@ static int compress(const char* in_name, const char* wav_name, const char* out_n
                (int)k.bind.off, k.corr, mix);
   }
   r = k.close(r);
-  if (!r && !o.quiet) st.report(in_name, cost, orig, (double)k.s.pos, o.level, o.stats, bound);
+  if (!r && !o.quiet) st.report(in_name, cost, orig, (double)k.s.pos, k.level, o.stats, bound);
   if (!r && !o.quiet && o.stats && k.wav.ok) {  // (-s: the binding: each core channel's WAV channels, and gains not 1)
     int any = 0;
     for (int ch = 0; ch < NCH; ch++) {
@@ -276,7 +279,14 @@ static void usage(void) {
   char lv[NOTE_MAX];
   int k = 0;
   size_t i;
-  for (i = 0; i < sizeof kLevels / sizeof kLevels[0]; i++) k += snprintf(lv + k, sizeof lv - k, " -%d", kLevels[i]);
+  const char* how = "; d takes it from the stream";  // (how c picks a level: with -8 in the build, pick_level())
+  for (i = 0; i < sizeof kLevels / sizeof kLevels[0]; i++) {
+    k += snprintf(lv + k, sizeof lv - k, " -%d", kLevels[i]);
+    if (kLevels[i] == 8)
+      how = " (without one, -8 where a WAV channel goes into a mix of\n"
+            "           two with a gain of its own, as a DTS:X encoder's downmix, else -9); d takes\n"
+            "           it from the stream";
+  }
   fprintf(stderr, "dtsdpack - lossless compressor for a DTS core stream against its lossless audio\n"
                   "Usage: dtsdpack c [options] input.dtsc input.wav output.dtsd\n"
                   "       dtsdpack d [options] input.dtsd input.wav output.dtsc\n"
@@ -288,9 +298,9 @@ static void usage(void) {
                   "  -s    (c) bytes spent per kind of syntax element\n"
                   "  -q    no statistics, no progress line\n"
                   "  -p    the progress line even where stderr is not a terminal\n"
-                  "  %s  (c) the model's level; d takes it from the stream\n"
+                  "  %s  (c) the model's level%s\n"
                   "the core stream's input and output can be - for stdin and stdout (not with -v)\n",
-          lv + 1);
+          lv + 1, how);
 }
 
 int main(int argc, char** argv) {
@@ -311,6 +321,7 @@ int main(int argc, char** argv) {
     else if (argv[a][1] >= '1' && argv[a][1] <= '9' && !argv[a][2]) {
       size_t i;
       o.level = argv[a][1] - '0';
+      o.level_set = 1;
       for (i = 0; i < sizeof kLevels / sizeof kLevels[0] && kLevels[i] != o.level; i++) {}
       if (i == sizeof kLevels / sizeof kLevels[0]) {
         fprintf(stderr, "dtsdpack: no level -%d in this build\n", o.level);

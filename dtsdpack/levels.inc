@@ -1,9 +1,10 @@
 // levels.inc -- the levels of this build: every level, or the one a tuning build has
 // (-DDTSD_ONLY=L, as mk.sh builds it; LvOnly then). Each level is its generated families
 // (MOD/l<L>/), wrapped into configuration classes (famcfg.inc), and its own class, which Model
-// takes (lv<L>.inc). c without a level takes the first, kLevels[0], and with_level() runs what a
-// level is asked for. First what the levels are made of: the coder, the context mixing parts,
-// IDX's runtime, the families and their variables.
+// takes (lv<L>.inc). c without a level takes the one Call::pick_level() says (-8 for a DTS:X
+// encoder's binding, else the first, kLevels[0]), and with_level() runs what a level is asked for.
+// First what the levels are made of: the coder, the context mixing parts, IDX's runtime, the
+// families and their variables.
 #include "cmbase.inc"
 #include "coder.inc"
 #include "cm.inc"
@@ -23,6 +24,12 @@
 #else
 #define DTSD_L9(X)
 #endif
+#if DTSD_LV(8) && __has_include("lv8.inc")
+#include "lv8.inc"
+#define DTSD_L8(X) X(8)
+#else
+#define DTSD_L8(X)
+#endif
 #if DTSD_LV(5) && __has_include("lv5.inc")
 #include "lv5.inc"
 #define DTSD_L5(X) X(5)
@@ -35,7 +42,7 @@
 #else
 #define DTSD_L1(X)
 #endif
-#define DTSD_LEVELS(X) DTSD_L9(X) DTSD_L5(X) DTSD_L1(X)
+#define DTSD_LEVELS(X) DTSD_L9(X) DTSD_L8(X) DTSD_L5(X) DTSD_L1(X)
 #ifdef DTSD_ONLY
 #define DTSD_CAT2(a, b) a##b
 #define DTSD_CAT(a, b) DTSD_CAT2(a, b)

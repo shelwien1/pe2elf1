@@ -39,7 +39,10 @@ dtsdpack d [options] input.dtsd input.wav output.dtsc
   the core the audio predicted.
 - `-q` turns off the statistics and the progress line.
 - `-p` shows the progress line even where stderr is not a terminal.
-- `-9` (with `c`) is the model's level, the only one this version has; `d` takes it from the file.
+- `-9` (with `c`) is the model's level, and `-8` the same model with four families' parameters
+  tuned on a DTS:X encoder's stream (the Cymatics one, below). Without either, `c` takes `-8`
+  where the binding mixes two WAV channels, one with a gain before the mix (that encoder's
+  downmix of the back surrounds), else `-9`; `d` takes the level from the file.
 
 The core stream's input and output can be `-` for stdin and stdout, except with `-v`, which reads
 the files again; the WAV is read once from its start, so it can be a pipe too (not both of them
@@ -168,7 +171,7 @@ MA's XLL, whose 7.1 bed FFmpeg decodes, and the DTS:X objects' data, which
 
 | Stream | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `Nigel_Stanford_Cymatics_DTS-X.dts` | 61758340 | 61830 (0.10%) | the bed's 5.1 downmix, every channel at -3 dB, each surround its side and back surround, the back's samples first times 32767/32768, rounded (61943 before format 129's retunes, 62024 before format 128's sid retune, 67327 before format 127's LFE error fits, 76800 before format 125's transients, 89909 before format 124's allocation table for its encoder, 92266 before format 123's LFE predictions by class, 179247 before format 122's gains before the mix, below; 184951 before format 117's changes for this encoder's LFE) |
+| `Nigel_Stanford_Cymatics_DTS-X.dts` | 61758340 | 61287 (0.10%) | the bed's 5.1 downmix, every channel at -3 dB, each surround its side and back surround, the back's samples first times 32767/32768, rounded (at level -8, below; 61830 before format 130's -8, 61943 before format 129's retunes, 62024 before format 128's sid retune, 67327 before format 127's LFE error fits, 76800 before format 125's transients, 89909 before format 124's allocation table for its encoder, 92266 before format 123's LFE predictions by class, 179247 before format 122's gains before the mix, below; 184951 before format 117's changes for this encoder's LFE) |
 
 Its surrounds' subband samples were 80 KB of its 180, their bottom subband 36 KB, missed 9% of the
 time, the more the louder: what seemed something more in the core than in the bed (white, in time
@@ -1356,7 +1359,8 @@ Each element is binarised, and each decision goes to one of twelve families (`fa
 m4vpack's and h264p's): counters chosen by context indices, mixed in the logistic domain, refined
 by APMs, then range coded (`rc.inc`). `famvars.inc` lists the variables the model gives each
 family; `IDX/l9/<family>.idx` declares level -9's indices over them and their tunable parameters,
-which `IDX/idx2inc.pl` turns into `MOD/l9/` (`./mk.sh mod`; the format:
+and `IDX/l8/` level -8's (the same but for four families' parameters, below), which
+`IDX/idx2inc.pl` turns into `MOD/l9/` and `MOD/l8/` (`./mk.sh mod`; the format:
 [IDX/IDX-FORMAT.md](IDX/IDX-FORMAT.md)). The tables are mapped zeroed and take memory where they are
 written; the APMs' rows and the third mixer's, by their contexts' decision nodes (an APM's up to
 504 bytes a node), are laid out in the order a stream first codes them (a context's nodes' rows by
@@ -1614,23 +1618,31 @@ Format 129 retunes scl, smp, vqp and abd on the same dumps (two hours, the four 
 three passes and part of a fourth, 3.6% off its output there; smp seven, 0.38%; vqp two, 0.1%;
 abd seven, 0.9%): the regression set 37 bytes smaller (`s.2.dts`'s core a byte bigger), the
 calibration set 103, the 28 short streams 114 (none of them bigger), the Cymatics stream's core
-113.
-`./mk.sh check 9 stream wav ...`
+113. Format 130 adds level -8 for what format 128 left out: level -9's model with hit's, vqr's,
+abt's and smp's parameters tuned on the dumps of the Cymatics stream (weighed twice) and of seven
+cuts of it, 8 frames to 98 s (two hours in all, from a tuning on the whole stream alone; their
+output there 2.1%, 0.6%, 2.4% and 0.6% smaller than with level -9's parameters), which `c` takes
+where the binding mixes two WAV channels, one with a gain before the mix, as that encoder's downmix
+does: the Cymatics stream's core 543 bytes smaller (0.88%), the cuts 32-148 bytes smaller each but
+for the 8-frame one (5 bytes bigger); the other streams take -9, as before. Tuned on the whole
+stream alone, the four had made its core 514 bytes smaller but the two cuts that start quiet 13
+and 69 bytes bigger and the 8-frame one 51.
+`./mk.sh check 9 stream wav ...` (and `8`)
 confirms that the tuning build, the shipping build and the build without AVX2 write the same
-files.
+files at that level.
 
 ### The format
 
-"dtsdpack", the format's version (129), the level; what the WAV was (whether it was one, its
-channels and bytes a sample, its size and the CRC-32 of its first 64 KB) and the binding (the
-offset; the WAV's samples to the core's, 1, 2 or 4 (its lower band, then 2), and the lower band's
-resolution; the LFE's channel; each core channel's WAV channel, and where it isn't that channel
-as it is, the second of its mix and their gains, a downmix table entry's index where they are
-one, and where it has them, its WAV channels' gains before the mix and a second pair of those),
+"dtsdpack", the format's version (130), the level (9, or 8: above); what the WAV was (whether it was
+one, its channels and bytes a sample, its size and the CRC-32 of its first 64 KB) and the binding
+(the offset; the WAV's samples to the core's, 1, 2 or 4 (its lower band, then 2), and the lower
+band's resolution; the LFE's channel; each core channel's WAV channel, and where it isn't that
+channel as it is, the second of its mix and their gains, a downmix table entry's index where they
+are one, and where it has them, its WAV channels' gains before the mix and a second pair of those),
 numbers in 7-bit groups; then the range coded chunks (a frame as records, bytes between frames, a
-frame kept as bytes), the end, and the CRC-32 of the core stream, which `d` checks. The
-header is 31 bytes for a 5.1 stream bound channel for channel (111 before format 90, every
-binding's fields at a fixed size: up to a third of a 7-frame DTS-HD MA sample's output).
+frame kept as bytes), the end, and the CRC-32 of the core stream, which `d` checks. The header is 31
+bytes for a 5.1 stream bound channel for channel (111 before format 90, every binding's fields at a
+fixed size: up to a third of a 7-frame DTS-HD MA sample's output).
 
 ## What it doesn't do
 
@@ -1700,7 +1712,9 @@ binding's fields at a fixed size: up to a third of a 7-frame DTS-HD MA sample's 
   its nearest vector 78%), its hit flags 14.3 KB (34218 misses in 68.8 million, 3.3 bits each;
   3.0 KB of that in its last 3.4 seconds, where the centre alone has the bits, every subband at
   ABITS 24, and 5% of its samples miss), its LFE 8.9 KB, its bit allocations 5.9 KB.
-- One thread, one level.
+- One thread, and one model: its two levels differ in four families' parameters, -8's tuned on
+  one DTS:X stream (and pieces of it); a build holds the model's code once for each (5.6 MB,
+  3.1 MB with -9 alone).
 
 ## Build
 
@@ -1714,7 +1728,9 @@ or by hand:
 g++ -O3 -fno-stack-clash-protection -march=x86-64-v3 -ffp-contract=off -std=c++11 -fno-exceptions -fno-rtti -ILib3 -pthread -static-libstdc++ -static-libgcc -o dtsdpack dtsdpack.cpp
 ```
 
-AVX2 or not, the files are the same (the last flags only make a short run start sooner). It needs GCC's or Clang's `__int128`. `MOD/` is generated
+AVX2 or not, the files are the same (the last flags only make a short run start sooner);
+`-DDTSD_ONLY=9` builds level -9 alone (3.1 MB, not 5.6; its `c` takes -9 for every stream and
+its `d` reads -9's files alone). It needs GCC's or Clang's `__int128`. `MOD/` is generated
 from `IDX/` (perl) and kept in the repository, so a plain build needs no perl; `tables.inc` is
 generated from FFmpeg's `libavcodec/dcadata.c` by `tools/mktables.py`, `IDX/l9/*.idx`'s first
 declarations by `tools/mkidx.py`, and `hfgroups.inc` (the HF VQ groups' scores) by
