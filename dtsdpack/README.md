@@ -1688,6 +1688,18 @@ binding's fields at a fixed size: up to a third of a 7-frame DTS-HD MA sample's 
   offset, with the XLL residual whole from the first frame: the model's indexes there cost less
   than their hit flags alone would, the noise's level known frame by frame (573 bytes against
   686).
+- What is left is mostly the encoders' own arithmetic, which the WAV doesn't show. Of `s.2.dts`'s
+  core at format 127 (its costs by field, `-DDTSD_FSTAT`'s, and by subband and the hit flags'
+  apart, in a build counting them), the top four subbands, 21 to 24 kHz and little but the
+  encoder's FFT noise, took 47.8 KB of 76.4: band 31's HF VQ indexes 24.8 KB and its scale factors
+  9.2, subbands 28-30's 13.8; the subband samples' hit flags 20.3 KB, for 47125 misses in 55.7
+  million samples, 3.4 bits a miss, where a boundary crossed by Gaussian noise of a known level
+  costs 3.3 (3.7 for Laplacian noise); the missed values themselves 12 bytes. The Cymatics
+  stream's core: its top four subbands 30.0 KB of 62.0 (band 31's HF VQ indexes at the smallest
+  scale factor 11.4 KB, 46676 vectors, the model's first group the encoder's 73% of the time and
+  its nearest vector 78%), its hit flags 14.3 KB (34218 misses in 68.8 million, 3.3 bits each;
+  3.0 KB of that in its last 3.4 seconds, where the centre alone has the bits, every subband at
+  ABITS 24, and 5% of its samples miss), its LFE 8.9 KB, its bit allocations 5.9 KB.
 - One thread, one level.
 
 ## Build
