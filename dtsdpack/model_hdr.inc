@@ -21,6 +21,10 @@ struct ModelHdr {
   U8 occ[F_N];  // each field's places so far in the frame
   int st, nch;  // the frame's: whether the field before kept its last value, how many changed
   int lastkind, lastkind2;  // the chunks before's kinds (1 + the kind, 0 none)
+  // the core's code books: whether FFmpeg's encoder's rule has made them (core_books()), and the
+  // last frame's (with its ADJs)
+  int sel_ff;
+  U8 sel_last[NCH][10], adj_last[NCH][10];
   int rawprev, rawprev2;    // the raw bytes before
   U8 tq[MAX_FRAME];         // (code_tail()'s bytes)
   S64 rawat;                // the bytes of the chunk kept as bytes coded so far
@@ -50,6 +54,9 @@ struct ModelHdr {
 
   // as the run starts (the history is zeroed pages: none)
   void hdr_start(void) {
+    sel_ff = 0;
+    for (int ch = 0; ch < NCH; ch++)
+      for (int a = 0; a < 10; a++) sel_last[ch][a] = (U8)QB_GROUP[a], adj_last[ch][a] = 0;
     npend = 0;
     memset(occ, 0, sizeof occ);
     st = nch = 0;

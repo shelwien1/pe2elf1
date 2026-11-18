@@ -471,7 +471,11 @@ struct Call {
   }
   // the LFE: the WAV channel no core channel has whose decimation correlates best with its nl
   // samples ln, ly (by those whose decimation's window ends in the WAV, where it ends in the
-  // window: as find_bind()'s probes), by 0.9 or more
+  // window: as find_bind()'s probes), by 0.9 or more; where none does, the best of them by more
+  // than 0.5 if its decimation corrected as the model's fixed predictors have it does (LFE_W2, or
+  // LFE_W2D, a decoded WAV's LFE interpolation undone: the WAVs FFmpeg decoded from its encoder's
+  // streams, whose LFE the decimation makes 0.89-0.91 of, LFE_W2D 0.985-0.987; any other channel
+  // 0.70 at most, 0.27)
   void bind_lfe(S64* ln, S64* ly, int nl, int up) {
     if (wav.got == wav.nsamp) {
       int m = 0;
@@ -480,7 +484,8 @@ struct Call {
       nl = m;
     }
     if (nl < 16) return;
-    double bc = 0.9;
+    double bc = 0.9, b2 = 0.5;
+    int found = 0, w2 = -1;
     for (int wc = 0; wc < wav.nch; wc++) {
       int used = 0;
       for (int ch = 0; ch < NCH; ch++) used |= bind.map[ch] == wc || bind.map2[ch] == wc;
@@ -491,7 +496,28 @@ struct Call {
         sxy += x * y, sxx += x * x, syy += y * y;
       }
       const double c = sxx > 0 && syy > 0 ? sxy / sqrt(sxx * syy) : 0;
-      if (c > bc) bc = c, bind.lfe = (S8)wc;
+      if (c > bc) bc = c, bind.lfe = (S8)wc, found = 1;
+      if (c > b2) b2 = c, w2 = wc;
+    }
+    if (found || w2 < 0) return;
+    // (the decimations by 32 around each sample, as the model's lfe_d2(): each once)
+    static S64 dv[128], dm[128];
+    for (int i = 0; i < 128; i++) dm[i] = INT64_MIN;
+    auto d2 = [&](S64 m) {
+      const int i = (int)(m & 127);
+      if (dm[i] != m) dm[i] = m, dv[i] = lfe_decim(wav, w2, 32 * up * m + bind.off, up);
+      return dv[i];
+    };
+    for (int dd = 0; dd < 2 && !found; dd++) {
+      const S32* const w = dd ? LFE_W2D : LFE_W2;
+      double sxy = 0, sxx = 0, syy = 0;
+      for (int k = 0; k < nl; k++) {
+        S128 p = 0;
+        for (int t = 0; t < LFE_N2; t++) p += (S128)w[t] * d2(2 * ln[k] + t - LFE_K2);
+        const double x = (double)(S64)(p >> (dd ? 24 : 30)), y = (double)ly[k];
+        sxy += x * y, sxx += x * x, syy += y * y;
+      }
+      if (sxx > 0 && syy > 0 && sxy / sqrt(sxx * syy) >= 0.9) bind.lfe = (S8)w2, found = 1;
     }
   }
   // the first block of the frames in the n bytes at buf (eof: all of them) whose plain subband

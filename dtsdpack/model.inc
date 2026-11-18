@@ -575,6 +575,101 @@ struct Model : ModelX96<f_DEC, LV> {
     }
     return true;
   }
+  // The core's code books after its subframes, where FFmpeg's encoder's rule has made the stream's
+  // (set_best_code() of each frame's values: sel_ff, from the frames before), each against the
+  // rule's (ff_books()): the subframes walked with each channel's last books (and ADJs) meanwhile,
+  // whose bits the bit allocations' budget counts. FFmpeg's encoder's books are each frame's: `s.2`'s
+  // first 3 MB as decoded, encoded at 1509 kbps, 15365 of its 31700 Huffman; the DTS encoders'
+  // are the same for the whole stream, the codes of fixed length (the rule would have the others
+  // more often than not)
+  U8 selbk[NCH][20];
+  bool cdfr;
+  bool core_defer(CoreRec& r) {
+    cdfr = B::sel_ff != 0;
+    if (!cdfr) return false;
+    for (int ch = 0; ch < r.npchs; ch++)
+      for (int a = 0; a < 10; a++) {
+        if (ENC) selbk[ch][a] = (U8)r.sel[ch][a], selbk[ch][10 + a] = (U8)r.adj[ch][a];
+        r.sel[ch][a] = B::sel_last[ch][a];
+        r.adj[ch][a] = r.sel[ch][a] < QB_GROUP[a] ? B::adj_last[ch][a] : 0;
+      }
+    return true;
+  }
+  // the books FFmpeg's encoder's set_best_code() takes for the frame's values (rule[ch][a]): of an
+  // ABITS's Huffman books the first whose codes take the fewest bits, where those and the 2 bits of
+  // its ADJ take fewer than the codes of fixed length, else those (none of the ABITS: those)
+  static void ff_books(const CoreRec& r, int (*rule)[10]) {
+    for (int ch = 0; ch < r.npchs; ch++) {
+      U32 vc[10][7], cc[10];
+      memset(vc, 0, sizeof vc), memset(cc, 0, sizeof cc);
+      for (int sf = 0; sf < r.nsubfs; sf++) {
+        const CoreSub& s = r.sub[sf];
+        const int n = s.nssc * 8;
+        for (int b = 0; b < r.nvqsub[ch]; b++) {
+          const int A = s.abits[ch][b];
+          if (A < 1 || A > 10) continue;
+          const S32* q = s.q[ch][b];
+          for (int t = 0; t < QB_GROUP[A - 1]; t++) {
+            const HuffBook& hb = QB[A - 1][t];
+            U32 k = 0;
+            for (int j = 0; j < n; j++) k += (U32)hb.bits(q[j]);
+            vc[A - 1][t] += k;
+          }
+          cc[A - 1] += A <= 7 ? (U32)(BLOCK_BITS[A - 1] * n / 4) : (U32)((A - 3) * n);
+        }
+      }
+      for (int a = 0; a < 10; a++) {
+        int m = 0;
+        for (int t = 1; t < QB_GROUP[a]; t++) m = vc[a][t] < vc[a][m] ? t : m;
+        rule[ch][a] = cc[a] && vc[a][m] + 2 < cc[a] ? m : QB_GROUP[a];
+      }
+    }
+  }
+  bool core_books(CoreRec& r) {
+    int rule[NCH][10];
+    bool vlc = false;
+    if (!cdfr)
+      for (int ch = 0; ch < r.npchs; ch++)
+        for (int a = 0; a < 10; a++) vlc |= r.sel[ch][a] < QB_GROUP[a];
+    // (where no frame has had the rule's and this one has no Huffman books, the rule no matter)
+    const bool rl = cdfr || B::sel_ff || vlc;
+    if (rl) ff_books(r, rule);
+    if (cdfr) {
+      cdfr = false;
+      B::cat(CAT_HDR);
+#ifdef DTSD_FSTAT
+      c->fid = F_SEL;
+#endif
+      for (int a = 0; a < 10; a++)
+        for (int ch = 0; ch < r.npchs; ch++) {
+          S64 v = ENC ? selbk[ch][a] : 0;
+          v = B::hdr_pred(F_SEL, (1 << SEL_BITS[a]) - 1, v, rule[ch][a]);
+          r.sel[ch][a] = (int)v;
+        }
+#ifdef DTSD_FSTAT
+      c->fid = F_ADJ;
+#endif
+      for (int a = 0; a < 10; a++)
+        for (int ch = 0; ch < r.npchs; ch++) {
+          S64 v = 0;
+          if (r.sel[ch][a] < QB_GROUP[a]) v = B::hdr_field(F_ADJ, 3, ENC ? selbk[ch][10 + a] : 0);
+          r.adj[ch][a] = (int)v;
+        }
+      vlc = false;
+      for (int ch = 0; ch < r.npchs; ch++)
+        for (int a = 0; a < 10; a++) vlc |= r.sel[ch][a] < QB_GROUP[a];
+    }
+    // (the rule's where the frame's books are all its, and some are Huffman; not where one isn't)
+    if (rl) {
+      bool ok = true;
+      for (int ch = 0; ch < r.npchs; ch++)
+        for (int a = 0; a < 10; a++) ok &= rule[ch][a] == r.sel[ch][a];
+      B::sel_ff = !ok ? 0 : vlc ? 1 : B::sel_ff;
+    }
+    for (int ch = 0; ch < r.npchs; ch++)
+      for (int a = 0; a < 10; a++) B::sel_last[ch][a] = (U8)r.sel[ch][a], B::adj_last[ch][a] = (U8)r.adj[ch][a];
+    return good();
+  }
   // the same of the joint scale factors' books (each channel's, each subframe: `96-24.dts`'s the
   // cheapest 1875 times of 1876), after the scale factors
   bool x96_jdefer() { return true; }

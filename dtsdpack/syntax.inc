@@ -355,6 +355,8 @@ struct BitIn {
   void at(int, int, int) {}
   bool x96_defer(CoreRec&) { return false; }
   bool x96_books(CoreRec&) { return true; }
+  bool core_defer(CoreRec&) { return false; }
+  bool core_books(CoreRec&) { return true; }
   bool x96_jdefer() { return false; }
   bool x96_jsel(const CoreRec&, X96Sub&) { return true; }
   void pos_to(U64 p) { pos = p; }
@@ -426,6 +428,8 @@ struct BitOut {
   void at(int, int, int) {}
   bool x96_defer(CoreRec&) { return false; }
   bool x96_books(CoreRec&) { return true; }
+  bool core_defer(CoreRec&) { return false; }
+  bool core_books(CoreRec&) { return true; }
   bool x96_jdefer() { return false; }
   bool x96_jsel(const CoreRec&, X96Sub&) { return true; }
   void pos_to(U64 p) { pos = p; }
@@ -464,7 +468,10 @@ template <class IO>
 struct Walk {
   IO& io;
   const char* err;
-  explicit Walk(IO& i) : io(i), err(0) {}
+  // (the core's code books after its subframes: core_defer(); where its ADJs' bits begin)
+  bool seldfr;
+  U64 adjat;
+  explicit Walk(IO& i) : io(i), err(0), seldfr(false), adjat(0) {}
   bool fail(const char* why) {
     if (!err) err = why;
     return false;
@@ -511,11 +518,30 @@ struct Walk {
     c.nsubfs = c.subfs + 1;
     WU(PCHS, 3, c.pchs);
     c.npchs = c.pchs + 1;
+    seldfr = io.core_defer(c);
     if (!coding_header(c, 0, c.npchs)) return false;
     if (c.cpf) WU(AHCRC, 16, c.ahcrc);
     c.nblk = 0;  // subband samples so far
     for (int sf = 0; sf < c.nsubfs; sf++)
       if (!subframe(c, sf)) return false;
+    // (the model's code books after the subframes, from the values (core_books()); the subframes'
+    // bits then counted with them, and the ADJs')
+    if (!io.core_books(c)) return fail("a code book out of range");
+    if (seldfr) {
+      seldfr = false;
+      BitOut bo;  // (counts, writes nothing)
+      bo.init(nullptr, 0);
+      Walk<BitOut> wb(bo);
+      const int nb = c.nblk;
+      c.nblk = 0;
+      for (int sf = 0; sf < c.nsubfs; sf++)
+        if (!wb.subframe(c, sf)) return fail(wb.why());
+      c.nblk = nb;
+      U64 p = adjat + (c.cpf ? 16 : 0);
+      for (int a = 0; a < 10; a++)
+        for (int ch = 0; ch < c.npchs; ch++) p += c.sel[ch][a] < QB_GROUP[a] ? 2 : 0;
+      io.pos_to(p + bo.pos);
+    }
     if (io.pos > end) return fail("subframes past the end of the frame");
     // the extension the header names (XCH, X96, XXCH): found in the bits where it may be there, as
     // FFmpeg finds it, else as the record has it
@@ -835,6 +861,16 @@ struct Walk {
       WU(BHUFF, 3, c.bhuff[ch]);
       if (c.bhuff[ch] == 7) return fail("a bit allocation code book out of range");
     }
+    // (the core's books coded after its subframes, from the values, where the model says so
+    // (core_defer(): each channel's last ones meanwhile, which the ADJs' bits are counted as; the
+    // values walked in any of an ABITS's books' range), then core_books())
+    if (seldfr && !ch0) {
+      for (int a = 0; a < 10; a++) io.pos += (U64)(ch1 - ch0) * SEL_BITS[a];
+      adjat = io.pos;
+      for (int a = 0; a < 10; a++)
+        for (int ch = ch0; ch < ch1; ch++) io.pos += c.sel[ch][a] < QB_GROUP[a] ? 2 : 0;
+      return true;
+    }
     for (int a = 0; a < 10; a++)
       for (int ch = ch0; ch < ch1; ch++) WU(SEL, SEL_BITS[a], c.sel[ch][a]);
     for (int a = 0; a < 10; a++)
@@ -954,10 +990,11 @@ struct Walk {
     for (int ssf = 0; ssf < s.nssc; ssf++) {
       for (int ch = ch0; ch < ch1; ch++)
         for (int b = 0; b < c.nvqsub[ch]; b++) {
-          const int a = s.abits[ch][b], how = sample_coding(c, ch, a);
+          const int a = s.abits[ch][b], how = seldfr && a >= 1 && a <= 10 ? 1 : sample_coding(c, ch, a);
           S32* v = &s.q[ch][b][ssf * 8];
           if (how == 1) {
-            const HuffBook& hb = QB[a - 1][c.sel[ch][a - 1]];
+            const int sl = c.sel[ch][a - 1];
+            const HuffBook& hb = QB[a - 1][sl < QB_GROUP[a - 1] ? sl : 0];
             for (int m = 0; m < 8; m++) {
               io.at(ch, b, ssf * 8 + m);
               WH(q, hb, v[m]);
