@@ -16,9 +16,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   M_FAM(scl)
   M_FAM(scd)
   M_FAM(hit)
+  M_FAM(hid)
   M_FAM(smp)
+  M_FAM(smd)
   M_FAM(vqr)
   M_FAM(vqp)
+  M_FAM(vpd)
   WavIn* wav;     // the WAV (none: ok 0)
   Bind bind;      // how the core lines up with it
   const S64* fir; // the prototype filter of the frame's FILTS
@@ -2251,13 +2254,22 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       while (cand[at].i != v) at++;
     const int r0 = ENC ? rank_of(cand, n, at) : 0;
     int r;
-    if (kd == VK_PVQ || kd == VK_PVE) {  // (the predictors' ranks, by the vqp family: format 116)
-      M_vqp_v E;
+    if (kd == VK_PVQ || kd == VK_PVE) {  // (the predictors' ranks, by the vqp family: format 116; vpd's where the WAV is decoded)
+      if (dw_rule()) {
+        M_vpd_v E;
 #define M_COPY(f) E.f = D.f;
-      M_vqr_VARS(M_COPY)
+        M_vqr_VARS(M_COPY)
 #undef M_COPY
-      B::sel(f_vqp, E);
-      r = code_rank(f_vqp, r0, nb, E, cand, n, pq ? qr : nullptr);
+        B::sel(f_vpd, E);
+        r = code_rank(f_vpd, r0, nb, E, cand, n, pq ? qr : nullptr);
+      } else {
+        M_vqp_v E;
+#define M_COPY(f) E.f = D.f;
+        M_vqr_VARS(M_COPY)
+#undef M_COPY
+        B::sel(f_vqp, E);
+        r = code_rank(f_vqp, r0, nb, E, cand, n, pq ? qr : nullptr);
+      }
     } else {
       B::sel(f_vqr, D);
       r = code_rank(f_vqr, r0, nb, D, cand, n, pq ? qr : nullptr);
@@ -2934,6 +2946,24 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // FATE's 1-7 bytes smaller; by 8 and a 64th, a lossless WAV's too, `s.2.dts`'s first 3 MB's 5
   // bytes bigger)
   bool ab_rule() const { return abr[1] > abr[0] + 16 + abr[0] / 32; }
+  // whether the families of a decoded WAV's (sdd, hid, smd, vpd) take the decisions: where either
+  // search has been right clearly more often (abd's rule), and at -9 where after a 5.1 frame's
+  // indexes under 90% of them have been the audio's (the decodes of FATE's XBR and XXCH samples,
+  // whose searches fail too: 82.9-85% the audio's; `x96_xch_61_24_96_3840.dtsc` 23 bytes bigger with
+  // the others' families, at 95% the lossless WAVs' noisy first frames theirs; at -8 the 8-frame cut
+  // of the Cymatics stream, 75.5%, 20 bytes bigger)
+  bool dw_rule() const {
+    return ss_rule() || ab_rule() || (LV::id == 9 && n_smp >= SP_HN && n_hit * 100 < n_smp * 90);
+  }
+  // sid's side information, sdd's where the WAV is decoded (the joint scale factors jsc's either way)
+  S64 side_code(int fld, int ch, int b, S64 v, S64 lo, S64 hi, int bit1, S32 A, S32 P, int ac, int ab, int ec, int tr = 0) {
+    if (fld == SF_JSCALE || !dw_rule()) return B::side_code(fld, ch, b, v, lo, hi, bit1, A, P, ac, ab, ec, tr);
+    return B::template side_val<M_sdd_v>(B::f_sdd, fld, ch, b, v, lo, hi, bit1, A, P, ac, ab, ec, tr);
+  }
+  S64 side_index(int fld, int ch, int b, S64 v, int nbits, S32 A, int ac, int ab) {
+    if (!dw_rule()) return B::side_index(fld, ch, b, v, nbits, A, ac, ab);
+    return B::template side_ix<M_sdd_v>(B::f_sdd, fld, ch, b, v, nbits, A, ac, ab);
+  }
   bool ab_search_on() const { return ab_n < 512 || abr[1] > abr[0] + 32 + abr[0] / 64 || !(n_ab & 63); }
   bool hf_min_on() const { return hf_n < 2048 || hfr[0] * 8 > hfr[1] || !(n_hfvq & 63); }
 
@@ -4354,13 +4384,24 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // encoder's arithmetic errs by about the level of all its signal there, its loudest subband's
   // the lesser guess; -1 none: against that, D.nl; su, the unit of D.nr's nearness against the
   // step, 0 none)
+  // (hit's and smp's, or hid's and smd's where the WAV is decoded: dw_rule())
   S64 code_index(const M_smp_v& D, S64 v, int pk, S64 qp, S64 alt, S64 lo, S64 hi, int* how, HitCal* hc = nullptr,
                  S128 dist = 0, S128 unit = 0, int cb = 0, S128 su = 0, int hn = -1, bool xm = false) {
+    if (!dw_rule()) return code_ix<M_hit_v>(f_hit, f_smp, LV::smp::mt, D, v, pk, qp, alt, lo, hi, how, hc, dist, unit, cb, su, hn, xm);
+    M_smd_v E;
+#define M_COPY(f) E.f = D.f;
+    M_smp_VARS(M_COPY)
+#undef M_COPY
+    return code_ix<M_hid_v>(f_hid, f_smd, LV::smd::mt, E, v, pk, qp, alt, lo, hi, how, hc, dist, unit, cb, su, hn, xm);
+  }
+  template <class VH, class FH, class FS, class VS>
+  S64 code_ix(FH& fh, FS& fs, int mt, const VS& D, S64 v, int pk, S64 qp, S64 alt, S64 lo, S64 hi, int* how, HitCal* hc,
+              S128 dist, S128 unit, int cb, S128 su, int hn, bool xm) {
     *how = 2;
     bool far = false;  // (a miss past HIT_NEAR: by distance or by magnitude, fm_c's)
     if (pk) {
       const int kd = D.ab == 27 ? 2 : D.pm;
-      M_hit_v H;
+      VH H;
       H.pm = kd;
       H.nr = D.nr;
       H.nl = D.nl;
@@ -4497,13 +4538,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           if (xm_loss[0] + xm_loss[1] >= (S64)1 << 40) xm_loss[0] >>= 1, xm_loss[1] >>= 1;
         }
         if (hit) return *how = 0, qp;
-        B::sel(f_hit, H);  // (the family's rows for a miss only)
+        B::sel(fh, H);  // (the family's rows for a miss only)
       } else {
-        B::sel(f_hit, H);
-        hit = f_hit.bit(HT_HIT, ENC && v == qp);  // (the LFE's misses are the fit's: by the family)
+        B::sel(fh, H);
+        hit = fh.bit(HT_HIT, ENC && v == qp);  // (the LFE's misses are the fit's: by the family)
       }
       if (hit) return *how = 0, qp;
-      if (alt != qp && f_hit.bit(HT_ALT, ENC && v == alt)) return *how = 1, alt;
+      if (alt != qp && fh.bit(HT_ALT, ENC && v == alt)) return *how = 1, alt;
       far = (qp < 0 ? -qp : qp) >= 4;
       // (neither, the audio's 4 or more: where within HIT_NEAR of it, its side, alt's or the other
       // (up or down where none is), and its distance in unary, from 2 on alt's side (1 is alt), else
@@ -4512,34 +4553,34 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if ((qp < 0 ? -qp : qp) >= 4) {
         const int sa = alt > qp ? 1 : alt < qp ? -1 : 0;
         const S64 d = ENC ? v - qp : 0, ad = d < 0 ? -d : d;
-        if (f_hit.bit(HT_NEAR, ENC && ad <= HIT_NEAR)) {
-          const int same = f_hit.bit(HT_SIDE, ENC && (sa ? (d > 0) == (sa > 0) : d > 0));
+        if (fh.bit(HT_NEAR, ENC && ad <= HIT_NEAR)) {
+          const int same = fh.bit(HT_SIDE, ENC && (sa ? (d > 0) == (sa > 0) : d > 0));
           int k = same && sa ? 2 : 1;
-          while (k < HIT_NEAR && f_hit.bit(HT_DIST + (same ? HIT_NEAR : 0) + k, ENC && ad > k)) k++;
+          while (k < HIT_NEAR && fh.bit(HT_DIST + (same ? HIT_NEAR : 0) + k, ENC && ad > k)) k++;
           const S64 w = qp + (same ? (sa ? sa : 1) : (sa ? -sa : -1)) * k;
           return w < lo ? lo : w > hi ? hi : w;
         }
       }
     }
-    B::sel(f_smp, D);
+    B::sel(fs, D);
     S64 w;
     if (far && fm_c[1] < fm_c[0]) {
       // (its distance past HIT_NEAR, as far as either side allows, then which side where both do)
       const S64 d = ENC ? v - qp : 0, ad = d < 0 ? -d : d;
       const S64 up = hi - qp - HIT_NEAR - 1, dn = qp - lo - HIT_NEAR - 1, fmax = up > dn ? up : dn;
       const int fnb = imax(bit_len((U64)(fmax > 0 ? fmax : 0)), 1);
-      const S64 m = checked(code_len(f_smp, QN_LEN, fnb, LV::smp::mt, ENC ? ad - HIT_NEAR - 1 : 0, ENC), 0, fmax);
+      const S64 m = checked(code_len(fs, QN_LEN, fnb, mt, ENC ? ad - HIT_NEAR - 1 : 0, ENC), 0, fmax);
       int neg = 0;
-      if (m <= up && m <= dn) neg = f_smp.bit(QN_SIGN, ENC && d < 0);
+      if (m <= up && m <= dn) neg = fs.bit(QN_SIGN, ENC && d < 0);
       else if (m > up) neg = 1;
       w = neg ? qp - (m + HIT_NEAR + 1) : qp + (m + HIT_NEAR + 1);
       w = w < lo ? lo : w > hi ? hi : w;
     } else {
       const S64 mmax = -lo > hi ? -lo : hi;
       const int maxnb = imax(bit_len((U64)mmax), 1);
-      const S64 m = checked(code_len(f_smp, QN_LEN, maxnb, LV::smp::mt, ENC ? (v < 0 ? -v : v) : 0, ENC), 0, mmax);
+      const S64 m = checked(code_len(fs, QN_LEN, maxnb, mt, ENC ? (v < 0 ? -v : v) : 0, ENC), 0, mmax);
       int neg = 0;
-      if (m && m <= hi && m <= -lo) neg = f_smp.bit(QN_SIGN, ENC && v < 0);
+      if (m && m <= hi && m <= -lo) neg = fs.bit(QN_SIGN, ENC && v < 0);
       else if (m > hi) neg = 1;
       w = neg ? -m : m;
     }

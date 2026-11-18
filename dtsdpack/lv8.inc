@@ -1,8 +1,8 @@
 // lv8.inc -- level -8: level -9's model, its families' shape the same (in each the ten counters,
 // the three mixers and the final one, and the two APMs), with the parameters of hit, vqr, abt,
 // smp, scl, sid, vqp and hdr tuned on a DTS:X encoder's stream (the Cymatics stream and its cuts;
-// the other four's are level -9's), which c takes without a level where the binding mixes two WAV
-// channels, one with a gain before the mix (Call::pick_level()).
+// the other eight's are level -9's, the decoded WAVs' among them), which c takes without a level
+// where the binding mixes two WAV channels, one with a gain before the mix (Call::pick_level()).
 // Its families as IDX/l8 declares them, generated into MOD/l8: each family's constants and tables
 // (_h.inc), its index builder and its configuration class C8_<family> (_p.inc, by
 // IDX/l8/family.inc and famcfg.inc); and the level's class, which Model<f_DEC, Lv8> takes.

@@ -1,8 +1,8 @@
 // model_side.inc -- the model's side information (model.inc): a subband's PMODE, PVQ, TMODE, joint
-// scale factors and high-frequency VQ vector and the LFE samples (the sid family; the joint scale
-// factors the jsc family), each against its last value and the place before's in the subframe; the
-// bit allocations (abt; a decoded WAV's the abd family), against the last ones, the subband below's
-// and the audio's energy.
+// scale factors and high-frequency VQ vector and the LFE samples (the sid family, sdd where the WAV
+// is decoded: model_smp.inc's side_code(); the joint scale factors the jsc family), each against
+// its last value and the place before's in the subframe; the bit allocations (abt; a decoded WAV's
+// the abd family), against the last ones, the subband below's and the audio's energy.
 
 template <int f_DEC, class LV>
 struct ModelSide : ModelHdr<f_DEC, LV> {
@@ -13,6 +13,7 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
   using B::checked;
   using B::code_val;
   M_FAM(sid)
+  M_FAM(sdd)
   M_FAM(jsc)
   M_FAM(abt)
   M_FAM(abd)
@@ -49,7 +50,11 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
   // An index v of nbits (PVQ, HFVQ) of sid's field fld: whether it is the last one A (1 + it, 0
   // none), else its top 4 bits as a tree, the bits below them by place
   S64 side_index(int fld, int ch, int b, S64 v, int nbits, S32 A, int ac, int ab) {
-    M_sid_v D;
+    return side_ix<M_sid_v>(f_sid, fld, ch, b, v, nbits, A, ac, ab);
+  }
+  template <class V, class F>
+  S64 side_ix(F& f, int fld, int ch, int b, S64 v, int nbits, S32 A, int ac, int ab) {
+    V D;
     D.fld = fld;
     D.cc = chan_class(ch);
     D.bd = b;
@@ -60,14 +65,14 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
     D.ab = ab;
     D.ec = 9;
     D.tr = 0;
-    B::sel(f_sid, D);
-    if (A && f_sid.bit(SN_SAME, ENC && v == A - 1)) return sst = 1, A - 1;
+    B::sel(f, D);
+    if (A && f.bit(SN_SAME, ENC && v == A - 1)) return sst = 1, A - 1;
     int x = 1;
     S64 u = 0;
     for (int i = nbits - 1; i >= 0; i--) {
       const int p = nbits - 1 - i;
       const int node = p < 4 ? SN_IX + x : SN_IXPOS + imin(p - 4, 15);
-      const int bit = f_sid.bit(node, ENC && ((v >> i) & 1));
+      const int bit = f.bit(node, ENC && ((v >> i) & 1));
       if (p < 4) x = x * 2 + bit;
       u = u * 2 + bit;
     }

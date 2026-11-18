@@ -57,16 +57,16 @@ WAV is the one `c` had: its format, its size and the CRC of its first 64 KB are 
 
 ```
 $ dtsdpack c -s s2.dtsc s2_full.wav s2.dtsd
-s2.dtsc: 50008260 -> 76402 bytes (0.15%, -9); 24855 frames, 24855 packed; 0 bytes between frames; 5 channels and the LFE against the WAV (offset 512, correlation 1.0000)
+s2.dtsc: 50008260 -> 76384 bytes (0.15%, -9); 24855 frames, 24855 packed; 0 bytes between frames; 5 channels and the LFE against the WAV (offset 512, correlation 1.0000)
   bytes                             input     packed
   bytes kept as bytes                   0          3    0.00%
   headers, container              1059444         34    0.00%
-  side information                2521040      36268    1.44%
+  side information                2521040      36251    1.44%
   bit allocations                 2174812       4485    0.21%
   scale factors                   3512740      15279    0.43%
   subband samples                40631706      20298    0.05%
   bits after the subframes         108518          0    0.00%
-  total                          50008260      76368    0.15%
+  total                          50008260      76351    0.15%
   the audio's indexes: 99.92% of the samples; the audio's scale factors: 99.09%
   the bit allocations' staircases: 95.53% of the ABITS, right in 99.57% of them
   the encoders' allocation table: 94.32% of the ABITS, right in 99.57% of them
@@ -95,10 +95,10 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76402 (0.15%) | 71.86% | 88.21% |
-| its first 3 MB (6.8 s) | 1275608 | 3507 (0.27%) | | |
-| 3 MB from its middle (5.7 s) | 1068372 | 4648 (0.44%) | | |
-| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2612 (0.11%) | | |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76384 (0.15%) | 71.86% | 88.21% |
+| its first 3 MB (6.8 s) | 1275608 | 3484 (0.27%) | | |
+| 3 MB from its middle (5.7 s) | 1068372 | 4622 (0.43%) | | |
+| FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2589 (0.11%) | | |
 
 Compressing the whole of `s.2.dts`'s core takes 78 seconds (0.6 MB of core a second; 71 in format
 95, 38 before the HF VQ's sampling of format 93, below) and 42 MB of memory, decompressing it 80
@@ -123,9 +123,9 @@ FFmpeg's small DTS-HD MA samples (`xll_*`, 7 frames each) round-trip too:
 | `xll_51_24_48_768` | 7168 | 294 (4.10%) | the WAV's 5.1 |
 | `xll_71_24_48_768_0` | 7168 | 276 (3.85%) | a downmix of its 7.1: every channel at -3 dB, each surround its side and rear surround |
 | `xll_71_24_48_768_1` | 7168 | 299 (4.17%) | the same, the rear surrounds' sign inverted |
-| `xll_xch_61_24_48_768` | 7168 | 558 (7.78%) | its 6.1's 5.1, the back centre in the surrounds at about -3 dB; and in the XCH extension, the back centre |
-| `xll_71_24_96_768` | 7168 | 254 (3.54%) | the 96 kHz WAV's 64-band analysis's lower half, a downmix as the 48 kHz one's |
-| `xll_51_16_192_768_1` | 7168 | 233 (3.25%) | the 64-band analysis's lower half of the 192 kHz WAV's lower frequency band, as DTS-HD MA's XLL makes it (below) |
+| `xll_xch_61_24_48_768` | 7168 | 559 (7.80%) | its 6.1's 5.1, the back centre in the surrounds at about -3 dB; and in the XCH extension, the back centre |
+| `xll_71_24_96_768` | 7168 | 255 (3.56%) | the 96 kHz WAV's 64-band analysis's lower half, a downmix as the 48 kHz one's |
+| `xll_51_16_192_768_1` | 7168 | 234 (3.26%) | the 64-band analysis's lower half of the 192 kHz WAV's lower frequency band, as DTS-HD MA's XLL makes it (below) |
 | `xll_51_16_192_768_0` | 7168 | 210 (2.93%) | the same (the same WAV, another core) |
 
 Before the downmixes were found, the 7.1 and 6.1 ones went to 36-38%: only 3 of their core's
@@ -145,9 +145,9 @@ bits: a 16-bit stream's decoded to 24 bits, 8; the binding keeps it; at 24 bits 
 bytes of the first; read on past a quiet start, 4 MB at a time, until 2^16 samples that aren't 0
 have come, to 256 MB: where the first 4 MB were silent it was 0, and at 0 the first sample comes
 out 4.3 times bigger; with 300 silent frames before it, 1616 bytes then, 852 after; 629 in
-format 131), the lower band saturating at 24 bits as the encoders' does. Their indexes are
-then the audio's 99.5% of the time, their scale factors 99.8% (from 66%), and their cores 78% and
-80% smaller.
+format 131, 609 in format 132), the lower band saturating at 24 bits as the encoders' does. Their
+indexes are then the audio's 99.5% of the time, their scale factors 99.8% (from 66%), and their
+cores 78% and 80% smaller.
 
 Streams of FFmpeg's samples site (`samples.ffmpeg.org/A-codecs/DTS/dts/`, some 5 MB pieces of
 longer ones) and FATE's `dts_es.dts`, their cores against FFmpeg's decodes (lossless for DTS-HD MA,
@@ -157,13 +157,13 @@ allocations in):
 
 | Stream | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 28564 (1.51%) | the 96 kHz decode's 64-band analysis's lower half (99.79% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
-| `Master Audio 5.0 96khz.dts` | 1768548 | 3490 (0.20%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
-| `Master Audio 7.1.dts` | 1945604 | 4171 (0.21%) | a downmix of its 7.1 |
-| `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 3797 (0.14%) | its 3.1 |
-| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 2338 (0.04%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
-| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 1633 (0.32%) | the same (1.95%) |
-| `open bitrate.dts` (stereo, open rate) | 5242416 | 896 (0.02%) | decoded (99.99% of the indexes, 99.96% of the scale factors, 99.82% of the bit allocations, 99.99% of the HF VQ groups, 99.82% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
+| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 28539 (1.51%) | the 96 kHz decode's 64-band analysis's lower half (99.79% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
+| `Master Audio 5.0 96khz.dts` | 1768548 | 3472 (0.20%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
+| `Master Audio 7.1.dts` | 1945604 | 4139 (0.21%) | a downmix of its 7.1 |
+| `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 3784 (0.14%) | its 3.1 |
+| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 2318 (0.04%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
+| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 1631 (0.32%) | the same (1.95%) |
+| `open bitrate.dts` (stereo, open rate) | 5242416 | 884 (0.02%) | decoded (99.99% of the indexes, 99.96% of the scale factors, 99.82% of the bit allocations, 99.99% of the HF VQ groups, 99.82% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
 
 A DTS:X stream, `Nigel_Stanford_Cymatics_DTS-X.dts` (5:27; a 5.1 core at 1509 kbps beside DTS-HD
 MA's XLL, whose 7.1 bed FFmpeg decodes, and the DTS:X objects' data, which
@@ -221,7 +221,8 @@ with eight frames cut from the middle of the Cymatics stream, FFmpeg decodes its
 core alone (the back surrounds silent, the core's channels at their own level), the rest as the
 bed, the core's channels at -3 dB of it. Its core (4024 bytes) lined up with nothing until the
 binding left out the blocks whose windows pass the WAV's end (below): 3274 bytes before, 2406
-now; the Cymatics cut's core (16096 bytes) 12528 before, 3835 after (3831 in format 122).
+after (2432 in format 132, below); the Cymatics cut's core (16096 bytes) 12528 before, 3835 after
+(3831 in format 122).
 
 No stream at hand has XXCH in its core substream: FATE's XXCH samples (`xxch_71_24_48_2046`,
 `xbr_xxch_71_24_48_3840`, `x96_xxch_71_24_96_3840`, 7 frames each) have it in their extension
@@ -240,12 +241,12 @@ their decodes clip too (0.3-1.2% of the samples):
 
 | Stream | Core | dtsdpack |
 |---|---:|---:|
-| `core_51_24_48_768_0`, `_1` (5.1) | 7168 | 1400 (19.53%), 1390 (19.39%) |
-| `xch_61_24_48_768` (6.1 by XCH) | 7168 | 1453 (20.27%) |
+| `core_51_24_48_768_0`, `_1` (5.1) | 7168 | 1396 (19.48%), 1388 (19.36%) |
+| `xch_61_24_48_768` (6.1 by XCH) | 7168 | 1454 (20.28%) |
 | `x96_51_24_96_1509` (X96) | 14084 | 2647 (18.79%) |
-| `x96_xch_61_24_96_3840` | 14084 | 1833 (13.01%) |
-| `xbr_51_24_48_3840`, `xbr_xch_61_24_48_3840` (XBR: its residuals in the decode) | 14084 | 1585 (11.25%), 1998 (14.19%) |
-| `xll_x96_51_24_96_1509` (DTS-HD MA, X96) | 14084 | 1326 (9.41%) |
+| `x96_xch_61_24_96_3840` | 14084 | 1844 (13.09%) |
+| `xbr_51_24_48_3840`, `xbr_xch_61_24_48_3840` (XBR: its residuals in the decode) | 14084 | 1593 (11.31%), 1988 (14.12%) |
+| `xll_x96_51_24_96_1509` (DTS-HD MA, X96) | 14084 | 1329 (9.44%) |
 
 ## How it works
 
@@ -1355,7 +1356,7 @@ FATE's other samples 12-28%, the XXCH ones 16-32% (`xbr_xxch_71_24_48_3840`'s 40
 
 ### The model
 
-Each element is binarised, and each decision goes to one of twelve families (`fam.inc`, ac3pack's,
+Each element is binarised, and each decision goes to one of sixteen families (`fam.inc`, ac3pack's,
 m4vpack's and h264p's): counters chosen by context indices, mixed in the logistic domain, refined
 by APMs, then range coded (`rc.inc`). `famvars.inc` lists the variables the model gives each
 family; `IDX/l9/<family>.idx` declares level -9's indices over them and their tunable parameters,
@@ -1372,6 +1373,8 @@ touched several (a 7-frame stream's run maps 700 fewer pages, a quarter of them)
   word's distance to the frame's end makes); the container's kinds and lengths.
 - **sid**: a subband's PMODE (against the gain and the rise above), TMODE, and where the WAV isn't
   bound, its predictor, its HF VQ vector and the LFE samples.
+- **sdd**: a decoded WAV's (as the scale factor or the bit allocation search shows it, as for abd,
+  or at -9 where under 90% of its indexes have been the audio's; sid's until format 132, below).
 - **jsc**: the joint scale factors (the core's and X96's), against the source channel's audio or
   their running mean (sid's until format 116, below).
 - **abt**: the bit allocations.
@@ -1381,10 +1384,13 @@ touched several (a 7-frame stream's run maps 700 fewer pages, a quarter of them)
 - **scd**: a decoded WAV's (as the scale factor search shows it; scl's until format 118, below).
 - **hit**: whether an index that isn't the audio's is the other side's, and an LFE sample's whether
   it is the audio's.
+- **hid**: a decoded WAV's (as for sdd; hit's until format 132, below).
 - **smp**: the indexes otherwise (and all of them where the WAV isn't bound): magnitude and sign.
+- **smd**: a decoded WAV's (as for sdd; smp's until format 132, below).
 - **vqr**: the ranks of the HF VQ vectors (their groups', then theirs in the group).
 - **vqp**: the ranks of the predictors (their blocks', then theirs in the block; vqr's until format
   116, below).
+- **vpd**: a decoded WAV's (as for sdd; vqp's until format 132, below).
 - **raw**: bytes kept as bytes, the bits after the subframes, those before the extension's sync word,
   and XXCH's other bits.
 
@@ -1586,64 +1592,85 @@ parameters took 5.4% off theirs there, scl's 2.3%; and on the lossless ones' alo
 (three passes and one), abt's 2.1%, scl's 1.7% (one pass of abt's on all of them, 0.04%). In all,
 the regression set 309 bytes smaller (`s.2.dts`'s core 115, `ES 6.1 16bit.dts`'s 55), the
 calibration set 278, the Cymatics stream's core 233. Tuned apart the same way, smp's, vqp's, hit's
-and sid's took 0.3-0.7% off theirs on the decoded streams, too little for families of their own.
-Since format 119 the switches to a decoded WAV's rules come sooner: the scale factor search's,
-ss_rule() (the rest of the model's, and since format 118 the decoded WAVs' families'), where it has
-been right more often than the better rule by a 32nd (it wanted 64 more and an 8th, which FATE's
-7-frame decoded samples never reached; the families, a 16th), X96's subbands' the same (64 more and
-an 8th before), and the bit allocation search's by 16 more and a 32nd (32 before). The decoded WAVs'
-streams 0.67% smaller in all (the regression and calibration sets' short ones), the lossless WAVs'
-the same: the regression set 417 bytes smaller (`96-24.dts`'s core 194, FATE's XXCH samples' 37-60,
-`dts_es.dts`'s 64), the calibration set 431. Taken from the first frame on instead (as a header flag
-would have them), the decoded WAVs' rules made those streams 26 bytes smaller again but three of
-FATE's samples 32 bigger (the XBR samples and x96_xch, whose searches are right no more often than
-the RMS rule): not worth a flag. Format 120 retunes abd and scd on format 119's dumps of the decoded
-WAVs' streams (three passes each: 1.9% and 1.35% off their output there): the regression set 46
-bytes smaller, the calibration set 34. Format 121 retunes vqr, smp, hit, vqp, abt and scl on format
-120's dumps of the 14 streams (weighted as before; one pass to three, as each kept gaining): scl's
-output there 0.7% smaller, vqp's 0.3%, hit's 0.13%, the others' 0.01% or less; on the Cymatics
-stream's, hit's 1.9%, scl's 4.3%. Its sid, tuned the same way (1.1% off its output there), is left
-out: the Cymatics stream's sid output 2.5 times bigger with it, 2887 bytes. The regression set
-22 bytes smaller, the calibration set 26, the Cymatics stream's core 667. Format 126 retunes abt
-on format 125's dumps (four passes, 0.17% off its output there): the regression set 54 bytes
-smaller, the calibration set 43, the Cymatics stream's core 18. Its sid, tuned the same way (2.3%
-off its output there; the calibration set 79 bytes smaller again, the 28 short streams 63), is
+and sid's took 0.3-0.7% off theirs on the decoded streams, too little for families of their own
+(until format 132, below: the lossless streams' sid, tuned apart, took 18% off its output on
+theirs). Since format 119 the switches to a decoded WAV's rules come sooner: the scale factor
+search's, ss_rule() (the rest of the model's, and since format 118 the decoded WAVs' families'),
+where it has been right more often than the better rule by a 32nd (it wanted 64 more and an 8th,
+which FATE's 7-frame decoded samples never reached; the families, a 16th), X96's subbands' the same
+(64 more and an 8th before), and the bit allocation search's by 16 more and a 32nd (32 before). The
+decoded WAVs' streams 0.67% smaller in all (the regression and calibration sets' short ones), the
+lossless WAVs' the same: the regression set 417 bytes smaller (`96-24.dts`'s core 194, FATE's XXCH
+samples' 37-60, `dts_es.dts`'s 64), the calibration set 431. Taken from the first frame on instead
+(as a header flag would have them), the decoded WAVs' rules made those streams 26 bytes smaller
+again but three of FATE's samples 32 bigger (the XBR samples and x96_xch, whose searches are right
+no more often than the RMS rule): not worth a flag. Format 120 retunes abd and scd on format 119's
+dumps of the decoded WAVs' streams (three passes each: 1.9% and 1.35% off their output there): the
+regression set 46 bytes smaller, the calibration set 34. Format 121 retunes vqr, smp, hit, vqp, abt
+and scl on format 120's dumps of the 14 streams (weighted as before; one pass to three, as each kept
+gaining): scl's output there 0.7% smaller, vqp's 0.3%, hit's 0.13%, the others' 0.01% or less; on
+the Cymatics stream's, hit's 1.9%, scl's 4.3%. Its sid, tuned the same way (1.1% off its output
+there), is left out: the Cymatics stream's sid output 2.5 times bigger with it, 2887 bytes. The
+regression set 22 bytes smaller, the calibration set 26, the Cymatics stream's core 667. Format 126
+retunes abt on format 125's dumps (four passes, 0.17% off its output there): the regression set 54
+bytes smaller, the calibration set 43, the Cymatics stream's core 18. Its sid, tuned the same way
+(2.3% off its output there; the calibration set 79 bytes smaller again, the 28 short streams 63), is
 left out again: the Cymatics stream's core 141 bytes bigger with it. Format 128 retunes sid on
 format 127's dumps, the Cymatics stream's among them (weighed as two of 28 streams; part of a pass
-in two hours, 3.2% off its output there): the regression set 9 bytes smaller, the calibration set
-5, the 28 short streams 7, the Cymatics stream's core 81 (its transient modes 217 bytes to 143).
-Its hit, abt and vqr, tuned the same way (1.2%, 0.8% and 0.3% off theirs there), are left out:
-each made the Cymatics stream's core 140-160 bytes smaller and the other sets 9-41 bytes bigger.
-Format 129 retunes scl, smp, vqp and abd on the same dumps (two hours, the four at once: scl
-three passes and part of a fourth, 3.6% off its output there; smp seven, 0.38%; vqp two, 0.1%;
-abd seven, 0.9%): the regression set 37 bytes smaller (`s.2.dts`'s core a byte bigger), the
-calibration set 103, the 28 short streams 114 (none of them bigger), the Cymatics stream's core
-113. Format 130 adds level -8 for what format 128 left out: level -9's model with hit's, vqr's,
-abt's and smp's parameters tuned on the dumps of the Cymatics stream (weighed twice) and of seven
-cuts of it, 8 frames to 98 s (two hours in all, from a tuning on the whole stream alone; their
-output there 2.1%, 0.6%, 2.4% and 0.6% smaller than with level -9's parameters), which `c` takes
-where the binding mixes two WAV channels, one with a gain before the mix, as that encoder's downmix
-does: the Cymatics stream's core 543 bytes smaller (0.88%), the cuts 32-148 bytes smaller each but
-for the 8-frame one (5 bytes bigger); the other streams take -9, as before. Tuned on the whole
-stream alone, the four had made its core 514 bytes smaller but the two cuts that start quiet 13
-and 69 bytes bigger and the 8-frame one 51. Format 131 retunes the four families -8 still had as
--9's, scl, sid, vqp and hdr, at each level: -9's on format 127's dumps of the 14 streams alone, now
-that the Cymatics stream takes -8, and of two outside the sets, FATE's 192 kHz sample with 300
-silent frames before it (above) and the silent-surround one (sid 1.4% off its output on the 14
-streams' dumps, half off the 192 kHz stream's, which sid tuned on the 14 alone had made 15% bigger;
-scl 0.4%; vqp and hdr nothing), -8's on its and its cuts' (sid 12.8%, scl 4.8%, hdr 8%, vqp 4%): the
-regression set 27 bytes smaller, the calibration set 55, the 28 short streams 32 (`open bitrate.dts`
-16 bigger), the 25 short streams 15, the Cymatics stream's core 126 bytes smaller (0.21%), its cuts
-9-89 each, the 192 kHz stream's 364 (993 to 629). hit, vqr, abt and smp, retuned the same way at -9
-(0.02% off theirs), are left out: the regression set 10 bytes smaller with them, the 25 short
-streams 2 bigger.
+in two hours, 3.2% off its output there): the regression set 9 bytes smaller, the calibration set 5,
+the 28 short streams 7, the Cymatics stream's core 81 (its transient modes 217 bytes to 143). Its
+hit, abt and vqr, tuned the same way (1.2%, 0.8% and 0.3% off theirs there), are left out: each made
+the Cymatics stream's core 140-160 bytes smaller and the other sets 9-41 bytes bigger. Format 129
+retunes scl, smp, vqp and abd on the same dumps (two hours, the four at once: scl three passes and
+part of a fourth, 3.6% off its output there; smp seven, 0.38%; vqp two, 0.1%; abd seven, 0.9%): the
+regression set 37 bytes smaller (`s.2.dts`'s core a byte bigger), the calibration set 103, the 28
+short streams 114 (none of them bigger), the Cymatics stream's core 113. Format 130 adds level -8
+for what format 128 left out: level -9's model with hit's, vqr's, abt's and smp's parameters tuned
+on the dumps of the Cymatics stream (weighed twice) and of seven cuts of it, 8 frames to 98 s (two
+hours in all, from a tuning on the whole stream alone; their output there 2.1%, 0.6%, 2.4% and 0.6%
+smaller than with level -9's parameters), which `c` takes where the binding mixes two WAV channels,
+one with a gain before the mix, as that encoder's downmix does: the Cymatics stream's core 543 bytes
+smaller (0.88%), the cuts 32-148 bytes smaller each but for the 8-frame one (5 bytes bigger); the
+other streams take -9, as before. Tuned on the whole stream alone, the four had made its core 514
+bytes smaller but the two cuts that start quiet 13 and 69 bytes bigger and the 8-frame one 51.
+Format 131 retunes the four families -8 still had as -9's, scl, sid, vqp and hdr, at each level:
+-9's on format 127's dumps of the 14 streams alone, now that the Cymatics stream takes -8, and of
+two outside the sets, FATE's 192 kHz sample with 300 silent frames before it (above) and the
+silent-surround one (sid 1.4% off its output on the 14 streams' dumps, half off the 192 kHz
+stream's, which sid tuned on the 14 alone had made 15% bigger; scl 0.4%; vqp and hdr nothing), -8's
+on its and its cuts' (sid 12.8%, scl 4.8%, hdr 8%, vqp 4%): the regression set 27 bytes smaller, the
+calibration set 55, the 28 short streams 32 (`open bitrate.dts` 16 bigger), the 25 short streams 15,
+the Cymatics stream's core 126 bytes smaller (0.21%), its cuts 9-89 each, the 192 kHz stream's 364
+(993 to 629). hit, vqr, abt and smp, retuned the same way at -9 (0.02% off theirs), are left out:
+the regression set 10 bytes smaller with them, the 25 short streams 2 bigger. Format 132 gives hit,
+smp, vqp and sid a family each for a decoded WAV's decisions, hid, smd, vpd and sdd, taken where abd
+is (the scale factor or the bit allocation search right clearly more often) and, at -9, where after
+a 5.1 frame's indexes fewer than 90% of them have been the audio's: FATE's XBR and XXCH samples,
+whose searches fail too (82.9-85% the audio's; with the other families `x96_xch_61_24_96_3840.dtsc`
+and `xbr_xch_61_24_48_3840.dtsc` 23 bytes bigger each; at 95% the lossless WAVs' noisy first frames
+went with them, `s2h.dtsc` 13 bytes bigger; at -8 the Cymatics stream's 8-frame cut, its indexes
+75.5% the audio's, 20 bytes bigger). Format 118 had found too little apart in these four for
+families of their own; it is the lossless streams' parameters that differ now: tuned on format 127's
+dumps of those streams alone, sid's took 18% off its output there (851 bytes to 697, a pass), vqp's
+4.1%, hit's 0.5% and smp's 0.4%; on the decoded ones' alone, sid's 2.9%, hit's 1.3%, vqp's 0.6% and
+smp's 0.3% (50 minutes for each kind, the four at once). From those, tuned again on new dumps of the
+14 streams and the two outside the sets (weighted as before), the decoded WAVs' families on their
+decisions there (hid's output 1.5% smaller, sdd's 1.5%, vpd's and smd's 0.2% and 0.1%) and the
+others on the rest (sid's 3.8%, hit's 0.1%; two and a half hours of tuning in all): the regression
+set 195 bytes smaller (`s.2.dts`'s core 18), the calibration set 159, the 28 short streams 170 (13
+of them 2-32 bytes smaller, 10 of them 1-11 bigger, FATE's XBR, XXCH and X96 samples the most), the
+25 short streams 72, the 192 kHz stream with 300 silent frames before it 20 (629 to 609); FATE's
+DTS:X sample, its indexes 37% the audio's, 32 bytes bigger (2400 to 2432). A decoded WAV's families
+learn from the first decisions they take, not from the stream's start: with the others' parameters
+as they were, those streams came 1-9 bytes bigger. Level -8's four are -9's, the Cymatics stream and
+its cuts as they were.
 `./mk.sh check 9 stream wav ...` (and `8`)
 confirms that the tuning build, the shipping build and the build without AVX2 write the same
 files at that level.
 
 ### The format
 
-"dtsdpack", the format's version (131), the level (9, or 8: above); what the WAV was (whether it was
+"dtsdpack", the format's version (132), the level (9, or 8: above); what the WAV was (whether it was
 one, its channels and bytes a sample, its size and the CRC-32 of its first 64 KB) and the binding
 (the offset; the WAV's samples to the core's, 1, 2 or 4 (its lower band, then 2), and the lower
 band's resolution; the LFE's channel; each core channel's WAV channel, and where it isn't that
@@ -1723,8 +1750,8 @@ fixed size: up to a third of a 7-frame DTS-HD MA sample's output).
   3.0 KB of that in its last 3.4 seconds, where the centre alone has the bits, every subband at
   ABITS 24, and 5% of its samples miss), its LFE 8.9 KB, its bit allocations 5.9 KB.
 - One thread, and one model: its two levels differ in eight families' parameters, -8's tuned on
-  one DTS:X stream (and pieces of it); a build holds the model's code once for each (5.6 MB,
-  3.1 MB with -9 alone).
+  one DTS:X stream (and pieces of it); a build holds the model's code once for each (6.9 MB,
+  3.7 MB with -9 alone).
 
 ## Build
 
@@ -1739,7 +1766,7 @@ g++ -O3 -fno-stack-clash-protection -march=x86-64-v3 -ffp-contract=off -std=c++1
 ```
 
 AVX2 or not, the files are the same (the last flags only make a short run start sooner);
-`-DDTSD_ONLY=9` builds level -9 alone (3.1 MB, not 5.6; its `c` takes -9 for every stream and
+`-DDTSD_ONLY=9` builds level -9 alone (3.7 MB, not 6.9; its `c` takes -9 for every stream and
 its `d` reads -9's files alone). It needs GCC's or Clang's `__int128`. `MOD/` is generated
 from `IDX/` (perl) and kept in the repository, so a plain build needs no perl; `tables.inc` is
 generated from FFmpeg's `libavcodec/dcadata.c` by `tools/mktables.py`, `IDX/l9/*.idx`'s first
