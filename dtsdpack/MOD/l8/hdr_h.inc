@@ -2,62 +2,61 @@
 
 
 
-static const byte D8_hdr_d_pos[31+1]={ 0,0,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3 };
 
 
 
 
-static const byte D8_hdr_h_pos[31+1]={ 0,1,1,1,1,2,3,3,3,3,3,3,4,4,4,4,4,4,4,4,5,6,6,6,6,7,7,7,7,7,7,7 };
+static const byte D8_hdr_h_pos[31+1]={ 0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,3,3,3,3,3,3,3 };
 
 
 
-static const byte D8_hdr_k_pos[31+1]={ 0,0,0,0,0,1,2,3,3,3,3,3,4,4,4,4,4,4,4,4,4,5,5,6,6,7,7,7,7,7,7,7 };
-
-
-
-
+static const byte D8_hdr_k_pos[31+1]={ 0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,3,4,4,4,4,4,4,4 };
 
 
 
 
-static const int D8_hdr_rA = (0+0) * (1);
-static const int D8_hdr_mwA = (143+0) * (1);
+
+
+
+
+static const int D8_hdr_rA = (128+0) * (1);
+static const int D8_hdr_mwA = (216+0) * (1);
 static const int D8_hdr_rB = (0+0) * (1);
-static const int D8_hdr_mwB = (0+0) * (1);
-static const int D8_hdr_rC = (90+0) * (1);
-static const int D8_hdr_mwC = (125+0) * (1);
+static const int D8_hdr_mwB = (6+0) * (1);
+static const int D8_hdr_rC = (0+0) * (1);
+static const int D8_hdr_mwC = (0+0) * (1);
 static const int D8_hdr_rD = (0+0) * (1);
 static const int D8_hdr_mwD = (0+0) * (1);
-static const int D8_hdr_rE = (54+0) * (1);
-static const int D8_hdr_mwE = (31+0) * (1);
-static const int D8_hdr_rH = (95+0) * (1);
-static const int D8_hdr_mwH = (0+0) * (1);
+static const int D8_hdr_rE = (49+0) * (1);
+static const int D8_hdr_mwE = (30+0) * (1);
+static const int D8_hdr_rH = (48+0) * (1);
+static const int D8_hdr_mwH = (6+0) * (1);
 static const int D8_hdr_rI = (97+0) * (1);
-static const int D8_hdr_mwI = (140+0) * (1);
+static const int D8_hdr_mwI = (252+0) * (1);
 static const int D8_hdr_rJ = (102+0) * (1);
-static const int D8_hdr_mwJ = (28+0) * (1);
+static const int D8_hdr_mwJ = (56+0) * (1);
 static const int D8_hdr_rK = (130+0) * (1);
-static const int D8_hdr_mwK = (36+0) * (1);
-static const int D8_hdr_rL = (0+0) * (1);
-static const int D8_hdr_mwL = (133+0) * (1);
-static const int D8_hdr_lr = (15+0) * (1);
-static const int D8_hdr_mb = (212+0) * (1);
+static const int D8_hdr_mwK = (0+0) * (1);
+static const int D8_hdr_rL = (16+0) * (1);
+static const int D8_hdr_mwL = (3+0) * (1);
+static const int D8_hdr_lr = (14+0) * (1);
+static const int D8_hdr_mb = (222+0) * (1);
 static const int D8_hdr_wp = (19+0) * (1);
-static const int D8_hdr_wq = (2+0) * (1);
+static const int D8_hdr_wq = (3+0) * (1);
 static const int D8_hdr_wo = (64+0) * (1);
-static const int D8_hdr_wa = (16+0) * (1);
-static const int D8_hdr_wf = (77+0) * (1);
+static const int D8_hdr_wa = (24+0) * (1);
+static const int D8_hdr_wf = (127+0) * (1);
 static const int D8_hdr_lf = (16+0) * (1);
-static const int D8_hdr_bf = (16+0) * (1);
+static const int D8_hdr_bf = (128+0) * (1);
 static const int D8_hdr_l2 = (16+0) * (1);
-static const int D8_hdr_l3 = (16+0) * (1);
-static const int D8_hdr_b2 = (16+0) * (1);
+static const int D8_hdr_l3 = (128+0) * (1);
+static const int D8_hdr_b2 = (0+0) * (1);
 static const int D8_hdr_b3 = (16+0) * (1);
-static const int D8_hdr_rS1 = (3+0) * (1);
-static const int D8_hdr_rS2 = (8+0) * (1);
-static const int D8_hdr_qs = (115+3) * (1);
+static const int D8_hdr_rS1 = (4+0) * (1);
+static const int D8_hdr_rS2 = (0+0) * (1);
+static const int D8_hdr_qs = (119+3) * (1);
 static const int D8_hdr_qf = (33+3) * (1);
-static const int D8_hdr_bw = (5+0) * (1);
+static const int D8_hdr_bw = (0+0) * (1);
 static const int D8_hdr_rT = (0+0) * (1);
 static const int D8_hdr_mwT = (0+0) * (1);
 static const int D8_hdr_mt = (6+0) * (1);
@@ -83,22 +82,22 @@ static const int D8_hdr_hN = (22+0) * (1);
 
 
 static const long long D8_hdr_a_Volume = tc_vmul(1, (1<<2)); // 4
-static const long long D8_hdr_b_Volume = tc_vmul(tc_vmul(1, (1<<5)), (1<<3)); // 256
-static const long long D8_hdr_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<1)), (1<<1)), 2); // 8
-static const long long D8_hdr_d_Volume = tc_vmul(tc_vmul(1, (1<<5)), 4); // 128
-static const long long D8_hdr_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<1)), 3), 3); // 18
-static const long long D8_hdr_f_Volume = tc_vmul(1, (1<<6)); // 64
+static const long long D8_hdr_b_Volume = tc_vmul(tc_vmul(1, (1<<6)), (1<<3)); // 512
+static const long long D8_hdr_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<6)), (1<<1)), 2); // 256
+static const long long D8_hdr_d_Volume = tc_vmul(tc_vmul(1, (1<<4)), 2); // 32
+static const long long D8_hdr_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<2)), 2), 3); // 24
+static const long long D8_hdr_f_Volume = tc_vmul(1, (1<<3)); // 8
 static const long long D8_hdr_g_Volume = tc_vmul(1, (1<<6)); // 64
-static const long long D8_hdr_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<4)), (1<<2)), 8); // 512
-static const long long D8_hdr_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 3), 3); // 72
-static const long long D8_hdr_j_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<2)), (1<<1)), 3); // 24
-static const long long D8_hdr_k_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<4)), 8), 1); // 128
-static const long long D8_hdr_l_Volume = tc_vmul(tc_vmul(1, (1<<4)), 3); // 48
+static const long long D8_hdr_h_Volume = tc_vmul(tc_vmul(1, (1<<3)), 4); // 32
+static const long long D8_hdr_i_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<4)), 1), 1); // 16
+static const long long D8_hdr_j_Volume = tc_vmul(1, 1); // 1
+static const long long D8_hdr_k_Volume = tc_vmul(tc_vmul(tc_vmul(1, (1<<3)), 5), 1); // 40
+static const long long D8_hdr_l_Volume = tc_vmul(tc_vmul(1, (1<<5)), 3); // 96
 static const long long D8_hdr_m_Volume = tc_vmul(1, (1<<6)); // 64
 static const long long D8_hdr_n_Volume = tc_vmul(1, (1<<6)); // 64
 static const long long D8_hdr_s_Volume = tc_vmul(tc_vmul(1, (1<<6)), 2); // 128
 static const long long D8_hdr_t_Volume = tc_vmul(1, (1<<3)); // 8
-static const long long D8_hdr_w_Volume = tc_vmul(tc_vmul(1, 1), 3); // 3
+static const long long D8_hdr_w_Volume = tc_vmul(tc_vmul(1, 1), 1); // 1
 
 #define D8_hdr_USES(X) X(fld) X(lv) X(l2) X(pos) X(st) X(nch)
 
