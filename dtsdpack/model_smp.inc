@@ -241,6 +241,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // how often the RMS rule's scale factor was the core's, scale_ceil()'s, and scale_search()'s (the
   // better of those two's where it isn't sure; halved as they grow); the search's tries (to 2048)
   U32 sfr[3], ss_n;
+  // how often a scale factor the search was tried on lay below its window (3 under the RMS rule's), of
+  // how many (low_on())
+  U32 sfl[2];
   // the same of the bit allocation search's ABITS (abits_search()) and the first guess's without
   // it, where it was tried; its tries; the ABITS (-s: those it said, those it said right)
   U32 abr[2], ab_n;
@@ -2870,10 +2873,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
 
   // The scale factor a decoded WAV says (the scale factor search): its values v (n of them, the
   // ADPCM prediction off) are what the decoder made of the indexes, or of a VQ vector (hfb), at the
-  // step and scale factor; so of the entries from p - 3 to p + 5 (a VQ subband's to p + 12), the one whose reconstruction lies
-  // nearest them, where nearer by 4 times the next best's error at least (else -1; a lossless WAV's
-  // values are the encoder's input: none is; a VQ subband's all the same, *conf -1); *conf the
-  // log2 of that ratio less 2, to 7
+  // step and scale factor; so of the entries from p - 3 to p + 5 (a VQ subband's to p + 12; where
+  // low_on(), from p - 16), the one whose reconstruction lies nearest them, where nearer by 4 times
+  // the next best's error at least (else -1; a lossless WAV's values are the encoder's input: none
+  // is; a VQ subband's all the same, *conf -1); *conf the log2 of that ratio less 2, to 7
   int scale_search(const CoreRec& r, const CoreSub& s, int ch, int b, int hfb, const S64* v, int n, int p, int* conf) {
     const U32* tab = r.shuff[ch] == 6 ? SF7 : SF6;
     const int nt = sf_entries(r.shuff[ch]), a = s.abits[ch][b];
@@ -2907,7 +2910,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     S128 e1 = -1, e2 = -1;
     int best = -1;
-    for (int i = imax(p - 3, 0); i <= imin(p + (hfb ? 12 : 5), nt - 1); i++) {
+    for (int i = imax(p - (hfb || !low_on() ? 3 : 16), 0); i <= imin(p + (hfb ? 12 : 5), nt - 1); i++) {
       S128 e;
       if (hfb) {
         e = vq_err(v, n, vq, tab[i]);
@@ -2937,6 +2940,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // 0.69%, the lossless ones' the same; by any lead, FATE's x96_xch sample, whose search is no
   // better than the RMS rule, 32 bytes bigger)
   bool ss_rule() const { return sfr[2] > sfr[sf_base()] + sfr[sf_base()] / 32; }
+  // whether the search goes down to 16 under the RMS rule's: where after 256 tries more than an
+  // eighth of the scale factors have lain under its window. FFmpeg's encoder takes, at its fine
+  // steps, the least scale factor whose range holds the subband's peak (dcaenc.c's
+  // calc_one_scale()), 3-14 entries under the RMS rule's: its streams' scale factors then 76-99%
+  // the prediction from 33-71%, their cores 18-51% smaller; every stream's so, the DTS encoders'
+  // decodes found finer lattices than theirs as near (`ES 6.1 16bit.dts`'s core 11% bigger)
+  bool low_on() const { return sfl[1] >= 256 && sfl[0] * 8 > sfl[1]; }
   bool search_on() const { return ss_n < 2048 || ss_rule() || !(n_sf & 63); }
   // the same of the bit allocation search, of the ABITS: in its first 512 (the 7-frame samples' the
   // same, 4-8% faster), and while it has been right clearly more often than the first guess without
@@ -3849,6 +3859,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (tried) {
         sfr[2] += v == pss;
         ss_n += ss_n < 2048;
+        sfl[0] += v < pr - 3;
+        if (++sfl[1] >= 1u << 16) sfl[0] >>= 1, sfl[1] >>= 1;
       }
       if (sfr[0] + sfr[1] >= 1u << 16) sfr[0] >>= 1, sfr[1] >>= 1, sfr[2] >>= 1;
     }

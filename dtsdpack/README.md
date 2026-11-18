@@ -243,10 +243,26 @@ their decodes clip too (0.3-1.2% of the samples):
 |---|---:|---:|
 | `core_51_24_48_768_0`, `_1` (5.1) | 7168 | 1396 (19.48%), 1388 (19.36%) |
 | `xch_61_24_48_768` (6.1 by XCH) | 7168 | 1454 (20.28%) |
-| `x96_51_24_96_1509` (X96) | 14084 | 2647 (18.79%) |
+| `x96_51_24_96_1509` (X96) | 14084 | 2646 (18.79%) |
 | `x96_xch_61_24_96_3840` | 14084 | 1844 (13.09%) |
 | `xbr_51_24_48_3840`, `xbr_xch_61_24_48_3840` (XBR: its residuals in the decode) | 14084 | 1593 (11.31%), 1988 (14.12%) |
 | `xll_x96_51_24_96_1509` (DTS-HD MA, X96) | 14084 | 1329 (9.44%) |
+
+Streams FFmpeg's encoder made (`ffmpeg -c:a dca -strict -2`), against FFmpeg's decodes, compress
+worse: their choices are FFmpeg's own (`libavcodec/dcaenc.c`), its bit allocations and the code
+books of each frame's indexes among them (a channel's for each ABITS, the cheapest: the DTS
+encoders' are the same for the whole stream), which the model codes before the values. Its scale
+factors are the least whose range at the subband's ABITS holds the subband's peak, 3 to 14 entries
+under the RMS rule's at its fine steps, which since format 133 the scale factor search goes down to
+(below):
+
+| FFmpeg's encode | Core | dtsdpack | before format 133 |
+|---|---:|---:|---:|
+| `s.2.dts`'s first 3 MB as decoded (5.1, 1509 kbps, 6.8 s) | 1275608 | 38631 (3.03%) | 51675 |
+| 3 MB from its middle (5.7 s) | 1068372 | 15371 (1.44%) | 29043 |
+| its first 3 MB at 768 kbps | 649216 | 21285 (3.28%) | 25903 |
+| `open bitrate.dts`'s first 20 s as decoded (stereo, 768 kbps) | 1920000 | 27339 (1.42%) | 49870 |
+| a minute of 5.1 shaped noise, its surrounds silent to 30 s (above) | 10597500 | 109620 (1.03%) | 225339 |
 
 ## How it works
 
@@ -666,6 +682,12 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   factors. A decoded VQ subband's scale factor lies 1 to 12 entries above its RMS rule's (the
   vectors' entries are small), so its search goes to 12 above, and where it isn't sure, its best
   is the prediction all the same.
+  FFmpeg's encoder takes, at its fine steps, the least scale factor whose quantizer range holds the
+  subband's peak (`calc_one_scale()`), 3 to 14 entries under the RMS rule's: so since format 133,
+  where after 256 tries more than an eighth of the scale factors have lain under its window, the
+  search goes down to 16 under it: its streams' scale factors 76-99% the prediction from 33-71%
+  (above). Every stream's so, the DTS encoders' decodes found finer lattices than theirs as near:
+  `ES 6.1 16bit.dts`'s core 11% bigger.
   Since format 91 a lossless WAV's scale factors go by where the encoder's arithmetic may have put
   the RMS (`sf_post()`): the values with the FFT's noise in them, its power at each sample 2.4
   2^-40 of the bottom subband's binade's (`hf_stair2()`) in the top subband, else 2^-43 (the HF VQ
@@ -1309,29 +1331,30 @@ analysis made for that). The Cymatics stream's frames 3000-5999, those channels 
 frame. Its first 3200 frames with 22.4 s of silence before them, 22572 then, are 10629; its frames
 8000-13999 and 20000-25999, 29384 and 27520 then, 19932 and 19159. A minute of 5.1 noise encoded
 by FFmpeg's encoder against its decode, whose channels FFmpeg scales by about 0.9999, has one of
-them now at 32767/32768 (225914 bytes, now 225266); the other streams the same. (At
-twice the rate, a lossless WAV's 64-band analysis being 1 - 1.4e-4 times the passes', 1 - 2^-15
-looked better there and wasn't: not tried.) (A clipped decode's distortion swamps a channel's
-quiet subbands at fine steps: their fit's gains came out at 0.00007 for channels that are their WAV
-channels as they are, and as most of those channels' indexes are 0, such a gain made more of them
-exactly than the right one: FATE's 5.1 and 6.1 samples' cores came out 36% and 18% bigger, the XXCH
-ones' 19% and 14%.) (Against a decoded WAV, two kinds of samples break a fit by steps alone: a
-silent subband the encoder gave a fine step, as `open bitrate.dts`'s has ABITS 24 at the smallest
-scale factor, all its indexes 0, where the WAV has its rounding; and silence beside a sudden loud
-onset, where the decoder's filterbank, FILTS 0's not quite perfect reconstruction, leaves a few
-percent of the onset in the WAV. Their fine steps made them outweigh everything else, and the fit's
-gains came out at 0.017 for a channel that is its WAV channel as it is.) The encoder mixed in the
-PCM, before its analysis: each sample's sum of the scaled channels rounded to the nearest integer
-(not each product rounded, nor the sum truncated). So a lossless WAV's mixed or scaled core channel,
-at the core's rate, is analysed as that rounded PCM, not as its channels' analyses mixed (`Master
-Audio 7.1.dts` 14.7% smaller: its indexes the audio's 99.64% of the time, from 99.51%; the 7-frame
-7.1 samples 2%; the XXCH samples' decodes, a decoder's mix, until the scale factor search shows them
-decoded, 0.4-0.7% bigger). The LFE gets the remaining WAV channel whose decimation correlates best
-with the first 1024 LFE samples that aren't 0 (`Master Audio 7.1.dts`'s first 1024 are all 0); where
-the window has fewer than 16 of them and the WAV can be read again, with those further on, from the
-first that has 16 more within a window's length, as above (the Cymatics stream's frames 3301-9300
-with their LFE made 0 for the first 25.6 s, in the core and the WAV: the LFE went without the WAV
-for the rest, 52220 bytes; then 44422, and in format 122 21606). `-s` shows the binding:
+them now at 32767/32768 (225914 bytes to 225266; 109620 since format 133, above); the other streams
+the same. (At twice the rate, a lossless WAV's 64-band analysis being 1 - 1.4e-4 times the passes',
+1 - 2^-15 looked better there and wasn't: not tried.) (A clipped decode's distortion swamps a
+channel's quiet subbands at fine steps: their fit's gains came out at 0.00007 for channels that are
+their WAV channels as they are, and as most of those channels' indexes are 0, such a gain made more
+of them exactly than the right one: FATE's 5.1 and 6.1 samples' cores came out 36% and 18% bigger,
+the XXCH ones' 19% and 14%.) (Against a decoded WAV, two kinds of samples break a fit by steps
+alone: a silent subband the encoder gave a fine step, as `open bitrate.dts`'s has ABITS 24 at the
+smallest scale factor, all its indexes 0, where the WAV has its rounding; and silence beside a
+sudden loud onset, where the decoder's filterbank, FILTS 0's not quite perfect reconstruction,
+leaves a few percent of the onset in the WAV. Their fine steps made them outweigh everything else,
+and the fit's gains came out at 0.017 for a channel that is its WAV channel as it is.) The encoder
+mixed in the PCM, before its analysis: each sample's sum of the scaled channels rounded to the
+nearest integer (not each product rounded, nor the sum truncated). So a lossless WAV's mixed or
+scaled core channel, at the core's rate, is analysed as that rounded PCM, not as its channels'
+analyses mixed (`Master Audio 7.1.dts` 14.7% smaller: its indexes the audio's 99.64% of the time,
+from 99.51%; the 7-frame 7.1 samples 2%; the XXCH samples' decodes, a decoder's mix, until the scale
+factor search shows them decoded, 0.4-0.7% bigger). The LFE gets the remaining WAV channel whose
+decimation correlates best with the first 1024 LFE samples that aren't 0 (`Master Audio 7.1.dts`'s
+first 1024 are all 0); where the window has fewer than 16 of them and the WAV can be read again,
+with those further on, from the first that has 16 more within a window's length, as above (the
+Cymatics stream's frames 3301-9300 with their LFE made 0 for the first 25.6 s, in the core and the
+WAV: the LFE went without the WAV for the rest, 52220 bytes; then 44422, and in format 122 21606).
+`-s` shows the binding:
 
 ```
   the binding: core channel 0 = 0.707092 WAV 2; core channel 1 = 0.707092 WAV 0; ...; core channel 3 = 0.707092 WAV 4*32767/32768 + 0.707092 WAV 6, or with WAV 4*32768/32768; ...; LFE = WAV 3
@@ -1670,7 +1693,7 @@ files at that level.
 
 ### The format
 
-"dtsdpack", the format's version (132), the level (9, or 8: above); what the WAV was (whether it was
+"dtsdpack", the format's version (133), the level (9, or 8: above); what the WAV was (whether it was
 one, its channels and bytes a sample, its size and the CRC-32 of its first 64 KB) and the binding
 (the offset; the WAV's samples to the core's, 1, 2 or 4 (its lower band, then 2), and the lower
 band's resolution; the LFE's channel; each core channel's WAV channel, and where it isn't that
