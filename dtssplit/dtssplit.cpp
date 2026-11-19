@@ -41,14 +41,18 @@
 //
 // DTS:X streams' XLL frames go on past the band data: their object data, from a sync word of its
 // own at a DWORD boundary (0x02000850; 0xF14000D0 for IMAX's), which no published specification
-// describes (FFmpeg looks for the sync word only to name the profile). In
-// Nigel_Stanford_Cymatics_DTS-X.dts (96 MB of its 321) it is a header of 21 bytes with its CRC, the
-// same in every frame, a byte, then one more XLL channel set, by the frame's common header: its
-// sub-header (4 channels, 24-bit, without speaker positions), NAVI table and band data, then 0s to a
-// DWORD boundary (obj_split()). The split decodes it as the XLL's own sets, its samples to
-// prefix.x.wav (4 channels, 24-bit) and the rest to the meta file; object data that isn't such a set
-// goes to prefix.dtsx as it is, frame after frame. The join takes prefix.x.wav and prefix.dtsx only
-// where the meta file says there is object data.
+// describes (FFmpeg 6 looks for the sync word only to name the profile; its master decodes what
+// follows as the 7.1.4's heights, parse_x_heights()). In Nigel_Stanford_Cymatics_DTS-X.dts (96 MB
+// of its 321) it is a header of 21 bytes with its CRC, the same in every frame, a byte, then one
+// more XLL channel set, by the frame's common header: its sub-header (4 channels, 24-bit, without
+// speaker positions: Lh, Rh, Lhr, Rhr), NAVI table and band data, then 0s to a DWORD boundary
+// (obj_split()). The split decodes it as the XLL's own sets, its samples to prefix.x.wav (4
+// channels, 24-bit) and the rest to the meta file; object data that isn't such a set goes to
+// prefix.dtsx as it is, frame after frame. The join takes prefix.x.wav and prefix.dtsx only where
+// the meta file says there is object data. The 7.1 bed has the heights in it, each at -3 dB in the
+// channel under it (L, R, Lsr, Rsr: FFmpeg's master takes them out to make the 7.1.4); from version
+// 22 the WAV has them out of those of the four coded without the core (xf_choose()), whose samples
+// are the audio, where it is 32-bit, and the join puts them back as it reads it (XfSamples).
 //
 // The meta file: "DTSSPLIT", a version byte (VERSION's; the join reads the earlier ones too, back
 // to 2, as VERSION's note says), then records, each a tag byte and its fields (numbers as LEB128
@@ -72,12 +76,16 @@
 //   E n bytes          an extension substream frame kept as bytes
 //   W w ...            WAV w's layout (before its first X): its channels, width and rate, the
 //                      speaker mask, the XLL channel of each WAV channel, the channel sets, the bands
-//   O 0 ...            prefix.x.wav's layout, as W's (before the first X with object samples)
+//   O 0 ... m          prefix.x.wav's layout, as W's (before the first X with object samples), and
+//                      (from version 22) the bed channels with the heights folded out (bit i: L,
+//                      R, Lsr, Rsr's)
 //   F k (at q)...      the EXSS header's fields that hold the XLL frame's size (q 0), the DTS:X
 //                      object data's offset in it (1) or its size (2): 16 bits from bit at each;
 //                      the X records after it keep them less that (xf_apply())
-//   X w ...            an extension substream frame with its XLL frame split, its samples in WAV w:
-//                      the EXSS bytes before the XLL frame, the speaker-mapping flag, the XLL
+//   X w f ...          an extension substream frame with its XLL frame split, its samples in WAV w:
+//                      (from version 22, after an O record's m other than 0) whether the WAV has the
+//                      heights folded out of the frame's bed, the EXSS bytes before the XLL frame,
+//                      the speaker-mapping flag, the XLL
 //                      header bytes (not their count: the join's parse of them gives it, as it does
 //                      that of the object data's), the coding parameters of each segment of each
 //                      channel set in each band, the XLL bytes after the band data up to the DTS:X
@@ -2662,7 +2670,8 @@ static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir, bool fl, b
     }
 }
 
-enum { VERSION = 21 };  // (the join reads 20 too, with the common flags as they are, format 17's
+enum { VERSION = 22 };  // (the join reads 21 too, without the DTS:X heights folded out of the bed,
+                        // 20, with the common flags as they are, format 17's
                         // Rice and hybrid rules and the Rice widths by one rule, 19, with the
                         // coding parameters as bytes, 18, with
                         // the headers as their bytes, 17, with the ranks
@@ -3068,6 +3077,49 @@ static void layout_of(const Xll& x, Layout& L) {
     }
 }
 
+// DTS:X's heights folded out of the bed (from version 22). FFmpeg's decoder (its master's
+// parse_x_heights()) takes a DTS:X stream's 7.1 for a downmix of 7.1.4, each height in the bed
+// channel under it at -3 dB: L, R, Lsr and Rsr less Lh, Rh, Lhr and Rhr times 23170/32768, rounded
+// (mul15()), are the 7.1.4's bed. Where a frame's object data went to prefix.x.wav (its channels
+// those four heights, in that order), the WAV has each of those bed channels the stream's O record
+// names so, the join adding the height back as it reads them: the channels coded without the core,
+// whose samples are the audio (those coded against it are residuals, the core's decode the fold),
+// at the heights' resolution, where the WAV is 32-bit (a sample less a height fits). The
+// Cymatics stream's rear surrounds so through FLAC 23% smaller, 51.2 MB to 39.4 MB, its first two
+// minutes 49%: their audio was mostly the heights'.
+static const U32 XF_WAV[4] = {0x1, 0x2, 0x10, 0x20};  // (the WAV bits of L, R, Lsr, Rsr)
+static inline S32 xf_part(S32 h) { return (S32)(((S64)h * 23170 + (1 << 14)) >> 15); }
+// the WAV channel of layout L at WAV bit b (-1: none): those with one come first, by their bit
+static int wav_ch_at(const Layout& L, U32 b) { return L.mask & b ? __builtin_popcount(L.mask & (b - 1)) : -1; }
+// whether the layouts L (the bed's) and O (the object data's) take the fold
+static bool xf_layouts(const Layout& L, const Layout& O) {
+  return L.bits == 32 && L.nbands == 1 && O.nch == 4 && !O.mask && O.nbands == 1;
+}
+// the bed channels to fold the heights out of (bit i: XF_WAV[i]'s), by the frame x of layout L and
+// its object data's set ox of layout O
+static int xf_choose(const Xll& x, const Layout& L, const Xll& ox, const Layout& O) {
+  if (!xf_layouts(L, O)) return 0;
+  int m = 0;
+  for (int i = 0; i < 4; i++) {
+    const int w = wav_ch_at(L, XF_WAV[i]);
+    if (w < 0) continue;
+    const int k = L.perm[w];  // (its XLL channel)
+    int c = 0;
+    while (c + 1 < x.nchsets && x.chofs[c + 1] <= k) c++;
+    if (x.cs[c].resenc >> (k - x.chofs[c]) & 1 && x.cs[c].pcm_res == ox.cs[0].pcm_res) m |= 1 << i;
+  }
+  return m;
+}
+// the heights ov (ns samples of O's channels) folded out of the bed's samples wv (ns of L's) in
+// the channels m names (sign -1), or back in (+1)
+static void xf_fold(S32* wv, const S32* ov, size_t ns, const Layout& L, const Layout& O, int m, int sign) {
+  for (int i = 0; i < 4; i++) {
+    const int w = m >> i & 1 ? wav_ch_at(L, XF_WAV[i]) : -1;
+    if (w < 0) continue;
+    for (size_t t = 0; t < ns; t++) wv[t * L.nch + w] += sign * xf_part(ov[t * O.nch + i]);
+  }
+}
+
 static bool layout_same(const Layout& a, const Layout& b) {
   if (a.nch != b.nch || a.bits != b.bits || a.rate != b.rate || a.nbands != b.nbands || a.nchsets != b.nchsets)
     return false;
@@ -3448,6 +3500,7 @@ struct Split {
   Extra oex;
   int oend;       // where its band data ends
   int obj;        // join_x(): whether the record had it split
+  int xfmask = 0;  // (from version 22) the bed channels with the heights folded out (xf_choose()'s; the O record's)
   size_t obytes;  // put_x(): its part of the record, in bytes
   // the EXSS header's fields that hold the XLL frame's size, the object data's offset in it or its
   // size (xfq 0, 1, 2), 16 bits from bit xfat (an F record's: xf_apply())
@@ -3716,11 +3769,13 @@ static void put_obj(Rec* o, const Split& sp, const U8* ob, int n, const std::vec
 // an X record into o, the frame's DTS:X object data into xs
 static void put_x(Rec* o, int wi, const U8* e, int n, int xoff, const U8* xf, int one2one, Split& sp,
                   const std::vector<std::pair<U64, S32> >& exc, std::vector<U8>& xs, int obj,
-                  const std::vector<std::pair<U64, S32> >& oexc) {
+                  const std::vector<std::pair<U64, S32> >& oexc, int fold, int xm) {
   Xll& x = sp.x;
   Rec& r = o[MS_REC];
   r.u8('X');
   r.uv(wi);
+  if (xm) r.u8(fold);  // (from version 22, once the stream has bed channels to fold the heights out of,
+                       // xm, the O record's: whether the WAV has them so in the frame)
   const int xa = dtsx_at(xf, sp.data_end, x.frame_size), hl = xa - sp.data_end;
   std::vector<U8> pre(e, e + xoff);
   exss_fields(&pre[0], pre.size(), n, 1);
@@ -4022,9 +4077,53 @@ static const char* jx_pre(void* a, const Xll& x) {
   return 0;
 }
 
-static const char* join_x(MetaIn& m, const Layout* L, Samples& smp, std::vector<U8>& out, Split& sp,
-                          std::vector<S32>& wv, RecIn* xs, int ver, const Layout* OL, Samples* osmp) {
+// (from version 22) a frame's bed samples as the join takes them: the WAV's (bed) with the heights
+// folded back in, prefix.x.wav's (obj) read along with them into ov, where the object data's join
+// takes them (VecSamples)
+struct XfSamples : Samples {
+  Samples* bed;
+  Samples* obj;
+  const Layout* L;
+  const Layout* O;
+  int m;
+  std::vector<S32> ov;
+  bool get(S32* out, size_t count) {
+    const size_t ns = count / L->nch, o0 = ov.size();
+    if (count % L->nch || !bed->get(out, count)) return false;
+    ov.resize(o0 + ns * O->nch);
+    if (ns && !obj->get(&ov[o0], ns * O->nch)) return false;
+    if (ns) xf_fold(out, &ov[o0], ns, *L, *O, m, 1);
+    return true;
+  }
+};
+// the samples v from at on
+struct VecSamples : Samples {
+  const std::vector<S32>* v;
+  size_t at;
+  bool get(S32* out, size_t count) {
+    if (count > v->size() - at) return false;
+    if (count) memcpy(out, &(*v)[at], count * sizeof *out);
+    at += count;
+    return true;
+  }
+};
+
+static const char* join_x(MetaIn& m, const Layout* L, Samples& wsmp, std::vector<U8>& out, Split& sp,
+                          std::vector<S32>& wv, RecIn* xs, int ver, const Layout* OL, Samples* wosmp) {
   RecIn &in = m.r(), &ih = *m.s[MS_HDR];  // (from version 16 the sections apart)
+  // (from version 22 whether the WAV has the heights folded out of the frame's bed: then the bed's
+  // samples come with them back in, and the object data's from what was read along)
+  const int fold = ver >= 22 && sp.xfmask ? in.u8() : 0;
+  if (in.bad || fold > 1 || (fold && (!L || !OL || !wosmp || !sp.xfmask || !xf_layouts(*L, *OL))))
+    return "a damaged record";
+  XfSamples xfs;
+  VecSamples xfo;
+  if (fold) {
+    xfs.bed = &wsmp, xfs.obj = wosmp, xfs.L = L, xfs.O = OL, xfs.m = sp.xfmask;
+    xfo.v = &xfs.ov, xfo.at = 0;
+  }
+  Samples& smp = fold ? (Samples&)xfs : wsmp;
+  Samples* const osmp = fold ? (Samples*)&xfo : wosmp;
   std::vector<U8> pre, hdr, tail, post, ob;
   if (!in.blob(pre, 1 << 20)) return "a damaged record";
   const int one2one = in.u8();
@@ -4136,6 +4235,7 @@ static const char* join_x(MetaIn& m, const Layout* L, Samples& smp, std::vector<
       }
     }
     fe.nx = (int)ob.size();
+    if (fold && (!sp.obj || xfo.at != xfs.ov.size())) return "a damaged record";
   } else {
     const U64 hx = in.uv(), hl = hx >> 1;
     if (in.bad || hl > fsize) return "a damaged record";
@@ -4221,6 +4321,7 @@ struct WavSamples : Samples {
   bool get(S32* out, size_t count) { return w->read(out, count); }
 };
 
+
 // ---------------------------------------------------------------------------------------------
 // the split
 
@@ -4228,6 +4329,8 @@ struct Stats {
   U64 bytes, raw, core, exss, xsplit, exceptions, ovl_bits;
   U64 x_bytes, x_frames;  // prefix.dtsx: the DTS:X object data kept as bytes, and the frames with it
   U64 o_frames;           // the frames whose object data went to prefix.x.wav
+  U64 f_frames;           // (of them, those with the heights folded out of the bed: f_mask's channels)
+  int f_mask;
   U64 m_obj;              // the meta file: their object data's headers and coding parameters
   U64 m_exss, m_xhdr, m_param, m_kept, m_raw;  // the meta file: EXSS headers, XLL headers, the rest of
                                                // X records, frames kept as bytes, bytes between frames
@@ -4431,7 +4534,7 @@ struct Splitter {
   std::vector<U64> ctape[2];  // (from version 20 its coding parameters', the frame's and the object data's)
   HacIo cw[2], crd[2];
   HdrState hst;
-  std::vector<S32> wv, wv2;
+  std::vector<S32> wv, wv2, wvf;  // (wvf: the WAV's samples with the heights folded out of the bed)
   static CoreFrame cf;
   // the EXSS header fields that hold the XLL frame's size, the DTS:X object data's offset or its size
   // (xf_apply()), found in the first 8 frames of distinct sizes (xf_done then): their EXSS headers
@@ -4537,6 +4640,15 @@ struct Splitter {
         wav_values(ONS, ol, &sp.oval[0], &owv[0], oexc);
       }
     }
+    // (the heights folded out of the bed, in the channels the stream's first object audio chose;
+    // xm: those in effect, the O record's, or this frame's choice where it writes that)
+    const int xm = xwav_on ? sp.xfmask : obj ? xf_choose(x, fl, sp.ox, ol) : 0;
+    const int fold = obj && xm && xf_layouts(fl, ol) && sp.ox.nframesamples * sp.ox.nbands == NS;
+    if (fold) {
+      wvf = wv;
+      xf_fold(&wvf[0], &owv[0], (size_t)NS, fl, ol, xm, -1);
+    }
+    const std::vector<S32>& ww = fold ? wvf : wv;  // (the WAV's)
     if (!xf_done && off >= 8) xf_probe(e, n, off, x.frame_size, xa < x.frame_size ? x.frame_size - xa : 0);
     // (the samples as the WAVs have them, for the prediction orders' rule, as the join will take them)
     sp.pv.clear();
@@ -4552,7 +4664,7 @@ struct Splitter {
     htape.clear();
     for (int j = 0; j < 2; j++) ctape[j].clear();
     hst.pend.clear();
-    put_x(o, wi, e, n, off, &xf[0], one2one, sp, exc, xpay, obj, oexc);
+    put_x(o, wi, e, n, off, &xf[0], one2one, sp, exc, xpay, obj, oexc, fold, xm);
     acr.pos = 0;
     acr.bad = false;
     hrd.pos = 0;
@@ -4572,8 +4684,8 @@ struct Splitter {
     in.u8();
     in.uv();
     MemSamples ms;
-    ms.v = &wv[0];
-    ms.n = wv.size();
+    ms.v = &ww[0];
+    ms.n = ww.size();
     std::vector<U8> back;
     RecIn xin;
     xin.init_mem(xpay.empty() ? &none : &xpay[0], xpay.size());
@@ -4582,6 +4694,7 @@ struct Splitter {
     oms.n = obj ? owv.size() : 0;
     static AoState aosave;  // (the rule's counts as they were, where the check fails)
     aosave = chk.ao;
+    chk.xfmask = xm;
     if (!(why = join_x(mi, &fl, ms, back, chk, wv2, &xin, VERSION, obj ? &ol : 0, &oms)) &&
         (back.size() != (size_t)n || memcmp(&back[0], e, n) || xin.mpos != xin.msize))
       why = "an XLL frame that doesn't join back the same";
@@ -4609,8 +4722,9 @@ struct Splitter {
       meta.write(lr);
       nwav++;
     }
-    wav[wi].write(&wv[0], wv.size());
+    wav[wi].write(&ww[0], ww.size());
     stt.exceptions += exc.size();
+    stt.f_frames += fold;
     stt.ovl_bits += sp.ex.ovl.v.size() * 8;
     if (obj) {
       if (!xwav_on) {
@@ -4622,7 +4736,10 @@ struct Splitter {
         xwav.mask = ol.mask;
         Rec lr;
         put_layout(lr, 'O', 0, ol);
+        lr.u8(xm);  // (from version 22: the bed channels with the heights folded out, xf_choose()'s)
         meta.write(lr);
+        sp.xfmask = xm;
+        stt.f_mask = xm;
         xwav_on = true;
       }
       xwav.write(&owv[0], owv.size());
@@ -4975,6 +5092,8 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
       continue;
     } else if (tag == 'O') {
       if (h[8] < 4 || have_o || in.uv() != 0 || in.bad || !get_layout(in, olay)) damaged("a damaged layout record", at);
+      sp.xfmask = h[8] >= 22 ? in.u8() : 0;  // (the bed channels with the heights folded out)
+      if (in.bad || sp.xfmask > 15) damaged("a damaged layout record", at);
       if (!(fo = fopen(oname.c_str(), "rb"))) die(EX_READ, "can't open %s", oname.c_str());
       const char* why = owi.open(fo);
       if (why) die(EX_DATA, "%s: %s", oname.c_str(), why);
@@ -5123,7 +5242,8 @@ int main(int argc, char** argv) {
     sp.prefix = prefix;
     Stats& st = sp.stt;
     st.bytes = st.raw = st.core = st.exss = st.xsplit = st.exceptions = st.ovl_bits = 0;
-    st.x_bytes = st.x_frames = st.o_frames = 0;
+    st.x_bytes = st.x_frames = st.o_frames = st.f_frames = 0;
+    st.f_mask = 0;
     st.m_exss = st.m_xhdr = st.m_param = st.m_kept = st.m_raw = st.m_obj = 0;
     U32 crc;
     sp.run(fi, crc);
@@ -5140,10 +5260,18 @@ int main(int argc, char** argv) {
         fprintf(stderr, "%s: %llu bytes: %llu samples a channel, %d channels, %d-bit, %d Hz\n", sp.wav[w].name.c_str(),
                 (unsigned long long)sp.wav[w].size(), (unsigned long long)sp.wav[w].frames, sp.wav[w].nch,
                 sp.wav[w].bits, sp.wav[w].rate);
-      if (sp.xwav_on)
-        fprintf(stderr, "%s: %llu bytes: %llu samples a channel, %d channels, %d-bit, %d Hz: the DTS:X object audio of %llu XLL frames\n",
+      if (sp.xwav_on) {
+        static const char* const XF_NAME[4] = {"L", "R", "Lsr", "Rsr"};
+        std::string fn;
+        for (int i = 0; i < 4; i++)
+          if (st.f_mask >> i & 1) fn += std::string(fn.empty() ? "" : ", ") + XF_NAME[i];
+        fprintf(stderr, "%s: %llu bytes: %llu samples a channel, %d channels, %d-bit, %d Hz: the DTS:X object audio of %llu XLL frames",
                 sp.xwav.name.c_str(), (unsigned long long)sp.xwav.size(), (unsigned long long)sp.xwav.frames,
                 sp.xwav.nch, sp.xwav.bits, sp.xwav.rate, (unsigned long long)st.o_frames);
+        if (st.f_frames)
+          fprintf(stderr, ", in %llu of them folded out of the bed's %s", (unsigned long long)st.f_frames, fn.c_str());
+        fprintf(stderr, "\n");
+      }
       if (st.x_frames)
         fprintf(stderr, "%s: %llu bytes: the DTS:X object data of %llu XLL frames, as it is\n", sp.dtsx.name.c_str(),
                 (unsigned long long)st.x_bytes, (unsigned long long)st.x_frames);

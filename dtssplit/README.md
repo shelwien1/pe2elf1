@@ -7,8 +7,10 @@ stream, byte for byte:
 - `prefix.wav`: the samples of the lossless extension (XLL, DTS-HD Master Audio), its prediction
   undone: the part of the audio the core leaves out, for a lossless audio compressor;
 - `prefix.x.wav`: a DTS:X stream's object audio, the channel set its XLL frames carry after their
-  band data (4 channels in the streams tried: 7.1.4's heights, it seems), decoded the same way
-  (only where there is any);
+  band data (4 channels in the streams tried: 7.1.4's heights, Lh, Rh, Lhr and Rhr, as FFmpeg's
+  newest decoder has them), decoded the same way (only where there is any); the 7.1 bed has each
+  of them in the channel under it at -3 dB, and `prefix.wav` has them out of those of these bed
+  channels that hold audio (from format 22);
 - `prefix.meta`: all else, the extension headers and the XLL coding parameters, and every byte
   that is neither, small enough that it hardly matters what compresses it;
 - `prefix.dtsx`: DTS:X object data of another form, as it is (only where there is any; none in the
@@ -51,8 +53,8 @@ A DTS:X stream's object audio gets a WAV of its own:
 Nigel_Stanford_Cymatics_DTS-X.dts: 321415780 bytes: 30695 core frames, 30695 extension substream frames (30695 with XLL split), 0 bytes between frames
 cym.dtsc: 61758340 bytes, the core frames
 cym.wav: 502906984 bytes: 15715840 samples a channel, 8 channels, 32-bit, 48000 Hz
-cym.x.wav: 188590184 bytes: 15715840 samples a channel, 4 channels, 24-bit, 48000 Hz: the DTS:X object audio of 30695 XLL frames
-cym.meta: 1733244 bytes: extension substream headers 1227800, XLL headers 73916, XLL coding parameters 245032, DTS:X object headers and coding parameters 94307, frames kept as bytes 0, bytes between frames 0, the rest 92189; 0 values clipped, 0 overlapping LSB bits
+cym.x.wav: 188590184 bytes: 15715840 samples a channel, 4 channels, 24-bit, 48000 Hz: the DTS:X object audio of 30695 XLL frames, in 30695 of them folded out of the bed's Lsr, Rsr
+cym.meta: 1763940 bytes: extension substream headers 1227800, XLL headers 73916, XLL coding parameters 275727, DTS:X object headers and coding parameters 94307, frames kept as bytes 0, bytes between frames 0, the rest 92190; 0 values clipped, 0 overlapping LSB bits
 verify: OK
 ```
 
@@ -191,7 +193,9 @@ the prediction residuals with Rice, hybrid Rice and binary codes, segment by seg
   frequency bands are put together.
 - **DTS:X object data:** in a DTS:X stream, each XLL frame goes on past the band data, from a sync
   word of its own at a DWORD boundary (0x02000850; 0xF14000D0 for IMAX Enhanced's). No published
-  specification describes what follows (FFmpeg looks for the sync word only to name the profile).
+  specification describes what follows (FFmpeg 6 looks for the sync word only to name the profile;
+  its master branch now decodes what follows as the 7.1.4's heights, `parse_x_heights()`, as
+  dtssplit does).
   In both DTS:X streams tried it is a header of 21 bytes with its CRC-16, the same in every frame,
   a byte (2), then one more XLL channel set, coded as the frame's own sets are and by the frame's
   common header (its segments and their sizes' width): its sub-header (4 channels, 24-bit, 48 kHz,
@@ -203,6 +207,18 @@ the prediction residuals with Rice, hybrid Rice and binary codes, segment by seg
   `Nigel_Stanford_Cymatics_DTS-X.dts` the object data is 96 MB of the 321, 3130 bytes a frame,
   which xz doesn't shrink at all; until the meta file's format 3 it went to the meta file (then 103
   MB), and in format 3 to `prefix.dtsx`.
+- **The heights in the bed:** a DTS:X stream's 7.1 is a downmix of its 7.1.4, each height in the
+  bed channel under it at -3 dB: L, R, Lsr and Rsr have Lh, Rh, Lhr and Rhr times 23170/32768,
+  rounded, in them (FFmpeg's master takes them out again to make the 7.1.4). The bed channels coded
+  against the core have their residual in the WAV, which has none of that (the core's decode is
+  the downmix's); those coded without the core have their audio there, heights and all, which
+  `prefix.x.wav` has again. From format 22 those channels have the heights out of them where the
+  WAV is 32-bit (a sample less a height then fits), the meta file's `O` record says which, and the
+  join adds them back as it reads the WAV. In `Nigel_Stanford_Cymatics_DTS-X.dts` they are the rear
+  surrounds (L and R are residuals): through FLAC (`-compression_level 8`) 51.2 MB with the heights
+  in, 39.4 MB with them out (its first two minutes 16.5 MB and 8.5 MB); the whole WAV through
+  WavPack (ffmpeg, `-compression_level 3`) 157325981 bytes in, 145156873 out (7.7% smaller). The
+  meta file is 4 bytes bigger with xz.
 - **Everything else** (bytes between frames, cut frames, files that aren't DTS): to the meta file
   as it is.
 
@@ -359,10 +375,11 @@ Each stream below joins back byte for byte (`-v`, and `d` and `cmp`):
 | `lotr_5.1_768.dts`, `dts_es.dts`, `core_51_24_48_768_0`, `x96_xxch_71_24_96_3840`, `xbr_xxch_71_24_48_3840`, `xxch_71_24_48_2046` | | core only, or EXSS without XLL | (no XLL) |
 | `s.2.dts`'s first 3 MB, `master_audio_7.1_24bit.dts`, the first 3 MB again | 12598176 | a layout change: 5.1, 7.1, 5.1 | 2440 of 2440, into `prefix.wav` and `prefix.2.wav` |
 
-Meta files of format 4 (the headers as they are), 3 (before `prefix.x.wav`) and 2 (before
-`prefix.dtsx`) still join: each stream above's, made by the versions before, joins back with this
-one. The split's other outputs are the same as format 4's (and, without DTS:X object data, as
-format 3's); the meta file is the same size as format 4's.
+Meta files of format 21 (the DTS:X heights in the bed), 4 (the headers as they are), 3 (before
+`prefix.x.wav`) and 2 (before `prefix.dtsx`) still join: each stream above's, made by the versions
+before, joins back with this one. The split's other outputs are the same as format 21's but for the
+DTS:X streams' WAVs (their rear surrounds without the heights), and those as format 4's (and,
+without DTS:X object data, as format 3's).
 
 `s.2.dts` uses pairwise decorrelation in every frame and adaptive prediction of orders 1-10. Its
 frames have 2, 4 or 8 segments. Its segments use Rice, binary and hybrid Rice codes (1227 isolated
@@ -403,9 +420,10 @@ stream, `s2_mid.dts`, `master_audio_7.1_24bit.dts`, `Master_Audio_5.0_96khz.dts`
 `xll_51_16_192_768_1`), 800 with format 15's (400 KB from the middle of the Cymatics stream,
 `s2_mid.dts`, `Master_Audio_7.1.dts`, `3-1.dts` and `xll_71_24_96_768`), 800 with format 16's
 (the same five), 800 with format 17's (the same five), 800 with format 18's (the same five), 800
-with format 19's (the same five), 800 with format 20's (the same five) and 800 with format 21's (the
-same five). Builds with `-O0`, `-O2` and `-O3 -march=native -ffp-contract=fast` (fused
-multiply-adds) write the same meta files, and each joins the others'.
+with format 19's (the same five), 800 with format 20's (the same five), 800 with format 21's (the
+same five) and 800 with format 22's (those five and FATE's `dtsx_7.1.4_24bit.dts`). Builds with
+`-O0`, `-O2` and `-O3 -march=native -ffp-contract=fast` (fused multiply-adds) write the same meta
+files, and each joins the others'.
 
 On `s.2.dts`, `c -v` takes 11.5 s and `d` 4.2 s, as with format 14 (format 8: 8.4 s and 3.1 s;
 format 4: 5.6 s and 2.0 s); on the Cymatics stream, `c -v` 32 s and `d` 12 s (format 14: 30 s and
@@ -432,14 +450,15 @@ to 13340.)
 
 The Cymatics stream's DTS:X object data, 96021900 bytes as it is, xz no smaller: as `prefix.x.wav`
 (188590184 bytes) through WavPack (ffmpeg, `-compression_level 3`), 92545003 bytes (FLAC
-`-compression_level 12`, 97067662), and 94 KB more of the meta file (1733244 bytes; with xz 36504,
-where format 3's was 2665280 without them, format 4's 4104040 with them, format 5's 1446656, format
+`-compression_level 12`, 97067662), and 94 KB more of the meta file (1763940 bytes; with xz 36508,
+where format 21's was 36504, format 3's 2665280 without them, format 4's 4104040 with them, format 5's 1446656, format
 6's 1054156, format 7's 722100, format 8's 678020, format 9's 427644, format 10's 392200, format
 11's 360700, format 12's 309328, format 13's 303912, format 14's 292292, format 15's 205592, format
 16's 169712, format 17's 153936, format 18's 137392, format 19's 68224 and format 20's 48604). Of
 its 4 channels, two follow the other two's pair closely (correlation 1.00), and the second pair the
 WAV's back surrounds (0.70 and 0.77; a linear fit of the WAV's channels leaves 40% and 50% of their
-energy), which a compressor that sees both WAVs can use.
+energy): the bed has the heights in it at -3 dB, and since format 22 the WAV has them out of its
+rear surrounds (above), which takes the WAV through WavPack from 157325981 bytes to 145156873.
 
 FLAC on the residual comes to almost exactly what XLL's own band data takes (78014222 bytes): the
 residual is close to noise, and XLL's per-frame LPC and Rice codes already do about what FLAC does.
@@ -596,7 +615,8 @@ show. `s.2.dts` takes 13 s.
 
 ## The meta file's format
 
-`DTSSPLIT`, a version byte (21; `d` reads 20 too, which keeps the common flags as they are, format
+`DTSSPLIT`, a version byte (22; `d` reads 21 too, which keeps the DTS:X heights in the bed, 20,
+which keeps the common flags as they are, format
 17's Rice and hybrid rules and the Rice widths by one rule, 19, which keeps the coding parameters as
 bytes and the reflection coefficients' codes against those of the recursion stopped where it breaks
 down, 18, which keeps the XLL headers as their bytes and the ranks' and pairs' decisions by LZMA's
@@ -644,9 +664,9 @@ range-coded in the eleventh section as that parse reads them, the bits no field 
 | `C` | a core frame: its size (its bytes are the next of `prefix.dtsc`) |
 | `E` | an extension substream frame kept as bytes |
 | `W` | WAV w's layout, before its first `X`: channels, width, rate, bands, speaker mask, the XLL channel of each WAV channel, the channel sets' sizes and masks |
-| `O` | `prefix.x.wav`'s layout, before the first `X` with object audio: 0, then as `W`'s |
+| `O` | `prefix.x.wav`'s layout, before the first `X` with object audio: 0, then as `W`'s; from format 22 the bed channels with the heights folded out (bit i: L, R, Lsr, Rsr's) |
 | `F` | the EXSS header's fields that hold the XLL frame's size, the DTS:X object data's offset in it or its size: their count, then each one's first bit and which (0, 1, 2); the `X` records after it keep these 16 bits less that |
-| `X` | an EXSS frame with its XLL frame split, its samples in WAV w: the EXSS bytes before the XLL frame, the speaker-mapping flag, the XLL header bytes, each segment's coding parameters, the XLL bytes after the band data up to the DTS:X object data (1 where the object data follows, plus 2 where they are 0s to the DWORD boundary, else plus their count times 4; the bytes), then where there is object data whether it is split: if so its bytes before its band data, its segments' coding parameters, its bytes after its band data (0 where they are 0s to the DWORD boundary past 2 more bytes, else their count plus 1; the bytes), its band 0's delayed samples, overlapping LSB bits and values clipped in `prefix.x.wav` (its samples the next of `prefix.x.wav`), else its size (its bytes the next of `prefix.dtsx`); the EXSS bytes after the XLL frame, band 0's delayed samples, the overlapping LSB bits, the clipped WAV values |
+| `X` | an EXSS frame with its XLL frame split, its samples in WAV w: from format 22, after an `O` record whose bed channels aren't none, whether the WAV has the heights folded out of the frame's bed; the EXSS bytes before the XLL frame, the speaker-mapping flag, the XLL header bytes, each segment's coding parameters, the XLL bytes after the band data up to the DTS:X object data (1 where the object data follows, plus 2 where they are 0s to the DWORD boundary, else plus their count times 4; the bytes), then where there is object data whether it is split: if so its bytes before its band data, its segments' coding parameters, its bytes after its band data (0 where they are 0s to the DWORD boundary past 2 more bytes, else their count plus 1; the bytes), its band 0's delayed samples, overlapping LSB bits and values clipped in `prefix.x.wav` (its samples the next of `prefix.x.wav`), else its size (its bytes the next of `prefix.dtsx`); the EXSS bytes after the XLL frame, band 0's delayed samples, the overlapping LSB bits, the clipped WAV values |
 | `Z` | the end: the input's size and CRC-32, the WAVs and their samples a channel, the size of `prefix.dtsx`, `prefix.x.wav`'s samples a channel |
 
 ## Build
