@@ -12,13 +12,13 @@ Const 0
 
 Index a
  a_pk: pk, 1!0
- a_nr: nr, 1!000001010000000
- a_nl: nl, 1!010010011101011
+ a_nr: nr, 1!000001011000100
+ a_nl: nl, 1!010010011111101
 
 Index b
  b_pk: pk, 1!1
- b_ab: ab, 1!010011101010100100110010010
- b_ql: ql, 1!111111110100010010000
+ b_ab: ab, 1!010011101010100100110001010
+ b_ql: ql, 1!111111110100010001000
 
 Index c
  c_pk: pk, 1!1
@@ -27,54 +27,54 @@ Index c
 
 Index d
  d_pk: pk, 1!1
- d_ab: ab, 1!011000010000101110100100100
- d_m1: m1, 1!0111110000000011110000
+ d_ab: ab, 1!000000010111001000100110100
+ d_m1: m1, 1!0111110000000000110000
 
 Index e
  e_pk: pk, 1!1
- e_ab: ab, 1!010000100110001011111100000
- e_m1: m1, 1!1101111001100110110000
+ e_ab: ab, 1!010001000110000011101100000
+ e_m1: m1, 1!1101111001101110110000
  e_m2: m2, 1!1101111011100101100000
 
 Index h
  h_pk: pk, 1!1
  h_ab: ab, 1!010101010110101001101000000
- h_nr: nr, 1!000010110000000
+ h_nr: nr, 1!000000000000000
 
 Index i
  i_pk: pk, 1!1
- i_ab: ab, 1!010010000110101110111000000
- i_hw: hw, 1!001
- i_pm: pm, 1!0
+ i_ab: ab, 1!010010001111001110111100000
+ i_hw: hw, 1!101
+ i_pm: pm, 1!1
 
 Index j
  j_pk: pk, 1!1
- j_ab: ab, 1!011001011011010010100010001
+ j_ab: ab, 1!011001011011010010100010000
  j_bd: bd, 1!0000000000000000000000000000000
 
 Index k
  k_pk: pk, 1!1
- k_nr: nr, 1!000000010111111
- k_pm: pm, 1!0
+ k_nr: nr, 1!000001001001101
+ k_pm: pm, 1!1
 
 Index l
  l_pk: pk, 1!0
- l_nl: nl, 1!011011100000100
- l_ab: ab, 1!010111011110100111100000000
+ l_nl: nl, 1!011001100000111
+ l_ab: ab, 1!010111010110100110100001100
 
 Index s
  s_pk: pk, 1!1
- s_nr: nr, 1!000001000000000
- s_nl: nl, 1!000010010000000
+ s_nr: nr, 1!000100000000000
+ s_nl: nl, 1!000000010001001
 
 Index f
  f_pk: pk, 1!0
- f_nl: nl, 1!001000000101000
- f_nr: nr, 1!000000001100000
+ f_nl: nl, 1!101110101100000
+ f_nr: nr, 1!000001001100000
 
 Index m
  m_pk: pk, 1!0
- m_nr: nr, 1!000100000000000
+ m_nr: nr, 1!000101000000000
 
 Index w
  w_nl: nl, 1!000000000000000
@@ -89,26 +89,26 @@ Index n
 Index g
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
-Number rA, 1, 0!00000000
+Number rA, 1, 0!10000001
 Number mwA, 1, 0!11011010
-Number rB, 1, 0!10010001
+Number rB, 1, 0!11001100
 Number mwB, 1, 0!00000000
 Number rC, 1, 0!00000000
-Number mwC, 1, 0!00111010
+Number mwC, 1, 0!00110110
 Number rD, 1, 0!00001000
-Number mwD, 1, 0!11011011
+Number mwD, 1, 0!11010001
 Number rE, 1, 0!00000000
-Number mwE, 1, 0!00010000
-Number rH, 1, 0!10101001
+Number mwE, 1, 0!00010010
+Number rH, 1, 0!10110001
 Number mwH, 1, 0!00000000
 Number rI, 1, 0!00000000
-Number mwI, 1, 0!11111000
-Number rJ, 1, 0!01110111
-Number mwJ, 1, 0!00000010
-Number rK, 1, 0!01010010
-Number mwK, 1, 0!11111110
-Number rL, 1, 0!10001110
-Number mwL, 1, 0!00000010
+Number mwI, 1, 0!11001111
+Number rJ, 1, 0!01110100
+Number mwJ, 1, 0!00000000
+Number rK, 1, 0!01001110
+Number mwK, 1, 0!11111111
+Number rL, 1, 0!10100011
+Number mwL, 1, 0!00000000
 Number lr, 1, 0!10000
 Number mb, 1, 0!00100001
 #  the mixers' initial weights, in 256ths (format 112): each counter's two probabilities' in the
@@ -120,7 +120,7 @@ Number wp, 1, 0!00011010
 Number wq, 1, 0!00000001
 Number wo, 1, 0!01000000
 Number wa, 1, 0!00000000
-Number wf, 1, 0!01001011
+Number wf, 1, 0!01001111
 Number lf, 1, 0!00000011
 Number bf, 1, 0!00000000
 Number l2, 1, 0!10000000
@@ -129,10 +129,10 @@ Number b2, 1, 0!00010000
 Number b3, 1, 0!00000000
 Number rS1, 1, 0!10000
 Number rS2, 1, 0!10000
-Number qs, 1, 3!1010100
+Number qs, 1, 3!1001111
 Number qf, 1, 3!0111101
 Number bw, 1, 0!01110
-Number rT, 1, 0!00101000
+Number rT, 1, 0!00101001
 Number mwT, 1, 0!11111111
 Number mt, 1, 0!000
 #  the mantissa mixer's rates: frozen (Index n)

@@ -23,23 +23,23 @@ Index b
 Index c
  c_pk: pk, 1!0
  c_nr: nr, 1!000000000000000
- c_hm: hm, 1!11
+ c_hm: hm, 1!01
 
 Index d
  d_pk: pk, 1!1
- d_ab: ab, 1!010000100111010100101000000
- d_m1: m1, 1!0000010100100010000000
+ d_ab: ab, 1!010000100111010100101100000
+ d_m1: m1, 1!0001010110100010000100
 
 Index e
  e_pk: pk, 1!1
- e_ab: ab, 1!010101010001000011100000000
- e_m1: m1, 1!1011010000111010010000
+ e_ab: ab, 1!010111010001000011110100000
+ e_m1: m1, 1!1011010000111010000000
  e_m2: m2, 1!1111001010100001000000
 
 Index h
  h_pk: pk, 1!1
  h_ab: ab, 1!010111010110101001100010010
- h_nr: nr, 1!000001000000000
+ h_nr: nr, 1!000000000000000
 
 Index i
  i_pk: pk, 1!0
@@ -49,27 +49,27 @@ Index i
 
 Index j
  j_pk: pk, 1!1
- j_ab: ab, 1!011001011011010010100010000
+ j_ab: ab, 1!011001011011010010100010001
  j_bd: bd, 1!0000000000000000000000000000011
 
 Index k
  k_pk: pk, 1!1
- k_nr: nr, 1!000000010111011
+ k_nr: nr, 1!000000000000011
  k_pm: pm, 1!1
 
 Index l
- l_pk: pk, 1!1
- l_nl: nl, 1!000000000000010
+ l_pk: pk, 1!0
+ l_nl: nl, 1!010000000000010
  l_ab: ab, 1!010101001111100100101000000
 
 Index s
  s_pk: pk, 1!0
- s_nr: nr, 1!000000000100000
+ s_nr: nr, 1!000000000010000
  s_nl: nl, 1!000000001001010
 
 Index f
  f_pk: pk, 1!0
- f_nl: nl, 1!000000100001110
+ f_nl: nl, 1!101000001001110
  f_nr: nr, 1!000000000011010
 
 Index m
@@ -91,23 +91,23 @@ Index g
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
 Number rA, 1, 0!00000000
 Number mwA, 1, 0!11000111
-Number rB, 1, 0!11111011
+Number rB, 1, 0!11111110
 Number mwB, 1, 0!00000110
 Number rC, 1, 0!01000110
-Number mwC, 1, 0!11101011
-Number rD, 1, 0!11111011
-Number mwD, 1, 0!11111011
-Number rE, 1, 0!00101101
+Number mwC, 1, 0!11110011
+Number rD, 1, 0!11110010
+Number mwD, 1, 0!10110011
+Number rE, 1, 0!00100001
 Number mwE, 1, 0!11111100
-Number rH, 1, 0!11111101
+Number rH, 1, 0!11111110
 Number mwH, 1, 0!00000000
 Number rI, 1, 0!00001111
-Number mwI, 1, 0!10111000
+Number mwI, 1, 0!10101000
 Number rJ, 1, 0!11111111
 Number mwJ, 1, 0!00000000
-Number rK, 1, 0!11111010
+Number rK, 1, 0!10111111
 Number mwK, 1, 0!11111111
-Number rL, 1, 0!11101000
+Number rL, 1, 0!11110011
 Number mwL, 1, 0!00000001
 Number lr, 1, 0!10001
 Number mb, 1, 0!00100000

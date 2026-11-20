@@ -318,6 +318,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
                            // coroutine's yield copies, 64 KB at most: Lib3/coro3b.inc)
   // the LFE (64x) against the WAV's LFE channel (bind.lfe)
   int lfe_on;              // the subframe's LFE samples are coded against the audio's
+  S64 lfe_g;               // the fixed filters' gain, Q15 (smp_start(): a DTS:X encoder's downmix's where so bound)
   int lfe_n;               // how many
   S64 lfe_n0;              // the first's place (its interpolation's 64 samples from 64 times it)
   S64 lfe_f[4 * NSSF][LFE_NF];  // each one's decimated samples around it (the last values after them: code_lfe()'s)
@@ -890,6 +891,17 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     ffe_ok = 0, n_ff = n_ffhit = 0;
     qff_c[0] = qff_c[1] = qff_n[0] = qff_n[1] = 0;
     ffl_ok = ffl_use = 0, ffl_n = 0;
+    // (since format 140 the two fixed filters' predictions, LFE_W2's and LFE_W2D's, times the DTS:X
+    // encoders' downmix gain, 23170/32768, where the binding mixes two WAV channels with a gain before
+    // the mix, as Call::pick_level() takes for their sign: the Cymatics stream's LFE runs at 0.69-0.70
+    // of LFE_W2's where it is loud, as the core's channels do at 0.707092 of the WAV's, and those two
+    // predictions were the value 43% of the time, in its silences; its LFE 1.4% smaller, its core
+    // 0.19%, at 0.695 a little less. Its filter is not quite theirs, though: that gain falls to
+    // 0.50-0.61 over frames 7000-13000. The fits' errors learnt from larger misses too, up to a
+    // quarter of the prediction, so that theirs would learn the gain: its LFE 3.6% bigger)
+    lfe_g = BIND_Q15;
+    for (int ch = 0; ch < NCH; ch++)
+      if (b.map[ch] >= 0 && b.map2[ch] >= 0 && (b.p1[ch] != BIND_Q15 || b.p2[ch] != BIND_Q15 || b.alt[ch])) lfe_g = 23170;
     for (int k = 0; k < FFL_N; k++) ffl_h[k] = 0, ffl_v[k] = 0;
     for (int m = 0; m < FfEnc::NMG; m++)
       for (int c = 0; c < 4; c++) {
@@ -5048,11 +5060,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     return best >= 0 && br <= LFE_LAT_T * lfe_n ? best : -1;
   }
+  // a fixed filter's prediction p at their gain (lfe_g)
+  S64 lfe_gain(S64 p) const { return lfe_g == BIND_Q15 ? p : (S64)((S128)p * lfe_g / BIND_Q15); }
   S64 lfe_pred(int i) const {
     const int k = lfe_best() % 6;  // (the step not yet known: as is)
     return k == 5 ? lfit4[lfe_pl[i]].predict(lfe_f3[i])
-         : k == 4 ? lfe_dec(i)
-         : k >= 3 ? lfe_fixed(i)
+         : k == 4 ? lfe_gain(lfe_dec(i))
+         : k >= 3 ? lfe_gain(lfe_fixed(i))
          : k == 2 ? lfit3.predict(lfe_f3[i])
          : k == 1 ? lfit2.predict(lfe_f[i])
                   : lfit.predict(lfe_f[i]);
@@ -5063,8 +5077,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     S128 dist;
     int how;
     for (int k = 0; k < LFE_NP; k++) lfe_f[i][LFE_NT + k] = lfe_past[k];  // (the values decoded)
-    const S64 p1 = lfit.predict(lfe_f[i]), p2 = lfit2.predict(lfe_f[i]), p3 = lfit3.predict(lfe_f3[i]), p4 = lfe_fixed(i),
-              p5 = lfe_dec(i), p6 = lfit4[lfe_pl[i]].predict(lfe_f3[i]);
+    const S64 p1 = lfit.predict(lfe_f[i]), p2 = lfit2.predict(lfe_f[i]), p3 = lfit3.predict(lfe_f3[i]),
+              p4 = lfe_gain(lfe_fixed(i)), p5 = lfe_gain(lfe_dec(i)), p6 = lfit4[lfe_pl[i]].predict(lfe_f3[i]);
     const S64 pk[6] = {p1, p2, p3, p4, p5, p6};
     const int lb = lfe_best();
     const S64 pg = pk[lb % 6] + (lb % 12 >= 6 ? lfe_half() : 0), ag = pg < 0 ? -pg : pg;

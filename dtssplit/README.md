@@ -653,7 +653,7 @@ codeword, of 64 the encoder keeps, is nearest the LPC of the subframe and the 4 
 the VQ vector the best of a group of 32 that a learned score picks),
 how it decimated the LFE, and how its bit allocations follow one table of the subbands' energies
 (a transient's from the transient on) at the level its rate control sets, filling its frames; the
-core takes 76387 bytes (0.15%).
+core takes 76383 bytes (0.15%).
 
 That doesn't help dtssplit as it is. There the audio isn't stored: the WAV holds the residual,
 which is the audio less the core's decode, and the core is what predicts the audio. It helps a
@@ -664,7 +664,7 @@ compressor that stores the audio and derives the core from it:
 | the core (xz), the residual (FLAC), the meta file (xz) | 122131582 | 93.55% |
 | the same, the core by a model of its fields (78.8%) | about 118.7 MB | 90.9% |
 | the audio (FLAC), the core given the audio, the meta file | about 110.4 MB | 84.5% |
-| the audio (FLAC), the core by dtsdpack, the meta file (xz) | 107065145 | 82.01% |
+| the audio (FLAC), the core by dtsdpack, the meta file (xz) | 107065141 | 82.01% |
 
 The audio costs 29 MB more than the residual (106981478 against 78014446 bytes with FLAC), but
 the core costs 37-42 MB less. In such a compressor:
