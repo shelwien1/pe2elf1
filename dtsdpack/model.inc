@@ -51,6 +51,7 @@ struct Model : ModelX96<f_DEC, LV> {
   int n_frames;  // (the frames so far)
   void Init(void) {
     n_frames = 0;
+    B::ffe = nullptr;
 #define M_INIT(F) B::f_##F.Init(), B::t_##F = nullptr;
     DTSD_FAMS(M_INIT)
 #undef M_INIT
@@ -66,6 +67,7 @@ struct Model : ModelX96<f_DEC, LV> {
   B::f_##F.Quit();
     DTSD_FAMS(M_QUIT)
 #undef M_QUIT
+    if (B::ffe) free(B::ffe), B::ffe = nullptr;
   }
   // the run starts: the families' tables mapped and wired to the coder co; the WAV, bound by b
   void start(Coder<f_DEC>* co, WavIn* w, const Bind& b) {
@@ -407,7 +409,8 @@ struct Model : ModelX96<f_DEC, LV> {
         const int og2 = ut ? sg0 : tg;
         const int sa = !fs && G && Sn == G ? (sg < 0 ? 0 : sg == G - 1 ? 1 : hist.abits[ch][b] && sg == hist.abits[ch][b] - 1 ? 2 : 3) : -1;
         const int ag = sa >= 0 ? sa : !fs || og2 < 0 ? 0 : og2 == sg ? 1 : og2 == alt ? 2 : 3;
-        if (!twin_field(fid, ch, b, v, lo, hi))
+        // (FFmpeg's encoder's ABITS, where made again: ff_abits())
+        if (!twin_field(fid, ch, b, v, lo, hi) && !(B::ffe_ok && !pass && bound[ch] && B::ff_abits(ch, b, v, lo, hi)))
           v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
                          s.pmode[ch][b], lbd, nb, mx, Sn, near_e ? 14 : nn, sc, eq, ms,
                          alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag, fs && ut ? sx : 0, pq1, pq2, B::ss_rule() || B::ab_rule());
@@ -582,18 +585,37 @@ struct Model : ModelX96<f_DEC, LV> {
   // first 3 MB as decoded, encoded at 1509 kbps, 15365 of its 31700 Huffman; the DTS encoders'
   // are the same for the whole stream, the codes of fixed length (the rule would have the others
   // more often than not)
-  U8 selbk[NCH][20];
+  U8 selbk[NCH][21];
   bool cdfr;
   bool core_defer(CoreRec& r) {
     cdfr = B::sel_ff != 0;
     if (!cdfr) return false;
-    for (int ch = 0; ch < r.npchs; ch++)
+    for (int ch = 0; ch < r.npchs; ch++) {
       for (int a = 0; a < 10; a++) {
         if (ENC) selbk[ch][a] = (U8)r.sel[ch][a], selbk[ch][10 + a] = (U8)r.adj[ch][a];
         r.sel[ch][a] = B::sel_last[ch][a];
         r.adj[ch][a] = r.sel[ch][a] < QB_GROUP[a] ? B::adj_last[ch][a] : 0;
       }
+      if (ENC) selbk[ch][20] = (U8)r.bhuff[ch];
+      r.bhuff[ch] = B::bh_last[ch];
+    }
     return true;
+  }
+  // the bit allocations' book FFmpeg's encoder's set_best_abits_code() takes for channel ch's
+  // ABITS: of the Huffman books the first whose codes take the fewest bits, where fewer than 5 bits
+  // each, else 5 bits (6); 6 where one is 0 or over 12
+  static int ff_bhuff(const CoreRec& r, int ch) {
+    int t[5] = {0, 0, 0, 0, 0}, n = 0;
+    for (int sf = 0; sf < r.nsubfs; sf++)
+      for (int b = 0; b < r.nvqsub[ch]; b++, n++) {
+        const int A = r.sub[sf].abits[ch][b];
+        if (A < 1 || A > 12) return 6;
+        for (int k = 0; k < 5; k++) t[k] += BA[k].bits(A);
+      }
+    int m = 6, mb = 5 * n;
+    for (int k = 0; k < 5; k++)
+      if (t[k] < mb) mb = t[k], m = k;
+    return m;
   }
   // the books FFmpeg's encoder's set_best_code() takes for the frame's values (rule[ch][a]): of an
   // ABITS's Huffman books the first whose codes take the fewest bits, where those and the 2 bits of
@@ -655,6 +677,14 @@ struct Model : ModelX96<f_DEC, LV> {
           if (r.sel[ch][a] < QB_GROUP[a]) v = B::hdr_field(F_ADJ, 3, ENC ? selbk[ch][10 + a] : 0);
           r.adj[ch][a] = (int)v;
         }
+#ifdef DTSD_FSTAT
+      c->fid = F_BHUFF;
+#endif
+      for (int ch = 0; ch < r.npchs; ch++) {
+        const S64 v = B::hdr_pred(F_BHUFF, 7, ENC ? selbk[ch][20] : 0, ff_bhuff(r, ch));
+        if (v == 7) return c->err = 1, false;
+        r.bhuff[ch] = (int)v;
+      }
       vlc = false;
       for (int ch = 0; ch < r.npchs; ch++)
         for (int a = 0; a < 10; a++) vlc |= r.sel[ch][a] < QB_GROUP[a];
@@ -662,12 +692,16 @@ struct Model : ModelX96<f_DEC, LV> {
     // (the rule's where the frame's books are all its, and some are Huffman; not where one isn't)
     if (rl) {
       bool ok = true;
-      for (int ch = 0; ch < r.npchs; ch++)
+      for (int ch = 0; ch < r.npchs; ch++) {
         for (int a = 0; a < 10; a++) ok &= rule[ch][a] == r.sel[ch][a];
+        ok &= ff_bhuff(r, ch) == r.bhuff[ch];
+      }
       B::sel_ff = !ok ? 0 : vlc ? 1 : B::sel_ff;
     }
-    for (int ch = 0; ch < r.npchs; ch++)
+    for (int ch = 0; ch < r.npchs; ch++) {
       for (int a = 0; a < 10; a++) B::sel_last[ch][a] = (U8)r.sel[ch][a], B::adj_last[ch][a] = (U8)r.adj[ch][a];
+      B::bh_last[ch] = (U8)r.bhuff[ch];
+    }
     return good();
   }
   // the same of the joint scale factors' books (each channel's, each subframe: `96-24.dts`'s the

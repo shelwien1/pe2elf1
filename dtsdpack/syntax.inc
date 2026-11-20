@@ -857,19 +857,21 @@ struct Walk {
       WU(SHUFF, 3, c.shuff[ch]);
       if (c.shuff[ch] == 7) return fail("a scale factor code book out of range");
     }
-    for (int ch = ch0; ch < ch1; ch++) {
-      WU(BHUFF, 3, c.bhuff[ch]);
-      if (c.bhuff[ch] == 7) return fail("a bit allocation code book out of range");
-    }
     // (the core's books coded after its subframes, from the values, where the model says so
     // (core_defer(): each channel's last ones meanwhile, which the ADJs' bits are counted as; the
-    // values walked in any of an ABITS's books' range), then core_books())
+    // values walked in any of an ABITS's books' range, the ABITS in any of theirs), then
+    // core_books())
     if (seldfr && !ch0) {
+      io.pos += (U64)(ch1 - ch0) * 3;
       for (int a = 0; a < 10; a++) io.pos += (U64)(ch1 - ch0) * SEL_BITS[a];
       adjat = io.pos;
       for (int a = 0; a < 10; a++)
         for (int ch = ch0; ch < ch1; ch++) io.pos += c.sel[ch][a] < QB_GROUP[a] ? 2 : 0;
       return true;
+    }
+    for (int ch = ch0; ch < ch1; ch++) {
+      WU(BHUFF, 3, c.bhuff[ch]);
+      if (c.bhuff[ch] == 7) return fail("a bit allocation code book out of range");
     }
     for (int a = 0; a < 10; a++)
       for (int ch = ch0; ch < ch1; ch++) WU(SEL, SEL_BITS[a], c.sel[ch][a]);
@@ -910,7 +912,9 @@ struct Walk {
     for (int ch = ch0; ch < ch1; ch++)
       for (int b = 0; b < c.nvqsub[ch]; b++) {
         io.at(ch, b, 0);
-        if (c.bhuff[ch] < 5)
+        if (seldfr)
+          WU(ABITS, 5, s.abits[ch][b]);
+        else if (c.bhuff[ch] < 5)
           WH(ABITS, BA[c.bhuff[ch]], s.abits[ch][b]);
         else
           WU(ABITS, c.bhuff[ch] - 1, s.abits[ch][b]);

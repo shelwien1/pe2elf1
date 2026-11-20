@@ -126,6 +126,7 @@
 #include "levels.inc"
 // the analysis, the reader, the model, the runs
 #include "anal.inc"
+#include "ffenc.inc"
 #include "reader.inc"
 #include "model.inc"
 #include "sys.inc"

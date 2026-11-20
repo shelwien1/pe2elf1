@@ -8,7 +8,7 @@
 enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND };  // the header's fixed part
 enum { DP_BIND_MAX = 3 + 10 + 4 + 5 + 3 + 26 * NCH };                     // (and the binding's bytes at most)
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
-constexpr int DP_VERSION = 134;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
+constexpr int DP_VERSION = 135;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
                                // extension as records; 4: a WAV at twice the core's rate, X96 and XXCH; 5: the
                                // scale factor search; 6: the bit allocation search; 7: the bits after the
                                // subframes as the bytes they end in, the energy's quarter of its bucket, the
@@ -232,7 +232,12 @@ constexpr int DP_VERSION = 134;  // the format's (2: a core channel's binding a 
                                // scale factors have lain under its window, as FFmpeg's encoder's;
                                // 134: the core's code books after its subframes, by FFmpeg's
                                // encoder's rule, where the frames' have been its; the LFE bound
-                               // by its decimation corrected as a decoded WAV's where not as is)
+                               // by its decimation corrected as a decoded WAV's where not as is;
+                               // 135: FFmpeg's encoder made again from its decode: the ABITS by
+                               // its noise search, its margins and the decode's lattice, their
+                               // code books after them by its rule, each scale factor's first
+                               // guess the likeliest of its rules', the LFE by FFmpeg's decoder's
+                               // interpolation undone, its scale factors by the encoder's rules)
 
 static void put_le(U8* p, U64 v, int n) {
   for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));
@@ -406,6 +411,7 @@ struct Stats {
   U64 ab9, ab_srch9, ab_hits9;     // (and its ABITS, those its bit allocation search said, those it said right)
   U64 ab, ab_srch, ab_hits;        // (and the ABITS, those the bit allocation search said, those it said right)
   U64 ab_st, ab_sthits;            // (those a staircase said, those it said right)
+  U64 ab_ff, ab_ffhits;            // (those FFmpeg's encoder made again said, those it said right)
   U64 ab_tb, ab_tbhits;            // (those the allocation table said, those it said right)
 
   // c's summary line (out_bytes: the compressed size, at the level), and with -s the bytes by kind
@@ -444,6 +450,9 @@ struct Stats {
       if (ab_tb)
         fprintf(stderr, "  the encoders' allocation table: %.2f%% of the ABITS, right in %.2f%% of them\n",
                 PERCENT * ab_tb / ab, PERCENT * ab_tbhits / ab_tb);
+      if (ab_ff)
+        fprintf(stderr, "  FFmpeg's encoder's bit allocations: %.2f%% of the ABITS, right in %.2f%% of them\n",
+                PERCENT * ab_ff / ab, PERCENT * ab_ffhits / ab_ff);
       if (smp9 || sf9)
         fprintf(stderr, "  X96: the audio's indexes: %.2f%% of the samples; the audio's scale factors: %.2f%%\n",
                 smp9 ? PERCENT * hits9 / smp9 : 0.0, sf9 ? PERCENT * sf_hits9 / sf9 : 0.0);

@@ -161,8 +161,8 @@ allocations in):
 | `Master Audio 5.0 96khz.dts` | 1768548 | 3472 (0.20%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
 | `Master Audio 7.1.dts` | 1945604 | 4139 (0.21%) | a downmix of its 7.1 |
 | `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 3784 (0.14%) | its 3.1 |
-| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 2318 (0.04%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
-| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 1631 (0.32%) | the same (1.95%) |
+| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 2332 (0.04%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
+| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 1619 (0.32%) | the same (1.95%) |
 | `open bitrate.dts` (stereo, open rate) | 5242416 | 884 (0.02%) | decoded (99.99% of the indexes, 99.96% of the scale factors, 99.82% of the bit allocations, 99.99% of the HF VQ groups, 99.82% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
 
 A DTS:X stream, `Nigel_Stanford_Cymatics_DTS-X.dts` (5:27; a 5.1 core at 1509 kbps beside DTS-HD
@@ -241,31 +241,41 @@ their decodes clip too (0.3-1.2% of the samples):
 
 | Stream | Core | dtsdpack |
 |---|---:|---:|
-| `core_51_24_48_768_0`, `_1` (5.1) | 7168 | 1396 (19.48%), 1388 (19.36%) |
-| `xch_61_24_48_768` (6.1 by XCH) | 7168 | 1454 (20.28%) |
+| `core_51_24_48_768_0`, `_1` (5.1) | 7168 | 1397 (19.49%), 1389 (19.38%) |
+| `xch_61_24_48_768` (6.1 by XCH) | 7168 | 1455 (20.30%) |
 | `x96_51_24_96_1509` (X96) | 14084 | 2646 (18.79%) |
 | `x96_xch_61_24_96_3840` | 14084 | 1844 (13.09%) |
 | `xbr_51_24_48_3840`, `xbr_xch_61_24_48_3840` (XBR: its residuals in the decode) | 14084 | 1593 (11.31%), 1988 (14.12%) |
 | `xll_x96_51_24_96_1509` (DTS-HD MA, X96) | 14084 | 1329 (9.44%) |
 
-Streams FFmpeg's encoder made (`ffmpeg -c:a dca -strict -2`), against FFmpeg's decodes, compress
-worse: their choices are FFmpeg's own (`libavcodec/dcaenc.c`), its bit allocations among them, by
-each subband's peak against a masking curve of its own (FFmpeg's encoder, re-encoding those
-decodes, makes 97-99% of them again; the model's staircases are right in 81%). Its scale factors
-are the least whose range at the subband's ABITS holds the subband's peak, 3 to 14 entries under
-the RMS rule's at its fine steps, which since format 133 the scale factor search goes down to; its
-code books for each frame's indexes (each channel's for each ABITS: the DTS encoders' are the same
-for the whole stream) those that code the values the cheapest, which since format 134 the model
-codes after the values, by that rule; and its decodes' LFE, which their decimation makes 89-91% of,
-the model binds since format 134 by its decimation corrected as a decoded WAV's (below):
+Streams FFmpeg's encoder made (`ffmpeg -c:a dca -strict -2`), against FFmpeg's decodes: their
+choices are FFmpeg's own (`libavcodec/dcaenc.c`). Its bit allocations go by each subband's peak
+against a masking curve of its own, at the noise level its search finds for the frame's bits; since
+format 135 the model makes them again from the WAV as FFmpeg's encoder computes them (`ffenc.inc`,
+below), and they are the core's 97.1-98.7% of the time (the model's staircases', 80-89%). Its scale
+factors are the least whose range at the subband's ABITS holds the subband's peak, 3 to 14 entries
+under the RMS rule's at its fine steps, which since format 133 the scale factor search goes down to,
+and since format 135 each one's first guess is the likeliest of four, that rule on the decode's
+peak among them (below); its code books for each frame's indexes (each channel's for each ABITS:
+the DTS encoders' are the same for the whole stream) those that code the values the cheapest,
+which since format 134 the model codes after the values, by that rule, and since format 135 its
+bit allocations' books too; and its decodes' LFE, which their decimation makes 89-91% of, the model
+binds since format 134 by its decimation corrected as a decoded WAV's, and predicts since format
+135 by FFmpeg's decoder's interpolation undone exactly (below). Their bit allocations took 83.3 KB
+in format 134 and take 5.8 KB, their scale factors 24.4 KB and 8.4 KB, their LFE 6.0 KB and 0.3 KB;
+what is left is mostly the indexes that the decodes don't give back (the first 3 MB's 7.5 KB of
+11.1, `open bitrate.dts`'s encode's 10.3 KB of 12.9), at steps under the WAV's unit, which its
+rounding hides. Making FFmpeg's encoder's choices again costs a quarter of the time: these cores
+compress at 537-826 KB a second and decompress at 599-855 (format 134's 697-1035 and 774-1081, on a
+host where the 7-frame samples above go at 355 and 447 at the least, as in format 134):
 
-| FFmpeg's encode | Core | dtsdpack | format 133 | format 132 |
+| FFmpeg's encode | Core | dtsdpack | format 134 | format 133 |
 |---|---:|---:|---:|---:|
-| `s.2.dts`'s first 3 MB as decoded (5.1, 1509 kbps, 6.8 s) | 1275608 | 26484 (2.08%) | 38631 | 51675 |
-| 3 MB from its middle (5.7 s) | 1068372 | 10051 (0.94%) | 15371 | 29043 |
-| its first 3 MB at 768 kbps | 649216 | 11263 (1.73%) | 21285 | 25903 |
-| `open bitrate.dts`'s first 20 s as decoded (stereo, 768 kbps) | 1920000 | 23362 (1.22%) | 27339 | 49870 |
-| a minute of 5.1 shaped noise, its surrounds silent to 30 s (above) | 10597500 | 65358 (0.62%) | 109620 | 225339 |
+| `s.2.dts`'s first 3 MB as decoded (5.1, 1509 kbps, 6.8 s) | 1275608 | 11098 (0.87%) | 26484 | 38631 |
+| 3 MB from its middle (5.7 s) | 1068372 | 2197 (0.21%) | 10051 | 15371 |
+| its first 3 MB at 768 kbps | 649216 | 2249 (0.35%) | 11263 | 21285 |
+| `open bitrate.dts`'s first 20 s as decoded (stereo, 768 kbps) | 1920000 | 12930 (0.67%) | 23362 | 27339 |
+| a minute of 5.1 shaped noise, its surrounds silent to 30 s (above) | 10597500 | 6621 (0.06%) | 65358 | 109620 |
 
 ## How it works
 
@@ -689,8 +699,9 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   subband's peak (`calc_one_scale()`), 3 to 14 entries under the RMS rule's: so since format 133,
   where after 256 tries more than an eighth of the scale factors have lain under its window, the
   search goes down to 16 under it: its streams' scale factors 76-99% the prediction from 33-71%
-  (above). Every stream's so, the DTS encoders' decodes found finer lattices than theirs as near:
-  `ES 6.1 16bit.dts`'s core 11% bigger.
+  (above; since format 135, where its bit allocations are made again, the first guess goes by its
+  rule too, below). Every stream's so, the DTS encoders' decodes found finer lattices than theirs as
+  near: `ES 6.1 16bit.dts`'s core 11% bigger.
   Since format 91 a lossless WAV's scale factors go by where the encoder's arithmetic may have put
   the RMS (`sf_post()`): the values with the FFT's noise in them, its power at each sample 2.4
   2^-40 of the bottom subband's binade's (`hf_stair2()`) in the top subband, else 2^-43 (the HF VQ
@@ -974,6 +985,25 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   up to 79% off (a lossless WAV's were rounded too before: FFmpeg's `master_audio_7.1_24bit.dts`'s
   LFE took 2248 bytes, now 262, its core 30% smaller; `s.2.dts`'s core 2.4%, `Master Audio
   7.1.dts`'s 1.0%).
+  FFmpeg's decoder makes each LFE value's 64 samples from it and the 7 before (`lfe_fir_float_c()`,
+  8 of `ff_dca_lfe_fir_64`'s coefficients each), in floats, the WAV having them floored to its
+  resolution; so a value is the least squares solution of the 16 from it whose interpolations are
+  the 1024 samples from its own, the 7 before it known: a fixed filter of those samples less a fixed
+  combination of the 7 (`lfels.inc`; the WAV's rounding 3.7 times as strong in it). Since format
+  135 that is the fifth prediction where the WAV is decoded at the core's rate (LFE_W2D, a fit of
+  it, before): on FFmpeg's decode of its encode of `s.2.dts`'s first 3 MB, 5058 of its 5072 LFE
+  values within 0.04 of a step, all but the last 14, whose samples pass the WAV's end (`ES 6.1
+  16bit.dts`'s too where a step is 8 or more of the decoder's integer LFE units; its quiet
+  stretches' steps, a few units or less, the integers blur). Before the scale factor, though, a
+  value after the subframe's first has only predictions for some of the 7 before it, and the
+  inversion makes their errors grow, 2 to 4 times from one value to the next (where the values' own
+  errors are a fair part of a step, the eighth is off by as much as the values). So the scale
+  factor's first guess is there the one of four that has been right most often: the RMS rule's,
+  FFmpeg's encoder's rule on the predictions' peak (`calc_one_scale()` at ABITS 11, its LFE units
+  128 times the decoder's), the least whose step puts that peak within 3/32 of 127, and the RMS
+  rule's on LFE_W2D's predictions. The FFmpeg encodes' LFE 6.0 KB to 0.3 KB (their scale factors
+  the second's 95.5-96.9% of the time); `ES 6.1 16bit.dts`'s 14 bytes bigger (its scale factors'
+  guesses, by the RMS rule, a little less sure), FATE's `dts_es.dts`'s 12 smaller.
 - **The transients**: a decoded WAV's subband with a transient (TMODE) doesn't fit one scale
   factor's lattice. So, its ABITS known, where the bit allocation search's fit is within a 64th of
   a step squared a value, it has none; else the subsubframe from which two scale factors' lattices
@@ -1154,6 +1184,41 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   distance at the two largest values, and each one's whole distance is summed, the largest values
   first, only while it could still come under the second best's: the same pair as trying them all,
   at a fraction of the cost.
+- **FFmpeg's encoder** (since format 135, `ffenc.inc`): where the core's code books have been its
+  rule's (below: its encodes') and the frame is as its are (one subframe of 16 blocks, at 32, 44.1
+  or 48 kHz, to 6 channels, each bound to a WAV channel as it is, at the core's rate), its bit
+  allocations are made again from the WAV: its subband transform of the 512 samples from where the
+  core's first block's analysis window ends (the 512 before them its history), each subband's
+  peak, its psychoacoustic masking and its search for the noise level whose ABITS the frame's bits
+  allow (`assign_bits()`), in its 32-bit arithmetic, its tables computed as its init computes them
+  (`ffenctab.inc`, embedded, so that they are the same on every machine), but for the masking's
+  MDCT, here in doubles through a 128-point FFT (FFmpeg's rounds at each step: a coefficient's
+  centibels the same but where they cross a boundary). Re-encoding FFmpeg's decode of its encode
+  of `s.2.dts`'s first 3 MB, FFmpeg's encoder makes 99.99% of the ABITS this makes from that decode
+  (all of them in 625 of its 633 frames), and of the stream's own, both 97.2%: the decode isn't the
+  encoder's input. Each ABITS is then first a flag, whether it is the one made again (not a
+  family's: counts in its contexts), by whether that is 8 or more, how near its SNR lies its
+  range's nearer end (11 buckets, 0 to 32 centibels and more) and which end that is, and the
+  lattice the decode's values fit: the decoded peak is an index times the step, under the
+  encoder's (by 30 centibels at ABITS 1, 14 at 2, 8 at 3), so the ABITS made from it are often one
+  under the core's; and at ABITS 1-6 the peak's index is the quantizer's top level (the least
+  scale factor that keeps the encoder's peak in range puts it there), so the values are multiples
+  of the peak over that level: the least ABITS from 1 to 8 whose lattice they fit within 0.08 of a
+  step at the root of their mean square (`FfEnc::lattice()`: none, the one made again, one above,
+  one below) tells them apart (the ABITS 39% smaller, `open bitrate.dts`'s encode's 19%). Where it
+  isn't the one made again, a second flag says whether it is the lattice's, else the one across
+  that nearer end, and else the family codes it as before: the FFmpeg encodes' ABITS the one made
+  again 97.1-98.7% of the time, `s.2.dts`'s first 3 MB's bit allocations 8.1 KB to 0.9, the
+  noise's 56.6 KB to 3.2 (`-s`: "FFmpeg's encoder's bit allocations: 99.84% of the ABITS, right in
+  97.14% of them"). Its scale factors (`calc_one_scale()`) are the least whose step keeps the
+  subband's peak, as the encoder had it, in the quantizer's range; the decode's peak is under it,
+  so that rule on the decode's peak is the core's in 74.0% of `s.2.dts`'s first 3 MB's scale
+  factors, the least scale factor whose step puts that peak within 3/32 of the quantizer's top
+  level (`FfEnc::scale_within()`; under 4/32, as the table's entries are 1.124 times the last, and
+  at ABITS 1 the peak is the step) in 95.9%. So where the ABITS are made again, a scale factor's
+  first guess is the one of four that has been the scale factor most often at its ABITS (to 12):
+  the model's prediction (right in 76.5%), that rule's, and the least within 3/32 or 8/32 of the
+  top level; the four so chosen, 96.7% (that 3 MB's scale factors 9.7 KB to 2.6).
 
 A WAV at twice the core's rate (96 kHz for a 48 kHz core) is analysed by the 64-band filterbank
 instead: the same transform of 64 bands, by FFmpeg's 1024-tap X96 prototype, each block 64 of the
@@ -1269,7 +1334,11 @@ books take), then codes the books, each against the rule's for the values, and t
 walk's place counted again with them), until a frame's aren't the rule's; a stream whose frames
 have no Huffman books doesn't take that rule (the DTS encoders': it would have Huffman books more
 often than not): the FFmpeg encodes' headers 4055-8076 bytes to 30-170, `s.2.dts`'s first 3 MB's
-core 20% smaller, the noise's 40%. Each kind of subband's rule, the RMS rule and the scale factor
+core 20% smaller, the noise's 40%. Since format 135 the bit allocations' books (BHUFF) come after
+the subframes there too, the ABITS walked in any of their books' range, each book against the one
+FFmpeg's encoder takes for the frame's ABITS (`set_best_abits_code()`: of the Huffman books the
+first whose codes take the fewest bits, where fewer than 5 bits each, else 5 bits; 5 bits where one
+is 0 or over 12): the noise's 1839 bytes to 2. Each kind of subband's rule, the RMS rule and the scale factor
 search (for X96's subbands with bits or VQ vectors: their vectors 16 samples) are counted as the
 stream goes, and the one right more often is the prediction: a lossless WAV makes the RMS rule the
 better. The core's scale factors get the same choice, among the RMS rule, the search, and the first
@@ -1712,7 +1781,7 @@ files at that level.
 
 ### The format
 
-"dtsdpack", the format's version (134), the level (9, or 8: above); what the WAV was (whether it was
+"dtsdpack", the format's version (135), the level (9, or 8: above); what the WAV was (whether it was
 one, its channels and bytes a sample, its size and the CRC-32 of its first 64 KB) and the binding
 (the offset; the WAV's samples to the core's, 1, 2 or 4 (its lower band, then 2), and the lower
 band's resolution; the LFE's channel; each core channel's WAV channel, and where it isn't that
@@ -1821,11 +1890,15 @@ writes: those of `s.2.dts`, `master_audio_7.1_24bit.dts`, `Master Audio 5.0 96kh
 Audio 7.1.dts` and `3-1.dts`, in that order; and `lfefilter.inc` (the encoders' LFE filter) by
 `tools/lfefilter.py` (numpy) from the LFE values `./mk.sh lfedump DIR stream wav ...` writes:
 `s.2.dts`'s; and `lfefilterd.inc` (FFmpeg's decodes') by `tools/lfefilter.py -d` from those of
-`ES 6.1 16bit.dts`, `dts_es.dts` and `96-24.dts`, in that order.
+`ES 6.1 16bit.dts`, `dts_es.dts` and `96-24.dts`, in that order; and `ffenctab.inc` (FFmpeg's
+encoder's tables, as its init computes them, with the generating machine's libm) by
+`tools/fftab.py`, and `lfels.inc` (its decoder's LFE interpolation undone) by `tools/lfels.py`
+(numpy), both from `libavcodec/dcadata.c`.
 
 ## License
 
 The tables in `tables.inc` (the QMF and LFE prototypes, the quantizer and scale factor tables, the
-ADPCM and HF VQ code books) are FFmpeg's, so dtsdpack is licensed under the GNU Lesser General
-Public License, version 2.1 or later. The framework (`fam.inc`, `cm*.inc`, `rc.inc`, `Lib3/`, `IDX/`)
-is ac3pack's.
+ADPCM and HF VQ code books) are FFmpeg's, and those in `ffenctab.inc` and `lfels.inc` are computed
+from FFmpeg's (and `ffenc.inc` follows its encoder's code), so dtsdpack is licensed under the GNU
+Lesser General Public License, version 2.1 or later. The framework (`fam.inc`, `cm*.inc`, `rc.inc`,
+`Lib3/`, `IDX/`) is ac3pack's.

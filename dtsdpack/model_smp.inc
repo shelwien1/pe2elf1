@@ -109,6 +109,21 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   int bud_n[NCH][NSUB], bud_si[NCH][NSUB];  // (how many; the RMS rule's scale factor)
   int bud_xs[NCH][NSUB];  // (a transient's second scale factor's and TMODE's bits, in quarters: format 125)
   U64 n_st, n_sthit;  // (-s: the ABITS a staircase said, those it said right)
+  // FFmpeg's encoder's bit allocations made again from the WAV (ffenc.inc), where the core's code
+  // books have been its (sel_ff): ffe, allocated then; ffe_ok, whether the frame's are made; how
+  // often its ABITS was the core's, by its margin (FfEnc::margin()), the side of its range that is
+  // nearer, whether under 8 and the lattice the values fit (FfEnc::lattice(): none, its, one above,
+  // one below), and the other where not (the lattice's, else the one across the nearer end) (-s:
+  // those it said, those it said right)
+  FfEnc* ffe;
+  int ffe_ok;
+  U16 ffn[2][FfEnc::NMG][4][2][2], ffd[FfEnc::NMG][4][2];
+  U64 n_ff, n_ffhit;
+  // and its scale factors: by the ABITS (to 12), how often each of four was the core's: the
+  // model's prediction, FFmpeg's encoder's rule on the decode's peak (calc_one_scale()) and the
+  // least whose step puts that peak within 3/32 and 1/4 of the quantizer's top level (FfEnc::
+  // scale_within())
+  U16 ffs_w[13][4];
   int pscale[NCH][NSUB];   // their first scale factor's prediction (1 + it, 0 none)
   // A lossless WAV's top subbands, VQ ones, as its encoder has them: subband NSUB - 1 - c with m
   // 2^-23 of subband c added, c 0 to CPL_N - 1, m one of cpl_m(c, k), k 0 to CPL_K - 1 (CPL_D[c]
@@ -280,6 +295,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // the LFE (64x) against the WAV's LFE channel (bind.lfe)
   int lfe_on;              // the subframe's LFE samples are coded against the audio's
   int lfe_n;               // how many
+  S64 lfe_n0;              // the first's place (its interpolation's 64 samples from 64 times it)
   S64 lfe_f[4 * NSSF][LFE_NF];  // each one's decimated samples around it (the last values after them: code_lfe()'s)
   S64 lfe_f3[4 * NSSF][LFE_N2];  // and the prototype's decimations by 32 around it (lfit3's, LFE_W2's)
   S64 lfe_past[LFE_NP];    // the last LFE values (times their steps; [0] the last)
@@ -287,6 +303,14 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   int lfe_scl;             // their scale factor (the walk has it after them: coded with the first)
   S64 lfe_st;              // its step
   int lfe_hm, lfe_lp;      // whether the last was the prediction (as hm), the last less its prediction (as lp)
+  // (where a decoded WAV's: how often each of four was the LFE's scale factor, the predictions' RMS
+  // rule's, FFmpeg's encoder's rule on their peak (its LFE's, calc_one_scale() at ABITS 11, of the
+  // peak in its units, 128 times the decoder's), the least whose step puts the peak within 3/32 of
+  // 127 (FfEnc::scale_within_peak()), and the RMS rule's on LFE_W2D's predictions, halved as they
+  // grow: before the scale factor the fifth's predictions after the subframe's first have only
+  // predictions for the values before, and its inversion of FFmpeg's interpolation makes their
+  // errors grow (by 2 to 4 times a value), where LFE_W2D's don't)
+  U16 lfs_w[4];
   S64 lfe_cn[128], lfe_cv[128];  // the decimations by 32 by place (m mod 128: m, the value)
   S32 lq1, lq2;            // the last two LFE indexes (as q1, q2, qs, miss)
   S8 lqs;
@@ -302,12 +326,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // where it is their filter, from a stream's start (`s.2.dts`'s LFE 3184 bytes to 223, its core
   // 3.0% smaller in all; FFmpeg's master_audio_7.1_24bit.dts's LFE 262 to 44, its core 5.9%, its
   // filter the same; `Master Audio 7.1.dts`'s, no linear filter of its WAV's, 0.4% bigger); and the
-  // fifth the same of FFmpeg's decodes, LFE_W2D (its LFE interpolation undone), the better from a
-  // decoded WAV's first values, which the fits haven't learned yet; and the sixth the third's at
-  // each place of a frame's values apart (lfit4, by lfe_pl): `Master Audio 7.1.dts`'s encoder
-  // decimates its LFE by another filter at each (once learned, the fits at each place make 93% of
-  // its values, the best of the rest 30%), refitted only where the first five missed more than a
-  // quarter of the values since the last refit (lfe_poor(): refitted every time, they'd cost
+  // fifth the same of FFmpeg's decodes, its LFE interpolation undone (since format 135 exactly,
+  // lfe_dec(), where the WAV is at the core's rate; else, and before, LFE_W2D, a fit of it), the
+  // better from a decoded WAV's first values, which the fits haven't learned yet; and the sixth the
+  // third's at each place of a frame's values apart (lfit4, by lfe_pl): `Master Audio 7.1.dts`'s
+  // encoder decimates its LFE by another filter at each (once learned, the fits at each place make
+  // 93% of its values, the best of the rest 30%), refitted only where the first five missed more
+  // than a quarter of the values since the last refit (lfe_poor(): refitted every time, they'd cost
   // nearly as much as all the others); the third leaves out the values far from its prediction
   // (LfeFit's RJ: the Cymatics stream's LFE 659 bytes smaller, where the others gained nothing)
   static constexpr int LFE_PL = 16;  // (a frame's values: 8 a 512-sample frame's)
@@ -730,6 +755,54 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     return hit;
   }
 
+  // FFmpeg's encoder's bit allocations for the core's frame r, its subframe s (ffenc.inc): where the
+  // core's code books have been its, the frame as its are (one subframe of 16 blocks, at 32, 44.1 or
+  // 48 kHz; to 6 channels, each a WAV channel as it is), from the WAV's 512 samples from o (where
+  // its first block's analysis ends), and the 512 before them (FFmpeg's s32: 24 bits shifted up)
+  bool ff_frame(const CoreRec& r, const CoreSub& s, S64 o) {
+    if (!B::sel_ff || r.nsubfs != 1 || r.nblks != 15 || s.nssc != 2 || r.npchs > FfEnc::MAXC || bind.up != 1 || wav->dec != 1)
+      return false;
+    const int ri = r.sfreq == 13 ? 2 : r.sfreq == 8 ? 1 : r.sfreq == 3 ? 0 : -1;
+    if (ri < 0) return false;
+    for (int ch = 0; ch < r.npchs; ch++)
+      if (bind.map[ch] < 0 || bind.map2[ch] >= 0 || bind.map[ch] >= wav->nch) return false;
+    if (!ffe) {
+      ffe = (FfEnc*)xmalloc(sizeof(FfEnc));
+      ffe->init();
+    }
+    ffe->set(r.npchs, ri, 8 * (r.fsize + 1), r.lff != 0);
+    wav->need(o - 512, o + 512);
+    for (int ch = 0; ch < r.npchs; ch++) {
+      S32 buf[1024];
+      const S32* x = wav->span(bind.map[ch], o - 512, 1024, buf);
+      for (int i = 0; i < 512; i++) ffe->hist[ch][i] = (S32)((U32)x[i] << 8), ffe->in[ch][i] = (S32)((U32)x[512 + i] << 8);
+    }
+    ffe->frame();
+    return true;
+  }
+  // channel ch's subband b's ABITS v (in lo..hi) against FFmpeg's encoder's made again: whether it
+  // is that, by how near its SNR lies the nearer end of its range, else whether the ABITS across
+  // that end; false where neither (the family codes it then, as any)
+  bool ff_abits(int ch, int b, S64& v, S64 lo, S64 hi) {
+    int dir;
+    const int ga = ffe->abits[ch][b], mb = ffe->margin(ch, b, &dir), al = ffe->lattice(ch, b);
+    const int lc = !al ? 0 : al == ga ? 1 : al == ga + 1 ? 2 : al == ga - 1 ? 3 : 0;
+    if (ga < lo || ga > hi) return false;
+    n_ff++;
+    if (ff_flag(ffn[ga >= 8][mb][lc][dir > 0], v, ga)) return n_ffhit++, true;
+    const int g2 = lc == 2 ? ga + 1 : lc == 3 ? ga - 1 : ga + dir;
+    return g2 >= lo && g2 <= hi && ff_flag(ffd[mb][lc], v, g2);
+  }
+  // whether v is tv, by the counts n (of not, of so), v then tv
+  bool ff_flag(U16* n, S64& v, S64 tv) {
+    U32 p = (U32)((U64)(2 * n[0] + 1) * CO_ONE / (2 * ((U64)n[0] + n[1]) + 2));
+    p = p < 1 ? 1 : p > CO_ONE - 1 ? CO_ONE - 1 : p;
+    const int hit = c->code_bit(p, ENC && v == tv);
+    if (++n[hit] >= 4096) n[0] >>= 1, n[1] >>= 1;
+    if (hit) v = tv;
+    return hit;
+  }
+
   void smp_start(WavIn* w, const Bind& b) {
     wav = w;
     bind = bind2 = b;
@@ -743,6 +816,14 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           twin[ch] = e;
     }
     for (int k = 0; k < 6; k++) tw_n[k][0] = 1, tw_n[k][1] = 7;
+    ffe_ok = 0, n_ff = n_ffhit = 0;
+    for (int m = 0; m < FfEnc::NMG; m++)
+      for (int c = 0; c < 4; c++) {
+        for (int g = 0; g < 2; g++)
+          for (int d = 0; d < 2; d++) ffn[g][m][c][d][0] = 1, ffn[g][m][c][d][1] = 7;
+        ffd[m][c][0] = 1, ffd[m][c][1] = 7;
+      }
+    memset(ffs_w, 0, sizeof ffs_w);
     tw_t[0] = tw_t[1] = 0;
     memset(sp_x, 0, sizeof sp_x);
     {  // (MC's samples: the quantiles in an order of each value's own, by an LCG's Fisher-Yates)
@@ -779,6 +860,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int i = 0; i < 128; i++) lfe_cn[i] = -1;
     lfe_nsf = 0;
     lfe_lp = 9;
+    lfs_w[0] = lfs_w[1] = lfs_w[2] = lfs_w[3] = 0;
     jx_lo = NSUB;
     for (int ch = 0; ch < NCH; ch++)
       for (int k = 0; k < NSUB - JE_B0; k++) je_n[ch][k] = 0, je_ht[ch][k] = -1;
@@ -896,6 +978,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     S64 lo = o0 - 512 * up, hi = hs;
     // the LFE (64x only), its samples' windows and the correction's around them
     const S64 n0 = t0 / 2;
+    lfe_n0 = n0;
     if (r.lff == 2 && !r.xpass && bind.lfe >= 0 && bind.lfe < wav->nch) {
       lfe_on = 1;
       lfe_n = 2 * r.lff * s.nssc;
@@ -903,6 +986,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       hi = imax(hi, 64 * up * (n0 + lfe_n - 1 + LFE_K) + bind.off + 32 * up);
     }
     wav->need(lo, hi);
+    // (lfe_dec()'s, to its last value's, whether it is taken or not: the WAV read the same at both
+    // ends whatever the rules (the binding's first pass reads on at the coding end))
+    if (lfe_on && up == 1) wav->need(lo, 64 * (n0 + lfe_n + 7) + bind.off);
+    if (!r.xpass && !sf) ffe_ok = ff_frame(r, s, 32 * (S64)t0 + bind.off);
     // (where the analysis first reaches into the WAV's last frame (of the core's frame's length), but
     // not past its end: a cut stream's WAV whose last frame a decoder made from that frame's own
     // subband samples alone, its synthesis without the frames before (FFmpeg's, where the lossless
@@ -3817,6 +3904,28 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // one where it has been right more often, by a margin: `96-24.dts`'s core 0.3% smaller)
     const int lw = bound[ch] && jx_low(b), pa = p;
     if (lw && jx_more(jx_sr[b], 4, 1)) p = -1, near = SB_N - 1;
+    // (where FFmpeg's encoder's bit allocations are made again, the first guess the one of four that
+    // has been the scale factor most often at the subband's ABITS (to 12): the model's prediction,
+    // FFmpeg's encoder's rule on the decode's peak (calc_one_scale()), and the least scale factor
+    // whose step puts that peak within 3/32 or 8/32 of the quantizer's top level (FfEnc::
+    // scale_within(): the decode's peak is an index times the step, the index at most that level).
+    // FFmpeg's decode of its encode of `s.2.dts`'s first 3 MB: the model's prediction right in
+    // 76.5% of its scale factors, the rule in 74.0% (the decode's peak 3 under at ABITS 1-3), the
+    // two within 95.9% and 81.9%, the four so chosen 96.7%; its core 26% smaller, `open
+    // bitrate.dts`'s encode's 7%, the two others' 37% and 58%. The nearness the model's own, the
+    // run its choice's: set to the surest where the choice isn't the model's, 0.3% bigger)
+    int fc[4] = {-1, -1, -1, -1}, p0 = p;
+    if (ffe_ok && !r.xpass && bound[ch] && !hfb && !tm && !s.pmode[ch][b] && p >= 0 && r.shuff[ch] == 6) {
+      FfSoft qq;
+      const int a = s.abits[ch][b];
+      const U16* const w = ffs_w[imin(a, 12)];
+      fc[0] = p, fc[1] = FfEnc::one_scale(ffe->peak[ch][b], a, &qq);
+      fc[2] = ffe->scale_within(ch, b, a, 3), fc[3] = ffe->scale_within(ch, b, a, 8);
+      int k = 0;
+      for (int i = 1; i < 4; i++)
+        if (w[i] > w[k]) k = i;
+      if (k) p = fc[k];
+    }
     D.dp = p >= 0 ? sf_run(r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p) : 0;
     D.kd = hfb ? 2 : j;
     D.ab = hfb ? 0 : vvar(s.abits[ch][b] + 1, 27);
@@ -3831,7 +3940,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.nb = bound[ch] && b ? clip((es[ch][b - 1] - es[ch][b]) / 2, -4, 4) + 4 : 9;
     if (cpl_leak(r, ch, b, 24, 8) >= 0) D.nb = cpl_leak(r, ch, b, 24, 8);
     const int spu = spk && p >= 0 && p == pr;
-    v = scale(D, v, p, A, max, spu, sg, spc, spp, spk);
+    v = scale(D, v, p, A, max, spu && p == p0, sg, spc, spp, spk);
+    if (fc[0] >= 0) {
+      U16* const w = ffs_w[imin(s.abits[ch][b], 12)];
+      for (int i = 0; i < 4; i++) w[i] += v == fc[i];
+      if (w[0] + w[1] + w[2] + w[3] >= 4096)
+        for (int i = 0; i < 4; i++) w[i] >>= 1;
+    }
     if (spu) p = spc[0];
     if (p >= 0) {
       hm[ch] = v == p ? 1 : 2;
@@ -4612,7 +4727,24 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     S64 x[4 * NSSF];
     for (int i = 0; i < lfe_n; i++) x[i] = lfe_p[i] >> (LFE_Q - 12);  // (RMS / 16, in 2^-AQ_F: scale_pred()'s)
     int near;
-    const int p = scale_pred(x, lfe_n, SF7, SF7_N, &near);
+    int p = scale_pred(x, lfe_n, SF7, SF7_N, &near);
+    int lc[4] = {p, -1, -1, -1};
+    if (ss_rule() && bind.up == 1) {
+      S64 m = 0;
+      for (int i = 0; i < lfe_n; i++) m = imax64(m, lfe_p[i] < 0 ? -lfe_p[i] : lfe_p[i]);
+      const S32 pk = (S32)(m >> 20 < 0x7fffffff ? m >> 20 : 0x7fffffff);  // (the encoder's units: 2^-20 of the model's)
+      FfSoft qq;
+      lc[1] = FfEnc::one_scale(fe_get_cb(pk), 11, &qq), lc[2] = FfEnc::scale_within_peak(pk, 11, 3);
+      S64 x2[4 * NSSF];
+      for (int i = 0; i < lfe_n; i++) x2[i] = lfe_fixed(i, true) >> (LFE_Q - 12);
+      int near2;
+      lc[3] = scale_pred(x2, lfe_n, SF7, SF7_N, &near2);
+      int k = 0;
+      for (int i = 1; i < 4; i++)
+        if (lfs_w[i] > lfs_w[k]) k = i;
+      p = lc[k];
+      if (k == 3) near = near2;
+    }
     M_scl_v D;
     D.kd = 3;
     D.ab = 0;
@@ -4627,6 +4759,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.cc = 0;
     D.nb = 9;
     v = (int)scale(D, v, p, 0, 128);
+    if (lc[1] >= 0) {
+      for (int i = 0; i < 4; i++) lfs_w[i] += v == lc[i];
+      if (lfs_w[0] + lfs_w[1] + lfs_w[2] + lfs_w[3] >= 1024)
+        for (int i = 0; i < 4; i++) lfs_w[i] >>= 1;
+    }
     lfe_hm = v == p ? 1 : 2;
     lfe_lp = dvar(v - p);
     n_sf++;
@@ -4663,10 +4800,31 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int k = 0; k < LFE_N2; k++) p += (S128)w[k] * lfe_f3[i][k];
     return (S64)(p >> (d ? 24 : 30));
   }
+  // value i's by FFmpeg's decoder's LFE interpolation undone, where a decoded WAV's (ss_rule()):
+  // its 1024 samples from value i's through LFE_LSH, less the 7 values before (lfe_f[i]'s past ones,
+  // times their steps) as FFmpeg dequantized them (the value times the step's 16 times, floored)
+  // through LFE_LSU; the WAV's samples at 24 bits or more half a unit up (FFmpeg's floats floored
+  // there). On FFmpeg's decode of its encode of `s.2.dts`'s first 3 MB 5058 of its 5072 LFE
+  // values within 0.04 of a step, all but the last 14, whose samples pass the WAV's end (the
+  // noise's power 3.7 times the WAV's: a 16-bit WAV's, 256 times as far, makes only the louder
+  // ones; where a step is a few of FFmpeg's integer LFE units, those blur it), where LFE_W2D's was
+  // a fit of the decimations
+  S64 lfe_dec(int i) const {
+    if (!ss_rule() || bind.up != 1) return lfe_fixed(i, true);
+    S32 buf[1024];
+    const S32* const s = wav->span(bind.lfe, 64 * (lfe_n0 + i) + bind.off - 512, 1024, buf);
+    const S64 h = wav->bps >= 3;
+    S128 acc = 0;
+    for (int k = 0; k < 1024; k++) acc += (S128)LFE_LSH[k] * (2 * (S64)s[k] + h);
+    for (int k = 0; k < 7; k++) acc -= (S128)LFE_LSU[k] * (2 * clip23(lfe_f[i][LFE_NT + k] >> 27));
+    // (acc 2^41 times the value as dequantized, x: the value times its step, (16 x + 15/2) 2^23)
+    return (S64)((acc * ((S128)1 << 26) + ((S128)15 << 62)) >> 40);
+  }
   S64 lfe_pred(int i) const {
     const int k = lfe_best() % 6;  // (the step not yet known: as is)
     return k == 5 ? lfit4[lfe_pl[i]].predict(lfe_f3[i])
-         : k >= 3 ? lfe_fixed(i, k == 4)
+         : k == 4 ? lfe_dec(i)
+         : k >= 3 ? lfe_fixed(i)
          : k == 2 ? lfit3.predict(lfe_f3[i])
          : k == 1 ? lfit2.predict(lfe_f[i])
                   : lfit.predict(lfe_f[i]);
@@ -4678,7 +4836,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     int how;
     for (int k = 0; k < LFE_NP; k++) lfe_f[i][LFE_NT + k] = lfe_past[k];  // (the values decoded)
     const S64 p1 = lfit.predict(lfe_f[i]), p2 = lfit2.predict(lfe_f[i]), p3 = lfit3.predict(lfe_f3[i]), p4 = lfe_fixed(i),
-              p5 = lfe_fixed(i, true), p6 = lfit4[lfe_pl[i]].predict(lfe_f3[i]);
+              p5 = lfe_dec(i), p6 = lfit4[lfe_pl[i]].predict(lfe_f3[i]);
     const S64 pk[6] = {p1, p2, p3, p4, p5, p6};
     const int lb = lfe_best();
     const S64 pg = pk[lb % 6] + (lb % 12 >= 6 ? lfe_half() : 0), ag = pg < 0 ? -pg : pg;
