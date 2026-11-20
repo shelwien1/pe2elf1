@@ -1268,14 +1268,14 @@ struct HacIo {
   void init(std::vector<U64>* w, const std::vector<U64>* t, AcDec* d, HacModel* m) {
     put_to = w, tape = t, dec = d, model = m, pos = 0, bad = false;
   }
-  void put(U32 c, U32 par, int b) {
-    if (put_to) put_to->push_back((U64)c | (U64)par << 24 | (U64)b << 48);
+  void put(U32 c, U32 par, int b, bool sh = false) {  // (sh: from version 26 the decision trains par too)
+    if (put_to) put_to->push_back((U64)c | (U64)par << 24 | (U64)b << 48 | (U64)(sh && par != c) << 49);
   }
-  int get(U32 c, U32 par) {
+  int get(U32 c, U32 par, bool sh = false) {
     const U64 e = (U64)c | (U64)par << 24;
     if (dec) {
       const int b = dec->bit16(model->p16(c, par));
-      model->pend.push_back(e | (U64)b << 48);
+      model->pend.push_back(e | (U64)b << 48 | (U64)(sh && par != c) << 49);
       return b;
     }
     if (!tape || pos >= tape->size() || ((*tape)[pos] & 0xFFFFFFFFFFFFull) != e) {
@@ -1289,32 +1289,46 @@ enum { HS_N = 1 << 16 };
 struct HdrState {
   std::vector<U32> last;                    // the keys' last values (hashed into HS_N)
   std::vector<std::pair<U32, U32> > pend;  // a frame's, once it is through (hdr_commit())
+  int v26;       // (v26: the common header's size and segment fields by HdrCoder::fcode())
+  U32 lfs, pfs;  // (v26: the last XLL frame's size, and that of the one being joined, join_x())
+  U32 nfr;       // (v26: the frames through)
+  HdrState() : v26(0), lfs(0), pfs(0), nfr(0) {}
   void reset() {
     last.assign(HS_N, 0);
     pend.clear();
+    lfs = pfs = nfr = 0;
   }
 };
 static void hdr_commit(HdrState& s) {
   for (size_t i = 0; i < s.pend.size(); i++) s.last[s.pend[i].first] = s.pend[i].second;
   s.pend.clear();
+  s.lfs = s.pfs;
+  s.nfr++;
 }
 struct HdrCoder {
   HacIo* io;
   HdrState* st;
   U32 obj;  // (1: the DTS:X object data's header)
   int chg;  // the header's fields so far unlike their last
-  void start(HacIo* i, HdrState* s, bool o) { io = i, st = s, obj = o, chg = 0; }
-  int bit(U32 c, U32 par, int b, bool put) {
+  U32 f3, f6;  // (v26: the frame's frame_size_nbits-1 and nframesegs_log2, once coded)
+  void start(HacIo* i, HdrState* s, bool o) { io = i, st = s, obj = o, chg = 0, f3 = f6 = 0; }
+  int bit(U32 c, U32 par, int b, bool put, bool sh = false) {
     if (put) {
-      io->put(c, par, b);
+      io->put(c, par, b, sh);
       return b;
     }
-    return io->get(c, par);
+    return io->get(c, par, sh);
   }
   // the value of the field key (n bits, 1-32): put, v (the split's), or got
   U32 code(U32 key, int n, U32 v, bool put) {
     const U32 k = key | obj << 20, part = k & ~0xFFu, slot = hmix(k, 0) & (HS_N - 1);
     const U32 last = n < 32 ? st->last[slot] & ((1u << n) - 1) : st->last[slot];
+    if (st->v26 && part == (U32)HL_FRM << 16 && n <= 5 && ((k & 0xFF) == 3 || ((k & 0xFF) >= 6 && (k & 0xFF) <= 8))) {
+      v = fcode(k, n, v, put, last);
+      if (v != last) chg++;
+      if (!put) st->pend.push_back(std::make_pair(slot, v));
+      return v;
+    }
     const U32 cc = 1 + (U32)(chg < 2 ? chg : 2);
     if (bit(hctx(k, cc), hctx(part, cc), v == last, put)) {
       v = last;
@@ -1342,6 +1356,91 @@ struct HdrCoder {
       }
     }
     if (!put) st->pend.push_back(std::make_pair(slot, v));
+    return v;
+  }
+  U32 tree(U32 k, U32 base, int n, U32 v, bool put) {  // (v, n bits, by a binary tree in the contexts k, base)
+    U32 node = 1;
+    for (int i = n - 1; i >= 0; i--) {
+      const U32 c = hctx(k, base + node);
+      node = node << 1 | (U32)bit(c, c, (int)(v >> i & 1), put);
+    }
+    return node - (1u << n);
+  }
+  // (from version 26, past a stream's first 1024 frames: before, code()'s) a parameter set's flags
+  // against fp_set()'s (key kf, v: f1), the Rice one in the context of the part, of the bucket of how
+  // many bits the rule's choice of it was by (br, fp_bucket()) and of the key's last value, the hybrid
+  // one of the hybrid code's (bh) and of the Rice one's; each parent the context less the last value,
+  // trained by the decisions it is the parent of. (On a short stream, code()'s contexts, the key's
+  // own, make the range coder's bytes runs of 0xFF that xz takes in a few bytes)
+  U32 f1code(U32 kf, U32 v, bool put, U32 br, U32 bh) {
+    const U32 k = kf | obj << 20, part = k & ~0xFFu, slot = hmix(k, 0) & (HS_N - 1), last = st->last[slot] & 3;
+    const int b0 = bit(hctx(part, 0x70000 + (br * 4 + last) * 2), hctx(part, 0x70200 + br), (int)(v & 1), put, true);
+    const U32 c1 = (bh * 2 + (U32)b0) * 4 + last;
+    const int b1 = bit(hctx(part, 0x70400 + c1), hctx(part, 0x70600 + bh * 2 + (U32)b0), (int)(v >> 1 & 1), put, true);
+    v = (U32)b0 | (U32)b1 << 1;
+    if (v != last) chg++;
+    if (!put) st->pend.push_back(std::make_pair(slot, v));
+    return v;
+  }
+  U32 flast(U32 f, int n) const { return st->last[hmix((U32)HL_FRM << 16 | f, 0) & (HS_N - 1)] & ((1u << n) - 1); }
+  // (from version 26) the common header's field k (n bits; last: its last value): frame_size_nbits (3),
+  // nframesegs_log2 (6), nsegsamples_log2 (7) or seg_size_nbits (8), each less 1 but 6 and 7. Where
+  // the last frame's size was in its binade (pos: the 4 bits below its top one, HdrState::lfs) tells
+  // how near the next is: 3 is whether it is the last's (in the context of pos), else the one past it
+  // toward the nearer end, else its bits by a binary tree. 6 is whether it is the last's, in the
+  // context of the last one and of whether 3 went up, down or not, else the other of 1 and 2, else a
+  // binary tree (the encoders' segment count follows no rule of the residuals' bits that we found:
+  // a third of the Cymatics stream's frames take the fewest bits so). 7 by whether the frame's samples
+  // are the last frame's (the last 6 and 7 less this 6), else a binary tree. 8 by whether it is 3's
+  // less 1, else 3's (the encoders' width of a segment's size is near that of the frame's), in the
+  // context of pos, of 3's change and of the last frame's 8 less its 3; else a binary tree. Each first
+  // and second decision's parent is its context less pos (or 3's change), trained by it.
+  U32 fcode(U32 k, int n, U32 v, bool put, U32 last) {
+    const U32 f = k & 0xFF, m = (1u << n) - 1;
+    const U32 lv = st->lfs ? st->lfs - 1 : 0;
+    int kb = 0;
+    while (kb < 32 && (lv >> kb)) kb++;
+    const U32 pos = kb > 4 ? lv >> (kb - 5) & 15 : 0;
+    const U32 l3 = flast(3, 5), ch = f3 > l3 ? 2 : f3 < l3 ? 0 : 1;
+    if (f == 3) {
+      const U32 a = (pos >= 8 ? last + 1 : last - 1) & m, c = 0x50000 + pos * 4;
+      if (bit(hctx(k, c), hctx(k, 0x50100), v == last, put, true)) {
+        v = last;
+      } else if (bit(hctx(k, c + 1), hctx(k, 0x50101), v == a, put, true)) {
+        v = a;
+      } else {
+        v = tree(k, 0x50200, n, v, put);
+      }
+      f3 = v;
+    } else if (f == 6) {
+      const U32 a = last == 1 ? 2 : 1, c = 0x51000 + ((last & 15) * 3 + ch) * 2, pc = 0x51100 + (last & 15) * 2;
+      if (bit(hctx(k, c), hctx(k, pc), v == last, put, true)) {
+        v = last;
+      } else if (bit(hctx(k, c + 1), hctx(k, pc + 1), v == a, put, true)) {
+        v = a;
+      } else {
+        v = tree(k, 0x51200 + (last & 15) * 32, n, v, put);
+      }
+      f6 = v;
+    } else if (f == 7) {
+      const U32 p = (last + flast(6, 4) - f6) & m;
+      if (bit(hctx(k, 0x52000), hctx(k, 0x52000), v == p, put)) {
+        v = p;
+      } else {
+        v = tree(k, 0x52100, n, v, put);
+      }
+    } else {
+      const int lm = (int)last - (int)l3;
+      const U32 lb = lm < -2 ? 0 : lm > 2 ? 4 : (U32)(lm + 2), c = 0x53000 + ((pos * 3 + ch) * 5 + lb) * 4;
+      const U32 p = (f3 - 1) & m, a = f3 & m, pc = 0x53600 + (ch * 5 + lb) * 4;
+      if (bit(hctx(k, c), hctx(k, pc), v == p, put, true)) {
+        v = p;
+      } else if (bit(hctx(k, c + 1), hctx(k, pc + 1), v == a, put, true)) {
+        v = a;
+      } else {
+        v = tree(k, 0x53800, n, v, put);
+      }
+    }
     return v;
   }
   // (from version 20) a code width's difference from its rule's (ck_xor(); key, n bits), in the
@@ -2915,7 +3014,8 @@ static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir, bool fl, b
     }
 }
 
-enum { VERSION = 25 };  // (the join reads 24 too, the pairs' flags without dc_bits(), 23, the orders'
+enum { VERSION = 26 };  // (the join reads 25 too, the common header's size and segment fields as the
+                        // others, 24, the pairs' flags without dc_bits(), 23, the orders'
                         // rule stopped where the recursion breaks down, 22, the pairs' flags without dc_gain() and the ranks without ac_rx(), 21, without
                         // the DTS:X heights folded out of the bed,
                         // 20, with the common flags as they are, format 17's
@@ -3075,6 +3175,15 @@ static void ck_xor(const Xll& x, std::vector<Chunk>& ck, const BandData& res, in
               if (hc) {  // (from version 20 range-coded, by the rule's margins)
                 wm = (U32)part | (U32)(k.rice[i] ? 1 : 0) << 1 | (k.rice[i] ? w_margin(uu, pred, top) : 10u | 10u << 4) << 2 |
                      (U32)(alt >= 0 && alt != pred) << 10;
+                // (from version 26 a common set's first residuals' width also by how far the largest one's is past
+                // the rule's: the encoders' is the rule's and 1 in 66% of s.2.dts's, and 2 in 21%, where theirs
+                // is no rule of the residuals' sums, sums of squares or bits that we found)
+                if (ver >= 26 && k.seg_common && !part && k.rice[i]) {
+                  int lw = 0;
+                  while (lw < 32 && (mx >> (lw + 1))) lw++;
+                  const int dw = lw - pred;
+                  wm |= 1u << 11 | (U32)(dw < 0 ? 0 : dw > 4 ? 4 : dw) << 12;
+                }
                 if (join) f = (U8)hc->wcode(wkey, s.nabits, 0, false, wm);
               }
               const int act = !join ? f : dif ? (int)dif_back(f, (U32)pred, s.nabits) : f ^ pred;
@@ -3441,7 +3550,15 @@ static inline bool get_layout(RecIn& in, Layout& L) {
 // before them, as before version 17: the band filter needs band 1's history.
 struct FpSet {
   int rice, hyb;
+  S64 dr, dh;  // (from version 26 the bits each flag's rule chose by: dr Rice less binary, dh hybrid less Rice; FP_NONE: none)
 };
+static const S64 FP_NONE = (S64)((U64)1 << 63);
+// (from version 26) a margin's bucket: 5 none, 4-0 1-2, 3-8, 9-32, 33-128 or more bits below 0, 6-10 above
+static U32 fp_bucket(S64 d) {
+  const U64 a = d < 0 ? (U64)-d : (U64)d;
+  const U32 b = !a ? 0 : a <= 2 ? 1 : a <= 8 ? 2 : a <= 32 ? 3 : a <= 128 ? 4 : 5;
+  return d < 0 ? 5 - b : 5 + b;
+}
 // (from version 21) a binary code's width for residuals whose largest is w bits (zigzagged): the
 // code's field holds the width less 1 (0: no bits), so a width of 1 takes 2; at most top + 1
 static int lin_width(int w, int top) {
@@ -3526,11 +3643,15 @@ static void fp_set(const Xll& x, const BandData& res, int b, int c, int seg, int
   const U64 rb = t1 + n * one;
   if (f21) {  // (a binary code's true width; a Rice code of its own pays its hybrid flag; ties binary)
     const int top = (1 << s.nabits) - 1;
-    o.rice = rb + (own ? 1 : 0) < n * (U64)(bw >= 2 ? bw : bw ? 2 : 0);
+    const U64 lb = n * (U64)(bw >= 2 ? bw : bw ? 2 : 0);
+    o.rice = rb + (own ? 1 : 0) < lb;
     o.hyb = 0;
+    o.dr = (S64)(rb + (own ? 1 : 0)) - (S64)lb, o.dh = FP_NONE;
     if (o.rice && own) {
       const int na = seg ? 0 : d.aorder[i] < S ? d.aorder[i] : S;
-      o.hyb = (U64)s.nabits + hyb_bits(res.at(b, x.chofs[c] + i) + (size_t)seg * S + na, S - na, (int)lg, top) < rb;
+      const U64 hb = (U64)s.nabits + hyb_bits(res.at(b, x.chofs[c] + i) + (size_t)seg * S + na, S - na, (int)lg, top);
+      o.hyb = hb < rb;
+      o.dh = (S64)hb - (S64)rb;
     }
     return;
   }
@@ -3615,11 +3736,14 @@ static void put_chunk(Rec* o, const int* q, Xll& x, int b, int seg, int c, const
     s.seg_common = k.seg_common;
     const int np = s.seg_common ? 1 : s.nch;
     for (int i = 0; i < np; i++) {
-      FpSet fp = {0, 0};
+      FpSet fp = {0, 0, 0, FP_NONE};
       if (res) fp_set(x, *res, b, c, seg, i, s.seg_common, fp, hc != 0);
       const U32 f1 = (U32)((k.rice[i] ^ fp.rice) | (k.hyb[i] ^ fp.hyb) << 1);
       if (hc) {  // (from version 20 the widths are ck_xor()'s to code)
-        hc->code(kb | (U32)(1 + i), 2, f1, true);
+        if (hc->st->v26 && res && hc->st->nfr >= 1024)
+          hc->f1code(kb | (U32)(1 + i), f1, true, fp_bucket(fp.dr), fp.dh == FP_NONE ? 11 : fp_bucket(fp.dh));
+        else
+          hc->code(kb | (U32)(1 + i), 2, f1, true);
       } else {
         fl.u8((int)f1);
         if (k.hyb[i]) wd.u8(k.aux_code[i]);
@@ -3666,9 +3790,10 @@ static bool get_chunk(MetaIn& m, const int* q, Xll& x, int b, int seg, int c, Ch
     s.seg_common = k.seg_common = (f >> 1 & 1) ^ pc;
     const int np = s.seg_common ? 1 : s.nch;
     for (int i = 0; i < np; i++) {
-      FpSet fp = {0, 0};
+      FpSet fp = {0, 0, 0, FP_NONE};
       if (res) fp_set(x, *res, b, c, seg, i, s.seg_common, fp, f21);
-      const int v = hc ? (int)hc->code(kb | (U32)(1 + i), 2, 0, false) : fl.u8();
+      const int v = hc && hc->st->v26 && res && f21 && hc->st->nfr >= 1024 ? (int)hc->f1code(kb | (U32)(1 + i), 0, false, fp_bucket(fp.dr), fp.dh == FP_NONE ? 11 : fp_bucket(fp.dh))
+                    : hc ? (int)hc->code(kb | (U32)(1 + i), 2, 0, false) : fl.u8();
       k.rice[i] = (v & 1) ^ fp.rice;
       k.hyb[i] = (v >> 1 & 1) ^ fp.hyb;
       if (v >> 2 || (k.hyb[i] && (s.seg_common || !k.rice[i]))) return false;
@@ -4545,6 +4670,7 @@ static const char* join_x(MetaIn& m, const Layout* L, Samples& wsmp, std::vector
   if (ver >= 5 && !pre.empty()) exss_fields(&pre[0], pre.size(), (int)(pre.size() + w.v.size() + post.size()), 0);
   ao_count(sp.aoc);  // (the frame's orders to the counts)
   ao_count(sp.aoco);
+  if (sp.hst) sp.hst->pfs = (U32)w.v.size();  // (from version 26 the frame's size, the next's contexts)
   if (sp.hauto && sp.hst) hdr_commit(*sp.hst);  // (and from version 19 its headers' fields to their last values)
   out.clear();
   out.insert(out.end(), pre.begin(), pre.end());
@@ -5068,6 +5194,7 @@ struct Splitter {
     chk.aoc.io = chk.aoco.io = &acr;
     sp.aoc.ndp = sp.aoco.ndp = chk.aoc.ndp = chk.aoco.ndp = 0;
     hst.reset();
+    hst.v26 = 1;
     hw.init(&htape, 0, 0, 0);
     hrd.init(0, &htape, 0, 0);
     sp.hput = &hw;
@@ -5263,6 +5390,7 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
   }
   hacio.init(0, 0, &hacdec, &hacmodel);
   hst.reset();
+  hst.v26 = h[8] >= 26;
   sp.acput = 0;
   sp.hput = 0;
   sp.aoc.io = sp.aoco.io = h[8] >= 18 ? &acio : 0;
