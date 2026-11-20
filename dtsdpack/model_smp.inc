@@ -303,14 +303,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   int lfe_scl;             // their scale factor (the walk has it after them: coded with the first)
   S64 lfe_st;              // its step
   int lfe_hm, lfe_lp;      // whether the last was the prediction (as hm), the last less its prediction (as lp)
-  // (where a decoded WAV's: how often each of four was the LFE's scale factor, the predictions' RMS
+  // (where a decoded WAV's: how often each of five was the LFE's scale factor, the predictions' RMS
   // rule's, FFmpeg's encoder's rule on their peak (its LFE's, calc_one_scale() at ABITS 11, of the
   // peak in its units, 128 times the decoder's), the least whose step puts the peak within 3/32 of
-  // 127 (FfEnc::scale_within_peak()), and the RMS rule's on LFE_W2D's predictions, halved as they
-  // grow: before the scale factor the fifth's predictions after the subframe's first have only
-  // predictions for the values before, and its inversion of FFmpeg's interpolation makes their
-  // errors grow (by 2 to 4 times a value), where LFE_W2D's don't)
-  U16 lfs_w[4];
+  // 127 (FfEnc::scale_within_peak()), the RMS rule's on LFE_W2D's predictions, and the one whose
+  // lattice the WAV's LFE fits (lfe_lattice()), halved as they grow: before the scale factor the
+  // fifth's predictions after the subframe's first have only predictions for the values before,
+  // and its inversion of FFmpeg's interpolation makes their errors grow (by 2 to 4 times a value),
+  // where LFE_W2D's don't)
+  U16 lfs_w[5];
   S64 lfe_cn[128], lfe_cv[128];  // the decimations by 32 by place (m mod 128: m, the value)
   S32 lq1, lq2;            // the last two LFE indexes (as q1, q2, qs, miss)
   S8 lqs;
@@ -860,7 +861,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int i = 0; i < 128; i++) lfe_cn[i] = -1;
     lfe_nsf = 0;
     lfe_lp = 9;
-    lfs_w[0] = lfs_w[1] = lfs_w[2] = lfs_w[3] = 0;
+    lfs_w[0] = lfs_w[1] = lfs_w[2] = lfs_w[3] = lfs_w[4] = 0;
     jx_lo = NSUB;
     for (int ch = 0; ch < NCH; ch++)
       for (int k = 0; k < NSUB - JE_B0; k++) je_n[ch][k] = 0, je_ht[ch][k] = -1;
@@ -4728,7 +4729,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int i = 0; i < lfe_n; i++) x[i] = lfe_p[i] >> (LFE_Q - 12);  // (RMS / 16, in 2^-AQ_F: scale_pred()'s)
     int near;
     int p = scale_pred(x, lfe_n, SF7, SF7_N, &near);
-    int lc[4] = {p, -1, -1, -1};
+    int lc[5] = {p, -1, -1, -1, -1};
     if (ss_rule() && bind.up == 1) {
       S64 m = 0;
       for (int i = 0; i < lfe_n; i++) m = imax64(m, lfe_p[i] < 0 ? -lfe_p[i] : lfe_p[i]);
@@ -4739,9 +4740,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       for (int i = 0; i < lfe_n; i++) x2[i] = lfe_fixed(i, true) >> (LFE_Q - 12);
       int near2;
       lc[3] = scale_pred(x2, lfe_n, SF7, SF7_N, &near2);
+      lc[4] = lfe_lattice(imin(lc[0], lc[1]) - 8, imax(lc[0], lc[1]) + 8);
       int k = 0;
-      for (int i = 1; i < 4; i++)
-        if (lfs_w[i] > lfs_w[k]) k = i;
+      for (int i = 1; i < 5; i++)
+        if (lc[i] >= 0 && lfs_w[i] > lfs_w[k]) k = i;
       p = lc[k];
       if (k == 3) near = near2;
     }
@@ -4760,9 +4762,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.nb = 9;
     v = (int)scale(D, v, p, 0, 128);
     if (lc[1] >= 0) {
-      for (int i = 0; i < 4; i++) lfs_w[i] += v == lc[i];
-      if (lfs_w[0] + lfs_w[1] + lfs_w[2] + lfs_w[3] >= 1024)
-        for (int i = 0; i < 4; i++) lfs_w[i] >>= 1;
+      for (int i = 0; i < 5; i++) lfs_w[i] += v == lc[i];
+      if (lfs_w[0] + lfs_w[1] + lfs_w[2] + lfs_w[3] + lfs_w[4] >= 1024)
+        for (int i = 0; i < 5; i++) lfs_w[i] >>= 1;
     }
     lfe_hm = v == p ? 1 : 2;
     lfe_lp = dvar(v - p);
@@ -4819,6 +4821,52 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int k = 0; k < 7; k++) acc -= (S128)LFE_LSU[k] * (2 * clip23(lfe_f[i][LFE_NT + k] >> 27));
     // (acc 2^41 times the value as dequantized, x: the value times its step, (16 x + 15/2) 2^23)
     return (S64)((acc * ((S128)1 << 26) + ((S128)15 << 62)) >> 40);
+  }
+  // (a decoded WAV's at the core's rate: the scale factor from s0 to s1 whose lattice the WAV's LFE
+  // fits best: at each, the subframe's values as FFmpeg's decoder would have them at it, each the
+  // inversion's (lfe_dec()'s) from the WAV and the values before it so decoded, rounded to its step,
+  // and their squared distances from those lattice points against its step's square; where the
+  // step is right, the values before each are the decoder's and the inversion exact (within 0.04
+  // of a step), where not, they drift. The best where its values come within 0.06 of a step at the
+  // root of their mean square, some not 0, else -1: on FFmpeg's encodes of `s.2.dts`'s first 3 MB
+  // and of the noise, 99.5% and 100% of their LFE scale factors so, all right; `ES 6.1
+  // 16bit.dts`'s 87.7%, all right, the rest where its LFE is quiet)
+  static constexpr double LFE_LAT_T = 0.0036;  // (0.06 squared)
+  int lfe_lattice(int s0, int s1) const {
+    S128 base[4 * NSSF];  // (the samples' part of each value's inversion, the same at any step)
+    const S64 h = wav->bps >= 3;
+    for (int i = 0; i < lfe_n; i++) {
+      S32 buf[1024];
+      const S32* const s = wav->span(bind.lfe, 64 * (lfe_n0 + i) + bind.off - 512, 1024, buf);
+      S128 acc = 0;
+      for (int k = 0; k < 1024; k++) acc += (S128)LFE_LSH[k] * (2 * (S64)s[k] + h);
+      base[i] = acc;
+    }
+    int best = -1;
+    double br = 0;
+    for (int sf = imin(s1, SF7_N - 1); sf >= imax(s0, 0); sf--) {
+      const S64 st = lfe_scale_dec(sf);
+      if (st <= 0) continue;
+      S64 pi[7];  // (the 7 values before, as FFmpeg dequantized them; [0] the last)
+      for (int k = 0; k < 7; k++) pi[k] = clip23(lfe_past[k] >> 27);
+      S128 res = 0;
+      int nz = 0;
+      for (int i = 0; i < lfe_n; i++) {
+        S128 acc = base[i];
+        for (int k = 0; k < 7; k++) acc -= (S128)LFE_LSU[k] * (2 * pi[k]);
+        const S64 e = (S64)((acc * ((S128)1 << 26) + ((S128)15 << 62)) >> 40);
+        S64 q = e >= 0 ? (e + st / 2) / st : -((-e + st / 2) / st);
+        q = q < -128 ? -128 : q > 127 ? 127 : q;
+        const S64 d = e - q * st;
+        res += (S128)d * d;
+        nz += q != 0;
+        for (int k = 6; k > 0; k--) pi[k] = pi[k - 1];
+        pi[0] = clip23((q * st) >> 27);
+      }
+      const double rel = (double)res / ((double)st * st);
+      if (nz && (best < 0 || rel < br)) best = sf, br = rel;
+    }
+    return best >= 0 && br <= LFE_LAT_T * lfe_n ? best : -1;
   }
   S64 lfe_pred(int i) const {
     const int k = lfe_best() % 6;  // (the step not yet known: as is)

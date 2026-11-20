@@ -8,7 +8,7 @@
 enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND };  // the header's fixed part
 enum { DP_BIND_MAX = 3 + 10 + 4 + 5 + 3 + 26 * NCH };                     // (and the binding's bytes at most)
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
-constexpr int DP_VERSION = 135;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
+constexpr int DP_VERSION = 136;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
                                // extension as records; 4: a WAV at twice the core's rate, X96 and XXCH; 5: the
                                // scale factor search; 6: the bit allocation search; 7: the bits after the
                                // subframes as the bytes they end in, the energy's quarter of its bucket, the
@@ -237,7 +237,8 @@ constexpr int DP_VERSION = 135;  // the format's (2: a core channel's binding a 
                                // its noise search, its margins and the decode's lattice, their
                                // code books after them by its rule, each scale factor's first
                                // guess the likeliest of its rules', the LFE by FFmpeg's decoder's
-                               // interpolation undone, its scale factors by the encoder's rules)
+                               // interpolation undone, its scale factors by the encoder's rules;
+                               // 136: a decoded WAV's LFE scale factor by the lattice its LFE fits)
 
 static void put_le(U8* p, U64 v, int n) {
   for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));

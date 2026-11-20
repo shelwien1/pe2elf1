@@ -161,8 +161,8 @@ allocations in):
 | `Master Audio 5.0 96khz.dts` | 1768548 | 3472 (0.20%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
 | `Master Audio 7.1.dts` | 1945604 | 4139 (0.21%) | a downmix of its 7.1 |
 | `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 3784 (0.14%) | its 3.1 |
-| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 2332 (0.04%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
-| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 1619 (0.32%) | the same (1.95%) |
+| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 2319 (0.04%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
+| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 1617 (0.32%) | the same (1.95%) |
 | `open bitrate.dts` (stereo, open rate) | 5242416 | 884 (0.02%) | decoded (99.99% of the indexes, 99.96% of the scale factors, 99.82% of the bit allocations, 99.99% of the HF VQ groups, 99.82% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
 
 A DTS:X stream, `Nigel_Stanford_Cymatics_DTS-X.dts` (5:27; a 5.1 core at 1509 kbps beside DTS-HD
@@ -261,21 +261,23 @@ the DTS encoders' are the same for the whole stream) those that code the values 
 which since format 134 the model codes after the values, by that rule, and since format 135 its
 bit allocations' books too; and its decodes' LFE, which their decimation makes 89-91% of, the model
 binds since format 134 by its decimation corrected as a decoded WAV's, and predicts since format
-135 by FFmpeg's decoder's interpolation undone exactly (below). Their bit allocations took 83.3 KB
-in format 134 and take 5.8 KB, their scale factors 24.4 KB and 8.4 KB, their LFE 6.0 KB and 0.3 KB;
+135 by FFmpeg's decoder's interpolation undone exactly, its scale factors since format 136 by the
+lattice the WAV's LFE fits (below). Their bit allocations took 83.3 KB in format 134 and take 5.8 KB,
+their scale factors 24.4 KB and 8.4 KB, their LFE 6.0 KB, 0.3 KB in format 135 and 71 bytes;
 what is left is mostly the indexes that the decodes don't give back (the first 3 MB's 7.5 KB of
 11.1, `open bitrate.dts`'s encode's 10.3 KB of 12.9), at steps under the WAV's unit, which its
-rounding hides. Making FFmpeg's encoder's choices again costs a quarter of the time: these cores
-compress at 537-826 KB a second and decompress at 599-855 (format 134's 697-1035 and 774-1081, on a
-host where the 7-frame samples above go at 355 and 447 at the least, as in format 134):
+rounding hides. Making FFmpeg's encoder's choices again takes a fifth to a third more time: these
+cores compress at 311-774 KB a second and decompress at 334-833, the slowest the 768 kbps one, whose
+frames are half the bytes for the same work (format 134's 379-1004 and 446-1023, on a host where the
+7-frame samples above go at 342 and 439 at the least, format 134 at 346 and 426):
 
-| FFmpeg's encode | Core | dtsdpack | format 134 | format 133 |
+| FFmpeg's encode | Core | dtsdpack | format 135 | format 134 |
 |---|---:|---:|---:|---:|
-| `s.2.dts`'s first 3 MB as decoded (5.1, 1509 kbps, 6.8 s) | 1275608 | 11098 (0.87%) | 26484 | 38631 |
-| 3 MB from its middle (5.7 s) | 1068372 | 2197 (0.21%) | 10051 | 15371 |
-| its first 3 MB at 768 kbps | 649216 | 2249 (0.35%) | 11263 | 21285 |
-| `open bitrate.dts`'s first 20 s as decoded (stereo, 768 kbps) | 1920000 | 12930 (0.67%) | 23362 | 27339 |
-| a minute of 5.1 shaped noise, its surrounds silent to 30 s (above) | 10597500 | 6621 (0.06%) | 65358 | 109620 |
+| `s.2.dts`'s first 3 MB as decoded (5.1, 1509 kbps, 6.8 s) | 1275608 | 11079 (0.87%) | 11098 | 26484 |
+| 3 MB from its middle (5.7 s) | 1068372 | 2176 (0.20%) | 2197 | 10051 |
+| its first 3 MB at 768 kbps | 649216 | 2231 (0.34%) | 2249 | 11263 |
+| `open bitrate.dts`'s first 20 s as decoded (stereo, 768 kbps) | 1920000 | 12930 (0.67%) | 12930 | 23362 |
+| a minute of 5.1 shaped noise, its surrounds silent to 30 s (above) | 10597500 | 6476 (0.06%) | 6621 | 65358 |
 
 ## How it works
 
@@ -1003,7 +1005,17 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   128 times the decoder's), the least whose step puts that peak within 3/32 of 127, and the RMS
   rule's on LFE_W2D's predictions. The FFmpeg encodes' LFE 6.0 KB to 0.3 KB (their scale factors
   the second's 95.5-96.9% of the time); `ES 6.1 16bit.dts`'s 14 bytes bigger (its scale factors'
-  guesses, by the RMS rule, a little less sure), FATE's `dts_es.dts`'s 12 smaller.
+  guesses, by the RMS rule, a little less sure), FATE's `dts_es.dts`'s 12 smaller. But the
+  inversion stays exact where the values before are the decoder's, and they are where the step is
+  right: so since format 136 a fifth (`lfe_lattice()`) is the scale factor, from 8 below the first
+  two's to 8 above, at which the subframe's values decoded as FFmpeg's decoder would have them
+  there (each the inversion's from the WAV and the values so decoded before it, rounded to the
+  step) lie nearest their lattice points, where they lie within 0.06 of a step at the root of their
+  mean square, some of them not 0 (at a wrong step the values before go wrong, and the rest drift).
+  It is so for 99.5% and 100% of the LFE scale factors of FFmpeg's encodes of `s.2.dts`'s first 3
+  MB and of the noise, all right, and 87.7% of `ES 6.1 16bit.dts`'s, all right (the rest are where
+  its LFE is quiet): the FFmpeg encodes' LFE 0.3 KB to 71 bytes, `ES 6.1 16bit.dts`'s 13 bytes
+  smaller again, `dts_es.dts`'s 2.
 - **The transients**: a decoded WAV's subband with a transient (TMODE) doesn't fit one scale
   factor's lattice. So, its ABITS known, where the bit allocation search's fit is within a 64th of
   a step squared a value, it has none; else the subsubframe from which two scale factors' lattices
@@ -1781,7 +1793,7 @@ files at that level.
 
 ### The format
 
-"dtsdpack", the format's version (135), the level (9, or 8: above); what the WAV was (whether it was
+"dtsdpack", the format's version (136), the level (9, or 8: above); what the WAV was (whether it was
 one, its channels and bytes a sample, its size and the CRC-32 of its first 64 KB) and the binding
 (the offset; the WAV's samples to the core's, 1, 2 or 4 (its lower band, then 2), and the lower
 band's resolution; the LFE's channel; each core channel's WAV channel, and where it isn't that
