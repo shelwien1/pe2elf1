@@ -1009,6 +1009,8 @@ struct AoState {
   U32 n[XCS + 1][XCH][AO_NR];
   int v14, v15, v17;  // (v17: the orders kept as their rank under the rule's cost, from version 17)
   int v18;            // (v18: the ranks and the pairs' flags in MS_AC, from version 18)
+  int v23;            // (v23: the pairs' flags by the decorrelation's gain after the prediction, dc_gain(), the
+                      // ranks by the two cheapest orders, ac_rx())
   U8 dcp[XCS + 1][XCH / 2];  // (from version 18: each pair's flag in its set's last frame, ac_dcf()'s)
 };
 
@@ -1017,13 +1019,21 @@ struct AoState {
 // probabilities are a block's from its start, and move 1/32 of the way to a decision once the
 // record it is in is through (AcModel::commit()): the split codes a record's decisions once the
 // check has joined it back, and the join can parse a header again (AcIo::mark(), rewind()).
-// Contexts: a prediction order's rank, 0 or not, then 1 or not, by its set and the bucket of
-// the rule's cost between its two cheapest orders (ac_rank()); ranks from 2 as 4 bits by the
-// set; a pair's flag for a coefficient by its set, the pair, the flags of the 3 pairs before it
-// in the frame, its own in the set's last frame and the size of the coefficient dc_code() gives
-// it (ac_dcf()).
-enum { AC_RK0 = 0, AC_RK1 = AC_RK0 + (XCS + 1) * 16, AC_RKT = AC_RK1 + (XCS + 1) * 16,
-       AC_DCF = AC_RKT + (XCS + 1) * 16, AC_NCTX = AC_DCF + (XCS + 1) * 8 * 8 * 2 * 4 };
+// Contexts: a prediction order's rank, 0 or not, then 1 or not, by its set, the bucket of the
+// rule's cost between its two cheapest orders and from version 23 those two orders (ac_rx())
+// (ac_rank_put()); ranks from 2 as 4 bits by the set; a pair's flag for a coefficient by its set,
+// the pair, the flags of the 3 pairs before it in the frame, its own in the set's last frame, the
+// size of the coefficient dc_code() gives it and from version 23 what decorrelating by it would
+// save after the prediction (dc_gain()) (ac_dcf()). From version 23 a rank's first two decisions'
+// contexts start from their parent's estimate, the context but for ac_rx(), which each of their
+// decisions moves too (ac_par(), HacModel::commit()).
+enum { AC_RX = 36, AC_RK0 = 0, AC_RK1 = AC_RK0 + (XCS + 1) * 16 * AC_RX, AC_RKT = AC_RK1 + (XCS + 1) * 16 * AC_RX,
+       AC_DCF = AC_RKT + (XCS + 1) * 16, AC_NG = 5, AC_RP0 = AC_DCF + (XCS + 1) * 8 * 8 * 2 * 4 * AC_NG,
+       AC_RP1 = AC_RP0 + (XCS + 1) * 16, AC_NCTX = AC_RP1 + (XCS + 1) * 16 };
+static U32 ac_par(U32 c) {
+  if (c >= AC_RKT) return c;
+  return c < AC_RK1 ? AC_RP0 + (c - AC_RK0) / AC_RX : AC_RP1 + (c - AC_RK1) / AC_RX;
+}
 struct AcModel {
   U16 p[AC_NCTX];         // P(0) in 4096ths
   std::vector<U32> pend;  // the record's decisions (context << 1 | bit), for commit()
@@ -1116,7 +1126,7 @@ struct HacModel {
   HacModel() : lim(HC_LIM) {}
   std::vector<U32> p;  // P(0) in 2^-24ths
   std::vector<U16> n;
-  std::vector<U64> pend;  // the record's decisions (context | parent << 24 | bit << 48), for commit()
+  std::vector<U64> pend;  // the record's decisions (context | parent << 24 | bit << 48 | the parent's too << 49)
   void reset() {
     p.assign(HC_N, 1u << 23);
     n.assign(HC_N, 0);
@@ -1130,11 +1140,15 @@ struct HacModel {
     for (size_t i = 0; i < pend.size(); i++) {
       const U32 c = (U32)(pend[i] & 0xFFFFFF), par = (U32)(pend[i] >> 24 & 0xFFFFFF);
       if (!n[c]) p[c] = p[par];
-      const S64 d = (pend[i] >> 48 & 1 ? 0 : (S64)1 << 24) - (S64)p[c];
-      p[c] = (U32)((S64)p[c] + d / (n[c] + 2));
-      if (n[c] < lim) n[c]++;
+      move(c, (int)(pend[i] >> 48 & 1));
+      if (pend[i] >> 49 & 1) move(par, (int)(pend[i] >> 48 & 1));
     }
     pend.clear();
+  }
+  void move(U32 c, int b) {
+    const S64 d = (b ? 0 : (S64)1 << 24) - (S64)p[c];
+    p[c] = (U32)((S64)p[c] + d / (n[c] + 2));
+    if (n[c] < lim) n[c]++;
   }
 };
 // the decisions of a record's headers: the split's (put(): to its tape), the check's (get(): back
@@ -1145,19 +1159,21 @@ struct AcIo {
   AcDec* dec;
   AcModel* model;
   HacModel* kmodel;  // (from version 19 the join's, in model's place)
+  bool par;          // (from version 23 the contexts' parents, ac_par())
   AcDec mdec;
   size_t pos, mpos, mpend;
   bool bad, mbad;
   void init(std::vector<U32>* w, const std::vector<U32>* t, AcDec* d, AcModel* m) {
-    put_to = w, tape = t, dec = d, model = m, kmodel = 0, pos = mpos = mpend = 0, bad = mbad = false;
+    put_to = w, tape = t, dec = d, model = m, kmodel = 0, par = false, pos = mpos = mpend = 0, bad = mbad = false;
   }
   void put(U32 ctx, int b) {
     if (put_to) put_to->push_back(ctx << 1 | (U32)b);
   }
   int get(U32 ctx) {
     if (dec && kmodel) {
-      const int b = dec->bit16(kmodel->p16(ctx, ctx));
-      kmodel->pend.push_back((U64)ctx | (U64)ctx << 24 | (U64)b << 48);
+      const U32 pa = par ? ac_par(ctx) : ctx;
+      const int b = dec->bit16(kmodel->p16(ctx, pa));
+      kmodel->pend.push_back((U64)ctx | (U64)pa << 24 | (U64)b << 48 | (U64)(pa != ctx) << 49);
       return b;
     }
     if (dec) {
@@ -1184,10 +1200,18 @@ struct AcIo {
     }
   }
 };
-static void ac_rank_put(AcIo& io, int set, int mb, int r) {
-  io.put(AC_RK0 + set * 16 + mb, r != 0);
+// (the cheapest order in 6 buckets (0, 1, 2, 3-4, 5-7, 8 up), how far the next cheapest is from it
+// (1, 2, more) and on which side)
+static int ac_rx(const U8* rank) {
+  const int o = rank[0], d = rank[1] - rank[0], a = d < 0 ? -d : d;
+  const int ob = o < 3 ? o : o < 5 ? 3 : o < 8 ? 4 : 5;
+  return (ob * 3 + (a < 2 ? 0 : a < 3 ? 1 : 2)) * 2 + (d > 0);
+}
+static void ac_rank_put(AcIo& io, int set, int mb, int rx, int r) {
+  const int k = (set * 16 + mb) * AC_RX + rx;
+  io.put(AC_RK0 + k, r != 0);
   if (!r) return;
-  io.put(AC_RK1 + set * 16 + mb, r != 1);
+  io.put(AC_RK1 + k, r != 1);
   if (r == 1) return;
   for (int i = 3, node = 1; i >= 0; i--) {
     const int b = (r - 2) >> i & 1;
@@ -1195,16 +1219,17 @@ static void ac_rank_put(AcIo& io, int set, int mb, int r) {
     node = node * 2 + b;
   }
 }
-static int ac_rank_get(AcIo& io, int set, int mb) {
-  if (!io.get(AC_RK0 + set * 16 + mb)) return 0;
-  if (!io.get(AC_RK1 + set * 16 + mb)) return 1;
+static int ac_rank_get(AcIo& io, int set, int mb, int rx) {
+  const int k = (set * 16 + mb) * AC_RX + rx;
+  if (!io.get(AC_RK0 + k)) return 0;
+  if (!io.get(AC_RK1 + k)) return 1;
   int node = 1;
   for (int i = 0; i < 4; i++) node = node * 2 + io.get(AC_RKT + set * 16 + node);
   return (node - 16 + 2) & 15;  // (14 and 15 none are put as; a damaged section's, 0 and 1)
 }
-static U32 ac_dcf(int set, int i, int hist, int last, int pc) {
+static U32 ac_dcf(int set, int i, int hist, int last, int pc, int gb) {
   const int a = pc < 0 ? -pc : pc;
-  return AC_DCF + (U32)((((set * 8 + (i < 7 ? i : 7)) * 8 + (hist & 7)) * 2 + (last & 1)) * 4 + (a < 3 ? a : 3));
+  return AC_DCF + (U32)(((((set * 8 + (i < 7 ? i : 7)) * 8 + (hist & 7)) * 2 + (last & 1)) * 4 + (a < 3 ? a : 3)) * AC_NG + gb);
 }
 
 // From version 19 the meta file keeps the XLL headers as their fields, range-coded (MS_HAC) as
@@ -1424,6 +1449,7 @@ struct AoCtx {
 };
 static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, int* pred, bool keep, U8 (*rank)[16] = 0,
                     U8* mbk = 0);
+static int dc_gain(const AoCtx& ac, int g0, int a, int b, int pc);
 static void dc_order(AoCtx& ac, int g0, int nch, int* order);
 static int dc_code(const AoCtx& ac, int nch, int a, int b);
 
@@ -1574,7 +1600,8 @@ static const char* xll_headers(Xll& x, const U8* p, int n, int one2one, const Xl
           int fl = (int)r.get(1);
           const int pc = dp ? dc_code(*ao, s.nch, d.order[2 * i], d.order[2 * i + 1]) : 0;
           if (acf) {
-            const int f = fl ^ ao->io->get(ac_dcf(set, i, hist, ao->st->dcp[set][i], unzig((U32)pc)));
+            const int gb = ao->st->v23 ? dc_gain(*ao, x.nch, d.order[2 * i], d.order[2 * i + 1], pc) : 0;
+            const int f = fl ^ ao->io->get(ac_dcf(set, i, hist, ao->st->dcp[set][i], unzig((U32)pc), gb));
             bits_xor(fix, d.dfat[i], 1, (U32)(fl ^ f));
             fl = f;
             if (ao->ndp < XCS * XCH / 2) {
@@ -1613,7 +1640,9 @@ static const char* xll_headers(Xll& x, const U8* p, int n, int one2one, const Xl
         ao_pred(*ao, base ? XCS : c, x.nch, s, d, pred, true, rank, mbk);
         const bool acr = ao->st->v18 && ao->io;  // (from version 18 the ranks in MS_AC: ac_rank_get())
         for (int ch = 0; ch < s.nch; ch++) {  // (from version 17 their rank; dif: from 13 their difference; before, XORed)
-          const int sym = acr ? d.aorder[ch] ^ ac_rank_get(*ao->io, base ? XCS : c, mbk[ch]) : d.aorder[ch];
+          const int sym =
+              acr ? d.aorder[ch] ^ ac_rank_get(*ao->io, base ? XCS : c, mbk[ch], ao->st->v23 ? ac_rx(rank[ch]) : 0)
+                  : d.aorder[ch];
           const int act = ao->st->v17 ? rank[ch][sym]
                           : dif       ? (int)dif_back((U32)d.aorder[ch], (U32)pred[ch], 4)
                                       : d.aorder[ch] ^ pred[ch];
@@ -2391,16 +2420,57 @@ static const std::vector<double>& hann_cos(int N) {
 // of the Cymatics stream's first channel set and all but 44 of the 885113 of s.2.dts (99.9% and
 // 99.3% with the integers' before), in 99.3% of the Cymatics stream's second set's (92.5%) and
 // 99.8% of its object audio's (93.5%)
+// (the last ones are kept with their samples: the pairs' gains, the orders' rule and the reflection
+// coefficients take those of the same samples, and the split's check takes them all again; to
+// AO_K lags at least, for those that ask for more)
+struct AcfCache {
+  enum { NE = 48 };
+  struct E {
+    std::vector<S32> x;
+    U64 h;
+    int o;  // (the last lag; -1: none)
+    float R[XORD + 1];
+  } e[NE];
+  int next;
+  AcfCache() : next(0) {
+    for (int i = 0; i < NE; i++) e[i].h = 0, e[i].o = -1;
+  }
+};
 static void rc_autocorr(const S32* bb, int N, int o, float* R) {
+  static AcfCache c;
+  if (N <= 0) {
+    for (int l = 0; l <= o; l++) R[l] = 0;
+    return;
+  }
+  U64 h[4] = {(U64)N, 1, 2, 3};
+  int n = 0;
+  for (; n + 4 <= N; n += 4)
+    for (int j = 0; j < 4; j++) h[j] = (h[j] + (U32)bb[n + j]) * 0x9E3779B97F4A7C15ull;
+  for (; n < N; n++) h[0] = (h[0] + (U32)bb[n]) * 0x9E3779B97F4A7C15ull;
+  const U64 hk = h[0] ^ (h[1] >> 7 | h[1] << 57) ^ (h[2] >> 23 | h[2] << 41) ^ (h[3] >> 41 | h[3] << 23);
+  for (int i = 0; i < AcfCache::NE; i++) {
+    const AcfCache::E& e = c.e[i];
+    if (e.h == hk && e.o >= o && e.x.size() == (size_t)N && !memcmp(&e.x[0], bb, (size_t)N * sizeof *bb)) {
+      memcpy(R, e.R, (size_t)(o + 1) * sizeof *R);
+      return;
+    }
+  }
+  const int oc = o > AO_K ? o : AO_K;
   const std::vector<double>& w = hann_cos(N);
   static std::vector<float> xf;
   xf.resize((size_t)N);
-  for (int n = 0; n < N; n++) xf[n] = (float)f64mul((double)bb[n], w[n]);
-  for (int l = 0; l <= o; l++) {
+  for (n = 0; n < N; n++) xf[n] = (float)f64mul((double)bb[n], w[n]);
+  AcfCache::E& e = c.e[c.next];
+  c.next = (c.next + 1) % AcfCache::NE;
+  for (int l = 0; l <= oc; l++) {
     double acc = 0;
-    for (int n = 0; n + l < N; n++) acc += (double)f32mul(xf[n], xf[n + l]);
-    R[l] = (float)acc;
+    for (n = 0; n + l < N; n++) acc += (double)f32mul(xf[n], xf[n + l]);
+    e.R[l] = (float)acc;
   }
+  e.x.assign(bb, bb + N);
+  e.h = hk;
+  e.o = oc;
+  memcpy(R, e.R, (size_t)(o + 1) * sizeof *R);
 }
 
 // The order of the nch channels of the set whose first is g0 of ac's samples, as the encoders' pairwise
@@ -2479,6 +2549,49 @@ static S64 log2_q20(float f) {
     if (v >> 31) v >>= 1, r += (S64)1 << i;
   }
   return r;
+}
+
+// The bits a channel's prediction takes by the autocorrelation R of its N samples (rc_autocorr()'s), as
+// the order rule weighs them (ao_pred()'s): (N/2) log2 of the variance Levinson's recursion leaves,
+// in single precision, at the cheapest order to 10, 8 bits an order (Q20; 0 where R[0] isn't > 0)
+static S64 dc_cost(const float* R, int N) {
+  if (!(R[0] > 0) || !(R[0] < 3.0e38f)) return 0;
+  float a[11], an[11], E = R[0];
+  a[0] = 1;
+  S64 best = log2_q20(E) * (N / 2);
+  for (int j = 1; j <= 10; j++) {
+    float acc = R[j];
+    for (int t = 1; t < j; t++) acc = f32add(acc, f32mul(a[t], R[j - t]));
+    const float k = -f32div(acc, E);
+    for (int t = 1; t < j; t++) an[t] = f32add(a[t], f32mul(k, a[j - t]));
+    for (int t = 1; t < j; t++) a[t] = an[t];
+    a[j] = k;
+    E = f32mul(E, f32add(1.0f, -f32mul(k, k)));
+    if (!(E > 0) || !(E < 3.0e38f)) break;
+    const S64 c = log2_q20(E) * (N / 2) + (S64)8 * j * (1 << 20);
+    if (c < best) best = c;
+  }
+  return best;
+}
+// From version 23 a pair's flag goes by what decorrelating its channel b by the base a at the
+// coefficient pc (dc_code()'s) would save b's prediction (dc_cost() less dc_cost()), in 5 buckets:
+// under -8 bits, -8 to 0, 0 to 8, 8 to 32, more. The encoders decorrelate where it saves bits after
+// the prediction, it seems: the Cymatics stream's pairs at 64 bits or more 97% decorrelated, under -8
+// 9% (by the samples' own correlation alone, as decorrelated past 128 bits as not)
+static int dc_gain(const AoCtx& ac, int g0, int a, int b, int pc) {
+  const int N = ac.N;
+  if (!ac.val || N <= 0 || a < 0 || b < 0 || g0 + a >= ac.nch || g0 + b >= ac.nch) return 2;
+  const S32* va = ac.val + (size_t)(g0 + a) * N;
+  const S32* vb = ac.val + (size_t)(g0 + b) * N;
+  static std::vector<S32> yd;
+  yd.resize((size_t)N);
+  const int cf = unzig((U32)pc);
+  for (int n = 0; n < N; n++) yd[n] = (S32)((U32)vb[n] - (U32)decor_term((U32)va[n], cf));
+  float R1[11], R2[11];
+  rc_autocorr(vb, N, 10, R1);
+  rc_autocorr(&yd[0], N, 10, R2);
+  const S64 g = dc_cost(R1, N) - dc_cost(R2, N), B = (S64)1 << 20;
+  return g < -8 * B ? 0 : g < 0 ? 1 : g < 8 * B ? 2 : g < 32 * B ? 3 : 4;
 }
 
 // The prediction orders of the channels of channel set s (set: its index in the counts) in band 0,
@@ -2670,7 +2783,9 @@ static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir, bool fl, b
     }
 }
 
-enum { VERSION = 22 };  // (the join reads 21 too, without the DTS:X heights folded out of the bed,
+enum { VERSION = 23 };  // (the join reads 22 too, the pairs' flags without dc_gain() and the ranks
+                        // without ac_rx(), 21, without
+                        // the DTS:X heights folded out of the bed,
                         // 20, with the common flags as they are, format 17's
                         // Rice and hybrid rules and the Rice widths by one rule, 19, with the
                         // coding parameters as bytes, 18, with
@@ -3116,7 +3231,8 @@ static void xf_fold(S32* wv, const S32* ov, size_t ns, const Layout& L, const La
   for (int i = 0; i < 4; i++) {
     const int w = m >> i & 1 ? wav_ch_at(L, XF_WAV[i]) : -1;
     if (w < 0) continue;
-    for (size_t t = 0; t < ns; t++) wv[t * L.nch + w] += sign * xf_part(ov[t * O.nch + i]);
+    for (size_t t = 0; t < ns; t++)  // (mod 2^32: a damaged WAV's values anything)
+      wv[t * L.nch + w] = (S32)((U32)wv[t * L.nch + w] + (U32)(sign * xf_part(ov[t * O.nch + i])));
   }
 }
 
@@ -3672,7 +3788,8 @@ static void put_hdr(Rec& o, const U8* p, const Xll& x, const std::vector<Chunk>&
           const int fl = d.dcat[i] >= 0;
           if (fl) bits_xor(&h[0], d.dcat[i], 7, pc);
           if (ao->st->v18 && ao->io) {
-            ao->io->put(ac_dcf(set0 + c, i, hist, ao->st->dcp[set0 + c][i], unzig(pc)), fl);
+            const int gb = ao->st->v23 ? dc_gain(*ao, x.chofs[c], d.order[2 * i], d.order[2 * i + 1], (int)pc) : 0;
+            ao->io->put(ac_dcf(set0 + c, i, hist, ao->st->dcp[set0 + c][i], unzig(pc), gb), fl);
             bits_xor(&h[0], d.dfat[i], 1, (U32)fl);
           }
           hist = hist << 1 | fl;
@@ -3687,7 +3804,7 @@ static void put_hdr(Rec& o, const U8* p, const Xll& x, const std::vector<Chunk>&
         U32 r = 0;
         while (r < 15 && rank[ch][r] != v) r++;
         if (ao->st->v18 && ao->io) {  // (from version 18 to MS_AC, the field 0s: ac_rank_put())
-          ac_rank_put(*ao->io, set0 + c, mbk[ch], (int)r);
+          ac_rank_put(*ao->io, set0 + c, mbk[ch], ao->st->v23 ? ac_rx(rank[ch]) : 0, (int)r);
           bits_xor(&h[0], at, 4, v);
         } else {
           bits_xor(&h[0], at, 4, v ^ r);
@@ -4401,9 +4518,9 @@ struct MetaOut {
   void ac(const std::vector<U32>& t, const std::vector<U64>& th, const std::vector<U64>* tc) {
     amodel.pend.clear();
     for (size_t i = 0; i < t.size(); i++) {
-      const U32 c = t[i] >> 1;
-      enc.bit16(amodel.p16(c, c), (int)(t[i] & 1));
-      amodel.pend.push_back((U64)c | (U64)c << 24 | (U64)(t[i] & 1) << 48);
+      const U32 c = t[i] >> 1, pa = ac_par(c);
+      enc.bit16(amodel.p16(c, pa), (int)(t[i] & 1));
+      amodel.pend.push_back((U64)c | (U64)pa << 24 | (U64)(t[i] & 1) << 48 | (U64)(pa != c) << 49);
     }
     for (size_t i = 0; i < th.size(); i++)
       henc.bit16(hmodel.p16((U32)(th[i] & 0xFFFFFF), (U32)(th[i] >> 24 & 0xFFFFFF)), (int)(th[i] >> 48 & 1));
@@ -4808,7 +4925,7 @@ struct Splitter {
     xwav_on = false;
     xf_done = false;
     memset(&chk.ao, 0, sizeof chk.ao);
-    chk.ao.v14 = chk.ao.v15 = chk.ao.v17 = chk.ao.v18 = 1;
+    chk.ao.v14 = chk.ao.v15 = chk.ao.v17 = chk.ao.v18 = chk.ao.v23 = 1;
     chk.aost = sp.aost = &chk.ao;
     acw.init(&actape, 0, 0, 0);
     acr.init(0, &actape, 0, 0);
@@ -4979,6 +5096,7 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
   sp.ao.v15 = h[8] >= 15;
   sp.ao.v17 = h[8] >= 17;
   sp.ao.v18 = h[8] >= 18;
+  sp.ao.v23 = h[8] >= 23;
   sp.aost = &sp.ao;
   static AcDec acdec, hacdec;  // (from version 18, MS_AC's: a block's decisions; from 19 MS_HAC's)
   static AcModel acmodel;
@@ -4998,6 +5116,7 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
   hacmodel.lim = h[8] >= 20 ? HC_LIMH : HC_LIM;
   acio.init(0, 0, &acdec, &acmodel);
   if (h[8] >= 19) acio.kmodel = &kacmodel;
+  acio.par = h[8] >= 23;
   for (int j = 0; j < 2; j++) {
     cdec[j].init(&none, 0);
     cmodel[j].reset();
