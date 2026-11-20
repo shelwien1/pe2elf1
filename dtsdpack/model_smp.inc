@@ -122,8 +122,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // and its scale factors: by the ABITS (to 12), how often each of four was the core's: the
   // model's prediction, FFmpeg's encoder's rule on the decode's peak (calc_one_scale()) and the
   // least whose step puts that peak within 3/32 and 1/4 of the quantizer's top level (FfEnc::
-  // scale_within())
-  U16 ffs_w[13][4];
+  // scale_within()); since format 137 by the second's scale factor too (in fours, to 40) and the
+  // first's difference from it (to 2)
+  U16 ffs_w[13][11][5][4];
   int pscale[NCH][NSUB];   // their first scale factor's prediction (1 + it, 0 none)
   // A lossless WAV's top subbands, VQ ones, as its encoder has them: subband NSUB - 1 - c with m
   // 2^-23 of subband c added, c 0 to CPL_N - 1, m one of cpl_m(c, k), k 0 to CPL_K - 1 (CPL_D[c]
@@ -3914,14 +3915,22 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // 76.5% of its scale factors, the rule in 74.0% (the decode's peak 3 under at ABITS 1-3), the
     // two within 95.9% and 81.9%, the four so chosen 96.7%; its core 26% smaller, `open
     // bitrate.dts`'s encode's 7%, the two others' 37% and 58%. The nearness the model's own, the
-    // run its choice's: set to the surest where the choice isn't the model's, 0.3% bigger)
-    int fc[4] = {-1, -1, -1, -1}, p0 = p;
+    // run its choice's: set to the surest where the choice isn't the model's, 0.3% bigger. Since
+    // format 137 most often there and at the rule's scale factor (in fours, to 40) and the model's
+    // prediction's difference from it (to 2): which one is right goes by both, the rule and the
+    // two within where the steps are under the WAV's unit, the model's prediction more often
+    // where they aren't. The five FFmpeg encodes' first guesses wrong 1545 times in their
+    // 1301664 scale factors, from 8263 (by the ABITS and the rule's scale factor in twos, 4578):
+    // their scale factors 8.4 KB to 1.8, the five 34892 bytes to 28360 (31715 so, 32533 by the
+    // rule's in eights; by the difference to 1 or 3 the first guesses wrong 2572 and 1639 times))
+    int fc[4] = {-1, -1, -1, -1}, p0 = p, fb = 0;
     if (ffe_ok && !r.xpass && bound[ch] && !hfb && !tm && !s.pmode[ch][b] && p >= 0 && r.shuff[ch] == 6) {
       FfSoft qq;
       const int a = s.abits[ch][b];
-      const U16* const w = ffs_w[imin(a, 12)];
       fc[0] = p, fc[1] = FfEnc::one_scale(ffe->peak[ch][b], a, &qq);
       fc[2] = ffe->scale_within(ch, b, a, 3), fc[3] = ffe->scale_within(ch, b, a, 8);
+      fb = (imin(fc[1], 40) >> 2) * 5 + clip(fc[0] - fc[1], -2, 2) + 2;
+      const U16* const w = ffs_w[imin(a, 12)][fb / 5][fb % 5];
       int k = 0;
       for (int i = 1; i < 4; i++)
         if (w[i] > w[k]) k = i;
@@ -3943,7 +3952,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const int spu = spk && p >= 0 && p == pr;
     v = scale(D, v, p, A, max, spu && p == p0, sg, spc, spp, spk);
     if (fc[0] >= 0) {
-      U16* const w = ffs_w[imin(s.abits[ch][b], 12)];
+      U16* const w = ffs_w[imin(s.abits[ch][b], 12)][fb / 5][fb % 5];
       for (int i = 0; i < 4; i++) w[i] += v == fc[i];
       if (w[0] + w[1] + w[2] + w[3] >= 4096)
         for (int i = 0; i < 4; i++) w[i] >>= 1;

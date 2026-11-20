@@ -7,7 +7,10 @@
 // `s.2.dts`'s first 3 MB, FFmpeg's encoder makes 99.99% of the ABITS this makes from that decode
 // (in 625 of its 633 frames all of them); of the stream's own, both 97.2%: the decode isn't the
 // encoder's input. Each frame's input the WAV's 512 samples from where the core's first block's
-// analysis window ends, as FFmpeg's encoder's is, the 512 before them its history
+// analysis window ends, as FFmpeg's encoder's is, the 512 before them its history. The same
+// integers as dcaenc.c's, made faster: the transform 8 values at a time (AVX2), the masking's sums
+// over the bins that can change them, its bands side by side, and each subband's bits at each ABITS
+// once a frame, not at each noise level the search tries (FFmpeg's encodes compressed 17-20% faster)
 #include "ffenctab.inc"
 
 struct FfSoft {
@@ -73,6 +76,22 @@ static INLINE S32 fe_add_cb(S32 a, S32 b) {
   }
   return a - b >= 256 ? a : a + FE_CB_ADD[a - b];
 }
+#ifdef DTSD_AVX2
+// (fe_mul32() on 8 lanes: each product's high half, rounded, as the integers have it)
+static INLINE __m256i fe_mul32_8(__m256i a, __m256i b) {
+  const __m256i r = _mm256_set1_epi64x((S64)1 << 31);
+  const __m256i pe = _mm256_add_epi64(_mm256_mul_epi32(a, b), r);
+  const __m256i po = _mm256_add_epi64(_mm256_mul_epi32(_mm256_srli_epi64(a, 32), _mm256_srli_epi64(b, 32)), r);
+  return _mm256_blend_epi32(_mm256_srli_epi64(pe, 32), po, 0xAA);
+}
+// (fe_add_cb() on 8 lanes: the larger plus tab's entry for the difference, FE_CB_ADD's to 255 and 0
+// from 256)
+static INLINE __m256i fe_add_cb8(__m256i a, __m256i b, const S32* tab) {
+  const __m256i hi = _mm256_max_epi32(a, b);
+  const __m256i d = _mm256_min_epi32(_mm256_sub_epi32(hi, _mm256_min_epi32(a, b)), _mm256_set1_epi32(256));
+  return _mm256_add_epi32(hi, _mm256_i32gather_epi32(tab, d, 4));
+}
+#endif
 
 struct FfEnc {
   static constexpr int NB = 32, NS = 16, MAXC = 6, NMG = 11;
@@ -81,14 +100,52 @@ struct FfEnc {
   S32 hist[MAXC][512], in[MAXC][512];
   S32 sub[MAXC][NB][NS];
   S32 peak[MAXC][NB], mask[NB];
-  int abits[MAXC][NB], scale[MAXC][NB], sel_a[MAXC];
-  S32 q[MAXC][NB][NS];
+  int abits[MAXC][NB], sel_a[MAXC];
   double tw_c[128], tw_s[128], fw_c[64], fw_s[64];  // (the MDCT's rotations, its FFT's)
+  S32 ct[32][NB];  // (the transform's cosines: acc[16 + i]'s for band b, ct[i][b]; the struct is
+                   // malloc()'s, so not 32-byte aligned)
+  int aj[3][25][2];            // (the bins where FE_AUF[r][i] is above -1400: from aj[r][i][0] to before [1])
+  U32 mo_ok[MAXC][NB];             // (each subband's ABITS from 1 to 10 whose bits mo_bits has, this frame)
+  U32 mo_bits[MAXC][NB][10][8];    // (its 16 indexes' bits by each code book of the ABITS's group)
+  S32 cb_add[257];                 // (FE_CB_ADD, and 0 at 256: fe_add_cb8()'s)
+  S32 jwin[512];                   // (calc_power()'s window)
+  int cb_lo[31], cb_hi[31];        // (FE_CB_LEVEL's last entry at 2^(k+1) or more (0 if none), and at 2^k)
+#ifdef DTSD_AVX2
+  S16 auf_t[3][256][32];           // (FE_AUF by bin, its 25 bands side by side, -3500 past them)
+  int aj_all[3][2];                // (the bins any band's sum takes: aj's least and its last)
+#endif
   int noise, fz;           // (the frame's, as found, and whether ABITS 0 was forbidden)
 
   int a_lo[2][27], a_hi[2][27];  // (the SNRs each ABITS takes, with ABITS 0 allowed and not)
   void init() {
     worst = -2047;
+    for (int i = 0; i < 32; i++)
+      for (int b = 0; b < NB; b++) ct[i][b] = fe_cos(((2 * b + 1) * (2 * (i + 32) + 1)) << 3);
+    for (int r = 0; r < 3; r++)
+      for (int i = 0; i < 25; i++) {
+        int lo = 256, hi = 0;
+        for (int j = 0; j < 256; j++)
+          if (FE_AUF[r][i][j] > -1400) lo = imin(lo, j), hi = j + 1;
+        aj[r][i][0] = lo, aj[r][i][1] = hi;
+      }
+#ifdef DTSD_AVX2
+    for (int r = 0; r < 3; r++) {
+      aj_all[r][0] = 256, aj_all[r][1] = 0;
+      for (int i = 0; i < 25; i++)
+        if (aj[r][i][0] < aj[r][i][1]) aj_all[r][0] = imin(aj_all[r][0], aj[r][i][0]), aj_all[r][1] = imax(aj_all[r][1], aj[r][i][1]);
+      for (int j = 0; j < 256; j++)
+        for (int i = 0; i < 32; i++) auf_t[r][j][i] = i < 25 ? FE_AUF[r][i][j] : (S16)-3500;
+    }
+#endif
+    for (int d = 0; d < 257; d++) cb_add[d] = d < 256 ? FE_CB_ADD[d] : 0;
+    for (int i = 0; i < 512; i++) jwin[i] = 0x3fffffff - (fe_cos(4 * i + 2) >> 1);
+    for (int k = 0; k < 31; k++) {
+      cb_lo[k] = cb_hi[k] = 0;
+      for (int r = 0; r < 2048; r++) {
+        if ((S64)FE_CB_LEVEL[r] >= (S64)1 << (k + 1)) cb_lo[k] = r;
+        if ((S64)FE_CB_LEVEL[r] >= (S64)1 << k) cb_hi[k] = r;
+      }
+    }
     for (int n = 0; n < 128; n++) tw_c[n] = FE_MDCT_TW[2 * n] / 2147483648.0, tw_s[n] = FE_MDCT_TW[2 * n + 1] / 2147483648.0;
     for (int k = 0; k < 64; k++) fw_c[k] = fe_cos(16 * k) / 2147483648.0, fw_s[k] = fe_cos(512 - 16 * k) / 2147483648.0;
     for (int f = 0; f < 2; f++) {
@@ -118,29 +175,63 @@ struct FfEnc {
     *dir = dh < dl ? 1 : -1;
     return m < 4 ? m : m < 8 ? 4 + (m >= 6) : m < 16 ? 6 + (m >= 12) : m < 32 ? 8 + (m >= 24) : 10;
   }
+  // (fe_get_cb(): the last entry at |in| or more, searched for among those of its binade alone,
+  // from the last one at twice its binade's least on (FE_CB_LEVEL falls by 2^(1/200) an entry: some
+  // 60 in a binade, under 64))
+  S32 get_cb(S32 in) const {
+    const S32 v = in < 0 ? (S32)(0u - (U32)in) : in;  // (-2^31 stays so: every entry at it or more, as 0)
+    if (v <= 0) return -2047;
+    const U32 a = (U32)v;
+    const int k = 31 - __builtin_clz(a), hi = cb_hi[k];
+    int res = cb_lo[k];
+    for (int i = 32; i > 0; i >>= 1)
+      if (res + i <= hi && FE_CB_LEVEL[res + i] >= (S32)a) res += i;
+    return -res;
+  }
   // (subband_transform())
+  // (its window's 512 samples from hs on, circularly: here twice over in h, so that they lie in a
+  // row; the sums in 32 bits, wrapping, in any order: the same integers)
   void transform() {
     for (int ch = 0; ch < nch; ch++) {
-      S32 h[512];
-      memcpy(h, hist[ch], sizeof h);
+      alignas(32) S32 h[1024];
+      memcpy(h, hist[ch], 512 * sizeof(S32)), memcpy(h + 512, hist[ch], 512 * sizeof(S32));
       int hs = 0;
       for (int s = 0; s < NS; s++) {
-        S32 acc[64];
-        memset(acc, 0, sizeof acc);
-        int k = 0, j = 0;
-        for (int i = hs; i < 512; k = (k + 1) & 63, i++, j++) acc[k] += fe_mul32(h[i], FE_INTERP[j]);
-        for (int i = 0; i < hs; k = (k + 1) & 63, i++, j++) acc[k] += fe_mul32(h[i], FE_INTERP[j]);
-        for (k = 16; k < 32; k++) acc[k] = acc[k] - acc[31 - k];
-        for (k = 32; k < 48; k++) acc[k] = acc[k] + acc[95 - k];
-        for (int b = 0; b < NB; b++) {
-          S32 r = 0;
-          for (int i = 16; i < 48; i++) {
-            const int x = (2 * b + 1) * (2 * (i + 16) + 1);
-            r += fe_mul32(acc[i], fe_cos(x << 3)) >> 3;
-          }
-          sub[ch][b][s] = ((b + 1) & 2) ? -r : r;
+        alignas(32) S32 acc[64], r[NB];
+#ifdef DTSD_AVX2
+        for (int k = 0; k < 64; k += 8) {
+          __m256i a = _mm256_setzero_si256();
+          for (int m = 0; m < 8; m++)
+            a = _mm256_add_epi32(a, fe_mul32_8(_mm256_loadu_si256((const __m256i*)(h + hs + k + 64 * m)),
+                                               _mm256_loadu_si256((const __m256i*)(FE_INTERP + k + 64 * m))));
+          _mm256_store_si256((__m256i*)(acc + k), a);
         }
-        for (int i = 0; i < 32; i++) h[i + hs] = in[ch][s * 32 + i];
+#else
+        for (int k = 0; k < 64; k++) {
+          U32 a = 0;
+          for (int m = 0; m < 8; m++) a += (U32)fe_mul32(h[hs + k + 64 * m], FE_INTERP[k + 64 * m]);
+          acc[k] = (S32)a;
+        }
+#endif
+        for (int k = 16; k < 32; k++) acc[k] = (S32)((U32)acc[k] - (U32)acc[31 - k]);
+        for (int k = 32; k < 48; k++) acc[k] = (S32)((U32)acc[k] + (U32)acc[95 - k]);
+#ifdef DTSD_AVX2
+        for (int b = 0; b < NB; b += 8) {
+          __m256i a = _mm256_setzero_si256();
+          for (int i = 0; i < 32; i++)
+            a = _mm256_add_epi32(a, _mm256_srai_epi32(fe_mul32_8(_mm256_set1_epi32(acc[16 + i]),
+                                                                 _mm256_loadu_si256((const __m256i*)(ct[i] + b))), 3));
+          _mm256_store_si256((__m256i*)(r + b), a);
+        }
+#else
+        for (int b = 0; b < NB; b++) {
+          U32 a = 0;
+          for (int i = 0; i < 32; i++) a += (U32)(fe_mul32(acc[16 + i], ct[i][b]) >> 3);
+          r[b] = (S32)a;
+        }
+#endif
+        for (int b = 0; b < NB; b++) sub[ch][b][s] = ((b + 1) & 2) ? (S32)(0u - (U32)r[b]) : r[b];
+        for (int i = 0; i < 32; i++) h[i + hs] = h[i + hs + 512] = in[ch][s * 32 + i];
         hs = (hs + 32) & 511;
       }
     }
@@ -187,18 +278,46 @@ struct FfEnc {
   void jnd(const S32* x, S32* out) {
     S32 d[512], power[256], un[256];
     double X[256];
-    for (int i = 0; i < 512; i++) d[i] = fe_norm(fe_mul32(x[i], 0x3fffffff - (fe_cos(4 * i + 2) >> 1)), 4);
+    for (int i = 0; i < 512; i++) d[i] = fe_norm(fe_mul32(x[i], jwin[i]), 4);
     mdct(d, X);
     for (int i = 0; i < 256; i++) {
-      const S32 cb = fe_get_cb((S32)floor(X[i] / 64 + 0.5));
+      const S32 cb = get_cb((S32)floor(X[i] / 64 + 0.5));
       power[i] = fe_add_cb(cb, cb);
     }
     for (int j = 0; j < 256; j++) un[j] = -2047;
     const S16(*auf)[256] = FE_AUF[rate_i];
+    // (den starts at -1114 and never falls, and a power is at most 30 (a centibel value's double):
+    // a bin whose FE_AUF entry is -1400 or less adds nothing to it, so the sum goes over the others;
+    // with AVX2 the 25 bands' sums side by side, 8 to a vector, each over the bins any band's takes)
+#ifdef DTSD_AVX2
+    alignas(32) S32 dens[32];
+    {
+      const S16(*at)[32] = auf_t[rate_i];
+      __m256i d0 = _mm256_set1_epi32(-1114), d1 = d0, d2 = d0, d3 = d0;
+      for (int j = aj_all[rate_i][0]; j < aj_all[rate_i][1]; j++) {
+        const __m256i pw = _mm256_set1_epi32(power[j]);
+        const __m128i* const r = (const __m128i*)at[j];
+        d0 = fe_add_cb8(d0, _mm256_add_epi32(pw, _mm256_cvtepi16_epi32(_mm_loadu_si128(r))), cb_add);
+        d1 = fe_add_cb8(d1, _mm256_add_epi32(pw, _mm256_cvtepi16_epi32(_mm_loadu_si128(r + 1))), cb_add);
+        d2 = fe_add_cb8(d2, _mm256_add_epi32(pw, _mm256_cvtepi16_epi32(_mm_loadu_si128(r + 2))), cb_add);
+        d3 = fe_add_cb8(d3, _mm256_add_epi32(pw, _mm256_cvtepi16_epi32(_mm_loadu_si128(r + 3))), cb_add);
+      }
+      _mm256_store_si256((__m256i*)dens, d0), _mm256_store_si256((__m256i*)(dens + 8), d1);
+      _mm256_store_si256((__m256i*)(dens + 16), d2), _mm256_store_si256((__m256i*)(dens + 24), d3);
+    }
+#endif
     for (int i = 0; i < 25; i++) {
+#ifdef DTSD_AVX2
+      const __m256i nd = _mm256_set1_epi32(-dens[i]);
+      for (int j = 0; j < 256; j += 8) {
+        const __m256i t = _mm256_add_epi32(nd, _mm256_cvtepi16_epi32(_mm_loadu_si128((const __m128i*)(auf[i] + j))));
+        _mm256_storeu_si256((__m256i*)(un + j), fe_add_cb8(_mm256_loadu_si256((const __m256i*)(un + j)), t, cb_add));
+      }
+#else
       S32 den = -1114;
-      for (int j = 0; j < 256; j++) den = fe_add_cb(den, power[j] + auf[i][j]);
+      for (int j = aj[rate_i][i][0]; j < aj[rate_i][i][1]; j++) den = fe_add_cb(den, power[j] + auf[i][j]);
       for (int j = 0; j < 256; j++) un[j] = fe_add_cb(un[j], -den + auf[i][j]);
+#endif
     }
     for (int j = 0; j < 256; j++) out[j] = fe_add_cb(out[j], -un[j] + 1114 - 928);
   }
@@ -239,7 +358,7 @@ struct FfEnc {
           const S32 v = sub[ch][b][s] < 0 ? -sub[ch][b][s] : sub[ch][b][s];
           m = imax(m, v);
         }
-        peak[ch][b] = fe_get_cb(m);
+        peak[ch][b] = get_cb(m);
       }
   }
   // (calc_one_scale())
@@ -334,18 +453,28 @@ struct FfEnc {
       sel_a[ch] = bs;
       consumed += bb;
     }
+    // (each subband's indexes' bits at each ABITS once a frame: they go by its peak and ABITS alone)
     U32 vc[MAXC][10][7], cc[MAXC][10];
     memset(vc, 0, sizeof vc), memset(cc, 0, sizeof cc);
     int bits = 0;
     for (int ch = 0; ch < nch; ch++)
       for (int b = 0; b < NB; b++) {
-        FfSoft qq;
         const int a = abits[ch][b];
-        scale[ch][b] = one_scale(peak[ch][b], a, &qq);
-        for (int s = 0; s < NS; s++) q[ch][b][s] = fe_quant(sub[ch][b][s], qq);
         if (a && a <= 10) {
-          for (int t = 0; t < QB_GROUP[a - 1]; t++)
-            for (int s = 0; s < NS; s++) vc[ch][a - 1][t] += (U32)QB[a - 1][t].bits(q[ch][b][s]);
+          U32* const mb = mo_bits[ch][b][a - 1];
+          if (!(mo_ok[ch][b] >> a & 1)) {
+            FfSoft qq;
+            one_scale(peak[ch][b], a, &qq);
+            S32 qv[NS];
+            for (int s = 0; s < NS; s++) qv[s] = fe_quant(sub[ch][b][s], qq);
+            for (int t = 0; t < QB_GROUP[a - 1]; t++) {
+              U32 x = 0;
+              for (int s = 0; s < NS; s++) x += (U32)QB[a - 1][t].bits(qv[s]);
+              mb[t] = x;
+            }
+            mo_ok[ch][b] |= 1u << a;
+          }
+          for (int t = 0; t < QB_GROUP[a - 1]; t++) vc[ch][a - 1][t] += mb[t];
           cc[ch][a - 1] += (U32)FE_BITS[a];
         } else
           bits += FE_BITS[a];
@@ -400,6 +529,7 @@ struct FfEnc {
     transform();
     masking();
     peaks();
+    memset(mo_ok, 0, sizeof mo_ok);
     assign();
   }
 };
