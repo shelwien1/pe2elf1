@@ -149,7 +149,9 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 // smp: ab ABITS (1-26; 27 an LFE sample's), hw the code (1 Huffman, 2 plain, 3 block codes), pk whether the audio
 //      predicts the index, nr how near the rounding boundary its value lies, as log2 of its
 //      distance in steps (0-15: 2^-17 or nearer to 2^-2 or farther), nl the same in the channel's
-//      loudest subband's RMS (0-15: 2^-28 to 2^-13), ql the length of the audio's index (0-21), hm how many of the
+//      loudest subband's RMS (0-15: 2^-28 to 2^-13; from format 139 an LFE value's how many of its
+//      24 predictions make its index, weighed by how often each has been the value, 0-15), ql the
+//      length of the audio's index (0-21), hm how many of the
 //      subband's last 8 indexes weren't the audio's (to 3), pm whether the subband predicts, bd the
 //      subband, m1, m2 the lengths of the two indexes before in the subband (22 none), sq the sign
 //      of the audio's index (0 none or 0, 1 +, 2 -), s1 that of the index before

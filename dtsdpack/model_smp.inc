@@ -5089,7 +5089,24 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.hw = 0;
     D.pk = 1;
     D.nr = near_bucket(dist, (S128)lfe_st << 22, 17);
-    D.nl = 0;
+    // (since format 139 nl, a subband sample's loudness nearness, which an LFE value has no use for,
+    // how many of the 24 predictions make qp too, each weighed by how often it has been the value
+    // lately (lfh's counts, which the choice above goes by, plus 1), in 0-15: where all 24 agree the
+    // value is the prediction (the Cymatics stream's 42% of its values, every one of them), where 8
+    // or fewer do 72% of the time or less. Its core 0.4% smaller, `ES 6.1 16bit.dts`'s 1.2%, the
+    // others within 3 bytes; the predictions unweighed, 0.01% less; the alternative's count for the
+    // flag after a miss, nothing more, as the predictions' means or medians, which miss more often)
+    {
+      U64 wa = 0, wt = 0;
+      for (int k = 0; k < LFE_NC; k++) {
+        S128 dd;
+        S64 al;
+        const U64 w = (U64)lfh[k] + 1;
+        wt += w;
+        if (requant(pc[k], lfe_st << 6, -128, 127, &dd, &al) == qp) wa += w;
+      }
+      D.nl = (int)(wa * 15 / wt);
+    }
     D.ql = imin(bit_len((U64)(qp < 0 ? -qp : qp)), 21);
     D.hm = imin(__builtin_popcount(lmiss), 3);
     D.pm = 0;
