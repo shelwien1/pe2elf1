@@ -1013,6 +1013,7 @@ struct AoState {
                       // ranks by the two cheapest orders, ac_rx())
   int v24;            // (v24: the orders' rule on past where Levinson's recursion breaks down, ao_pred())
   int v25;            // (v25: the pairs' flags by the bits decorrelating would save, dc_bits())
+  int v27;            // (v27: the orders' rule with the frame's first samples at the signal's variance, ao_pred())
   U8 dcp[XCS + 1][XCH / 2];  // (from version 18: each pair's flag in its set's last frame, ac_dcf()'s)
 };
 
@@ -2690,11 +2691,12 @@ static S64 dc_cost(const float* R, int N) {
 // on changing past -8 and 32: of the Cymatics stream's pairs with a coefficient, 0.14 under -64,
 // 0.24 at -32, 0.74 at 32, 0.93 past 64)
 // From version 25 the bits the encoders would code a channel's samples x in, it seems: the order the
-// rule picks (8.5 bits an order, no floor, on past where the recursion breaks down), its
+// rule picks (8.5 bits an order, no floor, on past where the recursion breaks down; from version 27,
+// v27, the encoders' cost, ao_cost()'s at L 8 and F 2), its
 // coefficients' codes (rc_levinson()'s) at 8 bits each, the residual by the decoder's prediction, each
 // 32 samples' Rice code at its best width (the bits a width takes are convex in it); each 256's into
 // b256
-static S64 dc_bits(const S32* x, int N, S64* b256) {
+static S64 dc_bits(const S32* x, int N, S64* b256, bool v27) {
   *b256 = 0;
   if (N <= 0) return 0;
   AcfCache::E* ce = acf_get(x, N, 10);  // (the samples' entry: none other is taken till the bits are kept)
@@ -2709,7 +2711,9 @@ static S64 dc_bits(const S32* x, int N, S64* b256) {
   if (!(R[0] > 0) || !(R[0] < 3.0e38f)) return 0;
   float a[11], an[11], E = R[0];
   a[0] = 1;
-  S64 best = log2_q20(E) * (N / 2);
+  // (from version 27 the order by the encoders' cost, ao_cost()'s at L 8 and F 2)
+  const S64 off = -log2_q20((float)(3 * N) / 8.0f), F = (S64)2 << 20, l0 = log2_q20(E) + off, L0 = l0 > F ? l0 : F;
+  S64 best = v27 ? L0 * N : log2_q20(E) * (N / 2);
   int bk = 0;
   for (int j = 1; j <= 10; j++) {
     float acc = R[j];
@@ -2720,7 +2724,13 @@ static S64 dc_bits(const S32* x, int N, S64* b256) {
     a[j] = k;
     E = f32mul(E, f32add(1.0f, -f32mul(k, k)));
     if (!(E > 0) || !(E < 3.0e38f)) continue;
-    const S64 c = log2_q20(E) * (N / 2) + (S64)17 * j * (1 << 19);
+    S64 c;
+    if (v27) {
+      const S64 lk = log2_q20(E) + off, Lk = lk > F ? lk : F;
+      c = Lk * (N - j) + L0 * j + (S64)16 * j * (1 << 20);
+    } else {
+      c = log2_q20(E) * (N / 2) + (S64)17 * j * (1 << 19);
+    }
     if (c < best) best = c, bk = j;
   }
   int code[10] = {0}, rq[10], co[XORD];
@@ -2798,7 +2808,7 @@ static int dc_gain(const AoCtx& ac, int g0, int a, int b, int pc) {
   if (v25) {
     if (!cf) return 14;  // (as decorrelating by 0, both the same)
     S64 l1, l2;
-    const S64 s1 = dc_bits(vb, N, &l1), s2 = dc_bits(&yd[0], N, &l2);
+    const S64 s1 = dc_bits(vb, N, &l1, ac.st->v27 != 0), s2 = dc_bits(&yd[0], N, &l2, ac.st->v27 != 0);
     const S64 d[2] = {s1 - s2 - 7, l1 - l2 - 7};
     static const int E[5] = {-32, -8, 0, 8, 32};
     int bi[2] = {0, 0};
@@ -2822,19 +2832,37 @@ static int dc_gain(const AoCtx& ac, int g0, int a, int b, int pc) {
 // (E_k no more than 0), as the encoders' does (rc_levinson()'s), an order where it has no E_k is
 // none, as their cost's NaN would be, and one past it can be the cheapest: the orders of the
 // Cymatics stream's frames where it breaks down, 85% (the second set) and 80% (the object audio) as
-// the rule had them before, 98% and 97%. keep: the candidates' orders to ac's pending ones, for
+// the rule had them before, 98% and 97%. From version 27 the cost is the encoders' own, it seems:
+// the first k samples, which the prediction can't take, at the samples' variance and the rest at
+// E_k's, (N - k)/2 max(log2 E_k, F) + (k/2) max(log2 E_0, F) + L k, with L 8 bits (each
+// coefficient's code) and F 2: 99.97% of s.2.dts's orders, 99.78% of the Cymatics stream's (the
+// rule before took 97.4% and 95.7%), 99.1-100% of the other 48 kHz streams'; the 96 kHz ones', at
+// 1024 samples a frame, go past 10 and are neither rule's. L in 12 values about 8 and F in 5, the
+// candidates, go by the channel as before. keep: the candidates' orders to ac's pending ones, for
 // ao_count()
 // (the candidates: L in halves of a bit, F; before version 14, L 12, 17, 22, 26, 30 or 36 and F
 // none, 2 or 4 alone, AO_OLD)
 static const int AO_LAM[AO_NL] = {10, 12, 14, 17, 20, 22, 24, 26, 28, 30, 33, 36};
+// (from version 27: L in halves of a bit, around the encoders' 8; AO_DEF27 L 8 and F 2)
+static const int AO_LAM27[AO_NL] = {12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 24, 28};
+enum { AO_DEF27 = 2 * AO_NL + 4 };
 static const int AO_FLO[AO_NF] = {-1000, 1, 2, 3, 4};
 static bool ao_old(int j) {
   const int f = j / AO_NL, l = j % AO_NL;
   return (f == 0 || f == 2 || f == 4) && (l & 1);
 }
+// candidate f, l's cost of order k (L: the variance's log2 at each order, Q20): before version 27
+// (N/2) max(L_k, F) + L k, from version 27 (v27) twice ((N - k)/2 max(L_k, F) + (k/2) max(L_0, F) + L k)
+static S64 ao_cost(const S64* L, int k, int N, int f, int l, bool v27) {
+  const S64 F = (S64)AO_FLO[f] * (1 << 20), lv = L[k] > F ? L[k] : F;
+  if (!v27) return lv * (N / 2) + (S64)AO_LAM[l] * k * (1 << 19);
+  const S64 l0 = L[0] > F ? L[0] : F;
+  return lv * (N - k) + l0 * k + (S64)AO_LAM27[l] * k * (1 << 20);
+}
 static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, int* pred, bool keep, U8 (*rank)[16],
                     U8* mbk) {
   const int N = ac.N;
+  const bool v27 = ac.st->v27 != 0;
   static std::vector<S32> sig[2];
   static std::vector<S64> xs;
   sig[0].resize((size_t)N);
@@ -2920,25 +2948,21 @@ static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, i
           S64 bj = 0;
           for (int k = 0; k <= K; k++) {
             if (!okk[k]) continue;
-            const S64 lv = L[k] > (S64)AO_FLO[f] * (1 << 20) ? L[k] : (S64)AO_FLO[f] * (1 << 20);
-            const S64 j = lv * (N / 2) + (S64)AO_LAM[l] * k * (1 << 19);
+            const S64 j = ao_cost(L, k, N, f, l, v27);
             if (k == 0 || j < bj) bj = j, bk = k;
           }
           out[f * AO_NL + l] = (U8)bk;
         }
     }
     const U32* cnt = ac.st->n[set][oc];
-    int bi = AO_DEF;
+    int bi = v27 ? (int)AO_DEF27 : (int)AO_DEF;
     for (int j = 0; j < AO_NR; j++)
       if (cnt[j] > cnt[bi] && (ac.st->v14 || ao_old(j))) bi = j;
     pred[i] = out[bi];
     if (rank) {  // (the orders by the cost under candidate bi, the smaller first of equals, then those past K)
       S64 J[16];
       const int f = bi / AO_NL, l = bi % AO_NL;
-      for (int k = 0; k <= Kv; k++) {
-        const S64 lv = Lk[k] > (S64)AO_FLO[f] * (1 << 20) ? Lk[k] : (S64)AO_FLO[f] * (1 << 20);
-        J[k] = lv * (N / 2) + (S64)AO_LAM[l] * k * (1 << 19);
-      }
+      for (int k = 0; k <= Kv; k++) J[k] = ao_cost(Lk, k, N, f, l, v27);
       int nr = 0, nv = 0;
       bool used[16] = {false};
       for (;;) {
@@ -2953,7 +2977,7 @@ static void ao_pred(AoCtx& ac, int set, int g0, const Chset& s, const Band& d, i
       for (int k = 0; k < 16; k++)
         if (!used[k]) rank[i][nr++] = (U8)k;
       if (mbk && nv >= 2) {  // (the cost between the two cheapest, in bits: the bucket of its log2, to 14)
-        const U64 t = (U64)(J[rank[i][1]] - J[rank[i][0]]) >> 20;
+        const U64 t = (U64)(J[rank[i][1]] - J[rank[i][0]]) >> (v27 ? 21 : 20);
         int b = 0;
         while (b < 14 && (t + 1) >> (b + 1)) b++;
         mbk[i] = (U8)b;
@@ -3014,7 +3038,8 @@ static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir, bool fl, b
     }
 }
 
-enum { VERSION = 26 };  // (the join reads 25 too, the common header's size and segment fields as the
+enum { VERSION = 27 };  // (the join reads 26 too, the orders' rule with the frame's first samples at the
+                        // residuals' variance, 25, the common header's size and segment fields as the
                         // others, 24, the pairs' flags without dc_bits(), 23, the orders'
                         // rule stopped where the recursion breaks down, 22, the pairs' flags without dc_gain() and the ranks without ac_rx(), 21, without
                         // the DTS:X heights folded out of the bed,
@@ -5184,7 +5209,7 @@ struct Splitter {
     xwav_on = false;
     xf_done = false;
     memset(&chk.ao, 0, sizeof chk.ao);
-    chk.ao.v14 = chk.ao.v15 = chk.ao.v17 = chk.ao.v18 = chk.ao.v23 = chk.ao.v24 = chk.ao.v25 = 1;
+    chk.ao.v14 = chk.ao.v15 = chk.ao.v17 = chk.ao.v18 = chk.ao.v23 = chk.ao.v24 = chk.ao.v25 = chk.ao.v27 = 1;
     chk.aost = sp.aost = &chk.ao;
     acw.init(&actape, 0, 0, 0);
     acr.init(0, &actape, 0, 0);
@@ -5359,6 +5384,7 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
   sp.ao.v23 = h[8] >= 23;
   sp.ao.v24 = h[8] >= 24;
   sp.ao.v25 = h[8] >= 25;
+  sp.ao.v27 = h[8] >= 27;
   sp.aost = &sp.ao;
   static AcDec acdec, hacdec;  // (from version 18, MS_AC's: a block's decisions; from 19 MS_HAC's)
   static AcModel acmodel;

@@ -423,6 +423,17 @@ of `s.2.dts` from 9900 bytes with xz to 9272 (its eleventh section from 988 to 5
 stream's from 28688 to 25076 (its eleventh section from 5545 to 3115, its fourth from 6246 to
 5215) and the 27 streams of the regression set from 63964 to 63112.
 
+From format 27 the orders' rule weighs an order as the encoders do, it seems: the first k samples
+of a frame, which the prediction can't take, at the samples' own variance and the rest at what the
+prediction leaves, (N - k)/2 max(log2 E_k, F) + (k/2) max(log2 E_0, F) + L k bits, L 8 (each
+coefficient's code) and F 2 (`ao_cost()`). It picks the encoders' order for 99.97% of `s.2.dts`'s
+channels and frames, 99.78% of the Cymatics stream's (the rule before, 97.4% and 95.7%) and 99.1%
+to 100% of the other 48 kHz streams' (the 96 kHz ones', at 1024 samples a frame, go past order 10
+and are neither rule's); L in 12 values about 8 and F in 5 go by the channel as before, and the
+pairs' bits (`dc_bits()`) take the order so too. Format 27 takes the meta file of `s.2.dts` from
+9272 bytes with xz to 7280 (its tenth section from 3991 to 2028), the Cymatics stream's from 25076
+to 16796 (from 14387 to 6221) and the 27 streams of the regression set from 63112 to 60608.
+
 ## Tests
 
 Each stream below joins back byte for byte (`-v`, and `d` and `cmp`):
@@ -443,12 +454,12 @@ Each stream below joins back byte for byte (`-v`, and `d` and `cmp`):
 | `lotr_5.1_768.dts`, `dts_es.dts`, `core_51_24_48_768_0`, `x96_xxch_71_24_96_3840`, `xbr_xxch_71_24_48_3840`, `xxch_71_24_48_2046` | | core only, or EXSS without XLL | (no XLL) |
 | `s.2.dts`'s first 3 MB, `master_audio_7.1_24bit.dts`, the first 3 MB again | 12598176 | a layout change: 5.1, 7.1, 5.1 | 2440 of 2440, into `prefix.wav` and `prefix.2.wav` |
 
-Meta files of format 25 (the common header's size and segment fields as the others), 24 (the
-pairs' flags by their gain), 23 (the orders' rule stopped where the recursion breaks down), 22 (the pairs'
+Meta files of format 26 (the orders' rule before the encoders' cost), 25 (the common header's size
+and segment fields as the others), 24 (the pairs' flags by their gain), 23 (the orders' rule stopped where the recursion breaks down), 22 (the pairs'
 flags and the ranks in fewer contexts), 21 (the DTS:X heights in the bed), 20, 19, 18, 17, 4 (the
 headers as they are), 3 (before `prefix.x.wav`) and 2 (before `prefix.dtsx`) still join: each
 stream above's, made by the versions before, joins back with this one. The split's other outputs
-are the same as format 25's, 24's, 23's and 22's, and format 21's but for the DTS:X
+are the same as format 26's, 25's, 24's, 23's and 22's, and format 21's but for the DTS:X
 streams' WAVs (their rear surrounds without the heights), and those as format 4's (and, without
 DTS:X object data, as format 3's).
 
@@ -496,13 +507,13 @@ same five), 800 with format 22's (those five and FATE's `dtsx_7.1.4_24bit.dts`) 
 23's (the same six; a damaged 32-bit WAV took format 22's fold of the DTS:X heights past a sample's
 32 bits, which it now takes mod 2^32), 800 with format 24's (those six and two pieces of the
 Cymatics stream, 400 KB each, where the recursion breaks down), 800 with format 25's (the same
-eight) and 800 with format 26's (the same eight). Builds with
+eight), 800 with format 26's (the same eight) and 800 with format 27's (the same eight). Builds with
 `-O0`, `-O2` and `-O3 -march=native -ffp-contract=fast` (fused multiply-adds) write the same meta
 files, and each joins the others'.
 
-On `s.2.dts`, `c -v` takes 15.3 s and `d` 5.4 s, where format 25's take 16.1 s and 5.6 s
-(format 24's 13.6 s and 4.9 s, format 22's 13.3 s and 4.7 s); on the Cymatics stream, `c -v` 42 s and
-`d` 15.7 s, format 25's 43 s and 15.8 s (format 24's 38 s and 12.9 s, format 22's 36 s and 11.9 s).
+On `s.2.dts`, `c -v` takes 15.6 s and `d` 5.7 s, where format 26's take 15.7 s and 5.8 s
+(format 24's 13.6 s and 4.9 s, format 22's 13.3 s and 4.7 s); on the Cymatics stream, `c -v` 41 s and
+`d` 15.2 s, format 26's 40 s and 14.6 s (format 24's 38 s and 12.9 s, format 22's 36 s and 11.9 s).
 (Measured before on another day: on `s.2.dts` format 14's 11.5 s and 4.2 s, format 8's 8.4 s and
 3.1 s, format 4's 5.6 s and 2.0 s; on the Cymatics stream format 21's 32 s and 12 s, format 14's
 30 s and 10.6 s, format 8's 23 s.)
@@ -516,20 +527,20 @@ For `s.2.dts`, with xz `-9e` and FLAC (ffmpeg, `-compression_level 12`):
 | `s.2.dts` | 130554771 | 100% |
 | `s.2.dts`, xz | 124891928 | 95.66% |
 | `s2.dtsc` (the core), xz | 44109856 | 33.79% |
-| `s2.meta`, xz | 9272 | 0.01% |
+| `s2.meta`, xz | 7280 | 0.01% |
 | `s2.wav`, FLAC | 78014446 | 59.76% |
-| the three | 122133574 | 93.55% |
+| the three | 122131582 | 93.55% |
 
 (The meta file's format 4 came to 1243884 bytes with xz, format 5's to 386896, format 6's to 282692,
 format 7's to 204176, format 8's to 200204, format 9's to 89028, format 10's to 78872, format 11's
 to 77536, format 12's to 65596, format 13's to 63744, format 14's to 61180, format 15's to 51912,
 format 16's to 43852, format 17's to 41672, format 18's to 35560, format 19's to 16600, format 20's
-to 13340, format 21's and 22's to 11636, format 23's to 11212, format 24's to 11164, format 25's to 9900.)
+to 13340, format 21's and 22's to 11636, format 23's to 11212, format 24's to 11164, format 25's to 9900, format 26's to 9272.)
 
 The Cymatics stream's DTS:X object data, 96021900 bytes as it is, xz no smaller: as `prefix.x.wav`
 (188590184 bytes) through WavPack (ffmpeg, `-compression_level 3`), 92545003 bytes (FLAC
-`-compression_level 12`, 97067662), and 94 KB more of the meta file (1752681 bytes; with xz 25076,
-where format 25's was 28688, format 24's 31140, format 23's 32712, format 22's 36508, format 21's 36504, format 3's 2665280 without them, format 4's 4104040 with them, format 5's 1446656, format
+`-compression_level 12`, 97067662), and 94 KB more of the meta file (1744515 bytes; with xz 16796,
+where format 26's was 25076, format 25's 28688, format 24's 31140, format 23's 32712, format 22's 36508, format 21's 36504, format 3's 2665280 without them, format 4's 4104040 with them, format 5's 1446656, format
 6's 1054156, format 7's 722100, format 8's 678020, format 9's 427644, format 10's 392200, format
 11's 360700, format 12's 309328, format 13's 303912, format 14's 292292, format 15's 205592, format
 16's 169712, format 17's 153936, format 18's 137392, format 19's 68224 and format 20's 48604). Of
@@ -642,7 +653,7 @@ codeword, of 64 the encoder keeps, is nearest the LPC of the subframe and the 4 
 the VQ vector the best of a group of 32 that a learned score picks),
 how it decimated the LFE, and how its bit allocations follow one table of the subbands' energies
 (a transient's from the transient on) at the level its rate control sets, filling its frames; the
-core takes 76413 bytes (0.15%).
+core takes 76384 bytes (0.15%).
 
 That doesn't help dtssplit as it is. There the audio isn't stored: the WAV holds the residual,
 which is the audio less the core's decode, and the core is what predicts the audio. It helps a
@@ -650,10 +661,10 @@ compressor that stores the audio and derives the core from it:
 
 | `s.2.dts` | Bytes | |
 |---|---:|---:|
-| the core (xz), the residual (FLAC), the meta file (xz) | 122135938 | 93.55% |
+| the core (xz), the residual (FLAC), the meta file (xz) | 122131582 | 93.55% |
 | the same, the core by a model of its fields (78.8%) | about 118.7 MB | 90.9% |
 | the audio (FLAC), the core given the audio, the meta file | about 110.4 MB | 84.5% |
-| the audio (FLAC), the core by dtsdpack, the meta file (xz) | 107069527 | 82.01% |
+| the audio (FLAC), the core by dtsdpack, the meta file (xz) | 107065142 | 82.01% |
 
 The audio costs 29 MB more than the residual (106981478 against 78014446 bytes with FLAC), but
 the core costs 37-42 MB less. In such a compressor:
@@ -693,8 +704,8 @@ show. `s.2.dts` takes 13 s.
 
 ## The meta file's format
 
-`DTSSPLIT`, a version byte (26; `d` reads 25 too, which codes the common header's size and
-segment fields as the others, 24, which codes the pairs' flags by their gain, 23,
+`DTSSPLIT`, a version byte (27; `d` reads 26 too, which has the orders' rule before the
+encoders' cost, 25, which codes the common header's size and segment fields as the others, 24, which codes the pairs' flags by their gain, 23,
 which stops the orders' rule where the recursion breaks down and has the pairs' gains in 5 buckets, 22, which codes the pairs' flags and
 the ranks in fewer contexts, 21, which keeps the DTS:X heights in the bed, 20,
 which keeps the common flags as they are, format
