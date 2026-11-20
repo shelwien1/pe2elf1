@@ -1012,6 +1012,7 @@ struct AoState {
   int v23;            // (v23: the pairs' flags by the decorrelation's gain after the prediction, dc_gain(), the
                       // ranks by the two cheapest orders, ac_rx())
   int v24;            // (v24: the orders' rule on past where Levinson's recursion breaks down, ao_pred())
+  int v25;            // (v25: the pairs' flags by the bits decorrelating would save, dc_bits())
   U8 dcp[XCS + 1][XCH / 2];  // (from version 18: each pair's flag in its set's last frame, ac_dcf()'s)
 };
 
@@ -1029,7 +1030,7 @@ struct AoState {
 // contexts start from their parent's estimate, the context but for ac_rx(), which each of their
 // decisions moves too (ac_par(), HacModel::commit()).
 enum { AC_RX = 36, AC_RK0 = 0, AC_RK1 = AC_RK0 + (XCS + 1) * 16 * AC_RX, AC_RKT = AC_RK1 + (XCS + 1) * 16 * AC_RX,
-       AC_DCF = AC_RKT + (XCS + 1) * 16, AC_NG = 7, AC_RP0 = AC_DCF + (XCS + 1) * 8 * 8 * 2 * 4 * AC_NG,
+       AC_DCF = AC_RKT + (XCS + 1) * 16, AC_NG = 36, AC_RP0 = AC_DCF + (XCS + 1) * 8 * 8 * 2 * 4 * AC_NG,
        AC_RP1 = AC_RP0 + (XCS + 1) * 16, AC_NCTX = AC_RP1 + (XCS + 1) * 16 };
 static U32 ac_par(U32 c) {
   if (c >= AC_RKT) return c;
@@ -1121,16 +1122,17 @@ struct AcDec {
 // all came out smaller the shorter their memory, to those (MS_AC's 22239 bytes of the Cymatics
 // stream at 4096, 22092 at 30; MS_HAC's 16228 at 4096, 13146 at 14 (the rules of version 19); the
 // coding parameters' 21536 at 4096, 19767 at 30)
-enum { HC_N = 1 << 18, HC_LIM = 4096, HC_LIMA = 30, HC_LIMC = 30, HC_LIMH = 14 };
+enum { HC_N = 1 << 18, HC_NA = 1 << 19, HC_LIM = 4096, HC_LIMA = 30, HC_LIMC = 30, HC_LIMH = 14 };
 struct HacModel {
-  int lim;  // (the decisions a context's estimate counts)
-  HacModel() : lim(HC_LIM) {}
+  int lim;    // (the decisions a context's estimate counts)
+  U32 size;  // (its contexts: HC_N, MS_AC's HC_NA, its contexts not hashed)
+  HacModel() : lim(HC_LIM), size(HC_N) {}
   std::vector<U32> p;  // P(0) in 2^-24ths
   std::vector<U16> n;
   std::vector<U64> pend;  // the record's decisions (context | parent << 24 | bit << 48 | the parent's too << 49)
   void reset() {
-    p.assign(HC_N, 1u << 23);
-    n.assign(HC_N, 0);
+    p.assign(size, 1u << 23);
+    n.assign(size, 0);
     pend.clear();
   }
   U32 p16(U32 c, U32 par) const {
@@ -2423,7 +2425,7 @@ static const std::vector<double>& hann_cos(int N) {
 // 99.8% of its object audio's (93.5%)
 // (the last ones are kept with their samples: the pairs' gains, the orders' rule and the reflection
 // coefficients take those of the same samples, and the split's check takes them all again; to
-// AO_K lags at least, for those that ask for more)
+// AO_K lags at least, for those that ask for more; and their dc_bits())
 struct AcfCache {
   enum { NE = 48 };
   struct E {
@@ -2431,18 +2433,18 @@ struct AcfCache {
     U64 h;
     int o;  // (the last lag; -1: none)
     float R[XORD + 1];
+    int nb;  // (dc_bits() kept: 1)
+    S64 bits[2];
   } e[NE];
   int next;
   AcfCache() : next(0) {
-    for (int i = 0; i < NE; i++) e[i].h = 0, e[i].o = -1;
+    for (int i = 0; i < NE; i++) e[i].h = 0, e[i].o = -1, e[i].nb = 0;
   }
 };
-static void rc_autocorr(const S32* bb, int N, int o, float* R) {
-  static AcfCache c;
-  if (N <= 0) {
-    for (int l = 0; l <= o; l++) R[l] = 0;
-    return;
-  }
+static AcfCache acf;
+// the entry of bb's (N > 0 samples) autocorrelation to lag o at least
+static AcfCache::E* acf_get(const S32* bb, int N, int o) {
+  AcfCache& c = acf;
   U64 h[4] = {(U64)N, 1, 2, 3};
   int n = 0;
   for (; n + 4 <= N; n += 4)
@@ -2451,10 +2453,8 @@ static void rc_autocorr(const S32* bb, int N, int o, float* R) {
   const U64 hk = h[0] ^ (h[1] >> 7 | h[1] << 57) ^ (h[2] >> 23 | h[2] << 41) ^ (h[3] >> 41 | h[3] << 23);
   for (int i = 0; i < AcfCache::NE; i++) {
     const AcfCache::E& e = c.e[i];
-    if (e.h == hk && e.o >= o && e.x.size() == (size_t)N && !memcmp(&e.x[0], bb, (size_t)N * sizeof *bb)) {
-      memcpy(R, e.R, (size_t)(o + 1) * sizeof *R);
-      return;
-    }
+    if (e.h == hk && e.o >= o && e.x.size() == (size_t)N && !memcmp(&e.x[0], bb, (size_t)N * sizeof *bb))
+      return &c.e[i];
   }
   const int oc = o > AO_K ? o : AO_K;
   const std::vector<double>& w = hann_cos(N);
@@ -2471,7 +2471,15 @@ static void rc_autocorr(const S32* bb, int N, int o, float* R) {
   e.x.assign(bb, bb + N);
   e.h = hk;
   e.o = oc;
-  memcpy(R, e.R, (size_t)(o + 1) * sizeof *R);
+  e.nb = 0;
+  return &e;
+}
+static void rc_autocorr(const S32* bb, int N, int o, float* R) {
+  if (N <= 0) {
+    for (int l = 0; l <= o; l++) R[l] = 0;
+    return;
+  }
+  memcpy(R, acf_get(bb, N, o)->R, (size_t)(o + 1) * sizeof *R);
 }
 
 // The order of the nch channels of the set whose first is g0 of ac's samples, as the encoders' pairwise
@@ -2582,10 +2590,102 @@ static S64 dc_cost(const float* R, int N) {
 // in 7: under -48, -48 to -8, -8 to 0, 0 to 8, 8 to 32, 32 to 64, more (the share decorrelated goes
 // on changing past -8 and 32: of the Cymatics stream's pairs with a coefficient, 0.14 under -64,
 // 0.24 at -32, 0.74 at 32, 0.93 past 64)
+// From version 25 the bits the encoders would code a channel's samples x in, it seems: the order the
+// rule picks (8.5 bits an order, no floor, on past where the recursion breaks down), its
+// coefficients' codes (rc_levinson()'s) at 8 bits each, the residual by the decoder's prediction, each
+// 32 samples' Rice code at its best width (the bits a width takes are convex in it); each 256's into
+// b256
+static S64 dc_bits(const S32* x, int N, S64* b256) {
+  *b256 = 0;
+  if (N <= 0) return 0;
+  AcfCache::E* ce = acf_get(x, N, 10);  // (the samples' entry: none other is taken till the bits are kept)
+  if (ce->nb) {
+    *b256 = ce->bits[1];
+    return ce->bits[0];
+  }
+  ce->nb = 1;
+  ce->bits[0] = ce->bits[1] = 0;
+  float R[11];
+  memcpy(R, ce->R, sizeof R);
+  if (!(R[0] > 0) || !(R[0] < 3.0e38f)) return 0;
+  float a[11], an[11], E = R[0];
+  a[0] = 1;
+  S64 best = log2_q20(E) * (N / 2);
+  int bk = 0;
+  for (int j = 1; j <= 10; j++) {
+    float acc = R[j];
+    for (int t = 1; t < j; t++) acc = f32add(acc, f32mul(a[t], R[j - t]));
+    const float k = -f32div(acc, E);
+    for (int t = 1; t < j; t++) an[t] = f32add(a[t], f32mul(k, a[j - t]));
+    for (int t = 1; t < j; t++) a[t] = an[t];
+    a[j] = k;
+    E = f32mul(E, f32add(1.0f, -f32mul(k, k)));
+    if (!(E > 0) || !(E < 3.0e38f)) continue;
+    const S64 c = log2_q20(E) * (N / 2) + (S64)17 * j * (1 << 19);
+    if (c < best) best = c, bk = j;
+  }
+  int code[10] = {0}, rq[10], co[XORD];
+  rc_levinson(R, bk, code, true, true);
+  for (int j = 0; j < bk; j++) {
+    const int q = unzig((U32)code[j]);
+    rq[j] = q >= 0 ? RC_TAB[q] : q > -128 ? -(int)RC_TAB[-q] : 0;
+  }
+  if (bk) rc_to_lpc(rq, bk, co);
+  static std::vector<U32> z;
+  z.resize((size_t)N);
+  for (int n = 0; n < N; n++) z[n] = zig(n < bk ? x[n] : (S32)((U32)x[n] + (U32)lpc_pred((const U32*)x, n, bk, co)));
+  S64 bits[2] = {8 * bk, 8 * bk};
+  for (int bl = 0; bl < 2; bl++)
+    for (int s0 = 0, B = bl ? 256 : 32; s0 < N; s0 += B) {
+    const int s1 = s0 + B < N ? s0 + B : N, len = s1 - s0;
+    U64 sum = 0;
+    for (int n = s0; n < s1; n++) sum += z[n];
+    int p = 0;
+    while (p < 23 && (sum / (U64)len) >> (p + 1)) p++;
+    auto cost = [&](int w) {
+      U64 c = (U64)w + (U64)len * (U64)(1 + w);
+      for (int n = s0; n < s1; n++) c += z[n] >> w;
+      return c;
+    };
+    // (the widths p - 1, p and p + 1 at once, nearly always the least among them: then on past it,
+    // the smallest of the widths at the least, as one at a time from p would end at)
+    const int q = p > 0 ? p - 1 : 0;
+    U64 c3[3] = {0, 0, 0};
+    for (int n = s0; n < s1; n++) c3[0] += z[n] >> q, c3[1] += z[n] >> (q + 1), c3[2] += z[n] >> (q + 2);
+    for (int t = 0; t < 3; t++) c3[t] += (U64)(q + t) + (U64)len * (U64)(1 + q + t);
+    U64 cp;
+    if (p > 0 && c3[0] <= c3[1]) {
+      p--, cp = c3[0];
+      while (p > 0) {
+        const U64 cl = cost(p - 1);
+        if (cl > cp) break;
+        cp = cl, p--;
+      }
+    } else {
+      cp = c3[p - q];
+      if (p < 23) {
+        U64 ch = c3[p - q + 1];
+        while (ch < cp) {
+          cp = ch, p++;
+          if (p >= 23) break;
+          ch = cost(p + 1);
+        }
+      }
+    }
+    bits[bl] += (S64)cp;
+  }
+  ce->bits[0] = bits[0];
+  ce->bits[1] = *b256 = bits[1];
+  return bits[0];
+}
+// (from version 25 the buckets of the bits decorrelating would save, less the coefficient's 7, by
+// dc_bits(), at Rice codes of 32 samples and of 256, each under -32, -8, 0, 8, 32, more: the flags of
+// the Cymatics stream's pairs 31% fewer bytes, s.2.dts's 38%; the 32's the better there, the 256's,
+// which are s.2.dts's segments, here)
 static int dc_gain(const AoCtx& ac, int g0, int a, int b, int pc) {
   const int N = ac.N;
-  const bool v24 = ac.st->v24;
-  if (!ac.val || N <= 0 || a < 0 || b < 0 || g0 + a >= ac.nch || g0 + b >= ac.nch) return v24 ? 3 : 2;
+  const bool v24 = ac.st->v24, v25 = ac.st->v25;
+  if (!ac.val || N <= 0 || a < 0 || b < 0 || g0 + a >= ac.nch || g0 + b >= ac.nch) return v25 ? 14 : v24 ? 3 : 2;
   const S32* va = ac.val + (size_t)(g0 + a) * N;
   const S32* vb = ac.val + (size_t)(g0 + b) * N;
   static std::vector<S32> yd;
@@ -2596,6 +2696,17 @@ static int dc_gain(const AoCtx& ac, int g0, int a, int b, int pc) {
   rc_autocorr(vb, N, 10, R1);
   rc_autocorr(&yd[0], N, 10, R2);
   const S64 g = dc_cost(R1, N) - dc_cost(R2, N), B = (S64)1 << 20;
+  if (v25) {
+    if (!cf) return 14;  // (as decorrelating by 0, both the same)
+    S64 l1, l2;
+    const S64 s1 = dc_bits(vb, N, &l1), s2 = dc_bits(&yd[0], N, &l2);
+    const S64 d[2] = {s1 - s2 - 7, l1 - l2 - 7};
+    static const int E[5] = {-32, -8, 0, 8, 32};
+    int bi[2] = {0, 0};
+    for (int t = 0; t < 2; t++)
+      while (bi[t] < 5 && d[t] >= E[bi[t]]) bi[t]++;
+    return bi[0] * 6 + bi[1];
+  }
   if (v24) return g < -48 * B ? 0 : g < -8 * B ? 1 : g < 0 ? 2 : g < 8 * B ? 3 : g < 32 * B ? 4 : g < 64 * B ? 5 : 6;
   return g < -8 * B ? 0 : g < 0 ? 1 : g < 8 * B ? 2 : g < 32 * B ? 3 : 4;
 }
@@ -2804,8 +2915,8 @@ static void rc_xor(U8* h, const Xll& x, const BandData& msb, int dir, bool fl, b
     }
 }
 
-enum { VERSION = 24 };  // (the join reads 23 too, the orders' rule stopped where the recursion breaks
-                        // down, 22, the pairs' flags without dc_gain() and the ranks without ac_rx(), 21, without
+enum { VERSION = 25 };  // (the join reads 24 too, the pairs' flags without dc_bits(), 23, the orders'
+                        // rule stopped where the recursion breaks down, 22, the pairs' flags without dc_gain() and the ranks without ac_rx(), 21, without
                         // the DTS:X heights folded out of the bed,
                         // 20, with the common flags as they are, format 17's
                         // Rice and hybrid rules and the Rice widths by one rule, 19, with the
@@ -4521,6 +4632,7 @@ struct MetaOut {
   U64 cbytes[2];  // (and the coding parameters', the frames' and the object data's)
   void open(const std::string& path) {
     amodel.lim = HC_LIMA;
+    amodel.size = HC_NA;
     hmodel.lim = HC_LIMH;
     cmodel[0].lim = cmodel[1].lim = HC_LIMC;
     f.open(path);
@@ -4946,7 +5058,7 @@ struct Splitter {
     xwav_on = false;
     xf_done = false;
     memset(&chk.ao, 0, sizeof chk.ao);
-    chk.ao.v14 = chk.ao.v15 = chk.ao.v17 = chk.ao.v18 = chk.ao.v23 = chk.ao.v24 = 1;
+    chk.ao.v14 = chk.ao.v15 = chk.ao.v17 = chk.ao.v18 = chk.ao.v23 = chk.ao.v24 = chk.ao.v25 = 1;
     chk.aost = sp.aost = &chk.ao;
     acw.init(&actape, 0, 0, 0);
     acr.init(0, &actape, 0, 0);
@@ -5119,6 +5231,7 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
   sp.ao.v18 = h[8] >= 18;
   sp.ao.v23 = h[8] >= 23;
   sp.ao.v24 = h[8] >= 24;
+  sp.ao.v25 = h[8] >= 25;
   sp.aost = &sp.ao;
   static AcDec acdec, hacdec;  // (from version 18, MS_AC's: a block's decisions; from 19 MS_HAC's)
   static AcModel acmodel;
@@ -5133,6 +5246,7 @@ static void join(const std::string& prefix, Sink& out, U64& nbytes) {
   hacdec.init(&none, 0);
   acmodel.reset();
   hacmodel.reset();
+  kacmodel.size = HC_NA;
   kacmodel.reset();
   kacmodel.lim = h[8] >= 20 ? HC_LIMA : HC_LIM;  // (version 19: HC_LIM)
   hacmodel.lim = h[8] >= 20 ? HC_LIMH : HC_LIM;
