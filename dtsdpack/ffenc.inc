@@ -188,6 +188,18 @@ struct FfEnc {
       if (res + i <= hi && FE_CB_LEVEL[res + i] >= (S32)a) res += i;
     return -res;
   }
+  // (lfe_downsample(): the LFE's 8 values from the 512 samples before the frame's, hl (its history),
+  // and the frame's, lx: each the sum of the 512 from the 64th before it times FE_LFE_FIR's taps, in
+  // 32 bits, wrapping)
+  static void lfe_down(const S32* hl, const S32* lx, S32* out) {
+    for (int l = 0; l < 8; l++) {
+      U32 acc = 0;
+      int j = 0;
+      for (int i = 64 * l; i < 512; i++, j++) acc += (U32)fe_mul32(hl[i], FE_LFE_FIR[j]);
+      for (int i = 0; i < 64 * l; i++, j++) acc += (U32)fe_mul32(lx[i], FE_LFE_FIR[j]);
+      out[l] = (S32)acc;
+    }
+  }
   // (subband_transform())
   // (its window's 512 samples from hs on, circularly: here twice over in h, so that they lie in a
   // row; the sums in 32 bits, wrapping, in any order: the same integers)

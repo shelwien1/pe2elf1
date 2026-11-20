@@ -119,6 +119,29 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   int ffe_ok;
   U16 ffn[2][FfEnc::NMG][4][2][2], ffd[FfEnc::NMG][4][2];
   U64 n_ff, n_ffhit;
+  // and its indexes: its encoder's quantization of the values it makes from the WAV, how often the
+  // core's where it isn't the model's prediction (that one, it) and in all (all, it); where it has
+  // been both more often and all but always, the WAV is the encoder's input
+  U32 qff_c[2], qff_n[2];
+  bool qff_on() const { return qff_n[0] >= 256 && (U64)qff_n[1] * 1000 >= (U64)qff_n[0] * 995 && jx_more(qff_c, 4, 1); }
+  // and its LFE: its 8 values (lfe_downsample()) from each of two WAV channels no core channel
+  // takes, with the history FFmpeg's encoder has (its input's last channel's, a sample late:
+  // shift_history() fills the LFE's from the slot before its input's first channel), or the
+  // channel's own; how often each one's quantization at the core's scale factor was the core's
+  // value; where the best's all but always, the values and their scale factor by it
+  static constexpr int FFL_N = 4;
+  S32 ffl[FFL_N][8];
+  U8 ffl_v[FFL_N];          // (whether made: the frame's channels)
+  int ffl_ok;               // (whether any)
+  int ffl_use;              // (whether the subframe's LFE goes by them)
+  U32 ffl_h[FFL_N], ffl_n;  // (the values each made, of those tallied)
+  int ffl_best() const {
+    int k = 0;
+    for (int i = 1; i < FFL_N; i++)
+      if (ffl_h[i] > ffl_h[k]) k = i;
+    return k;
+  }
+  bool ffl_on() const { return ffl_ok && ffl_v[ffl_best()] && ffl_n >= 8 && (U64)ffl_h[ffl_best()] * 200 >= (U64)ffl_n * 199; }
   // and its scale factors: by the ABITS (to 12), how often each of four was the core's: the
   // model's prediction, FFmpeg's encoder's rule on the decode's peak (calc_one_scale()) and the
   // least whose step puts that peak within 3/32 and 1/4 of the quantizer's top level (FfEnc::
@@ -762,6 +785,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // 48 kHz; to 6 channels, each a WAV channel as it is), from the WAV's 512 samples from o (where
   // its first block's analysis ends), and the 512 before them (FFmpeg's s32: 24 bits shifted up)
   bool ff_frame(const CoreRec& r, const CoreSub& s, S64 o) {
+    ffl_ok = 0;
     if (!B::sel_ff || r.nsubfs != 1 || r.nblks != 15 || s.nssc != 2 || r.npchs > FfEnc::MAXC || bind.up != 1 || wav->dec != 1)
       return false;
     const int ri = r.sfreq == 13 ? 2 : r.sfreq == 8 ? 1 : r.sfreq == 3 ? 0 : -1;
@@ -780,7 +804,52 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       for (int i = 0; i < 512; i++) ffe->hist[ch][i] = (S32)((U32)x[i] << 8), ffe->in[ch][i] = (S32)((U32)x[512 + i] << 8);
     }
     ffe->frame();
+    ffl_ok = 0;
+    if (r.lff == 2) {
+      int nc = 0;
+      for (int c = 0; c < wav->nch && nc < 2; c++) {
+        bool used = false;
+        for (int ch = 0; ch < r.npchs; ch++) used |= bind.map[ch] == c;
+        if (used) continue;
+        S32 b1[512], b2[512], b3[512], hl[512], lx[512];
+        const S32* const x = wav->span(c, o, 512, b1);
+        const S32* const h0 = wav->span(wav->nch - 1, o - 513, 512, b2);
+        const S32* const h1 = wav->span(c, o - 512, 512, b3);
+        for (int i = 0; i < 512; i++) lx[i] = (S32)((U32)x[i] << 8);
+        for (int k = 0; k < 2; k++) {
+          for (int i = 0; i < 512; i++) hl[i] = (S32)((U32)(k ? h1 : h0)[i] << 8);
+          if (!k) hl[0] = 0;  // (input[-1]: the memory before the frame's buffer, as 0)
+          FfEnc::lfe_down(hl, lx, ffl[2 * nc + k]);
+          ffl_v[2 * nc + k] = 1;
+        }
+        nc++;
+      }
+      for (int k = 2 * nc; k < FFL_N; k++) ffl_v[k] = 0;
+      ffl_ok = nc > 0;
+    }
     return true;
+  }
+  // the quantization of FFmpeg's LFE values at scale factor sf (its LFE's ABITS 11's step): q, or
+  // false where its exponent is out of range
+  static bool ffl_quant(int sf, FfSoft& q) {
+    const int ns = sf & 127, e = FE_SF_INV[ns].e + FE_STEP_INV[11].e - 17;
+    if (e < 1 || e > 30) return false;
+    q = FfSoft{fe_mul32(FE_SF_INV[ns].m, FE_STEP_INV[11].m), e};
+    return true;
+  }
+  // (each candidate's values against the subframe's s, at its scale factor sf: after the walk has
+  // them all)
+  void ffl_tally(const CoreSub& s, int sf) {
+    FfSoft q;
+    if (!ffl_ok || !ffl_quant(sf, q)) return;
+    for (int i = 0; i < 8; i++) {
+      for (int k = 0; k < FFL_N; k++) ffl_h[k] += ffl_v[k] && (S8)(fe_quant(ffl[k][i], q) & 0xff) == s.lfe[i];
+      ffl_n++;
+    }
+    if (ffl_n >= 1u << 16) {
+      ffl_n >>= 1;
+      for (int k = 0; k < FFL_N; k++) ffl_h[k] >>= 1;
+    }
   }
   // channel ch's subband b's ABITS v (in lo..hi) against FFmpeg's encoder's made again: whether it
   // is that, by how near its SNR lies the nearer end of its range, else whether the ABITS across
@@ -819,6 +888,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     for (int k = 0; k < 6; k++) tw_n[k][0] = 1, tw_n[k][1] = 7;
     ffe_ok = 0, n_ff = n_ffhit = 0;
+    qff_c[0] = qff_c[1] = qff_n[0] = qff_n[1] = 0;
+    ffl_ok = ffl_use = 0, ffl_n = 0;
+    for (int k = 0; k < FFL_N; k++) ffl_h[k] = 0, ffl_v[k] = 0;
     for (int m = 0; m < FfEnc::NMG; m++)
       for (int c = 0; c < 4; c++) {
         for (int g = 0; g < 2; g++)
@@ -974,6 +1046,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     fir = r.filts ? FIR_PERFECT : FIR_NONPERFECT;
     for (int ch = 0; ch < NCH; ch++) bound[ch] = 0, dtwin[ch] = -1;
     lfe_on = 0;
+    if (!r.xpass) ffl_ok = ffl_use = 0;
     if (!wav || !wav->ok) return;
     const int up = bind.up;
     const S64 o0 = 32 * up * t0 + bind.off, hs = o0 + 32 * up * (S64)(nsmp - 1);
@@ -3934,6 +4007,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       int k = 0;
       for (int i = 1; i < 4; i++)
         if (w[i] > w[k]) k = i;
+      if (qff_on()) k = 1;  // (since format 138 the rule's where the WAV is the encoder's input)
       if (k) p = fc[k];
     }
     D.dp = p >= 0 ? sf_run(r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p) : 0;
@@ -4396,6 +4470,27 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       tq = 1;
       if (jx_more(tw_t, 4, 1)) qp = qt, dist = dt, alt = at;
     }
+    // (since format 138 an FFmpeg encode's index as its encoder quantizes the values it makes from
+    // the WAV, at the core's scale factor and ABITS (ffenc.inc's transform, its quantize_value()):
+    // where the WAV is the encoder's input, the core's every time; taken, sure, where it has been
+    // all but always and more often than the audio's, as it is not for the encode's own decodes;
+    // else where it has been more often where the two differ, taken with the one next to it toward
+    // the audio's as the other (a 16-bit decode's of its encode of a 16-bit WAV, whose ABITS are its
+    // again: 445344 bytes to 381290))
+    S64 qff = 0;
+    const S64 qm = qp;
+    int hq = 0;
+    if (ffe_ok && !r.xpass && bnd && !pm && a > 0 && a <= 26 && r.shuff[ch] == 6 && j < FfEnc::NS) {
+      const int ns = s.scale[ch][b][0] & 127, e = FE_SF_INV[ns].e + FE_STEP_INV[a].e - 17;
+      if (e >= 1 && e <= 30) {
+        const FfSoft qq{fe_mul32(FE_SF_INV[ns].m, FE_STEP_INV[a].m), e};
+        qff = fe_quant(ffe->sub[ch][b][j], qq);
+        qff = qff < lo ? lo : qff > hi ? hi : qff;
+        hq = 1;
+        if (qff_on()) qp = qff, alt = qff + (qff >= 0 ? 1 : -1), dist = (S128)1 << 100;
+        else if (qff != qp && jx_more(qff_c, 4, 1)) alt = qff + (qp > qff ? 1 : -1), qp = qff;
+      }
+    }
     // (a sample past the WAV's end coded without it: its continuation's index as context)
     const int pe = bound[ch] && !bnd;
     S64 qc = 0;
@@ -4469,6 +4564,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (je) {
       je_qn[b][0]++, je_qn[b][1] += qe == v;
       if (je_qn[b][0] >= 1u << 16) je_qn[b][0] >>= 1, je_qn[b][1] >>= 1;
+    }
+    if (hq) {
+      if (qff != qm) qff_c[0] += v == qm, qff_c[1] += v == qff;
+      qff_n[0]++, qff_n[1] += v == qff;
+      if (qff_c[0] + qff_c[1] >= 1u << 16) qff_c[0] >>= 1, qff_c[1] >>= 1;
+      if (qff_n[0] >= 1u << 16) qff_n[0] >>= 1, qff_n[1] >>= 1;
     }
     miss[ch][b] = (U8)(miss[ch][b] << 1 | (bnd && how != 0));
     if (bnd) chm[ch] = chm[ch] << 1 | (how != 0);
@@ -4692,7 +4793,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         const S64 d = ENC ? v - qp : 0, ad = d < 0 ? -d : d;
         if (fh.bit(HT_NEAR, ENC && ad <= HIT_NEAR)) {
           const int same = fh.bit(HT_SIDE, ENC && (sa ? (d > 0) == (sa > 0) : d > 0));
-          int k = same && sa ? 2 : 1;
+          int k = same && sa && alt == qp + sa ? 2 : 1;  // (alt one away: 1 is alt)
           while (k < HIT_NEAR && fh.bit(HT_DIST + (same ? HIT_NEAR : 0) + k, ENC && ad > k)) k++;
           const S64 w = qp + (same ? (sa ? sa : 1) : (sa ? -sa : -1)) * k;
           return w < lo ? lo : w > hi ? hi : w;
@@ -4781,6 +4882,76 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     n_sfhit += v == p;
     lfe_scl = v;
     lfe_st = ss_rule() ? lfe_scale_dec(v) : lfe_scale(v);
+    return v;
+  }
+  // (where FFmpeg's encoder's LFE values have been the core's (ffl_on()): the scale factor v by its
+  // rule on the best's peak (calc_one_scale())
+  int code_lfe_scale_ff(int v) {
+    const S32* const x = ffl[ffl_best()];
+    S32 m = 0;
+    for (int i = 0; i < 8; i++) {
+      const S32 a = x[i] < 0 ? (S32)(0u - (U32)x[i]) : x[i];  // (as abs(): -2^31 stays so, below any)
+      if (a > m) m = a;
+    }
+    FfSoft qq;
+    const int p = FfEnc::one_scale(ffe->get_cb(m), 11, &qq);
+    M_scl_v D;
+    D.kd = 3;
+    D.ab = 0;
+    D.pm = 0;
+    D.pk = 1;
+    D.pn = SB_N - 1;
+    D.lp = lfe_lp;
+    D.pl = 15;
+    D.hm = lfe_hm;
+    D.bd = 0;
+    D.dp = sf_run(SF7, SF7_N, p);
+    D.cc = 0;
+    D.nb = 9;
+    v = (int)scale(D, v, p, 0, 128);
+    lfe_hm = v == p ? 1 : 2;
+    lfe_lp = dvar(v - p);
+    n_sf++;
+    n_sfhit += v == p;
+    lfe_scl = v;
+    lfe_st = ss_rule() ? lfe_scale_dec(v) : lfe_scale(v);
+    return v;
+  }
+  // and value i, v, by the best's quantization at that scale factor, sure
+  S64 code_lfe_ff(int i, S64 v) {
+    FfSoft q;
+    S64 qp = 0, alt = 1;
+    S128 dist = 0;
+    if (ffl_quant(lfe_scl, q)) {
+      qp = (S8)(fe_quant(ffl[ffl_best()][i], q) & 0xff);
+      alt = qp + (qp >= 0 ? 1 : -1);
+      alt = alt > 127 ? 126 : alt < -128 ? -127 : alt;
+      dist = (S128)1 << 100;
+    }
+    M_smp_v D;
+    D.ab = 27;
+    D.hw = 0;
+    D.pk = 1;
+    D.nr = near_bucket(dist, (S128)1 << 22, 17);
+    D.nl = 0;
+    D.ql = imin(bit_len((U64)(qp < 0 ? -qp : qp)), 21);
+    D.hm = imin(__builtin_popcount(lmiss), 3);
+    D.pm = 0;
+    D.bd = 0;
+    D.m1 = lq1 ? imin(lq1 - 1, 21) : 22;
+    D.m2 = lq2 ? imin(lq2 - 1, 21) : 22;
+    D.sq = svar(qp);
+    D.s1 = lqs;
+    int how;
+    v = code_index(D, v, 1, qp, alt, -128, 127, &how);
+    lmiss = (U8)(lmiss << 1 | (how != 0));
+    lq2 = lq1;
+    lq1 = 1 + bit_len((U64)(v < 0 ? -v : v));
+    lqs = (S8)svar(v);
+    n_smp++;
+    n_hit += how == 0;
+    for (int k = LFE_NP - 1; k > 0; k--) lfe_past[k] = lfe_past[k - 1];
+    lfe_past[0] = v * lfe_st;
     return v;
   }
   // the LFE's prediction from its features f: the fit's that has predicted the values more often

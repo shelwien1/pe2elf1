@@ -94,6 +94,13 @@ struct Model : ModelX96<f_DEC, LV> {
     last_pos = 0;
     last_cat = CAT_HDR;  // (the sync word)
     B::tframe = B::tnext;
+    // (the stream's first frame: whether FFmpeg's encoder's rule made its code books, a flag (1/64):
+    // where so it goes by FFmpeg's encoder too, since format 138; the frames after by the frames
+    // before)
+    if (n_frames == 1) {
+      B::cat(CAT_HDR);
+      B::sel_ff = c->code_bit(CO_ONE - CO_ONE / 64, ENC && ff_first(r));
+    }
     const bool ok = wk.core(r) && good();
     if (ok) {
       B::hdr_commit();
@@ -167,9 +174,15 @@ struct Model : ModelX96<f_DEC, LV> {
 #ifdef DTSD_FSTAT
     c->fid = fid;
 #endif
-    if (fid == F_LFEscaleIndex && B::lfe_on) {  // (coded with the first LFE sample)
-      account(CAT_SCALE);
-      v = B::lfe_scl;
+    if (fid == F_LFEscaleIndex) {  // (coded with the first LFE sample where against the audio's)
+      if (B::lfe_on || B::ffl_use) {
+        account(CAT_SCALE);
+        v = B::lfe_scl;
+      } else {
+        account(CAT_HDR);
+        v = hi > lo ? checked(hdr_field(fid, hi, v), lo, hi) : lo;
+      }
+      B::ffl_tally(s, (int)v);
       return good();
     }
     if (fid == F_XFSIZE) {  // (less the one its sync word's distance to the frame's end makes, mod 2^nbits)
@@ -487,6 +500,17 @@ struct Model : ModelX96<f_DEC, LV> {
         else v = side_index(SF_HFVQ, ch, b, v, 10, hist.hfvq[ch][b], 8, 0);
         break;
       case F_LFE: {  // (against the audio's, or signed: coded 128 up, against the sample before)
+        if (!cur_j) B::ffl_use = B::ffl_on();
+        if (B::ffl_use) {  // (FFmpeg's encoder's made again)
+          if (!cur_j) {
+            cat(CAT_SCALE);
+            B::code_lfe_scale_ff(ENC ? s.lfescale : 0);
+          }
+          account(CAT_SIDE);
+          v = B::code_lfe_ff(cur_j, v);
+          hist.lfe = (S32)v + 129;
+          break;
+        }
         if (B::lfe_on) {
           if (!cur_j) {
             cat(CAT_SCALE);
@@ -646,6 +670,17 @@ struct Model : ModelX96<f_DEC, LV> {
         rule[ch][a] = cc[a] && vc[a][m] + 2 < cc[a] ? m : QB_GROUP[a];
       }
     }
+  }
+  // (whether frame r's books are the rule's, some Huffman: where the first frame's, from it on)
+  static bool ff_first(const CoreRec& r) {
+    int rule[NCH][10];
+    ff_books(r, rule);
+    bool ok = true, vlc = false;
+    for (int ch = 0; ch < r.npchs; ch++) {
+      for (int a = 0; a < 10; a++) ok &= rule[ch][a] == r.sel[ch][a], vlc |= r.sel[ch][a] < QB_GROUP[a];
+      ok &= ff_bhuff(r, ch) == r.bhuff[ch];
+    }
+    return ok && vlc;
   }
   bool core_books(CoreRec& r) {
     int rule[NCH][10];

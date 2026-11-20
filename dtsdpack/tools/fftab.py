@@ -1,10 +1,11 @@
 # fftab.py DCADATA_C OUT -- the tables FFmpeg's DTS encoder (libavcodec/dcaenc.c, 6.1) builds at
 # init with libm, computed here the same way (C doubles, this machine's libm through ctypes), as C
 # arrays (ffenctab.inc): cos_table, cb_to_level, cb_to_add, band_interpolation and band_spectrum
-# (the non-perfect prototype filter's), the masking's MDCT's rotations (not FFmpeg's: to 31 bits,
-# where its are a float's), and auf at 32, 44.1 and 48 kHz, clamped at AUF_MIN (where
-# clamped, an entry adds nothing to adjust_jnd()'s sums: see the comment written out). DCADATA_C:
-# FFmpeg's libavcodec/dcadata.c (its ff_dca_fir_32bands_nonperfect)
+# (the non-perfect prototype filter's), lfe_fir_64i (the LFE's decimation), the masking's MDCT's
+# rotations (not FFmpeg's: to 31 bits, where its are a float's), and auf at 32, 44.1 and 48 kHz,
+# clamped at AUF_MIN (where clamped, an entry adds nothing to adjust_jnd()'s sums: see the comment
+# written out). DCADATA_C: FFmpeg's libavcodec/dcadata.c (its ff_dca_fir_32bands_nonperfect and
+# ff_dca_lfe_fir_64)
 import ctypes, re, struct, sys
 
 m = ctypes.CDLL("libm.so.6")
@@ -50,6 +51,17 @@ cb_to_level = [i32(0x7FFFFFFF * exp10(-0.005 * i)) for i in range(2048)]
 cb_to_add = [i32(100 * m.log10(1 + exp10(-0.01 * i))) for i in range(256)]
 # (0x1000000000ULL times a float: a float product, exact here, then truncated)
 band_interp = [i32(f32(float(0x1000000000) * v)) for v in fir]
+# lfe_fir_64i: ff_dca_lfe_fir_64's SCALE(c), c / (256.0f * 32768.0f) (a double, kept as a float), times
+# 0xffffff800000ULL (a float product, then truncated), in its 512 places (k 0-31, j 0-7)
+ml = re.search(r"ff_dca_lfe_fir_64\)\[256\]\s*=\s*\{(.*?)\};", src, re.S)
+lfe_c = [f32(float(v) / (256.0 * 32768.0)) for v in re.findall(r"SCALE\(([-+0-9.eE]+)\)", ml.group(1))]
+assert len(lfe_c) == 256
+lfe_fir = [0] * 512
+for k in range(32):
+    for j in range(8):
+        t = i32(f32(float(0xFFFFFF800000) * lfe_c[8 * k + j]))
+        lfe_fir[64 * j + k] = t
+        lfe_fir[64 * (7 - j) + (63 - k)] = t
 band_spectrum = []
 for j in range(8):
     acc = 0.0
@@ -114,6 +126,7 @@ with open(sys.argv[2], "w") as o:
     o.write(arr("FE_CB_LEVEL", "S32", cb_to_level))
     o.write(arr("FE_CB_ADD", "S16", cb_to_add, 16))
     o.write(arr("FE_INTERP", "S32", band_interp))
+    o.write(arr("FE_LFE_FIR", "S32", lfe_fir))
     o.write(arr("FE_SPECTRUM", "S32", band_spectrum))
     o.write(arr("FE_MDCT_TW", "S32", mdct_tw))
     o.write("static const S16 FE_AUF[3][25][256] = {  // (32, 44.1 and 48 kHz)\n")
