@@ -294,9 +294,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     return clip((bitlen128((U128)(p0 + 1)) - bitlen128((U128)(p1 + 1)) - o) / 2, 0, hi);
   }
   int hm[NCH];             // whether the channel's scale factor before was the prediction (0 none, 1 it was, 2 not)
-  // how often the RMS rule's scale factor was the core's, scale_ceil()'s, and scale_search()'s (the
-  // better of those two's where it isn't sure; halved as they grow); the search's tries (to 2048)
-  U32 sfr[3], ss_n;
+  // how often the RMS rule's scale factor was the core's and scale_ceil()'s (halved as they grow);
+  // where the search was tried, found one and it wasn't rule k's, how often rule k's was the core's
+  // and the search's (sfq[k], halved the same); the search's tries (to 2048)
+  U32 sfr[2], sfq[2][2], ss_n;
   // how often a scale factor the search was tried on lay below its window (3 under the RMS rule's), of
   // how many (low_on())
   U32 sfl[2];
@@ -3164,8 +3165,19 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // (abd, scd) with it, by a 16th in format 118; before, by 64 more and an 8th, which FATE's
   // 7-frame decoded samples never reached: the short streams 0.47% smaller, the decoded WAVs'
   // 0.69%, the lossless ones' the same; by any lead, FATE's x96_xch sample, whose search is no
-  // better than the RMS rule, 32 bytes bigger)
-  bool ss_rule() const { return sfr[2] > sfr[sf_base()] + sfr[sf_base()] / 32; }
+  // better than the RMS rule, 32 bytes bigger). Until format 149 the search's count grew where it was
+  // tried and the rules' on every scale factor: once off past its first 2048 tries, tried on 1 in
+  // 64, it never came on again; and where it found none (no scale factor 4 times nearer than the
+  // next) it was counted as the rule's. Since then they are counted where it found one, and only where the
+  // two differ: `padded.dts` (FFmpeg's samples; 5.1 at 1509 kbps, under -66 dBFS for its first 340
+  // frames and -40 after), whose search, unsure on its quiet start, was counted there as the RMS
+  // rule's against scale_ceil()'s, which won, was taken from its 47th frame on, from never: its core
+  // 418846 bytes to 167352, 60% smaller (counted where tried, 186653; where it differs but its none
+  // as the rule's, 181522)
+  bool ss_rule() const {
+    const int k = sf_base();
+    return sfq[k][1] > sfq[k][0] + sfq[k][0] / 32;
+  }
   // whether the search goes down to 16 under the RMS rule's: where after 256 tries more than an
   // eighth of the scale factors have lain under its window. FFmpeg's encoder takes, at its fine
   // steps, the least scale factor whose range holds the subband's peak (dcaenc.c's
@@ -4250,12 +4262,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (pr >= 0) {
       sfr[0] += v == pr, sfr[1] += v == pc;
       if (tried) {
-        sfr[2] += v == pss;
+        if (ps >= 0 && ps != pr) sfq[0][0] += v == pr, sfq[0][1] += v == ps;
+        if (ps >= 0 && ps != pc) sfq[1][0] += v == pc, sfq[1][1] += v == ps;
+        for (int k = 0; k < 2; k++)
+          if (sfq[k][0] + sfq[k][1] >= 1u << 16) sfq[k][0] >>= 1, sfq[k][1] >>= 1;
         ss_n += ss_n < 2048;
         sfl[0] += v < pr - 3;
         if (++sfl[1] >= 1u << 16) sfl[0] >>= 1, sfl[1] >>= 1;
       }
-      if (sfr[0] + sfr[1] >= 1u << 16) sfr[0] >>= 1, sfr[1] >>= 1, sfr[2] >>= 1;
+      if (sfr[0] + sfr[1] >= 1u << 16) sfr[0] >>= 1, sfr[1] >>= 1;
     }
     return v;
   }

@@ -58,8 +58,9 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
   }
   U64 n_smp9, n_hit9, n_sf9, n_sfhit9;  // (-s: X96's samples and scale factors, those the audio predicted)
   // how often x96_scale()'s rules were the stream's, by the subband's kind (halved as they grow);
+  // where the search was tried and found one, how often they and it were (sfq9, halved the same);
   // the search's tries (to 2048)
-  U32 sfr9[3][3], ss9_n;
+  U32 sfr9[3][2], sfq9[3][3], ss9_n;
   // how often the ABITS' first guess was right, and the bit allocation search's (halved as they
   // grow); the search's tries (to 2048); the ABITS (-s: and those the search said, those right)
   U32 ab9r[2], ab9_n;
@@ -867,10 +868,11 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
   }
   // (as search_on(): kind k's rule, the search's where it is right more often than the better of
   // the others by a 32nd, as ss_rule(); since format 119, by 64 more and an 8th before: `96-24.dts`'s
-  // core 118 bytes smaller, FATE's x96_51 sample's 39; by 16 and a 32nd, 46 bytes more of them)
+  // core 118 bytes smaller, FATE's x96_51 sample's 39; by 16 and a 32nd, 46 bytes more of them).
+  // Since format 149 counted where the search found one, as ss_rule()
   bool x96_rule(int k) const {
-    const U32 lead = imax(sfr9[k][0], sfr9[k][1]);
-    return sfr9[k][2] > lead + lead / 32;
+    const U32 lead = imax(sfq9[k][0], sfq9[k][1]);
+    return sfq9[k][2] > lead + lead / 32;
   }
   bool x96_search_on(int k) const { return ss9_n < 2048 || x96_rule(k) || !(n_sf9 & 63); }
 
@@ -978,10 +980,13 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     if (p0 >= 0) {
       sfr9[k][0] += v == p0, sfr9[k][1] += p1 >= 0 && v == p1;
       if (tried) {
-        sfr9[k][2] += v == pq;
+        if (ps >= 0) {
+          sfq9[k][0] += v == p0, sfq9[k][1] += p1 >= 0 && v == p1, sfq9[k][2] += v == pq;
+          if (sfq9[k][0] + sfq9[k][1] + sfq9[k][2] >= 1u << 16) sfq9[k][0] >>= 1, sfq9[k][1] >>= 1, sfq9[k][2] >>= 1;
+        }
         ss9_n += ss9_n < 2048;
       }
-      if (sfr9[k][0] + sfr9[k][1] + sfr9[k][2] >= 1u << 16) sfr9[k][0] >>= 1, sfr9[k][1] >>= 1, sfr9[k][2] >>= 1;
+      if (sfr9[k][0] + sfr9[k][1] >= 1u << 16) sfr9[k][0] >>= 1, sfr9[k][1] >>= 1;
     }
     return v;
   }
