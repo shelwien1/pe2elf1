@@ -304,6 +304,16 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // the same of the bit allocation search's ABITS (abits_search()) and the first guess's without
   // it, where it was tried; its tries; the ABITS (-s: those it said, those it said right)
   U32 abr[2], ab_n;
+  // where the search's ABITS lie 2 or more from the staircase's (the first guess without it, or the
+  // table's), how often the staircase's was right and the search's, by the search's sureness (0-3);
+  // where they differ at all and the search's missed, how often the staircase's was right and the
+  // last ABITS (ab2); each halved at 2^12
+  U32 abq[4][2], ab2[2];
+  bool abq_stair(int k) const { return abq[k][0] > abq[k][1] + 8 + abq[k][1] / 16; }
+  void abq_add(int k, bool s, bool g) {
+    abq[k][0] += s, abq[k][1] += g;
+    if (abq[k][0] + abq[k][1] >= 1u << 12) abq[k][0] >>= 1, abq[k][1] >>= 1;
+  }
   U64 n_ab, n_abs, n_abhit;
   int abfit_a[NCH][NSUB];   // the subframe's subbands' search's ABITS (-1 none), and its fit's distance
   U64 abfit_d[NCH][NSUB];
@@ -928,6 +938,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     ffe_ok = 0, n_ff = n_ffhit = 0;
     ffr_ok = 0, ffr_c[0] = ffr_c[1] = 0, ffr_l[0] = ffr_l[1] = 0;
     abk[0] = abk[1] = ab_ex[0] = ab_ex[1] = 0, ab_g1 = ab_gc = 0;
+    for (int k = 0; k < 4; k++) abq[k][0] = abq[k][1] = 0;
+    ab2[0] = ab2[1] = 0;
     qff_c[0] = qff_c[1] = qff_n[0] = qff_n[1] = 0;
     ffl_ok = ffl_use = 0, ffl_n = 0;
     // (since format 140 the two fixed filters' predictions, LFE_W2's and LFE_W2D's, times the DTS:X
@@ -3190,9 +3202,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // same, 4-8% faster), and while it has been right clearly more often than the first guess without
   // it (a lossless WAV's search, which rarely finds one, as often: then it ran on, for nothing, its
   // streams the same and 7.6% faster); since format 148, of those first 512 only every 8th where it
-  // has been right 24 times fewer than the first guess (FATE's 7-frame samples', whose first guesses
-  // win from their first frames, and the lossless WAVs': the decoded ones' searches lead from their
-  // first tries; FATE's XCH sample 4% faster, the sets' sizes the same to a few bytes)
+  // has been right 24 times fewer than the first guess (FATE's 7-frame samples', whose first
+  // guesses win from their first frames, and the lossless WAVs': the decoded ones' searches lead
+  // from their first tries; FATE's XCH sample 4% faster, the sets' sizes the same to a few bytes);
+  // since format 150 wherever the scale factor search's rule holds too, its ABITS the first guess
+  // or the second wherever it runs (`padded.dts`'s, not clearly more often right than the first
+  // guess it is counted against, ran on 36% of its ABITS: its core 10.5% smaller, as fast)
   // (the rule: by 16 and a 32nd since format 119, by 32 before: the decoded WAVs' streams but
   // FATE's 1-7 bytes smaller; by 8 and a 64th, a lossless WAV's too, `s.2.dts`'s first 3 MB's 5
   // bytes bigger)
@@ -3216,7 +3231,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     return B::template side_ix<M_sdd_v>(B::f_sdd, fld, ch, b, v, nbits, A, ac, ab);
   }
   bool ab_search_on() const {
-    if (abr[1] > abr[0] + 32 + abr[0] / 64) return true;
+    if (ss_rule() || abr[1] > abr[0] + 32 + abr[0] / 64) return true;
     if (ab_n < 512) return abr[0] < abr[1] + 24 || !(n_ab & 7);
     return !(n_ab & 63);
   }

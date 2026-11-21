@@ -366,9 +366,15 @@ struct Model : ModelX96<f_DEC, LV> {
           else if (e + k <= 128 && sn[k]) sv = sn[k], near_e = 1;
         }
         // (the search's, where it is right clearly more often than the first guess without it: it
-        // the first guess, its sureness and whether it is that one the context sc; PMODE's, where it
-        // made the same; else the staircase's, where it has one, else the one seen; the staircase's
-        // margin the context sm where the first guess is its)
+        // the first guess, its sureness and whether it is that one the context sc; PMODE's, where
+        // it made the same; else the staircase's, where it has one, else the one seen; the
+        // staircase's margin the context sm where the first guess is its. Since format 150, where
+        // the search's lies 2 ABITS or more from the staircase's and the staircase's has been right
+        // more often there, at the search's sureness, by 8 and a 16th, the staircase's is the first
+        // guess, the search's the second (abq_stair(): at steps under the WAV's LSB finer lattices
+        // fit as well, and the search, unsure, takes the coarsest: `padded.dts`'s, quiet at 1509
+        // kbps, right 0.3-2% of the time there, the staircase's 80-93%; `dtswavsample14.wav`'s 3%
+        // and 94%)
         const S32 og = sv ? sv : hist.abits[ch][b];
         int G = 0, gc = 0, sc = 0;
         U64 gd = 0;
@@ -387,15 +393,25 @@ struct Model : ModelX96<f_DEC, LV> {
         B::abfit_a[ch][b] = G - 1, B::abfit_d[ch][b] = gd;
         S32 Sn = sv;
         int fs = 0;  // (whether the first guess is the staircase's)
-        if (srch && G && B::ab_rule()) {
+        const int qk = srch && G && sg >= 0 && (G - 1 - sg >= 2 || sg - (G - 1) >= 2) ? imin(gc, 3) : -1;
+        const bool ovr = srch && G && B::ab_rule() && qk >= 0 && B::abq_stair(qk);
+        if (srch && G && B::ab_rule() && !ovr) {
           Sn = G, sc = 1 + 2 * imin(gc, 6) + (G == og);
           B::n_abs++;
         } else if (sg >= 0)
           Sn = sg + 1, fs = 1;
         // (where the first guess is the staircase's, the second the ABITS across the nearer edge of
-        // its energies: a miss's, nearly always)
+        // its energies: a miss's, nearly always; since format 150 the search's where that is the
+        // staircase's in its place; and where the search's is the first guess and the staircase's
+        // another, the staircase's, where it has been right more often than the last ABITS where
+        // the search's missed, by 8 and an 8th (ab2), else the last ABITS as before
+        // (`dtswavsample14.wav`'s staircase's as the second right 3.4 times as often;
+        // `dtswavsample16.wav`'s table's, the one it takes, less often, and its core 0.3% bigger:
+        // the counts lag where they turn))
         const int ms = Sn == sg + 1 ? sm : 0;
-        const int alt = ms ? (ms <= 8 ? sg - 1 : sg + 1) : -1;
+        const S32 la = hist.abits[ch][b];
+        const bool s2 = sc && sg >= 0 && sg != G - 1;
+        const int alt = ovr ? G - 1 : ms ? (ms <= 8 ? sg - 1 : sg + 1) : s2 && B::ab2[0] > B::ab2[1] + 8 + B::ab2[1] / 8 ? sg : -1;
         // (the share of the levels the subframe's ABITS allow at which the table says the first guess
         // is the first node's outside prediction (its miss's), and the share at which it says the
         // second candidate, of the rest, the second node's; each within 1/64 of 0 and 1. Since format
@@ -447,6 +463,11 @@ struct Model : ModelX96<f_DEC, LV> {
         if (ut) B::n_tb++, B::n_tbhit += v == tg;
         if (fs) B::n_st++, B::n_sthit += v == sg;
         if (sc) B::n_abhit += v == G - 1;
+        if (qk >= 0) B::abq_add(qk, v == sg, v == G - 1);
+        if (s2 && v != G - 1 && la - 1 != sg) {
+          B::ab2[0] += v == sg, B::ab2[1] += la && v == la - 1;
+          if (B::ab2[0] + B::ab2[1] >= 1u << 12) B::ab2[0] >>= 1, B::ab2[1] >>= 1;
+        }
         if (srch) {
           const int ro = og && v == og - 1, rs = G ? v == G - 1 : ro;
           B::abr[0] += ro, B::abr[1] += rs;
