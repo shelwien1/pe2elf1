@@ -117,6 +117,20 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // those it said, those it said right)
   FfEnc* ffe;
   int ffe_ok;
+  // (since format 143 its transform of the WAV rounded to 16 bits too, where it has more than 16:
+  // a decode of an encode of a 16-bit WAV gives the encoder's input back so, wherever the encode's
+  // noise lies under half its LSB (FFmpeg's decode as 24 bits of its encode of the 16-bit WAV
+  // below: 94.6% of the samples, all of them in its quiet blocks); ffr, allocated then; ffr_ok,
+  // whether the frame's is made; ffr_c, how often the WAV's quantization as it is and as rounded
+  // was the core's index where the two differ, halved at 4096 (it is the encoder's input where
+  // the signal is quiet, not where loud: at 2^16, that decode 10% bigger; by level instead, 0.16%
+  // smaller), the indexes by the rounded where it has been twice as often and 64 more (by a 16th
+  // and 4, `s.2.dts`'s first 3 MB as decoded 2.1% bigger, by a quarter and 64 1.1%: in its first
+  // 16 frames the rounded was right a third of the time, ahead for a while, then all but never), it
+  // made no more where clearly less)
+  FfEnc* ffr;
+  int ffr_ok;
+  U32 ffr_c[2];
   U16 ffn[2][FfEnc::NMG][4][2][2], ffd[FfEnc::NMG][4][2];
   U64 n_ff, n_ffhit;
   // and its indexes: its encoder's quantization of the values it makes from the WAV, how often the
@@ -794,7 +808,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // 48 kHz; to 6 channels, each a WAV channel as it is), from the WAV's 512 samples from o (where
   // its first block's analysis ends), and the 512 before them (FFmpeg's s32: 24 bits shifted up)
   bool ff_frame(const CoreRec& r, const CoreSub& s, S64 o) {
-    ffl_ok = 0;
+    ffl_ok = 0, ffr_ok = 0;
     if (!B::sel_ff || r.nsubfs != 1 || r.nblks != 15 || s.nssc != 2 || r.npchs > FfEnc::MAXC || bind.up != 1 || wav->dec != 1)
       return false;
     const int ri = r.sfreq == 13 ? 2 : r.sfreq == 8 ? 1 : r.sfreq == 3 ? 0 : -1;
@@ -806,13 +820,24 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       ffe->init();
     }
     ffe->set(r.npchs, ri, 8 * (r.fsize + 1), r.lff != 0);
+    const bool rd = wav->bps >= 3 && !(ffr_c[0] >= 64 && ffr_c[0] > 4 * (U64)ffr_c[1]);
+    if (rd && !ffr) {
+      ffr = (FfEnc*)xmalloc(sizeof(FfEnc));
+      ffr->init();
+    }
+    if (rd) ffr->set(r.npchs, ri, 8 * (r.fsize + 1), r.lff != 0);
     wav->need(o - 512, o + 512);
     for (int ch = 0; ch < r.npchs; ch++) {
       S32 buf[1024];
       const S32* x = wav->span(bind.map[ch], o - 512, 1024, buf);
       for (int i = 0; i < 512; i++) ffe->hist[ch][i] = (S32)((U32)x[i] << 8), ffe->in[ch][i] = (S32)((U32)x[512 + i] << 8);
+      for (int i = 0; rd && i < 1024; i++) {
+        const S32 v = imin((S32)((((S64)x[i] + 128) >> 8) * 256), 0x7FFF00);  // (as 16 bits, clipped)
+        (i < 512 ? ffr->hist[ch][i] : ffr->in[ch][i - 512]) = (S32)((U32)v << 8);
+      }
     }
     ffe->frame();
+    if (rd) ffr->transform(), ffr_ok = 1;
     ffl_ok = 0;
     if (r.lff == 2) {
       int nc = 0;
@@ -897,6 +922,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     for (int k = 0; k < 6; k++) tw_n[k][0] = 1, tw_n[k][1] = 7;
     ffe_ok = 0, n_ff = n_ffhit = 0;
+    ffr_ok = 0, ffr_c[0] = ffr_c[1] = 0;
     qff_c[0] = qff_c[1] = qff_n[0] = qff_n[1] = 0;
     ffl_ok = ffl_use = 0, ffl_n = 0;
     // (since format 140 the two fixed filters' predictions, LFE_W2's and LFE_W2D's, times the DTS:X
@@ -4497,9 +4523,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // else where it has been more often where the two differ, taken with the one next to it toward
     // the audio's as the other (a 16-bit decode's of its encode of a 16-bit WAV, whose ABITS are its
     // again: 445344 bytes to 381290))
-    S64 qff = 0;
+    S64 qff = 0, qfa = 0, qfr = 0;
     const S64 qm = qp;
-    int hq = 0;
+    int hq = 0, hr = 0;
     if (ffe_ok && !r.xpass && bnd && !pm && a > 0 && a <= 26 && r.shuff[ch] == 6 && j < FfEnc::NS) {
       const int ns = s.scale[ch][b][0] & 127, e = FE_SF_INV[ns].e + FE_STEP_INV[a].e - 17;
       if (e >= 1 && e <= 30) {
@@ -4507,6 +4533,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         qff = fe_quant(ffe->sub[ch][b][j], qq);
         qff = qff < lo ? lo : qff > hi ? hi : qff;
         hq = 1;
+        if (ffr_ok) {
+          qfa = qff, qfr = fe_quant(ffr->sub[ch][b][j], qq), hr = 1;
+          qfr = qfr < lo ? lo : qfr > hi ? hi : qfr;
+          if (jx_more(ffr_c, 64, 16)) qff = qfr;
+        }
         if (qff_on()) qp = qff, alt = qff + (qff >= 0 ? 1 : -1), dist = (S128)1 << 100;
         else if (qff != qp && jx_more(qff_c, 4, 1)) alt = qff + (qp > qff ? 1 : -1), qp = qff;
       }
@@ -4594,6 +4625,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       qff_n[0]++, qff_n[1] += v == qff;
       if (qff_c[0] + qff_c[1] >= 1u << 16) qff_c[0] >>= 1, qff_c[1] >>= 1;
       if (qff_n[0] >= 1u << 16) qff_n[0] >>= 1, qff_n[1] >>= 1;
+    }
+    if (hr) {
+      if (qfa != qfr) ffr_c[0] += v == qfa, ffr_c[1] += v == qfr;
+      if (ffr_c[0] + ffr_c[1] >= 1u << 12) ffr_c[0] >>= 1, ffr_c[1] >>= 1;
     }
     miss[ch][b] = (U8)(miss[ch][b] << 1 | (bnd && how != 0));
     if (bnd) chm[ch] = chm[ch] << 1 | (how != 0);

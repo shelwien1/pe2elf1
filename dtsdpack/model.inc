@@ -52,6 +52,7 @@ struct Model : ModelX96<f_DEC, LV> {
   void Init(void) {
     n_frames = 0;
     B::ffe = nullptr;
+    B::ffr = nullptr;
 #define M_INIT(F) B::f_##F.Init(), B::t_##F = nullptr;
     DTSD_FAMS(M_INIT)
 #undef M_INIT
@@ -68,6 +69,7 @@ struct Model : ModelX96<f_DEC, LV> {
     DTSD_FAMS(M_QUIT)
 #undef M_QUIT
     if (B::ffe) free(B::ffe), B::ffe = nullptr;
+    if (B::ffr) free(B::ffr), B::ffr = nullptr;
   }
   // the run starts: the families' tables mapped and wired to the coder co; the WAV, bound by b
   void start(Coder<f_DEC>* co, WavIn* w, const Bind& b) {

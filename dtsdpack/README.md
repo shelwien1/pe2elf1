@@ -309,6 +309,17 @@ samples", 39.37% before); its decodes of the 24-bit WAVs' encodes, 16-bit too, t
 since format 142 1.8% less again (1102817 bytes to 1083123, the five above), their hit flags by how
 near the boundary the decode's values lie against the WAV's LSB (below).
 
+Its 24-bit decode took 432519 bytes in format 142, 51.6 KB more than the 16-bit one, which is the
+same decode rounded: rounding takes the encode's noise away wherever it lies under half a 16-bit
+step, and gives back the encoder's input there (94.6% of the samples, every one in the blocks below
+-38 dBFS). So since format 143, where the WAV has more than 16 bits, FFmpeg's transform is made again
+from the WAV rounded to 16 bits as well, and an index goes by its quantization of that where it has
+been the core's twice as often as that of the WAV as it is, plus 64, the counts halved at
+4096 as the signal goes quiet and loud (halved at 2^16, 10% bigger; counted by the subframe's level
+too, 0.16% smaller); it is made no more where it has been right less than a quarter as often
+(FFmpeg's 24-bit decodes of the 24-bit WAVs' encodes the same bytes and as fast): 334657 bytes, 22.6%
+less, and faster to compress (1400 KB a second from 1252), there being fewer misses to code.
+
 ## How it works
 
 ### The stream
@@ -1901,7 +1912,7 @@ files at that level.
 
 ### The format
 
-"dtsdpack", the format's version (142), the level (9, or 8: above); what the WAV was (whether it was
+"dtsdpack", the format's version (143), the level (9, or 8: above); what the WAV was (whether it was
 one, its channels and bytes a sample, its size and the CRC-32 of its first 64 KB) and the binding
 (the offset; the WAV's samples to the core's, 1, 2 or 4 (its lower band, then 2), and the lower
 band's resolution; the LFE's channel; each core channel's WAV channel, and where it isn't that
