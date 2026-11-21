@@ -319,6 +319,10 @@ been the core's twice as often as that of the WAV as it is, plus 64, the counts 
 too, 0.16% smaller); it is made no more where it has been right less than a quarter as often
 (FFmpeg's 24-bit decodes of the 24-bit WAVs' encodes the same bytes and as fast): 334657 bytes, 22.6%
 less, and faster to compress (1400 KB a second from 1252), there being fewer misses to code.
+And since format 144, where the counts halved at 2^16 say the rounded one as a rule, the transform
+not taken gives the other candidate, the alternative, where the two differ: 322932 bytes, 3.5% less
+again (by the quickly halved counts alone, FFmpeg's decodes of the 24-bit WAVs' encodes up to 19
+bytes bigger).
 
 ## How it works
 
@@ -1912,7 +1916,7 @@ files at that level.
 
 ### The format
 
-"dtsdpack", the format's version (143), the level (9, or 8: above); what the WAV was (whether it was
+"dtsdpack", the format's version (144), the level (9, or 8: above); what the WAV was (whether it was
 one, its channels and bytes a sample, its size and the CRC-32 of its first 64 KB) and the binding
 (the offset; the WAV's samples to the core's, 1, 2 or 4 (its lower band, then 2), and the lower
 band's resolution; the LFE's channel; each core channel's WAV channel, and where it isn't that

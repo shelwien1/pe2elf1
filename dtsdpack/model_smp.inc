@@ -127,10 +127,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // smaller), the indexes by the rounded where it has been twice as often and 64 more (by a 16th
   // and 4, `s.2.dts`'s first 3 MB as decoded 2.1% bigger, by a quarter and 64 1.1%: in its first
   // 16 frames the rounded was right a third of the time, ahead for a while, then all but never), it
-  // made no more where clearly less)
+  // made no more where clearly less; ffr_l the same halved at 2^16, and where it says the rounded
+  // as a rule (a 16-bit WAV's decode), the one not taken is the other candidate, the alternative,
+  // where the two differ (since format 144: that decode 3.5% smaller; by the quick counts alone,
+  // FFmpeg's decodes of 24-bit WAVs' encodes up to 19 bytes bigger))
   FfEnc* ffr;
   int ffr_ok;
-  U32 ffr_c[2];
+  U32 ffr_c[2], ffr_l[2];
   U16 ffn[2][FfEnc::NMG][4][2][2], ffd[FfEnc::NMG][4][2];
   U64 n_ff, n_ffhit;
   // and its indexes: its encoder's quantization of the values it makes from the WAV, how often the
@@ -922,7 +925,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     for (int k = 0; k < 6; k++) tw_n[k][0] = 1, tw_n[k][1] = 7;
     ffe_ok = 0, n_ff = n_ffhit = 0;
-    ffr_ok = 0, ffr_c[0] = ffr_c[1] = 0;
+    ffr_ok = 0, ffr_c[0] = ffr_c[1] = 0, ffr_l[0] = ffr_l[1] = 0;
     qff_c[0] = qff_c[1] = qff_n[0] = qff_n[1] = 0;
     ffl_ok = ffl_use = 0, ffl_n = 0;
     // (since format 140 the two fixed filters' predictions, LFE_W2's and LFE_W2D's, times the DTS:X
@@ -4540,6 +4543,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         }
         if (qff_on()) qp = qff, alt = qff + (qff >= 0 ? 1 : -1), dist = (S128)1 << 100;
         else if (qff != qp && jx_more(qff_c, 4, 1)) alt = qff + (qp > qff ? 1 : -1), qp = qff;
+        if (hr && qfa != qfr && qp == qff && jx_more(ffr_l, 64, 16)) alt = qff == qfr ? qfa : qfr;
       }
     }
     // (a sample past the WAV's end coded without it: its continuation's index as context)
@@ -4629,6 +4633,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (hr) {
       if (qfa != qfr) ffr_c[0] += v == qfa, ffr_c[1] += v == qfr;
       if (ffr_c[0] + ffr_c[1] >= 1u << 12) ffr_c[0] >>= 1, ffr_c[1] >>= 1;
+      if (qfa != qfr) ffr_l[0] += v == qfa, ffr_l[1] += v == qfr;
+      if (ffr_l[0] + ffr_l[1] >= 1u << 16) ffr_l[0] >>= 1, ffr_l[1] >>= 1;
     }
     miss[ch][b] = (U8)(miss[ch][b] << 1 | (bnd && how != 0));
     if (bnd) chm[ch] = chm[ch] << 1 | (how != 0);
