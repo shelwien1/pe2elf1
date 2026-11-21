@@ -32,6 +32,7 @@ struct DtsCoro : CoIo<Coder<f_DEC> > {
   Model<f_DEC, LV> k;
   WavIn* wav;  // the WAV
   Bind bind;   // c: how the core lines up with it (d: from the stream)
+  int pk;      // the stream's packing (pack.inc): c's as the call found it, d's from the stream
   CoreRec f, scratch;                             // the frame being coded; the reader's
   U8 fb[MAX_FRAME + PAD], back[MAX_FRAME + PAD];  // c: the frame (and PAD zero bytes); it written back
   U8 pbuf[IO_BUF];                                // d: bytes kept as bytes, a buffer at a time
@@ -39,14 +40,15 @@ struct DtsCoro : CoIo<Coder<f_DEC> > {
   U64 nframe;
   AudioInfo audio;
 
-  void Init(int s, WavIn* w, const Bind& b) {  // (s: c -s, the bits by kind of syntax element)
-    coro_init();
+  void Init(int s, WavIn* w, const Bind& b, int p = PK_BE16) {  // (s: c -s, the bits by kind of
+    coro_init();                                                   // syntax element; p: the packing)
     io_init();
     stats = s;
     status = 1;
     nframe = 0;
     wav = w;
     bind = b;
+    pk = p;
     memset((void*)&audio, 0, sizeof audio);
     k.Init();
   }
@@ -89,9 +91,10 @@ struct DtsCoro : CoIo<Coder<f_DEC> > {
     memset(&st, 0, sizeof st);
     crc = 0;
     if (!rd.init(&scratch)) return fail(E_INTERNAL, "out of memory");
+    rd.pk = pk;
     memcpy(head, magic, sizeof magic);
     head[DP_AT_VERSION] = DP_VERSION;
-    head[DP_AT_LEVEL] = (U8)LV::id;
+    head[DP_AT_LEVEL] = (U8)(LV::id | pk << 4);  // (the level, and the packing above it)
     const int nb = bind_put(head + DP_AT_BIND, bind, *wav);
     write(head, (size_t)(DP_AT_BIND + nb));
     {  // (the model goes by the binding as d reads it)
@@ -108,18 +111,20 @@ struct DtsCoro : CoIo<Coder<f_DEC> > {
       int kind = CK_RAW;
       crc = crc32_upd(crc, p, len);
       st.in_bytes += (double)len;
+      // (a frame packed otherwise: the reader's unpacked copy, fl bytes, what the model codes)
+      const size_t fl = t == RD_FRAME && pk != PK_BE16 ? (size_t)rd.ul : len;
       if (t == RD_FRAME) {
         int why;
         nframe++;
         st.frames++;
-        memcpy(fb, p, len);
-        memset(fb + len, 0, PAD);
-        why = parse((int)len);
+        memcpy(fb, pk != PK_BE16 ? rd.ub : p, fl);
+        memset(fb + fl, 0, PAD);
+        why = rd.ux ? parse((int)fl) : 2;  // (one its packing doesn't make again: kept as bytes)
         if (!why) {
           frame_comes(f);
           k.code_kind(CK_FRAME);
-          if (!k.frame(f, (int)len)) return fail(E_INTERNAL, "internal error: a frame parsed couldn't be coded");
-          k.frame_bytes(fb, (int)len);
+          if (!k.frame(f, (int)fl)) return fail(E_INTERNAL, "internal error: a frame parsed couldn't be coded");
+          k.frame_bytes(fb, (int)fl);
           st.packed++;
           continue;
         }
@@ -133,7 +138,7 @@ struct DtsCoro : CoIo<Coder<f_DEC> > {
       k.code_kind(kind);
       k.code_raw_len(len);
       k.code_raw_bytes(p, len, kind);
-      if (kind == CK_BAD) k.skip_blocks(core_blocks(p, len));
+      if (kind == CK_BAD) k.skip_blocks(core_blocks(fb, fl));
     }
     k.code_kind(CK_END);
     code_u32(crc);
@@ -166,8 +171,10 @@ struct DtsCoro : CoIo<Coder<f_DEC> > {
     if (read(h, sizeof h) != sizeof h || memcmp(h, magic, sizeof magic)) return fail(E_DATA, "not a dtsdpack file");
     if (h[DP_AT_VERSION] != DP_VERSION)
       return fail(E_DATA, "format version %d, which this dtsdpack (version %d) doesn't read", h[DP_AT_VERSION], DP_VERSION);
-    if (h[DP_AT_LEVEL] != LV::id)
-      return fail(E_INTERNAL, "internal error: a stream of level -%d run at level -%d", h[DP_AT_LEVEL], LV::id);
+    if ((h[DP_AT_LEVEL] & 15) != LV::id)
+      return fail(E_INTERNAL, "internal error: a stream of level -%d run at level -%d", h[DP_AT_LEVEL] & 15, LV::id);
+    pk = h[DP_AT_LEVEL] >> 4;
+    if (pk >= PK_N) return fail(E_DATA, "damaged data");
     bool cut = false;
     if (!bind_read([&]() {
           U8 x;
@@ -190,16 +197,22 @@ struct DtsCoro : CoIo<Coder<f_DEC> > {
         k.frame_bytes(back, n);
         nframe++;
         frame_comes(f);
-        write(back, (size_t)n);
-        crc = crc32_upd(crc, back, (size_t)n);
+        const size_t m = pack_size(pk, (size_t)n);  // (packed as the stream's were)
+        if (pk != PK_BE16) pack_pack(pk, back, (size_t)n, pbuf);
+        write(pk != PK_BE16 ? pbuf : back, m);
+        crc = crc32_upd(crc, pk != PK_BE16 ? pbuf : back, m);
       } else {
         size_t n = k.code_raw_len(0), done = 0;
-        if (!n || n > IBUF_SIZE || (kind == CK_BAD && n > MAX_FRAME) || damaged()) return damaged_data();
+        if (!n || n > IBUF_SIZE || (kind == CK_BAD && n > pack_size(pk, MAX_FRAME)) || damaged()) return damaged_data();
         if (kind == CK_BAD) nframe++;
         while (done < n) {  // a buffer at a time
           const size_t l = n - done < sizeof pbuf ? n - done : sizeof pbuf;
           k.code_raw_bytes(pbuf, l, kind);
-          if (kind == CK_BAD) k.skip_blocks(core_blocks(pbuf, l));  // (all of it: a frame fits the buffer)
+          if (kind == CK_BAD) {  // (all of it: a frame fits the buffer; its blocks by its header unpacked)
+            U8 h[16];
+            if (pk == PK_BE16) k.skip_blocks(core_blocks(pbuf, l));
+            else if (pack_holds(pk, l) >= 16) pack_unpack(pk, pbuf, h, 16), k.skip_blocks(core_blocks(h, 16));
+          }
           write(pbuf, l);
           crc = crc32_upd(crc, pbuf, l);
           done += l;

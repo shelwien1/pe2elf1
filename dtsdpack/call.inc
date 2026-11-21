@@ -157,6 +157,7 @@ struct Call {
   bool lfe_few;  // (c: whether the LFE had too few samples that aren't 0 there: find_alignment())
   U8 chfew[NCH];  // (and which channels did: find_mixes())
   U32 core_hz;  // the core's samples a second (as its first frame says; 0: not known)
+  int pk;       // c: the stream's packing (pack.inc: its first frame's)
 
   // from the file from to to (compare: s compares with to instead of writing it), the WAV wavf, its
   // progress line tagged tag: shown with -p, or where stderr is a terminal, but not with -q
@@ -294,9 +295,9 @@ struct Call {
              head[DP_AT_VERSION], DP_VERSION);
       return E_DATA;
     }
-    r = with_level<DecodeOne>(head[DP_AT_LEVEL], *this, (const U8*)head, got);
+    r = with_level<DecodeOne>(head[DP_AT_LEVEL] & 15, *this, (const U8*)head, got);  // (the packing above it)
     if (r != kNoLevel) return r;
-    pr.say("dtsdpack: %s: compressed at level -%d, which this build has not\n", in_name, head[DP_AT_LEVEL]);
+    pr.say("dtsdpack: %s: compressed at level -%d, which this build has not\n", in_name, head[DP_AT_LEVEL] & 15);
     return E_DATA;
   }
 
@@ -313,18 +314,26 @@ struct Call {
   // the WAV's window (2^20 samples: 21.8 s at 48 kHz) has nothing there to line up. And where the
   // channels lined up but the window had too few of the LFE's samples that aren't 0, the LFE's by
   // them further on (lfe_far()). The WAV is read again from its start after.
+  // (A stream packed otherwise than the model's bytes, pack.inc's: its frames unpacked, by pk.)
   void find_alignment(pcU8 pre, size_t n, int eof) {
-    align_at(pre, n, eof, 0);
+    static CoreRec ur;  // (large)
+    size_t un = n;
+    U8* const u = pk != PK_BE16 ? pack_frames(pk, pre, n, eof, &un, &ur) : nullptr;
+    align_at(u ? u : pre, un, eof, 0);
     const bool far = bind.map[0] < 0;
-    if ((!far && !lfe_few && !any_few()) || !wav.can_rewind()) return;
+    if ((!far && !lfe_few && !any_few()) || !wav.can_rewind()) {
+      free(u);
+      return;
+    }
     U8* more = nullptr;
-    pcU8 buf = pre;
-    size_t bn = n;
+    pcU8 buf = u ? u : pre;
+    size_t bn = un;
     int beof = eof;
     const long at = eof ? -1 : ftell(in);
     if (at >= 0) {
       more = (U8*)xmalloc(n + FAR_READ + PAD);
       memcpy(more, pre, n);
+      bn = n;  // (as packed)
       while (bn < n + FAR_READ) {
         const size_t r = fread(more + bn, 1, n + FAR_READ - bn, in);
         if (!r) break;
@@ -333,6 +342,12 @@ struct Call {
       beof = bn < n + FAR_READ;
       memset(more + bn, 0, PAD);
       if (fseek(in, at, SEEK_SET)) fatal("the input can't be read again from where it was");
+      if (u) {  // (unpacked, the frames alone)
+        size_t m;
+        U8* const p = pack_frames(pk, more, bn, beof, &m, &ur);
+        free(more);
+        more = p, bn = m;
+      }
       buf = more;
     }
     bool moved = false;
@@ -344,6 +359,7 @@ struct Call {
     if (bind.map[0] >= 0 && lfe_few && lfe_far(buf, bn, beof)) moved = true;
     if (moved) wav.rewind();
     free(more);
+    free(u);
   }
   // the LFE's binding (where the window the channels lined up in had too few of its samples that
   // aren't 0: align_at()'s) by those in the n bytes at buf (eof: all of them) from the first that
@@ -889,7 +905,7 @@ struct Call {
       int r;
       if (!p) no_memory();
       C& c = *p;
-      c.Init(o.stats, &k.wav, k.bind);
+      c.Init(o.stats, &k.wav, k.bind, k.pk);
       r = k.run_one(c, pre, got);
       st = c.st;
       memcpy(cost, c.cost, sizeof c.cost);
@@ -922,6 +938,10 @@ struct Call {
       got += r;
     }
     memset(pre + got, 0, PAD);
+    {
+      static CoreRec r;  // (large)
+      pk = pack_first(pre, got, got < PRE_READ, &r);
+    }
     find_alignment(pre, got, got < PRE_READ);
     level = o.level_set ? o.level : pick_level(o.level);
     const int r = with_level<CompressOne>(level, *this, o, st, cost, orig, (pcU8)pre, got);

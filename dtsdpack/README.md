@@ -17,8 +17,9 @@ of its own. A 96 kHz stream's core is the lower half of a 64-band analysis of it
 twice the core's rate is analysed that way: DTS-HD MA 96 kHz cores go to 0.7-5.8%, where nothing
 lined up before.
 
-The core comes from [dtssplit](../dtssplit) (`prefix.dtsc`) or from any DTS stream; the WAV is the
-stream decoded, for instance by FFmpeg:
+The core comes from [dtssplit](../dtssplit) (`prefix.dtsc`) or from any DTS stream, its bits in
+16-bit words big-endian (the core's own), little-endian, or 14 bits a word as a DTS CD's are (DTS
+in a WAV file: below); the WAV is the stream decoded, for instance by FFmpeg:
 
 ```
 ffmpeg -i in.dts -c:a pcm_s24le in_full.wav
@@ -324,6 +325,20 @@ not taken gives the other candidate, the alternative, where the two differ: 3229
 again (by the quickly halved counts alone, FFmpeg's decodes of the 24-bit WAVs' encodes up to 19
 bytes bigger).
 
+A stream whose words are packed otherwise (below) was all bytes between frames until format 145,
+kept as bytes; now its frames are unpacked and coded as the core's own are. FFmpeg's samples of DTS
+in a WAV file, against their decodes by FFmpeg at 24 bits:
+
+| Sample | Its words | Stream | dtsdpack | Before |
+|---|---|---:|---:|---:|
+| `dtswavsample14.wav` (5.1, 44.1 kHz, 1953 frames, the last cut) | 14 bits each, little-endian | 8000000 | 65338 (0.82%) | 7266433 (90.83%) |
+| `Fire__VooDoo_Studio_30_sec.wav` (a DTS CD's, 5.1, 44.1 kHz) | the same | 5156908 | 16791 (0.33%) | 4680858 (90.77%) |
+| `dtswavsample16.wav` (5.1, 48 kHz, each frame padded to 2048 bytes) | 16 bits, little-endian | 47966252 | 188826 (0.39%) | 44772325 (93.34%) |
+
+And a stream packed any of the four ways compresses to the same bytes as in the core's own words
+(six of the sets' streams, packed so by a script: s.2's head, `96-24.dts`, `ES 6.1 16bit.dts`,
+open bitrate's FFmpeg encode, FATE's XCH sample and a cut one).
+
 ## How it works
 
 ### The stream
@@ -335,6 +350,15 @@ compared with the frame: if they match, the record is coded; if not, or the fram
 the frame is kept as bytes, and so is everything between frames, so any input round-trips. The same
 walk that reads a frame's bits and writes them is, at record level, what codes and decodes the
 record: the model (`model.inc`) is its IO, so the two directions can't drift apart.
+
+A stream may have its 16-bit words little-endian (DTS in a WAV at 48 kHz, its bytes swapped), or 14
+bits of it in each word, the word's top 2 bits copies of its bit 13 so that played as PCM the
+stream is no louder than 14 bits (a DTS CD's, DTS in a WAV at 44.1 kHz: little-endian there,
+big-endian too), as FFmpeg reads them all (`pack.inc`). The stream's packing is its first frame's;
+a frame packed so is unpacked into the core's own bytes, which are coded, and packed back as it
+was. Where packing those bytes again doesn't make the frame's (a word's top bits not those copies,
+or the bits past the frame's in its last 14-bit word, or the byte after an odd-sized frame's in its
+last 16-bit word, not 0), the frame is kept as bytes, its blocks counted as a frame's.
 
 The extension the frame's header names (EXT_AUDIO_ID), after the core's subframes, is found as
 FFmpeg finds it: its sync word at a 4-byte boundary, searched for back from the frame's end; XCH's
@@ -1916,16 +1940,18 @@ files at that level.
 
 ### The format
 
-"dtsdpack", the format's version (144), the level (9, or 8: above); what the WAV was (whether it was
-one, its channels and bytes a sample, its size and the CRC-32 of its first 64 KB) and the binding
-(the offset; the WAV's samples to the core's, 1, 2 or 4 (its lower band, then 2), and the lower
-band's resolution; the LFE's channel; each core channel's WAV channel, and where it isn't that
-channel as it is, the second of its mix and their gains, a downmix table entry's index where they
-are one, and where it has them, its WAV channels' gains before the mix and a second pair of those),
-numbers in 7-bit groups; then the range coded chunks (a frame as records, bytes between frames, a
-frame kept as bytes), the end, and the CRC-32 of the core stream, which `d` checks. The header is 31
-bytes for a 5.1 stream bound channel for channel (111 before format 90, every binding's fields at a
-fixed size: up to a third of a 7-frame DTS-HD MA sample's output).
+"dtsdpack", the format's version (145), the level (9, or 8: above) and above it the stream's packing
+(since format 145: 0 the core's own, 1 little-endian, 2 and 3 14 bits a word big- and
+little-endian); what the WAV was (whether it was one, its channels and bytes a sample, its size and
+the CRC-32 of its first 64 KB) and the binding (the offset; the WAV's samples to the core's, 1, 2 or
+4 (its lower band, then 2), and the lower band's resolution; the LFE's channel; each core channel's
+WAV channel, and where it isn't that channel as it is, the second of its mix and their gains, a
+downmix table entry's index where they are one, and where it has them, its WAV channels' gains
+before the mix and a second pair of those), numbers in 7-bit groups; then the range coded chunks (a
+frame as records, bytes between frames, a frame kept as bytes), the end, and the CRC-32 of the core
+stream, which `d` checks. The header is 31 bytes for a 5.1 stream bound channel for channel (111
+before format 90, every binding's fields at a fixed size: up to a third of a 7-frame DTS-HD MA
+sample's output).
 
 ## What it doesn't do
 
@@ -1937,6 +1963,9 @@ fixed size: up to a third of a 7-frame DTS-HD MA sample's output).
   MB): a 24-bit stream of 16-bit audio would be taken at 16 bits, untried; a 176.4 kHz one's is
   taken the same way, untried.
 - The LFE is predicted at 64x only (LFF 2); a 128x LFE (LFF 1) is coded by the model alone.
+- A stream's frames are taken in its first frame's packing alone: a frame packed another way is
+  bytes between frames, kept as bytes, and so is one its packing doesn't make again (a bit flipped
+  in a word's top two of the DTS CD's sample: its 4 KB frame 4.1 KB of the output).
 - XXCH has been tried only on the streams made from FATE's (above), and only one channel set is
   parsed, as in FFmpeg; X96 and XXCH in the extension substream aren't in the core (dtssplit keeps
   the extension substream).
