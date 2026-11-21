@@ -605,6 +605,14 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // `master_audio_7.1_24bit.dts`'s core 0.7%, `3-1.dts`'s 0.5%, the 7-frame FATE samples, too short
   // for the rule, 2-4 bytes bigger
   static constexpr int HC_MAX = 32, HC_S0 = -10, HC_K = 8;
+  // A decoded WAV's indexes miss by its own rounding, the same through the stream, more than by its
+  // decoder's arithmetic, which errs by the level: their hit cells' nearness is against 2^DW_HC of
+  // its LSBs (16-bit: 256 of the core's units) rather than against the level, under which its quiet
+  // subbands' error scales ran down to -HC_MAX and stayed (a 16-bit decode's subbands 18-24, 2-3),
+  // and the family's nearness (nl) against the level floored at 2^DW_NL (format 142: the 16-bit
+  // decodes of FFmpeg's encodes 1.2-2.8% smaller, the 24-bit ones up to 4%; the scales then end
+  // at -16 to 1)
+  static constexpr int DW_HC = 21, DW_NL = 19;
   struct HitCal {
     S32 s;   // (the scale: 2^(s/4))
     U32 m;   // (the misses)
@@ -4530,9 +4538,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.hw = sample_coding(r, ch, a);
     D.pk = bnd;
     D.nr = bnd ? near_bucket(dist, (S128)ss << AQ_F, 17) : 0;
-    // (the encoder's arithmetic errs by about its signal's level: the channel's loudest subband's)
+    // (the encoder's arithmetic errs by about its signal's level: the channel's loudest subband's;
+    // a decoded WAV's nearness against that level floored at 2^DW_NL, its hit cells' (code_index())
+    // against its rounding's unit, DW_HC doublings above its LSB)
     const S128 lvu = (S128)(r.shuff[ch] == 6 ? SF7 : SF6)[imax(esmax[ch] - 1, 0)] << 38;
-    D.nl = bnd ? near_bucket(dist, lvu, 28) : 0;
+    const bool dw = ss_rule();
+    D.nl = bnd ? near_bucket(dist, dw ? lvu + ((S128)1 << (38 + DW_NL)) : lvu, 28) : 0;
     D.ql = bnd ? imin(bit_len((U64)(qp < 0 ? -qp : qp)), 21) : pe ? imin(bit_len((U64)(qc < 0 ? -qc : qc)), 21) : 0;
     D.hm = imin(__builtin_popcount(miss[ch][b]), 3);
     D.pm = pm;
@@ -4564,8 +4575,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     // (a lossless WAV's nearness against the level at the sample, at the core's rate the level along
     // the subband's FFT path)
-    const S64 lv = !ss_rule() ? bind.up == 1 ? plev[ch][b][j] : tlev[ch][j] : 0;
-    v = code_index(D, v, bnd, qp, alt, lo, hi, &how, &hcal[b], dist, !ss_rule() ? (S128)lv << 22 : lvu,
+    const S64 lv = !dw ? bind.up == 1 ? plev[ch][b][j] : tlev[ch][j] : 0;
+    const S128 hu = !dw ? (S128)lv << 22 : (S128)(wav->bps == 2 ? 256 : 1) << (38 + DW_HC);
+    v = code_index(D, v, bnd, qp, alt, lo, hi, &how, &hcal[b], dist, hu,
                    (pc >= 8 ? 3 : pc >= 3 ? 2 : pc >= 1 ? 1 : 0) + 4 * jd, bnd ? (S128)ss << AQ_F : 0,
                    __builtin_popcount(miss[ch][b]), xm > 0);
     if (lk) bias_learn(b, xu, X[ch][0][j], shl64(pred, AQ_F), ss, lo, hi, v, qp, alt, dist);

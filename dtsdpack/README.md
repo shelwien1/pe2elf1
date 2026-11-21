@@ -158,13 +158,13 @@ allocations in):
 
 | Stream | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 28535 (1.51%) | the 96 kHz decode's 64-band analysis's lower half (99.79% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
+| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 28524 (1.51%) | the 96 kHz decode's 64-band analysis's lower half (99.79% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
 | `Master Audio 5.0 96khz.dts` | 1768548 | 3472 (0.20%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
 | `Master Audio 7.1.dts` | 1945604 | 4134 (0.21%) | a downmix of its 7.1 |
 | `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 3783 (0.14%) | its 3.1 |
-| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 2284 (0.04%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
-| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 1617 (0.32%) | the same (1.95%) |
-| `open bitrate.dts` (stereo, open rate) | 5242416 | 881 (0.02%) | decoded (99.99% of the indexes, 99.96% of the scale factors, 99.82% of the bit allocations, 99.99% of the HF VQ groups, 99.82% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
+| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 2291 (0.04%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
+| FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 1623 (0.32%) | the same (1.95%) |
+| `open bitrate.dts` (stereo, open rate) | 5242416 | 883 (0.02%) | decoded (99.99% of the indexes, 99.96% of the scale factors, 99.82% of the bit allocations, 99.99% of the HF VQ groups, 99.82% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
 
 A DTS:X stream, `Nigel_Stanford_Cymatics_DTS-X.dts` (5:27; a 5.1 core at 1509 kbps beside DTS-HD
 MA's XLL, whose 7.1 bed FFmpeg decodes, and the DTS:X objects' data, which
@@ -268,22 +268,25 @@ decimation corrected as a decoded WAV's, and predicts since format 135 by FFmpeg
 interpolation undone exactly, its scale factors since format 136 by the lattice the WAV's LFE fits
 (below). Their bit allocations took 83.3 KB in format 134 and take 5.7 KB, their scale factors 24.4
 KB, 8.4 KB in format 136 and 1.7 KB, their LFE 6.0 KB, 0.3 KB in format 135 and 70 bytes; what is
-left is mostly the indexes that the decodes don't give back (the first 3 MB's 7.5 KB of 9.3, `open
-bitrate.dts`'s encode's 10.3 KB of 11.4), at steps under the WAV's unit, which its rounding hides.
+left is mostly the indexes that the decodes don't give back (the first 3 MB's 7.1 KB of 8.8, `open
+bitrate.dts`'s encode's 9.8 KB of 10.9), at steps under the WAV's unit, which its rounding hides
+(since format 142 their hit flags by how near the boundary they lie against that unit: below).
 Making FFmpeg's encoder's choices again takes some time, less since format 137: these cores compress
-at 511-1331 KB a second and decompress at 590-1453, the slowest the 768 kbps one, whose frames are
-half the bytes for the same work (format 137 at 516-1365 and 591-1405 in the same runs, where the
-7-frame samples above go at 449 and 565 at the least; on the host as it was when those went at 484
-and 591, format 134, which doesn't make them, at 566-1320 and 597-1447, and format 136's arithmetic
-at 432-1156 and 506-1221):
+at 472-1292 KB a second and decompress at 548-1352 in format 142 (format 141 at 494-1304 and
+558-1385 in the same runs, the 7-frame samples above at 339 and 380 at the least), the slowest the
+768 kbps one, whose frames are half the bytes for the same work (earlier, on the host as it was,
+511-1331 and 590-1453, format 137 at 516-1365 and 591-1405 in the same runs, where the 7-frame
+samples above go at 449 and 565 at the least; on the host as it was when those went at 484 and 591,
+format 134, which doesn't make them, at 566-1320 and 597-1447, and format 136's arithmetic at
+432-1156 and 506-1221):
 
-| FFmpeg's encode | Core | dtsdpack | format 137 | format 134 |
-|---|---:|---:|---:|---:|
-| `s.2.dts`'s first 3 MB as decoded (5.1, 1509 kbps, 6.8 s) | 1275608 | 9255 (0.73%) | 9386 | 26484 |
-| 3 MB from its middle (5.7 s) | 1068372 | 1405 (0.13%) | 1514 | 10051 |
-| its first 3 MB at 768 kbps | 649216 | 1326 (0.20%) | 1390 | 11263 |
-| `open bitrate.dts`'s first 20 s as decoded (stereo, 768 kbps) | 1920000 | 11188 (0.58%) | 11403 | 23362 |
-| a minute of 5.1 shaped noise, its surrounds silent to 30 s (above) | 10597500 | 4590 (0.04%) | 4667 | 65358 |
+| FFmpeg's encode | Core | dtsdpack | format 141 | format 137 | format 134 |
+|---|---:|---:|---:|---:|---:|
+| `s.2.dts`'s first 3 MB as decoded (5.1, 1509 kbps, 6.8 s) | 1275608 | 8870 (0.70%) | 9255 | 9386 | 26484 |
+| 3 MB from its middle (5.7 s) | 1068372 | 1389 (0.13%) | 1405 | 1514 | 10051 |
+| its first 3 MB at 768 kbps | 649216 | 1330 (0.20%) | 1326 | 1390 | 11263 |
+| `open bitrate.dts`'s first 20 s as decoded (stereo, 768 kbps) | 1920000 | 10928 (0.57%) | 11188 | 11403 | 23362 |
+| a minute of 5.1 shaped noise, its surrounds silent to 30 s (above) | 10597500 | 4592 (0.04%) | 4590 | 4667 | 65358 |
 
 Against the WAV that was FFmpeg's encoder's input, not a decode, the model makes nearly all of an
 encode again since format 138: each index as the encoder quantizes the value its transform makes
@@ -299,10 +302,12 @@ frames' (the switches are learned) and a few bits a frame:
 | `open bitrate.dts`'s first 20 s as decoded (stereo, 768 kbps) | 1920000 | 175 (0.009%) | 9340 |
 | 10 s of that one's decode as 16 bits, encoded at FFmpeg's default (1411 kbps) | 1767192 | 138 (0.008%) | 162307 |
 
-FFmpeg's default 16-bit decode of that last one takes 381085 bytes, 445344 in format 137: where
+FFmpeg's default 16-bit decode of that last one takes 380885 bytes, 445344 in format 137: where
 FFmpeg's quantization of the decode's values has been the core's index more often than the model's
 prediction where the two differ, it is the prediction (`-s`: "the audio's indexes: 55.45% of the
-samples", 39.37% before); its decodes of the 24-bit WAVs' encodes, 16-bit too, take 0.02% less.
+samples", 39.37% before); its decodes of the 24-bit WAVs' encodes, 16-bit too, take 0.02% less, and
+since format 142 1.8% less again (1102817 bytes to 1083123, the five above), their hit flags by how
+near the boundary the decode's values lie against the WAV's LSB (below).
 
 ## How it works
 
@@ -452,7 +457,20 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   0.1% bigger; 1, 4, 16 and 64 times, 0.6%). `s.2.dts`'s core 0.94% smaller (the bias 0.65%, the
   nearness 0.14%, the margins 0.1%), its first 3 MB 1.0%, `3-1.dts`'s 0.6%, `Master Audio 7.1.dts`'s
   0.2%, five of the 7-frame samples 1 to 5 bytes bigger; a lossless WAV 5% slower to compress. A
-  decoded WAV's misses are the lattice's, not the arithmetic's, and keep the loudest subband's. Each
+  decoded WAV's misses are the lattice's, not the arithmetic's, and keep the loudest subband's; but
+  not for their hit cells since format 142: a decoder rounds its output to the WAV's resolution,
+  which errs by the same through the stream, more than its arithmetic does by the level, and
+  against the level a 16-bit decode's quiet subbands' error scales ran down to their floor, 2^-8,
+  and stayed there (subbands 22-23 of FFmpeg's 16-bit decode of the first 3 MB above, 2-3 and 16-18
+  of its middle's, 19-21 of its encode of `open bitrate.dts`'s). So a decoded WAV's hit cells' nearness is
+  against 2^21 of its LSBs (16 bits: 256 of the core's units), its scales then ending at 2^-4 to
+  2^0.25, and its families' (nl) against the level floored at 2^19: FFmpeg's 16-bit decodes of its
+  encodes (above) 1.8% smaller, its 24-bit ones 2.4%, `96-24.dts`'s core 11 bytes, FATE's XXCH and
+  XBR samples' 2-10; the decodes that do better against the level, four of FATE's 7-frame samples',
+  `dts_es.dts`'s, `ES 6.1 16bit.dts`'s and `open bitrate.dts`'s (all 24-bit), 2-18 bytes bigger.
+  Against the level plus 2^K LSBs, the 16-bit decodes were smallest at K = 20-21, the 24-bit ones
+  at 21-23; the level at the sample added, as a lossless WAV's (above), took at most 23 bytes off
+  the 24-bit ones; the X96 indexes the same either way. Each
   nearness is a doubling's bucket, and within one the miss rate changes several times over; so
   (format 71) a flag's
   probability is the geometric mean of the rates of the cells either side of where its two
@@ -1872,14 +1890,18 @@ with FFmpeg's five encodes among those dumps, none of which any tuning had had b
 2.0%, 1.0% and 0.7% smaller there; FFmpeg's encodes 27764 bytes from 28023 (0.9%), against its
 16-bit decodes of them 1102817 from 1105689 (0.26%), its encode of the 16-bit WAV (above) against
 its 16- and 24-bit decodes 0.06% and 0.3% smaller; the regression set 22 bytes smaller, the
-calibration set 25, the 28 short streams 27, the 25 short streams 24, none bigger.
+calibration set 25, the 28 short streams 27, the 25 short streams 24, none bigger. Format 142 tunes
+hid and smd again on those dumps made again, the decoded WAVs' hit cells against their LSB (above):
+their output 0.7% and 0.2% smaller there, FFmpeg's encodes 55 bytes (27164 to 27109), the 28 short
+streams 10 and the 25 short streams 9 of the 34 and 44 they had grown, the calibration set 10 of
+its 26.
 `./mk.sh check 9 stream wav ...` (and `8`)
 confirms that the tuning build, the shipping build and the build without AVX2 write the same
 files at that level.
 
 ### The format
 
-"dtsdpack", the format's version (141), the level (9, or 8: above); what the WAV was (whether it was
+"dtsdpack", the format's version (142), the level (9, or 8: above); what the WAV was (whether it was
 one, its channels and bytes a sample, its size and the CRC-32 of its first 64 KB) and the binding
 (the offset; the WAV's samples to the core's, 1, 2 or 4 (its lower band, then 2), and the lower
 band's resolution; the LFE's channel; each core channel's WAV channel, and where it isn't that
