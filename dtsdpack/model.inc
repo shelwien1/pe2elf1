@@ -461,14 +461,23 @@ struct Model : ModelX96<f_DEC, LV> {
         break;
       }
       case F_TMODE: {  // (against the transient search's, where the scale factor search's rule is taken: its
-                       // sureness the context ac is)
+                       // sureness the context ac is; and since format 147 against the TMODEs of the subband
+                       // below in the channel and of the channel before in the subband, tr, each none, 0, the
+                       // search's or another, as 6 + 4 the one below's + the other's: a transient is at the
+                       // same subsubframe in the subbands and channels it is in, the search finds none where
+                       // its two scale factors are the same, and the subband below's and the channel
+                       // before's TMODEs are already there: the DTS CD's sample's core 4.6% smaller)
         account(CAT_SIDE);
         int gt = -1, gc = 0;
         if (twin_field(fid, ch, b, v, lo, hi)) break;
         if (bound[ch] && B::ss_rule()) gt = B::tmode_search(r, s, ch, b, &gc);
-        if (gt >= 0)
+        if (gt >= 0) {
+          auto rel = [&](int c, int k) {  // (0 none coded, 1 none there, 2 the search's, 3 another)
+            return c < r.ch0() || k < 0 || k >= r.nvqsub[c] || !s.abits[c][k] ? 0 : !s.tmode[c][k] ? 1 : s.tmode[c][k] == gt ? 2 : 3;
+          };
           v = side_code(SF_TMSR, ch, b, v, lo, hi, 0, 1 + gt, hist.tmode[ch][b], gc, 1 + imin(s.abits[ch][b], 26),
-                        ec[ch][b]);
+                        ec[ch][b], 6 + 4 * rel(ch, b - 1) + rel(ch - 1, b));
+        }
         else if (bound[ch]) {  // (a lossless WAV's: against the rule, its class the context ac; and how the
                                // energy rises against the subband's transient threshold, tr: `s.2.dts`'s
                                // TMODEs 1.4 KB to 1.0, to 0.3 at the subband's threshold)

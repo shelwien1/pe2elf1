@@ -4,7 +4,8 @@
 #
 #  A decoded WAV's side information (sid's until format 132: where the scale factor search or
 #  the bit allocation search shows the WAV decoded, as for abd), and the LFE samples, each field
-#  against its last value and the place before's.
+#  against its last value and the place before's; a decoded WAV's TMODE (fld SF_TMSR, its own
+#  rows in h and i since format 147) against its neighbours' too, by tr (famvars.inc), in h.
 #  (The counters', mixers' and APMs' parameters start as ac3pack's sid family's.)
 
 Prefix D9_sdd
@@ -36,13 +37,13 @@ Index e
  e_bd: bd, 1!1001000000000000000000010001001
 
 Index h
- h_fld: fld, 1!00010000
+ h_fld: fld, 1!00010011
  h_ab: ab, 1!001110010000000000000000000
  h_lv: lv, &001000
- h_tr: tr, 1!11010
+ h_tr: tr, 1!110101111111111111111
 
 Index i
- i_fld: fld, 1!00000001
+ i_fld: fld, 1!00000011
  i_ec: ec, 1!111111001
  i_lv: lv, &000110
  i_tr: tr, 1!11000

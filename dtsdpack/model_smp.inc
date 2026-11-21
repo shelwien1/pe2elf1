@@ -3204,22 +3204,30 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   bool hf_min_on() const { return hf_n < 2048 || hfr[0] * 8 > hfr[1] || !(n_hfvq & 63); }
 
   // The ABITS a decoded WAV says (the bit allocation search): its values v (n of them, the ADPCM
-  // prediction off) are what the decoder made of indexes at the step of the ABITS and a scale factor;
-  // so of ABITS a0..a1 (g the guess) and the scale factors p - 3 to p + 5, the pair whose lattice
-  // lies nearest them in its steps (a finer one fits as nearly but in more of its steps, a coarser
-  // one misses the values between its points), of pairs as near the coarser lattice, then the scale
-  // factor nearer p (where the values all lie on both, as a 3-level quantizer's do on the 7-level
-  // one's at the same scale factor: `ES 6.1 16bit.dts`'s search right 99.23% of the time from 97.90%,
-  // its core 2.1% smaller): 1 + its ABITS, where an index it makes isn't 0 (else 0: the values say
-  // nothing); *conf the log2 of the next pair's distance over its, 0-7 (a pair as near isn't
-  // counted), *dbest its distance (norm_dist()'s), *ibest its scale factor. And where none fits
-  // within a 64th of a step squared a value, a transient's: of the ABITS a0..a1, the one whose
-  // lattice fits the subsubframes before some one and those from it on, each part at a scale factor
-  // of its own (part_fit()), the nearest, where 4 times nearer than the pair at least (*dbest still
-  // the pair's: `ES 6.1 16bit.dts`'s search right 99.71%, its core 12.8% smaller still, FATE's
-  // `dts_es.dts`'s 9.2%, `open bitrate.dts`'s 10.0%). (Only the pairs under cut: 0 where none is, and
+  // prediction off) are what the decoder made of indexes at the step of the ABITS and a scale
+  // factor; so of ABITS a0..a1 (g the guess) and the scale factors p - 3 to p + 5, the pair whose
+  // lattice lies nearest them in its steps (a finer one fits as nearly but in more of its steps, a
+  // coarser one misses the values between its points), of pairs as near the coarser lattice, then
+  // the scale factor nearer p (where the values all lie on both, as a 3-level quantizer's do on the
+  // 7-level one's at the same scale factor: `ES 6.1 16bit.dts`'s search right 99.23% of the time
+  // from 97.90%, its core 2.1% smaller): 1 + its ABITS, where an index it makes isn't 0 (else 0:
+  // the values say nothing); *conf the log2 of the next pair's distance over its, 0-7 (a pair as
+  // near isn't counted), *dbest its distance (norm_dist()'s), *ibest its scale factor. And where
+  // none fits within 3 eps (but where FFmpeg's encoder is made again: it takes no transients), a
+  // transient's: of the ABITS a0..a1, the one whose lattice fits the subsubframes before some one
+  // and those from it on, each part at a scale factor of its own (part_fit()), the nearest, where 4
+  // times nearer than the pair at least (*dbest still the pair's: `ES 6.1 16bit.dts`'s search right
+  // 99.71%, its core 12.8% smaller still, FATE's `dts_es.dts`'s 9.2%, `open bitrate.dts`'s 10.0%).
+  // Until format 147 that only where none fit within a 64th of a step squared a value, as the
+  // transient search did until format 146: but a transient's quiet first part lies near 0 on the
+  // second's lattice, and one lattice fits its values that well (the DTS CD's sample's search right
+  // in 97.8% of its ABITS from 90.6%, its bit allocations 2.2 KB to 0.4; `dtswavsample14.wav`'s,
+  // right too seldom before to be taken, 15.3 KB to 2.1, its PMODEs 1.3 KB to 0.5). And a split
+  // where the pair fits to that 64th yields to a coarse lattice's one scale factor (below) as near
+  // as it, by the cut at its distance and eps (`dtswavsample16.wav`'s encoder takes no transients:
+  // without it, its bit allocations 3.7% bigger). (Only the pairs under cut: 0 where none is, and
   // no transients.) Since format 146, but where FFmpeg's encoder is made again (its ABITS its own),
-  // and not after a transient's: the coarse lattices under a0..a1 by themselves, ABITS 1 to
+  // and not after another transient's: the coarse lattices under a0..a1 by themselves, ABITS 1 to
   // AB_COARSE, by the cut at the range pair's distance and eps (as near as it, or nearer): theirs
   // taken where 4 times nearer, and where as near, the one of the two that has been the ABITS more
   // often (abk, by an eighth and 2: a 3-level quantizer's values, 0 and a step either side, lie as
@@ -3427,12 +3435,25 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       const bool tr = ab_tdist != ~0ull;  // (a transient's)
       if (!tr) ab_tdist = t0;
       ab_g1 = ab_gc = 0;
-      if (tr || ffe_ok) return G;
+      if (ffe_ok || (tr && *dbest >= (U64)n << 10)) return G;
+      if (tr) {  // (a split where one lattice fits to a 64th: a coarse lattice's one scale factor as near, rather)
+        if (a0 > 1) {
+          int cc = 0, ic = 0;
+          U64 dc = ~0ull;
+          const U64 td = ab_tdist, cutt = td > ~0ull - 2 * eps ? ~0ull - 1 : td + eps + 1;
+          const int Gc = abits_search(r, ch, w, n, 1, 1, imin(AB_COARSE, a0 - 1), p, &cc, &dc, cutt, &ic);
+          if (Gc) {
+            G = Gc, *conf = cc, *dbest = dc, ab_tdist = t0;
+            if (ibest) *ibest = ic;
+          }
+        }
+        return G;
+      }
       if (a0 > 1) {  // (the coarse lattices)
         int cc = 0, ic = 0;
         U64 dc = ~0ull;
         const U64 cutc = !G ? (U64)n << 20 : *dbest > ~0ull - 2 * eps ? ~0ull - 1 : *dbest + eps + 1;
-        const int Gc = abits_search(r, ch, v, n, 1, 1, imin(AB_COARSE, a0 - 1), p, &cc, &dc, cutc, &ic);
+        const int Gc = abits_search(r, ch, w, n, 1, 1, imin(AB_COARSE, a0 - 1), p, &cc, &dc, cutc, &ic);
         if (Gc) {
           const bool clear = !G || (*dbest + eps) / (dc + eps) >= 4, tie = !clear && dc <= *dbest + eps;
           if (tie) ab_g1 = G, ab_gc = Gc;
@@ -3448,11 +3469,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
                   u0 = imax(af0, a1 + 1), u1 = af1;
         int G2 = 0, c2 = 0, i2 = 0;
         U64 d2 = ~0ull;
-        if (l0 <= l1) G2 = abits_search(r, ch, v, n, l1, l0, l1, p, &c2, &d2, 3 * eps, &i2);
+        if (l0 <= l1) G2 = abits_search(r, ch, w, n, l1, l0, l1, p, &c2, &d2, 3 * eps, &i2);
         if (u0 <= u1) {
           int c3 = 0, i3 = 0;
           U64 d3 = ~0ull;
-          const int G3 = abits_search(r, ch, v, n, u0, u0, u1, p, &c3, &d3, G2 && d2 < 3 * eps ? d2 + 1 : 3 * eps, &i3);
+          const int G3 = abits_search(r, ch, w, n, u0, u0, u1, p, &c3, &d3, G2 && d2 < 3 * eps ? d2 + 1 : 3 * eps, &i3);
           if (G3 && (!G2 || d3 < d2)) G2 = G3, c2 = c3, d2 = d3, i2 = i3;
         }
         if (G2 && d2 < 3 * eps && (!G || (*dbest + eps) / (d2 + eps) >= 4)) {
@@ -3520,31 +3541,6 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     if (best < 0 || !bnz) return 0;
     const U64 eps = 2 * (U64)n;  // (2^-15 steps squared a value)
-    if (cut == ~0ull && n >= 16 && d1 >= ((U64)n << 10) && ab_rule()) {  // (a transient's: two scale factors, where
-                                                                             // the search's rule is taken: a lossless
-                                                                             // WAV's fit none)
-      const int ns = n / 8;
-      U64 bk = ~0ull;
-      int ba = -1;
-      for (int a = a0; a <= a1; a++) {
-        S64 lo, hi;
-        quant_range(r, ch, a, lo, hi);
-        for (int k = 1; k < ns; k++) {  // (the parts' fits under the best's, as all would find)
-          const U64 dA = part_fit(r, ch, a, lo, hi, v, 8 * k, bk);
-          if (dA >= bk) continue;
-          const U64 dB = part_fit(r, ch, a, lo, hi, v + 8 * k, n - 8 * k, bk - dA);
-          const U64 d = dA + dB < dA ? ~0ull : dA + dB;
-          if (d < bk) bk = d, ba = a;
-        }
-      }
-      if (ba >= 0 && bk != ~0ull && (d1 + eps) / (bk + eps) >= 4) {
-        ab_tdist = bk;
-        const U64 ratio = (d1 + eps) / (bk + eps);
-        *conf = imin(bit_len(ratio) - 3, 7);
-        *dbest = d1;
-        return 1 + ba;
-      }
-    }
     const U64 ratio = d2 == ~0ull ? ~0ull : (d2 + eps) / (d1 + eps);
     *conf = imin(bit_len(ratio) - 1, 7);
     *dbest = d1;
@@ -3558,6 +3554,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   U32 abk[2];
   int ab_g1, ab_gc;
   U64 ab_tdist;  // (the transient's fit's distance, where abits_search() took one; the caller sets it to ~0)
+  // The distances under which a split's is 4 times nearer than a whole's, dw ((dw + eps) / (d + eps)
+  // >= 4 for d under it, as the searches take one: 0 where none is), eps 2 n
+  static U64 split_bound(U64 dw, U64 eps) {
+    const U64 q4 = (dw + eps) / 4;
+    return q4 >= eps ? q4 - eps + 1 : 0;
+  }
   // abits_search() without a cut: of the pairs (in their order, from the guesses out), the nearest
   // and the second nearest under 128 times its distance and 127 eps (where *conf is 7), as the heap
   // finds them: of pairs as near, the coarser lattice, then the scale factor nearer p, then the
@@ -3640,12 +3642,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       }
     }
     if (ba < 0 || !bnz) return 0;
-    if (n >= 16 && d1 >= ((U64)n << 10) && ab_rule()) {  // (a transient's: abits_search()'s)
+    if (n >= 16 && d1 >= 3 * eps && !ffe_ok && ab_rule()) {  // (a transient's: abits_search()'s)
       const int ns = n / 8;
       const S64* v = ab_v;
-      U64 bk = ~0ull;
+      U64 bk = split_bound(d1, eps);  // (only a split 4 times nearer is taken: the parts' fits under that alone)
       int bta = -1;
-      for (int a = a0; a <= a1; a++) {
+      for (int a = a0; bk && a <= a1; a++) {
         S64 lo, hi;
         quant_range(r, ch, a, lo, hi);
         for (int k = 1; k < ns; k++) {
@@ -3670,7 +3672,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (ibest) *ibest = bi;
     return 1 + ba;
   }
-  const S64* ab_v;  // (abits_search()'s values, in their order: abits_pass()'s transients')
+  const S64* ab_v;  // (abits_search()'s values, in their order: abits_pass()'s transients'; its own passes
+                    // after the first get them the largest first, as their cuts are past soonest so)
   // Where the largest of the m values v lies past the top of ABITS a's lattice (its range lo..hi) at
   // scale factor i1, the first entry above i1 whose step puts it at the top or under (the table's
   // end where none does), else -1: a lone index's RMS among 16 lies 12 dB under its peak, its
@@ -3753,9 +3756,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (d0 < 3 * eps) return *conf = 7, 0;
     }
     const bool one = d0 < ((U64)n << 10);
-    U64 bk = ~0ull;
+    U64 bk = d0 == ~0ull ? ~0ull : split_bound(d0, eps);  // (only a split 4 times nearer is taken)
     int best = -1;
-    for (int k = 1; k < ns; k++) {  // (each part's fit only while under the best's, as all would find)
+    for (int k = 1; bk && k < ns; k++) {  // (each part's fit only while under the best's, as all would find)
       const U64 d1 = part_fit(r, ch, a, lo, hi, x, 8 * k, bk);
       if (d1 >= bk) continue;
       const U64 d2 = part_fit(r, ch, a, lo, hi, x + 8 * k, 8 * (ns - k), bk - d1), d = d1 + d2 < d1 ? ~0ull : d1 + d2;

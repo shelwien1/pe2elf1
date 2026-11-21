@@ -98,7 +98,9 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      none; PMODE: the gain of the subband's LPC, in quarters of halvings, to 27), ec how its
 //      energy changes over the subframe's subsubframes (0-8, 9 none; PMODE: model_smp.inc's
 //      pmode_gain()), tr (PMODE, TMODE) how its energy rises against where the encoders seen take a
-//      transient, and make no prediction (model_smp.inc's pm_rise(): 0-5; 0 for the other fields)
+//      transient, and make no prediction (model_smp.inc's pm_rise(): 0-5; a decoded WAV's TMODE where
+//      the transient search's is taken, SF_TMSR: 6 + 4 the subband below's TMODE + the channel
+//      before's, each 0 not coded, 1 none, 2 the search's, 3 another, model.inc; 0 for the other fields)
 // abt: bd, cc, la the last ABITS (1 + it, 0 none), lb the subband below's in the subframe (1 + it,
 //      0 none), es the audio's energy in the subband as a scale factor index (the RMS rule's; 1 +
 //      it, 0 none), de its change from the last (0-8, 9 none), ls the last scale factor less the
