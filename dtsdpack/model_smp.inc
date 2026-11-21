@@ -926,7 +926,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int k = 0; k < 6; k++) tw_n[k][0] = 1, tw_n[k][1] = 7;
     ffe_ok = 0, n_ff = n_ffhit = 0;
     ffr_ok = 0, ffr_c[0] = ffr_c[1] = 0, ffr_l[0] = ffr_l[1] = 0;
-    abk[0] = abk[1] = 0, ab_g1 = ab_gc = 0;
+    abk[0] = abk[1] = ab_ex[0] = ab_ex[1] = 0, ab_g1 = ab_gc = 0;
     qff_c[0] = qff_c[1] = qff_n[0] = qff_n[1] = 0;
     ffl_ok = ffl_use = 0, ffl_n = 0;
     // (since format 140 the two fixed filters' predictions, LFE_W2's and LFE_W2D's, times the DTS:X
@@ -3177,7 +3177,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // the same of the bit allocation search, of the ABITS: in its first 512 (the 7-frame samples' the
   // same, 4-8% faster), and while it has been right clearly more often than the first guess without
   // it (a lossless WAV's search, which rarely finds one, as often: then it ran on, for nothing, its
-  // streams the same and 7.6% faster)
+  // streams the same and 7.6% faster); since format 148, of those first 512 only every 8th where it
+  // has been right 24 times fewer than the first guess (FATE's 7-frame samples', whose first guesses
+  // win from their first frames, and the lossless WAVs': the decoded ones' searches lead from their
+  // first tries; FATE's XCH sample 4% faster, the sets' sizes the same to a few bytes)
   // (the rule: by 16 and a 32nd since format 119, by 32 before: the decoded WAVs' streams but
   // FATE's 1-7 bytes smaller; by 8 and a 64th, a lossless WAV's too, `s.2.dts`'s first 3 MB's 5
   // bytes bigger)
@@ -3200,7 +3203,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (!dw_rule()) return B::side_index(fld, ch, b, v, nbits, A, ac, ab);
     return B::template side_ix<M_sdd_v>(B::f_sdd, fld, ch, b, v, nbits, A, ac, ab);
   }
-  bool ab_search_on() const { return ab_n < 512 || abr[1] > abr[0] + 32 + abr[0] / 64 || !(n_ab & 63); }
+  bool ab_search_on() const {
+    if (abr[1] > abr[0] + 32 + abr[0] / 64) return true;
+    if (ab_n < 512) return abr[0] < abr[1] + 24 || !(n_ab & 7);
+    return !(n_ab & 63);
+  }
   bool hf_min_on() const { return hf_n < 2048 || hfr[0] * 8 > hfr[1] || !(n_hfvq & 63); }
 
   // The ABITS a decoded WAV says (the bit allocation search): its values v (n of them, the ADPCM
@@ -3232,11 +3239,18 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // taken where 4 times nearer, and where as near, the one of the two that has been the ABITS more
   // often (abk, by an eighth and 2: a 3-level quantizer's values, 0 and a step either side, lie as
   // well on the lattices of more levels at a finer step, and which of them an encoder takes is its
-  // own: `dtswavsample16.wav`'s the coarse one, `ES 6.1 16bit.dts`'s the range's); then where the
-  // pair isn't within 3 eps, the other ABITS of af0..af1 by the cut at 3 eps, theirs taken where 4
-  // times nearer (a subband's ABITS leaps from about its last where its signal does:
+  // own: `dtswavsample16.wav`'s the coarse one, `ES 6.1 16bit.dts`'s the range's). Since format 148,
+  // where the range's pair is within 3 eps and no coarse lattice as near, the ABITS between those
+  // and the range the same way, their ties learned with the coarse ones' (a subband whose signal
+  // falls takes the quantizer of fewer levels its values lie on, under the window as often as in
+  // it: 72% of `dtswavsample16.wav`'s misses, its core 14% smaller). Then where the pair isn't
+  // within 3 eps, the other ABITS of af0..af1 by the cut at 3 eps, theirs taken where 4 times
+  // nearer (a subband's ABITS leaps from about its last where its signal does:
   // `dtswavsample16.wav`'s bit allocations 98 KB to 15 KB, the DTS CD's 2.6 KB to 2.2; every ABITS
-  // in the first pass instead, its window's guess lost, the DTS CD's 4.3 KB).
+  // in the first pass instead, its window's guess lost, the DTS CD's 4.3 KB); since format 148
+  // while a quarter of the range's pairs at least have been within 3 eps lately (ab_ex: FATE's
+  // 7-frame samples' decodes, noise near full scale and clipped, 12% of theirs, and the pass, which
+  // found none of theirs, cost them 4% of the time; `dtswavsample16.wav` 8 bytes bigger).
   // (The pairs by their distance at the 2 largest values, each one's whole distance, the largest
   // values first, while it could still be less than the second best's: as trying them all does.)
   // a pair of abits_pass()'s: its step and range, its ABITS and scale factor, and a bound under its
@@ -3463,7 +3477,25 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           }
         }
       }
-      if (af1 >= af0 && (af0 < a0 || af1 > a1) && (!G || *dbest >= 3 * eps)) {
+      if (G - 1 >= a0 && *dbest < 3 * eps && !ab_g1 && af0 <= a0 - 1 && a0 - 1 > AB_COARSE) {
+        // (the range's pair within 3 eps, no coarse lattice as near: the ABITS between the coarse ones
+        // and the range by the cut at its distance and eps, as near as it, the one of the two that has
+        // been the ABITS more often, as the coarse pass's)
+        const int l0 = imax(af0, AB_COARSE + 1), l1 = a0 - 1;
+        int c2 = 0, i2 = 0;
+        U64 d2 = ~0ull;
+        const int G2 = abits_search(r, ch, w, n, l1, l0, l1, p, &c2, &d2, *dbest + eps + 1, &i2);
+        if (G2) {
+          ab_g1 = G, ab_gc = G2;
+          if (abk[1] > abk[0] + abk[0] / 8 + 2) {
+            G = G2, *conf = c2, *dbest = d2;
+            if (ibest) *ibest = i2;
+          }
+        }
+      }
+      ab_ex[0] += G && *dbest < 3 * eps, ab_ex[1]++;
+      if (ab_ex[1] >= 1u << 12) ab_ex[0] >>= 1, ab_ex[1] >>= 1;
+      if (af1 >= af0 && (af0 < a0 || af1 > a1) && (!G || *dbest >= 3 * eps) && (ab_ex[1] < 64 || 4 * ab_ex[0] >= ab_ex[1])) {
         // (the rest of af0..af1, under and over: no pair of the range's or the coarse pass's lies within 3 eps)
         const int l0 = imax(af0, a0 > 1 ? imin(AB_COARSE, a0 - 1) + 1 : af0), l1 = imin(af1, a0 - 1),
                   u0 = imax(af0, a1 + 1), u1 = af1;
@@ -3548,10 +3580,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     return 1 + pr[best].a;
   }
   // (abits_search()'s coarse lattices, ABITS 1 to AB_COARSE; abk, how often the range's pair and the
-  // coarse one were the ABITS where they fit as near and differ, halved at 4096; ab_g1, ab_gc, those
-  // two of the last search, else 0)
+  // coarse one were the ABITS where they fit as near and differ, halved at 4096 (and the ties under
+  // the range's, which go the same way); ab_g1, ab_gc, those two of the last search, else 0; ab_ex,
+  // of how many searches the range's pair, after them, has been within 3 eps, halved at 4096)
   static constexpr int AB_COARSE = 3;
-  U32 abk[2];
+  U32 abk[2], ab_ex[2];
   int ab_g1, ab_gc;
   U64 ab_tdist;  // (the transient's fit's distance, where abits_search() took one; the caller sets it to ~0)
   // The distances under which a split's is 4 times nearer than a whole's, dw ((dw + eps) / (d + eps)

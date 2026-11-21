@@ -113,11 +113,12 @@ learned from. A 96 kHz stream's 64-band analysis and X96's searches cost more: `
 and decompresses in 4.3 (435 KB). The decoded WAVs' searches cost too; every other stream below goes
 at 550 KB of core a second or more both ways (FFmpeg's encodes, where its encoder is made again,
 less: below). The short samples below (7 frames, the 96 kHz and XBR ones 14; 7 and 14 KB) take 12 to
-47 ms each way, 295 to 720 KB a second (FATE's XCH and X96 ones the slowest, compressing; under 300
-since format 146): some milliseconds of a run are the same for any stream (starting, the WAV's
-header and start, the alignment, the WAV's continuation past its end, the kernel mapping the pages
-the model touches), and the searches run on every value of a stream's first 2048 (the bit allocation
-search's first 512), which is all of theirs.
+44 ms each way, 312 to 770 KB a second (FATE's XCH and X96 ones the slowest, compressing): some
+milliseconds of a run are the same for any stream (starting, the WAV's header and start, the
+alignment, the WAV's continuation past its end, the kernel mapping the pages the model touches), and
+the searches run on every value of a stream's first 2048 (the bit allocation search's first 512;
+since format 148 every 8th of them where it has been right 24 times fewer than the first guess, as
+on FATE's samples, X96's from its 256th where no more often), which is all of theirs.
 
 FFmpeg's small DTS-HD MA samples (`xll_*`, 7 frames each) round-trip too:
 
@@ -160,13 +161,13 @@ allocations in):
 
 | Stream | Core | dtsdpack | The core is |
 |---|---:|---:|---|
-| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 28322 (1.50%) | the 96 kHz decode's 64-band analysis's lower half (99.79% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
+| `96-24.dts` (DTS 96/24, 5.1, 20 s) | 1888194 | 28307 (1.50%) | the 96 kHz decode's 64-band analysis's lower half (99.79% of its indexes, 95.98% before X96's residuals were taken from its top subbands, below); its X96 extension, 12% of each frame, the upper half and the residuals (99.94%) |
 | `Master Audio 5.0 96khz.dts` | 1768548 | 3472 (0.20%) | the 96 kHz WAV's 64-band analysis's lower half (99.82%) |
 | `Master Audio 7.1.dts` | 1945604 | 4134 (0.21%) | a downmix of its 7.1 |
 | `3-1.dts` (DTS-HD MA 3.1) | 2782596 | 3783 (0.14%) | its 3.1 |
-| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 1997 (0.04%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
+| `ES 6.1 16bit.dts` (DTS-ES, XCH) | 5233800 | 1976 (0.04%) | 6.1 by XCH, decoded (1.39% before the bit allocation search) |
 | FATE's `dts_es.dts` (DTS-ES, XCH) | 503000 | 1539 (0.31%) | the same (1.95%) |
-| `open bitrate.dts` (stereo, open rate) | 5242416 | 675 (0.01%) | decoded (99.99% of the indexes, 99.96% of the scale factors, 99.82% of the bit allocations, 99.99% of the HF VQ groups, 99.82% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
+| `open bitrate.dts` (stereo, open rate) | 5242416 | 673 (0.01%) | decoded (99.99% of the indexes, 99.96% of the scale factors, 99.82% of the bit allocations, 99.99% of the HF VQ groups, 99.82% of the ADPCM predictors; 30.85% before the binding's fit stopped trusting silent subbands at fine steps, below, 2.19% before the scale factor search, and 0.85% before the bit allocation search) |
 
 A DTS:X stream, `Nigel_Stanford_Cymatics_DTS-X.dts` (5:27; a 5.1 core at 1509 kbps beside DTS-HD
 MA's XLL, whose 7.1 bed FFmpeg decodes, and the DTS:X objects' data, which
@@ -244,11 +245,11 @@ their decodes clip too (0.3-1.2% of the samples):
 
 | Stream | Core | dtsdpack |
 |---|---:|---:|
-| `core_51_24_48_768_0`, `_1` (5.1) | 7168 | 1397 (19.49%), 1389 (19.38%) |
-| `xch_61_24_48_768` (6.1 by XCH) | 7168 | 1455 (20.30%) |
-| `x96_51_24_96_1509` (X96) | 14084 | 2646 (18.79%) |
-| `x96_xch_61_24_96_3840` | 14084 | 1844 (13.09%) |
-| `xbr_51_24_48_3840`, `xbr_xch_61_24_48_3840` (XBR: its residuals in the decode) | 14084 | 1593 (11.31%), 1988 (14.12%) |
+| `core_51_24_48_768_0`, `_1` (5.1) | 7168 | 1413 (19.71%), 1397 (19.49%) |
+| `xch_61_24_48_768` (6.1 by XCH) | 7168 | 1463 (20.41%) |
+| `x96_51_24_96_1509` (X96) | 14084 | 2641 (18.75%) |
+| `x96_xch_61_24_96_3840` | 14084 | 1843 (13.09%) |
+| `xbr_51_24_48_3840`, `xbr_xch_61_24_48_3840` (XBR: its residuals in the decode) | 14084 | 1594 (11.32%), 1991 (14.14%) |
 | `xll_x96_51_24_96_1509` (DTS-HD MA, X96) | 14084 | 1329 (9.44%) |
 
 Streams FFmpeg's encoder made (`ffmpeg -c:a dca -strict -2`), against FFmpeg's decodes: their
@@ -333,8 +334,8 @@ in a WAV file, against their decodes by FFmpeg at 24 bits:
 | Sample | Its words | Stream | dtsdpack | format 145 | Before |
 |---|---|---:|---:|---:|---:|
 | `dtswavsample14.wav` (5.1, 44.1 kHz, 1953 frames, the last cut) | 14 bits each, little-endian | 8000000 | 43980 (0.55%) | 65338 | 7266433 (90.83%) |
-| `Fire__VooDoo_Studio_30_sec.wav` (a DTS CD's, 5.1, 44.1 kHz) | the same | 5156908 | 8165 (0.16%) | 16791 | 4680858 (90.77%) |
-| `dtswavsample16.wav` (5.1, 48 kHz, each frame padded to 2048 bytes) | 16 bits, little-endian | 47966252 | 50558 (0.11%) | 188826 | 44772325 (93.34%) |
+| `Fire__VooDoo_Studio_30_sec.wav` (a DTS CD's, 5.1, 44.1 kHz) | the same | 5156908 | 8136 (0.16%) | 16791 | 4680858 (90.77%) |
+| `dtswavsample16.wav` (5.1, 48 kHz, each frame padded to 2048 bytes) | 16 bits, little-endian | 47966252 | 43345 (0.09%) | 188826 | 44772325 (93.34%) |
 
 And a stream packed any of the four ways compresses to the same bytes as in the core's own words
 (six of the sets' streams, packed so by a script: s.2's head, `96-24.dts`, `ES 6.1 16bit.dts`,
@@ -1320,22 +1321,27 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   the one of the two that has been the ABITS more often lately (a 3-level quantizer's values, 0 and
   a step either side, lie as well on the lattices of more levels at a finer step, and which of them
   an encoder takes is its own: `dtswavsample16.wav`'s the coarse one, `ES 6.1 16bit.dts`'s the
-  range's). Then where the pair isn't within 3 eps, the other ABITS are, only their pairs within it,
-  and taken where 4 times nearer (`dtswavsample16.wav`'s bit allocations 98 KB to 15 KB, the search
+  range's). Since format 148, where the range's pair is within 3 eps and no coarse lattice as near,
+  the ABITS between those and the range are searched the same way, their ties going as the coarse
+  ones' do (a subband whose signal falls takes the quantizer of fewer levels its values lie on,
+  under the range as often as in it: 72% of `dtswavsample16.wav`'s misses, its core 14% smaller).
+  Then where the pair isn't within 3 eps, the other ABITS are, only their pairs within it, and
+  taken where 4 times nearer (`dtswavsample16.wav`'s bit allocations 98 KB to 15 KB, the search
   right in 98.4% of them from 90.3%; every ABITS in the first pass instead lost the range's guess,
-  the DTS CD's bit allocations 2.6 KB to 4.3, where by the passes 2.2). Its ABITS is then the first
-  guess, and its margin over the next pair, and
-  whether it is the first guess without it, a context: `open bitrate.dts`'s ABITS were that first
-  guess's 81% of the time (in its first 400 frames), and are the search's 99.82% (`ES 6.1
-  16bit.dts`'s 99.71%; `96-24.dts`'s core's 85.15%, its values having X96's residuals in them). What
-  the staircase or the table guesses is a context of the search's guess: where they agree, the
-  search is right 99.99% of the time (`ES 6.1 16bit.dts`'s), where not 80%, and its misses are
-  mostly what the staircase says, or the last ABITS where it says that (`open bitrate.dts`'s core
-  1.1% smaller, `dts_es.dts`'s 0.6%; the staircase's as the second guess, in the last ABITS's place,
-  makes `dts_es.dts`'s 5% smaller but `ES 6.1 16bit.dts`'s 2.6% bigger). The pairs go by their
-  distance at the two largest values, and each one's whole distance is summed, the largest values
-  first, only while it could still come under the second best's: the same pair as trying them all,
-  at a fraction of the cost.
+  the DTS CD's bit allocations 2.6 KB to 4.3, where by the passes 2.2); since format 148 only while
+  a quarter of the range's pairs at least have been within 3 eps lately (FATE's 7-frame samples',
+  noise near full scale and clipped, 12%: the pass found none of theirs and cost them 4% of their
+  time). Its ABITS is then the first guess, and its margin over the next pair, and whether it is the
+  first guess without it, a context: `open bitrate.dts`'s ABITS were that first guess's 81% of the
+  time (in its first 400 frames), and are the search's 99.82% (`ES 6.1 16bit.dts`'s 99.71%;
+  `96-24.dts`'s core's 85.15%, its values having X96's residuals in them). What the staircase or the
+  table guesses is a context of the search's guess: where they agree, the search is right 99.99% of
+  the time (`ES 6.1 16bit.dts`'s), where not 80%, and its misses are mostly what the staircase says,
+  or the last ABITS where it says that (`open bitrate.dts`'s core 1.1% smaller, `dts_es.dts`'s 0.6%;
+  the staircase's as the second guess, in the last ABITS's place, makes `dts_es.dts`'s 5% smaller
+  but `ES 6.1 16bit.dts`'s 2.6% bigger). The pairs go by their distance at the two largest values,
+  and each one's whole distance is summed, the largest values first, only while it could still come
+  under the second best's: the same pair as trying them all, at a fraction of the cost.
 - **FFmpeg's encoder** (since format 135, `ffenc.inc`): where the core's code books have been its
   rule's (below: its encodes') and the frame is as its are (one subframe of 16 blocks, at 32, 44.1
   or 48 kHz, to 6 channels, each bound to a WAV channel as it is, at the core's rate), its bit
@@ -1975,7 +1981,7 @@ files at that level.
 
 ### The format
 
-"dtsdpack", the format's version (147), the level (9, or 8: above) and above it the stream's packing
+"dtsdpack", the format's version (148), the level (9, or 8: above) and above it the stream's packing
 (since format 145: 0 the core's own, 1 little-endian, 2 and 3 14 bits a word big- and
 little-endian); what the WAV was (whether it was one, its channels and bytes a sample, its size and
 the CRC-32 of its first 64 KB) and the binding (the offset; the WAV's samples to the core's, 1, 2 or

@@ -795,9 +795,15 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
   }
   // (as ModelSmp's ab_rule(): the search's rule, where it has been right more often than the first
   // guess without it, by a margin (it is rarely wrong); tried in its first 2048 values, while its rule
-  // is taken, and in 1 of 64)
+  // is taken, and in 1 of 64; since format 148, of those first 2048 from the 256th only every 8th
+  // where it hasn't been right by 8 and a 64th more often (FATE's X96 samples', right as often as the
+  // first guess: 3% faster; `96-24.dts`'s ahead by a third within its first 128))
   bool x96_ab_rule() const { return ab9r[1] > ab9r[0] + 16; }
-  bool x96_ab_on() const { return ab9_n < 2048 || x96_ab_rule() || !(n_ab9 & 63); }
+  bool x96_ab_on() const {
+    if (x96_ab_rule()) return true;
+    if (ab9_n < 2048) return ab9_n < 256 || ab9r[1] >= ab9r[0] + 8 + ab9r[0] / 64 || !(n_ab9 & 7);
+    return !(n_ab9 & 63);
+  }
 
   // The X96 scale factor search (ModelSmp's scale_search()'s): at X96's steps (no adjustment), its
   // quantizer's range; a VQ'd subband's vectors one each pair of subsubframes (16 samples), each the

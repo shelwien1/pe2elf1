@@ -76,12 +76,29 @@ struct MixCand {
   S64 e2() const { return pre_gain(g2, p2); }
 };
 constexpr int MIX_CANDS = 12;
+// a channel's candidates' WAV channels and gains, each once (MixHits's and MixRef's mixes)
+struct MixGains {
+  int w1[MIX_CANDS], w2[MIX_CANDS];
+  S64 e1[MIX_CANDS], e2[MIX_CANDS];
+  void set(const MixCand* c, int n) {
+    for (int k = 0; k < n; k++) w1[k] = c[k].w1, w2[k] = c[k].w2, e1[k] = c[k].e1(), e2[k] = c[k].w2 >= 0 ? c[k].e2() : 0;
+  }
+  // candidate k's mix of the WAV channels' analyses xw in subband b, as the core's value
+  S64 mix(int k, S64 (*xw)[32], int b) const {
+    const S128 v = (S128)xw[w1[k]][b] * e1[k] + (w2[k] >= 0 ? (S128)xw[w2[k]][b] * e2[k] : 0);
+    return (S64)((v + (1 << 22)) >> 23);
+  }
+};
 struct MixHits {
   MixCand c[NCH][MIX_CANDS];
   int nc[NCH];
   U64 hits[NCH][MIX_CANDS], n[NCH];
   void operator()(const CoreRec& r, const CoreSub& s, int j, S64 (*xw)[32]) {
-    for (int ch = 0; ch < r.npchs + r.nxch; ch++)
+    for (int ch = 0; ch < r.npchs + r.nxch; ch++) {
+      const int nk = nc[ch];
+      MixGains g;
+      g.set(c[ch], nk);
+      U64 h[MIX_CANDS] = {};
       for (int b = 0; b < r.nvqsub[ch]; b++) {
         if (!s.abits[ch][b] || s.pmode[ch][b]) continue;
         const S64 ss = step_scale(r, s, ch, b, j >> 3);
@@ -89,14 +106,14 @@ struct MixHits {
         S64 lo, hi, xlo, xhi;
         quant_range(r, ch, s.abits[ch][b], lo, hi);
         index_cell(s.q[ch][b][j], ss, lo, hi, &xlo, &xhi);  // (the values requant() takes to its index)
-        for (int k = 0; k < nc[ch]; k++) {
-          const MixCand& m = c[ch][k];
-          const S128 v = (S128)xw[m.w1][b] * m.e1() + (m.w2 >= 0 ? (S128)xw[m.w2][b] * m.e2() : 0);
-          const S64 x = (S64)((v + (1 << 22)) >> 23);
-          hits[ch][k] += x >= xlo && x <= xhi;
+        for (int k = 0; k < nk; k++) {
+          const S64 x = g.mix(k, xw, b);
+          h[k] += x >= xlo && x <= xhi;
         }
         n[ch]++;
       }
+      for (int k = 0; k < nk; k++) hits[ch][k] += h[k];
+    }
   }
 };
 
@@ -112,6 +129,10 @@ struct MixRef {
   void operator()(const CoreRec& r, const CoreSub& s, int j, S64 (*xw)[32]) {
     for (int ch = 0; ch < r.npchs + r.nxch; ch++) {
       if (!nc[ch]) continue;
+      const int nk = nc[ch];
+      MixGains g;
+      g.set(c[ch], nk);
+      U64 h[MIX_REF] = {};
       for (int b = 0; b < r.nvqsub[ch]; b++) {
         if (!s.abits[ch][b] || s.pmode[ch][b]) continue;
         const S64 ss = step_scale(r, s, ch, b, j >> 3);
@@ -120,16 +141,15 @@ struct MixRef {
         quant_range(r, ch, s.abits[ch][b], lo, hi);
         index_cell(s.q[ch][b][j], ss, lo, hi, &xlo, &xhi);
         U32 mask = 0;
-        for (int k = 0; k < nc[ch]; k++) {
-          const MixCand& m = c[ch][k];
-          const S128 v = (S128)xw[m.w1][b] * m.e1() + (m.w2 >= 0 ? (S128)xw[m.w2][b] * m.e2() : 0);
-          const S64 x = (S64)((v + (1 << 22)) >> 23);
-          const int h = x >= xlo && x <= xhi;
-          hits[ch][k] += h, mask |= (U32)h << k;
+        for (int k = 0; k < nk; k++) {
+          const S64 x = g.mix(k, xw, b);
+          const int hk = x >= xlo && x <= xhi;
+          h[k] += hk, mask |= (U32)hk << k;
         }
         hist[ch][mask]++;
         n[ch]++;
       }
+      for (int k = 0; k < nk; k++) hits[ch][k] += h[k];
     }
   }
   // of channel ch's samples, those variant i makes and k doesn't
