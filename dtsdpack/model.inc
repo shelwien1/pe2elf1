@@ -237,7 +237,8 @@ struct Model : ModelX96<f_DEC, LV> {
             auto& k = B::abc[ch][b];
             k.g = og - 1, k.a0 = imax(1, k.g - 4), k.a1 = imin(26, k.g + 4), k.p = e - 1, k.gc = 0, k.gd = ~0ull;
             B::ab_tdist = ~0ull;
-            k.G = B::abits_search(r, ch, B::X[ch][b], n, k.g, k.a0, k.a1, k.p, &k.gc, &k.gd);
+            k.G = B::abits_search(r, ch, B::X[ch][b], n, k.g, k.a0, k.a1, k.p, &k.gc, &k.gd, ~0ull, nullptr, 1, 26);
+            k.G1 = B::ab_g1, k.Gc = B::ab_gc;
             const U64 dd = B::ab_tdist < k.gd ? B::ab_tdist : k.gd;
             fit = !k.G ? 3 : dd < ((U64)n << 10) ? 0 : dd < ((U64)n << 14) ? 1 : 2;
           }
@@ -371,12 +372,17 @@ struct Model : ModelX96<f_DEC, LV> {
         const S32 og = sv ? sv : hist.abits[ch][b];
         int G = 0, gc = 0, sc = 0;
         U64 gd = 0;
+        B::ab_g1 = B::ab_gc = 0;
         if (srch && nx) {
           const int g = og ? og - 1 : 1, a0 = og ? imax(imax((int)lo, 1), g - 4) : imax((int)lo, 1),
                     a1 = og ? imin((int)hi, g + 4) : (int)hi;
+          // (PMODE's search where the same but for the ABITS it may go to, all of them: where its is in
+          // this one's, the field's)
           const auto& k = B::abc[ch][b];
-          if (!s.pmode[ch][b] && k.g == g && k.a0 == a0 && k.a1 == a1 && k.p == e - 1) G = k.G, gc = k.gc, gd = k.gd;
-          else if (a0 <= a1) G = B::abits_search(r, ch, x, nx, g, a0, a1, e - 1, &gc, &gd);
+          const int af0 = imax((int)lo, 1), af1 = (int)hi;
+          if (!s.pmode[ch][b] && k.g == g && k.a0 == a0 && k.a1 == a1 && k.p == e - 1 && (!k.G || (k.G - 1 >= af0 && k.G - 1 <= af1)))
+            G = k.G, gc = k.gc, gd = k.gd, B::ab_g1 = k.G1, B::ab_gc = k.Gc;
+          else if (a0 <= a1) G = B::abits_search(r, ch, x, nx, g, a0, a1, e - 1, &gc, &gd, ~0ull, nullptr, af0, af1);
         }
         B::abfit_a[ch][b] = G - 1, B::abfit_d[ch][b] = gd;
         S32 Sn = sv;
@@ -446,6 +452,10 @@ struct Model : ModelX96<f_DEC, LV> {
           B::abr[0] += ro, B::abr[1] += rs;
           if (B::abr[0] + B::abr[1] >= 1u << 16) B::abr[0] >>= 1, B::abr[1] >>= 1;
           B::ab_n += B::ab_n < 2048;
+          if (G && B::ab_g1 && B::ab_gc && B::ab_g1 != B::ab_gc) {  // (abits_search()'s coarse lattices' rule)
+            B::abk[0] += v == B::ab_g1 - 1, B::abk[1] += v == B::ab_gc - 1;
+            if (B::abk[0] + B::abk[1] >= 1u << 12) B::abk[0] >>= 1, B::abk[1] >>= 1;
+          }
         }
         B::n_ab++;
         break;

@@ -583,6 +583,17 @@ static S128 vq_err(const S64* v, int n, int q, S64 sc) {
 }
 
 // the scale factor of table tab (nt entries) nearest (linearly) to t (2^-AQ_F)
+static int scale_near(S64 t, const U32* tab, int nt);
+// the same of the scale at which high-frequency VQ vector q fits the n values v best (least
+// squares, the decoder's rounding aside: 16 v.e / e.e, e its entries); -1 where none is above 0
+static int vq_scale(const S64* v, int n, int q, const U32* tab, int nt) {
+  S128 ve = 0;
+  S64 ee = 0;
+  for (int j = 0; j < n; j++) ve += (S128)v[j] * HF_VQ[q][j], ee += (S64)HF_VQ[q][j] * HF_VQ[q][j];
+  if (ee <= 0 || ve <= 0) return -1;
+  const S128 t = 16 * ve / ee;
+  return scale_near(t > ((S128)1 << 62) ? (S64)1 << 62 : (S64)t, tab, nt);
+}
 static int scale_near(S64 t, const U32* tab, int nt) {
   int lo = 0, hi = nt - 1;  // (the last entry at most t)
   while (lo < hi) {
