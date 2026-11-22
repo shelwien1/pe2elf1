@@ -309,6 +309,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // where they differ at all and the search's missed, how often the staircase's was right and the
   // last ABITS (ab2); each halved at 2^12
   U32 abq[4][2], ab2[2];
+  // (since format 151, a decoded WAV's indexes (code_q()): the noise's mean square, by channel, of
+  // the audio's subband samples less the decoder's where those are within 64 of 0, in 2^-32 of the
+  // core's units squared (-1 none yet); each subband's subframe's root mean square, in 2^-16; the
+  // places of the indexes among those that decode to the WAV's value, by how many there are (2-15,
+  // more) and the value (0, 1, more), from the one nearest 0, halved at 2^12; and where the place's
+  // index and the one before it differ, how often each was the core's, and the soft threshold's and
+  // the audio's, FFmpeg's encoder's apart (dv_sq[1]), each halved at 2^16)
+  double dv_n[NCH], dv_r[NCH][NSUB];
+  U32 dv_pos[15][3][8], dv_pq[2], dv_sq[2][2];
   bool abq_stair(int k) const { return abq[k][0] > abq[k][1] + 8 + abq[k][1] / 16; }
   void abq_add(int k, bool s, bool g) {
     abq[k][0] += s, abq[k][1] += g;
@@ -940,6 +949,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     abk[0] = abk[1] = ab_ex[0] = ab_ex[1] = 0, ab_g1 = ab_gc = 0;
     for (int k = 0; k < 4; k++) abq[k][0] = abq[k][1] = 0;
     ab2[0] = ab2[1] = 0;
+    for (int c = 0; c < NCH; c++) dv_n[c] = -1.0;
+    memset(dv_pos, 0, sizeof dv_pos), memset(dv_pq, 0, sizeof dv_pq);
+    memset(dv_sq, 0, sizeof dv_sq);
     qff_c[0] = qff_c[1] = qff_n[0] = qff_n[1] = 0;
     ffl_ok = ffl_use = 0, ffl_n = 0;
     // (since format 140 the two fixed filters' predictions, LFE_W2's and LFE_W2D's, times the DTS:X
@@ -4734,14 +4746,91 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // the short streams 92 bytes bigger, the noise at `3-1.dts`'s start enough to switch; by 16,
     // as they were, the Cymatics stream 1455 bytes smaller): not a twin's sure one)
     const int cq = bnd && dist != (S128)1 << 100;
-    S64 qk = 0;
+    S64 qk = 0, xq = xv;
     const S64 qp0 = qp;
     if (cq) {
       S128 dk;
       S64 ak;
       const S64 u = ss >> 7, c = qcar[ch][b], cc = c > u ? c - u : c < -u ? c + u : 0;
       qk = cc ? requant(xv + cc - shl64(pred, AQ_F), ss, lo, hi, &dk, &ak) : qp;
-      if (cc && qcn[ch][b][1] > qcn[ch][b][0] + 16) qp = qk, dist = dk, alt = ak;
+      if (cc && qcn[ch][b][1] > qcn[ch][b][0] + 16) qp = qk, dist = dk, alt = ak, xq = xv + cc;
+    }
+    // (since format 151, a decoded WAV's: the decoder rounds its subband samples to the LSB, so
+    // where the step lies under it the WAV says the rounded value, the index no more (the audio's
+    // value less the decoded one spreads the same, 0.05 LSB, whichever of them is the core's): the
+    // audio's index is one of those that decode to it, no likelier than the rest. Of those, the one
+    // in the place most often the core's (from the one nearest 0, to 7, by how many there are and
+    // the value: 0, 1 or more), where it has been the core's more often than the one before it by
+    // 16, the second most often the other candidate, nearness 0: `padded.dts`'s 241632 such
+    // indexes, most in its first 340 frames, quiet at 1509 kbps, the audio's 75.1% of the time,
+    // the place's 78.9%)
+    const bool dq = bnd && !pm && !x96a && !fx && !tq && !hq && ss_rule() && ss < ((S64)1 << 22) &&
+                    dist != (S128)1 << 100;
+    S64 dlo = 0, dhi = -1, dy = 0, dqp = qp;
+    int dnc = 0, dyc = 0, dact = 0;
+    const S64 dq0 = qp;
+    if (dq) {
+      dy = rshift(xq, AQ_F);  // (the decoded value)
+      {
+        // (the indexes q whose (q ss + 2^21) >> 22 is dy: from ceil(n0 / ss) to ceil(n1 / ss) - 1)
+        const S64 n0 = dy * ((S64)1 << 22) - ((S64)1 << 21), n1 = n0 + ((S64)1 << 22);
+        dlo = n0 > 0 ? (n0 + ss - 1) / ss : -((-n0) / ss);
+        dhi = (n1 > 0 ? (n1 + ss - 1) / ss : -((-n1) / ss)) - 1;
+      }
+      dlo = dlo < lo ? lo : dlo, dhi = dhi > hi ? hi : dhi;
+      const S64 n = dhi - dlo + 1;
+      if (n >= 2) {
+        dnc = (int)(n < 16 ? n - 2 : 14), dyc = dy == 0 ? 0 : dy == 1 || dy == -1 ? 1 : 2;
+        const U32* const c = dv_pos[dnc][dyc];
+        int k1 = 0, k2 = -1;
+        U32 tot = c[0];
+        for (int k = 1; k < 8; k++) tot += c[k], k1 = c[k] > c[k1] ? k : k1;
+        for (int k = 0; k < 8; k++)
+          if (k != k1 && (k2 < 0 || c[k] > c[k2])) k2 = k;
+        auto at = [&](int k) -> S64 {  // (the index at place k)
+          const S64 q = dy == 0 ? (xq < 0 ? -k : k) : dy > 0 ? dlo + k : dhi - k;
+          return q < dlo ? dlo : q > dhi ? dhi : q;
+        };
+        dqp = at(k1);
+        dact = tot >= 32 && dv_pq[1] > dv_pq[0] + 16;
+        if (dact && dqp != qp) {
+          const S64 a2 = at(k2);
+          alt = a2 != dqp ? a2 : qp;
+          if (alt == dqp) alt = dqp + (dqp >= 0 ? 1 : -1);
+          qp = dqp, dist = 0;
+        }
+      } else dhi = -1;
+    }
+    // (where that isn't taken, the audio's value soft-thresholded toward 0 by c N / R (N the
+    // noise's mean square, R the subframe's root mean square), where that has been the index more
+    // often than the audio's by 16: c 48, nearness 0 and the audio's the other candidate, the noise
+    // not apart from the signal, as where the WAV's rounding loses a quiet one; 1.4, about a
+    // Laplacian prior's sqrt(2), the threshold's own nearness and other side, where FFmpeg's
+    // encoder is made again, whose 16-bit decodes' noise is their rounding's (FFmpeg's encodes'
+    // 16-bit decodes 1083008 bytes to 1073569; nearness 0 there, the f1 encode's 0.6% bigger))
+    if (bnd && j == 0 && ss_rule()) {
+      double P = 0.0;
+      const int ns = 8 * s.nssc;
+      for (int k = 0; k < ns; k++) P += (double)X[ch][b][k] * (double)X[ch][b][k];
+      dv_r[ch][b] = sqrt(P / (double)ns);
+    }
+    const int ds = bnd && !pm && !x96a && !fx && !tq && ss_rule() && dist != (S128)1 << 100 &&
+                   !dact && dv_n[ch] > 0.0 && dv_r[ch][b] > 0.0;
+    S64 dsq = qp;
+    const S64 ds0 = qp;
+    if (ds) {
+      const double lam = (hq ? 1.4 : 48.0) * dv_n[ch] / dv_r[ch][b];
+      const double ax = xq < 0 ? -(double)xq : (double)xq;
+      const double xs = ax > lam ? (xq < 0 ? -(ax - lam) : ax - lam) : 0.0;
+      S128 d2;
+      S64 a2;
+      dsq = requant((S64)xs, ss, lo, hi, &d2, &a2);
+      const U32* const sq = dv_sq[hq ? 1 : 0];
+      if (dsq != qp && sq[1] > sq[0] + 16) {
+        if (hq) alt = a2, dist = d2;
+        else alt = ds0, dist = 0;
+        qp = dsq;
+      }
     }
     M_smp_v D;
     D.ab = a;
@@ -4791,6 +4880,31 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
                    (pc >= 8 ? 3 : pc >= 3 ? 2 : pc >= 1 ? 1 : 0) + 4 * jd, bnd ? (S128)ss << AQ_F : 0,
                    __builtin_popcount(miss[ch][b]), xm > 0);
     if (lk) bias_learn(b, xu, X[ch][0][j], shl64(pred, AQ_F), ss, lo, hi, v, qp, alt, dist);
+    if (dq && dhi >= dlo) {  // (the places, and the counts)
+      if (v >= dlo && v <= dhi) {
+        const S64 o = dy == 0 ? (v < 0 ? -v : v) : dy > 0 ? v - dlo : dhi - v;
+        U32* const c = dv_pos[dnc][dyc];
+        c[o > 7 ? 7 : o]++;
+        if (c[0] + c[1] + c[2] + c[3] + c[4] + c[5] + c[6] + c[7] >= 1u << 12)
+          for (int k = 0; k < 8; k++) c[k] >>= 1;
+      }
+      if (dqp != dq0) {
+        dv_pq[0] += v == dq0, dv_pq[1] += v == dqp;
+        if (dv_pq[0] + dv_pq[1] >= 1u << 16) dv_pq[0] >>= 1, dv_pq[1] >>= 1;
+      }
+    }
+    if (ds && dsq != ds0) {
+      U32* const sq = dv_sq[hq ? 1 : 0];
+      sq[0] += v == ds0, sq[1] += v == dsq;
+      if (sq[0] + sq[1] >= 1u << 16) sq[0] >>= 1, sq[1] >>= 1;
+    }
+    if (bnd && !x96a && b > 0 && b < 31 && ss_rule()) {  // (the noise, where the decoder's near 0)
+      const S64 y = (S64)dequantize((S32)v, ss) + pred;
+      if (y >= -64 && y <= 64) {
+        const double e = (double)(X[ch][b][j] - shl64(y, AQ_F)), e2 = e * e;
+        dv_n[ch] = dv_n[ch] < 0.0 ? e2 : dv_n[ch] + (e2 - dv_n[ch]) / 256.0;
+      }
+    }
     if (bnd && how != 0) {
       if (xm_id[b][j] != xid) xm_id[b][j] = xid, xm_cnt[b][j] = 0;
       xm_cnt[b][j] += xm_cnt[b][j] < 255;
