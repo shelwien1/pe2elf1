@@ -27,7 +27,9 @@ static INLINE S64 xll_mul(S64 a, S32 c, int bits) { return (a * c + ((S64)1 << (
 // A PCM WAV (16, 24 or 32-bit; RIFF or RF64), its samples as 24-bit values (16-bit ones shifted
 // up, 32-bit ones down: FFmpeg's 32-bit output of a 24-bit decode), a window of them at a time: the
 // samples [lo, got) of each channel in rings of WAV_WIN, read as need() asks for later ones; a file
-// or a pipe alike. Plain data: init() opens it, quit() frees what it holds.
+// or a pipe alike; a DTS:X stream's heights folded into it as it's read, where given (heights()) or
+// its own (own_heights()).
+// Plain data: init() opens it, quit() frees what it holds.
 struct WavIn {
   FILE* f;
   int ok;        // a WAV it reads (else the core is coded without one)
@@ -36,6 +38,11 @@ struct WavIn {
   U64 nsamp;     // its samples a channel (as its header says, or to its end)
   U64 size;      // the file's bytes (0: not known, a pipe)
   U32 crc;       // the CRC-32 of its first WAV_PROBE bytes (or of all, where fewer)
+  U32 chmask;    // its channel mask (WAVE_FORMAT_EXTENSIBLE's; 0: none)
+  WavIn* hw;     // the heights folded into it as it's read (heights()), else none
+  int hc[4];     // (their channels, the WAV's each goes into: -1 none)
+  int hself;     // its own heights folded into it instead (own_heights())
+  int hs[4];     // (their channels)
   U64 got;       // the samples read so far
   S64 lo;        // the samples before lo are given up
   S32* ring[WAV_CH];
@@ -67,7 +74,7 @@ struct WavIn {
   U64 xb0;
   int xbn;             // (how many of them there are: fewer at its end)
 
-  void init(FILE* fp) {
+  void init(FILE* fp, bool rings = true) {  // (rings: its samples kept in the window; the heights' aren't)
     memset(this, 0, sizeof *this);
     f = fp;
     probe = (U8*)xmalloc(WAV_PROBE);
@@ -81,10 +88,51 @@ struct WavIn {
     if (!fstat(fileno(f), &st) && S_ISREG(st.st_mode)) size = (U64)st.st_size;
     data_at = size ? ftell(f) : -1;
     if (!parse()) return;
-    for (int c = 0; c < nch; c++) ring[c] = (S32*)xmalloc(sizeof(S32) * WAV_WIN);
+    for (int c = 0; rings && c < nch; c++) ring[c] = (S32*)xmalloc(sizeof(S32) * WAV_WIN);
     rb = (U8*)xmalloc((size_t)IO_BUF * nch * bps);
     dec = 1;
     ok = 1;
+  }
+  // A DTS:X stream's heights, the WAV h's 4 channels (dtssplit's prefix.x.wav: Lh, Rh, Lhr and Rhr,
+  // 7.1.4's heights as FFmpeg's newest decoder has them), folded into this WAV's L, R, Lsr and Rsr
+  // (FL, FR, BL and BR by its channel mask; without one, an 8-channel WAV's in FFmpeg's 7.1 order)
+  // as they're read, each times 23170/32768, rounded at its own resolution (FFmpeg's mul15()), the
+  // sum saturated at 24 bits: as the stream's 7.1 bed has them, so a bed with them out (7.1.4's)
+  // lines up as the stream's 7.1 decode does (dtssplit's join adds them back the same way); before
+  // any sample is read. 0 where they are, else why not
+  const char* heights(WavIn* h) {
+    static const U32 BIT[4] = {0x1, 0x2, 0x10, 0x20};  // (FL, FR, BL, BR)
+    if (!ok || got) return "the WAV isn't used";
+    if (!h->ok) return h->why;
+    if (h->nch != 4) return "not 4 channels";
+    if (h->rate != rate) return "not at the WAV's rate";
+    const U32 m = chmask ? chmask : nch == 8 ? 0x63F : 0;
+    int any = 0;
+    for (int i = 0; i < 4; i++) {
+      int w = -1;
+      if (m & BIT[i]) {
+        w = 0;
+        for (U32 b = 1; b < BIT[i]; b <<= 1) w += (m & b) != 0;
+        if (w >= nch) w = -1;
+      }
+      hc[i] = w, any += w >= 0;
+    }
+    if (!any) return "the WAV has none of L, R, Lsr and Rsr";
+    hw = h;
+    return nullptr;
+  }
+  // Where it has no heights WAV (heights()) and its channels are FFmpeg's 7.1.4 (12, by its channel
+  // mask: FL, FR, FC, LFE, BL, BR, SL, SR, TFL, TFR, TBL, TBR), its own heights, the last four,
+  // folded into its FL, FR, BL and BR the same way: FFmpeg's master branch decodes a DTS:X stream so,
+  // its bed less the heights times 23170/32768 (its parse_x_heights(), DCA_XLL_X_HEIGHT_FOLD), at the
+  // output's resolution, clipped at 24 bits (where that clipped, the sum is not the bed); before any
+  // sample is read. Whether it is
+  bool own_heights() {
+    if (!ok || got || hw || nch != 12 || chmask != 0x2D63F) return false;
+    static const int BED[4] = {0, 1, 4, 5}, TOP[4] = {8, 9, 10, 11};  // (FL, FR, BL, BR; TFL, TFR, TBL, TBR)
+    for (int i = 0; i < 4; i++) hc[i] = BED[i], hs[i] = TOP[i];
+    hself = 1;
+    return true;
   }
   // its samples its lower band's (XLL_BAND) at the resolution sh: its rate and samples halved;
   // before any is read
@@ -134,10 +182,12 @@ struct WavIn {
   }
   // (c, after the binding's search far into it: call.inc's find_alignment()) back to its first
   // sample, as init() left it, where it can be read again from there
-  bool can_rewind() const { return ok && data_at >= 0; }
+  bool can_rewind() const { return ok && data_at >= 0 && (!hw || hw->data_at >= 0); }
   void rewind() {
     if (fseek(f, data_at, SEEK_SET)) fatal("the WAV can't be read again from its start");
     pat = pat0, got = 0, lo = 0, rgot = 0, rend = 0, xb0 = 0, xbn = 0;
+    if (hw && fseek(hw->f, hw->data_at, SEEK_SET)) fatal("the heights WAV can't be read again from its start");
+    if (hw) hw->pat = hw->pat0;
   }
   void quit() {
     for (int c = 0; c < WAV_CH; c++)
@@ -231,7 +281,8 @@ struct WavIn {
         nch = (int)le16(i + 10);
         rate = le32(i + 12);
         bits = (int)le16(i + 22);
-        if (fmt == 0xFFFE && sz >= 40 && i + 8 + 26 <= n) fmt = (int)le16(i + 8 + 24);  // (the subformat's)
+        if (fmt == 0xFFFE && sz >= 40 && i + 8 + 26 <= n)  // (the subformat's, and the channel mask)
+          fmt = (int)le16(i + 8 + 24), chmask = le32(i + 8 + 20);
       }
       if (!memcmp(h + i, "data", 4)) {
         if (fmt != 1 || nch < 1 || nch > WAV_CH || (bits != 16 && bits != 24 && bits != 32))
@@ -307,9 +358,9 @@ struct WavIn {
     xb0 = n0;
     xbn = XLL_B;
   }
-  // k more sample frames (at most IO_BUF) into dst's rings (by mask) from sample at on: the
-  // probe's first, then the file's; how many came
-  U64 read_frames(S32** dst, U64 mask, U64 at, U64 k) {
+  // k more sample frames' bytes (at most IO_BUF) into rb: the probe's first, then the file's; how
+  // many came whole
+  U64 fill(U64 k) {
     const size_t want = (size_t)k * nch * bps;
     size_t have = 0;
     if (pat < pn) {
@@ -322,17 +373,44 @@ struct WavIn {
       if (!r) break;
       have += r;
     }
-    const U64 n = have / ((size_t)nch * bps);
+    return have / ((size_t)nch * bps);
+  }
+  // a sample's bytes at p as a 24-bit value
+  INLINE S32 value(const U8* p) const {
+    if (bps == 2) return (S32)(S16)((U32)p[0] | (U32)p[1] << 8) * 256;
+    if (bps == 3) return (S32)((U32)p[0] << 8 | (U32)p[1] << 16 | (U32)p[2] << 24) >> 8;
+    return (S32)((U32)p[0] | (U32)p[1] << 8 | (U32)p[2] << 16 | (U32)p[3] << 24) >> 8;
+  }
+  // k more sample frames (at most IO_BUF) into dst's rings (by mask) from sample at on, the heights
+  // folded in (heights()); how many came
+  U64 read_frames(S32** dst, U64 mask, U64 at, U64 k) {
+    const U64 n = fill(k);
     for (U64 t = 0; t < n; t++) {
       const U8* p = rb + (size_t)t * nch * bps;
-      for (int c = 0; c < nch; c++, p += bps) {
-        S32 v;
-        if (bps == 2) v = (S32)(S16)((U32)p[0] | (U32)p[1] << 8) * 256;
-        else if (bps == 3) v = (S32)((U32)p[0] << 8 | (U32)p[1] << 16 | (U32)p[2] << 24) >> 8;
-        else v = (S32)((U32)p[0] | (U32)p[1] << 8 | (U32)p[2] << 16 | (U32)p[3] << 24) >> 8;
-        dst[c][(at + t) & mask] = v;
+      for (int c = 0; c < nch; c++, p += bps) dst[c][(at + t) & mask] = value(p);
+    }
+    if (hw) {  // (the heights of those frames, as many as there are)
+      const U64 hn = hw->fill(n);
+      const int hb = hw->bps;
+      for (U64 t = 0; t < hn; t++) {
+        const U8* p = hw->rb + (size_t)t * 4 * hb;
+        for (int i = 0; i < 4; i++, p += hb) {
+          if (hc[i] < 0) continue;
+          const S32 h = hw->value(p);
+          dst[hc[i]][(at + t) & mask] = fold(dst[hc[i]][(at + t) & mask], h, hb);
+        }
       }
     }
+    if (hself)  // (its own heights)
+      for (U64 t = 0; t < n; t++)
+        for (int i = 0; i < 4; i++)
+          dst[hc[i]][(at + t) & mask] = fold(dst[hc[i]][(at + t) & mask], dst[hs[i]][(at + t) & mask], bps);
     return n;
+  }
+  // the bed's value v with the height h of a WAV of b bytes a sample in it: h times 23170/32768,
+  // rounded at that WAV's resolution, the sum saturated at 24 bits
+  static INLINE S32 fold(S32 v, S32 h, int b) {
+    const S64 x = v + (b == 2 ? xll_mul(h >> 8, 23170, 15) * 256 : xll_mul(h, 23170, 15));
+    return (S32)(x < -(1 << 23) ? -(1 << 23) : x > (1 << 23) - 1 ? (1 << 23) - 1 : x);
   }
 };

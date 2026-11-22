@@ -30,11 +30,18 @@ dtsdpack c in.dtsc in_full.wav in.dtsd
 ## Usage
 
 ```
-dtsdpack c [options] input.dtsc input.wav output.dtsd
-dtsdpack d [options] input.dtsd input.wav output.dtsc
+dtsdpack c [options] input.dtsc input.wav [heights.wav] output.dtsd
+dtsdpack d [options] input.dtsd input.wav [heights.wav] output.dtsc
 ```
 
 - `c` compresses the core stream against the WAV, `d` decompresses it with the same WAV.
+- `heights.wav` (since format 155) is a DTS:X stream's heights, dtssplit's `prefix.x.wav` (Lh, Rh,
+  Lhr and Rhr), for a WAV of its 7.1 bed with them out: as the WAV is read, each is added into its
+  L, R, Lsr or Rsr (FL, FR, BL, BR) at -3 dB, times 23170/32768 rounded, which makes the stream's
+  7.1 decode again (below). A WAV that has them in, as FFmpeg's 7.1 decode has, takes none. Without
+  one, a 7.1.4 WAV (12 channels, FL, FR, FC, LFE, BL, BR, SL, SR, TFL, TFR, TBL, TBR: FFmpeg's
+  master branch's decode of a DTS:X stream, the bed less the heights) has its own last four added
+  back the same way. `d` takes the same one.
 - `-v` (with `c`) decompresses the output afterwards and compares it with the input.
 - `-s` (with `c`) shows the input and output size of each kind of syntax element, and how much of
   the core the audio predicted.
@@ -46,15 +53,16 @@ dtsdpack d [options] input.dtsd input.wav output.dtsc
   downmix of the back surrounds), else `-9`; `d` takes the level from the file.
 
 The core stream's input and output can be `-` for stdin and stdout, except with `-v`, which reads
-the files again; the WAV is read once from its start, so it can be a pipe too (not both of them
-from stdin). But `c` lines a stream that starts quiet for longer than 21.8 s (at 48 kHz; 10.9 s for
-a 96 or 192 kHz WAV) up with its WAV only where it can read on and back (below): files, not pipes.
-The WAV can be any PCM WAV of 16, 24 or 32 bits (RIFF or RF64): FFmpeg's 24-bit decode, or its
-32-bit one (a 24-bit decode in 32 bits).
+the files again; the WAVs are read once from their start, so they can be pipes too (one input from
+stdin at most). But `c` lines a stream that starts quiet for longer than 21.8 s (at 48 kHz; 10.9 s
+for a 96 or 192 kHz WAV) up with its WAV only where it can read on and back (below): files, not
+pipes. The WAV can be any PCM WAV of 16, 24 or 32 bits (RIFF or RF64): FFmpeg's 24-bit decode, or
+its 32-bit one (a 24-bit decode in 32 bits).
 
 A WAV that doesn't line up with the core, or isn't a WAV, isn't an error: the core is then coded
 by the model alone (as about 72% of its size), and the summary line says why. `d` checks that its
-WAV is the one `c` had: its format, its size and the CRC of its first 64 KB are in the header.
+WAV is the one `c` had: its format, its size and the CRC of its first 64 KB are in the header (and
+the heights WAV's, where one was added).
 
 ```
 $ dtsdpack c -s s2.dtsc s2_full.wav s2.dtsd
@@ -221,6 +229,24 @@ stream, one of its twelve 98.2%: format 123 takes the one best for the best's si
 of difference. The fits err as a line by sign: the values are some 0.7% bigger than their
 predictions, and those near 0 a sixth of a step nearer it; format 127 takes each prediction less a
 fit of that (below), 93.8%.
+
+The 7.1 bed has the DTS:X stream's heights in it, each in the channel under it at -3 dB (L, R, Lsr
+and Rsr with Lh, Rh, Lhr and Rhr times 23170/32768, rounded: [dtssplit](../dtssplit) takes them out
+of its WAV again), and without them it packs smaller: FLAC (`-compression_level 5`) takes FFmpeg's
+7.1 decode to 185462834 bytes, the bed less the heights to 169242780 (8.7% smaller) and the heights
+themselves, dtssplit's `prefix.x.wav`, to 98128482, so a store of the audio would keep the bed
+without them. Against that bed the core is 27924292 bytes (45.2%), its L, R and surrounds missing
+the heights; since format 155 the heights' WAV can follow the WAV (`dtsdpack c cym.dtsc bed.wav
+cym.x.wav cym.dtsd`), each height added back into its channel as the WAV is read, and the core is
+60730 bytes, the decode's 60720 and the heights' WAV's size and CRC. FFmpeg's releases (to 9.1)
+decode such a stream's 7.1 bed, its master branch 7.1.4 (its `parse_x_heights()`): the bed less the
+heights, as dtssplit's WAV has its channels, then the heights; dtsdpack adds a 7.1.4 WAV's own
+heights back the same way, and the core against one made so from the bed less the heights and
+`prefix.x.wav` is 60720 bytes (14653732 before). (A WAV that has the heights in already, as the
+releases' 7.1 decode does, would have them twice: 25224008 bytes.) dtssplit's own `prefix.wav` can't
+be the WAV, heights or not: its channels coded against the core hold their residuals (here all but
+the rear surrounds, which hold the bed's audio less the heights, exactly), which only the core makes
+audio again.
 
 FATE's `dtsx_7.1.4_24bit.dts`, two frames of another DTS:X stream (7.1.4), is a cut, it seems: as
 with eight frames cut from the middle of the Cymatics stream, FFmpeg decodes its first frame as the
@@ -2057,18 +2083,19 @@ files at that level.
 
 ### The format
 
-"dtsdpack", the format's version (154), the level (9, or 8: above) and above it the stream's packing
+"dtsdpack", the format's version (155), the level (9, or 8: above) and above it the stream's packing
 (since format 145: 0 the core's own, 1 little-endian, 2 and 3 14 bits a word big- and
-little-endian); what the WAV was (whether it was one, its channels and bytes a sample, its size and
-the CRC-32 of its first 64 KB) and the binding (the offset; the WAV's samples to the core's, 1, 2 or
-4 (its lower band, then 2), and the lower band's resolution; the LFE's channel; each core channel's
-WAV channel, and where it isn't that channel as it is, the second of its mix and their gains, a
-downmix table entry's index where they are one, and where it has them, its WAV channels' gains
-before the mix and a second pair of those), numbers in 7-bit groups; then the range coded chunks (a
-frame as records, bytes between frames, a frame kept as bytes), the end, and the CRC-32 of the core
-stream, which `d` checks. The header is 31 bytes for a 5.1 stream bound channel for channel (111
-before format 90, every binding's fields at a fixed size: up to a third of a 7-frame DTS-HD MA
-sample's output).
+little-endian); what the WAV was (whether it was one, and since format 155 whether a heights WAV was
+added into it, its channels and bytes a sample, its size and the CRC-32 of its first 64 KB; then the
+heights WAV's channels, bytes a sample, size and CRC, where there was one) and the binding (the
+offset; the WAV's samples to the core's, 1, 2 or 4 (its lower band, then 2), and the lower band's
+resolution; the LFE's channel; each core channel's WAV channel, and where it isn't that channel as
+it is, the second of its mix and their gains, a downmix table entry's index where they are one, and
+where it has them, its WAV channels' gains before the mix and a second pair of those), numbers in
+7-bit groups; then the range coded chunks (a frame as records, bytes between frames, a frame kept as
+bytes), the end, and the CRC-32 of the core stream, which `d` checks. The header is 31 bytes for a
+5.1 stream bound channel for channel (111 before format 90, every binding's fields at a fixed size:
+up to a third of a 7-frame DTS-HD MA sample's output).
 
 ## What it doesn't do
 
@@ -2080,6 +2107,11 @@ sample's output).
   MB): a 24-bit stream of 16-bit audio would be taken at 16 bits, untried; a 176.4 kHz one's is
   taken the same way, untried.
 - The LFE is predicted at 64x only (LFF 2); a 128x LFE (LFF 1) is coded by the model alone.
+- Heights are added back from a heights WAV, or a 7.1.4 WAV's own (FFmpeg's layout, by its channel
+  mask exactly): no FFmpeg build that decodes 7.1.4 was at hand, so its WAVs were made by its
+  source's rule (`dca_xll.c`); a stream whose XLL codes 7.1.4 itself (none at hand) would have its
+  heights added the same way, which its core's downmix may not have, and where FFmpeg clipped the
+  bed less a height at 24 bits the sum isn't the bed.
 - A stream's frames are taken in its first frame's packing alone: a frame packed another way is
   bytes between frames, kept as bytes, and so is one its packing doesn't make again (a bit flipped
   in a word's top two of the DTS CD's sample: its 4 KB frame 4.1 KB of the output).

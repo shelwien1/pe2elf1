@@ -184,7 +184,7 @@ struct DtsCoro : CoIo<Coder<f_DEC> > {
         }, bind, bw))
       return fail(E_DATA, cut ? "damaged data: the stream is cut short" : "damaged data");
     if (const char* why = bind_differs(bw, *wav))
-      return fail(E_DATA, "the WAV isn't the one it was compressed with (%s differs)", why);
+      return fail(E_DATA, "the WAV isn't the one it was compressed with (%s)", why);
     wav->set_dec(bind.dec, bind.dsh);
     coder_start();
     k.start(this, wav, bind);

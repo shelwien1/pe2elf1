@@ -168,6 +168,10 @@ struct Call {
   FILE* wf;
   const char* wav_name;
   WavIn wav;
+  FILE* hf;            // a DTS:X stream's heights WAV, folded into the WAV (WavIn's heights()), or none
+  const char* h_name;
+  WavIn hwav;
+  const char* hwhy;    // (why they weren't folded in, where they weren't)
   Sink s;
   const char* out_name;
   Progress pr;
@@ -180,15 +184,20 @@ struct Call {
   U32 core_hz;  // the core's samples a second (as its first frame says; 0: not known)
   int pk;       // c: the stream's packing (pack.inc: its first frame's)
 
-  // from the file from to to (compare: s compares with to instead of writing it), the WAV wavf, its
-  // progress line tagged tag: shown with -p, or where stderr is a terminal, but not with -q
-  void init(FILE* from, const char* from_name, FILE* wavf, const char* wname, FILE* to, const char* to_name,
-            int compare, const Opts& o, const char* tag) {
+  // from the file from to to (compare: s compares with to instead of writing it), the WAV wavf and
+  // the heights WAV hfile (or none), its progress line tagged tag: shown with -p, or where stderr is
+  // a terminal, but not with -q
+  void init(FILE* from, const char* from_name, FILE* wavf, const char* wname, FILE* hfile, const char* hname,
+            FILE* to, const char* to_name, int compare, const Opts& o, const char* tag) {
     in = from;
     in_name = from_name;
     wf = wavf;
     wav_name = wname;
     wav.init(wf);
+    memset(&hwav, 0, sizeof hwav);
+    hf = hfile, h_name = hname, hwhy = nullptr;
+    if (hf) hwav.init(hf, false), hwhy = wav.heights(&hwav);
+    wav.own_heights();  // (a 7.1.4 WAV's, where no heights WAV is)
     memset(&s, 0, sizeof s);
     s.f = to;
     s.compare = compare;
@@ -202,10 +211,10 @@ struct Call {
     pr.Init();
     if (o.progress || (!o.quiet && stderr_tty())) pr.start(tag, file_size(in));
   }
-  // c's or d's call from the file named from, against the WAV named wname, to the one named to: 0,
-  // or the exit status of an error (said)
-  int open(const char* from, const char* wname, const char* to, const Opts& o, const char* tag) {
-    FILE *f, *w, *t;
+  // c's or d's call from the file named from, against the WAV named wname and the heights WAV named
+  // hname (0: none), to the one named to: 0, or the exit status of an error (said)
+  int open(const char* from, const char* wname, const char* hname, const char* to, const Opts& o, const char* tag) {
+    FILE *f, *w, *h = nullptr, *t;
     if (!(f = open_file(from, 0))) {
       fprintf(stderr, "dtsdpack: can't open %s\n", from);
       return E_READ;
@@ -215,22 +224,31 @@ struct Call {
       if (f != stdin) fclose(f);
       return E_READ;
     }
+    if (hname && !(h = open_file(hname, 0))) {
+      fprintf(stderr, "dtsdpack: can't open %s\n", hname);
+      if (f != stdin) fclose(f);
+      if (w != stdin) fclose(w);
+      return E_READ;
+    }
     if (!(t = open_file(to, 1))) {
       fprintf(stderr, "dtsdpack: can't create %s\n", to);
       if (f != stdin) fclose(f);
       if (w != stdin) fclose(w);
+      if (h && h != stdin) fclose(h);
       return E_WRITE;
     }
-    init(f, from, w, wname, t, to, 0, o, tag);
+    init(f, from, w, wname, h, hname, t, to, 0, o, tag);
     return 0;
   }
-  // the end of the call's progress line, its run's status r; the WAV closed
+  // the end of the call's progress line, its run's status r; the WAVs closed
   void end(int r) {
     pr.end(r, n.raw, n.packed, n.frames);
     pr.Quit();
     wav.quit();
+    hwav.quit();
     if (wf && wf != stdin) fclose(wf);
-    wf = nullptr;
+    if (hf && hf != stdin) fclose(hf);
+    wf = hf = nullptr;
   }
   // the end of c's or d's call, its run's status r: the output flushed and closed (the input stays
   // open: -v reads it again), the progress line ended; r, or the exit status of an error writing

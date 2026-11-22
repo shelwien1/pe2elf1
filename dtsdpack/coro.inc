@@ -6,9 +6,9 @@
 // data: the chunks (kind, then the records of a frame, or a length and the bytes of bytes kept as
 // bytes), the end, and the CRC-32 of the stream (32 bits at 1/2 each).
 enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND };  // the header's fixed part
-enum { DP_BIND_MAX = 3 + 10 + 4 + 5 + 3 + 26 * NCH };                     // (and the binding's bytes at most)
+enum { DP_BIND_MAX = 3 + 10 + 4 + 2 + 10 + 4 + 5 + 3 + 26 * NCH };       // (and the binding's bytes at most)
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
-constexpr int DP_VERSION = 154;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
+constexpr int DP_VERSION = 155;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
                                // extension as records; 4: a WAV at twice the core's rate, X96 and XXCH; 5: the
                                // scale factor search; 6: the bit allocation search; 7: the bits after the
                                // subframes as the bytes they end in, the energy's quarter of its bucket, the
@@ -279,7 +279,8 @@ constexpr int DP_VERSION = 154;  // the format's (2: a core channel's binding a 
                                // at the last one too, its unsure search a nearness bucket of its own;
                                // 154: a 16-bit decode's fit with the earlier channels' decoded values
                                // of the sample, in ADPCM subbands too; the LFE bound by its loudest
-                               // values where its first bind none)
+                               // values where its first bind none; 155: a DTS:X stream's heights
+                               // WAV folded into the WAV, and in the header)
 
 static void put_le(U8* p, U64 v, int n) {
   for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));
@@ -315,23 +316,26 @@ static bool gain_uncode(U64 u, S32& g) {
   g = (S32)x;
   return true;
 }
-// What the WAV was (whether it was one, its channels, its bytes a sample, a byte each; its size; the
-// CRC-32 of its first 64 KB, 4 bytes) and the binding (the offset, signed; the WAV's samples to the
-// core's, 1, 2 or 4: its lower band, then 2, and in the upper 4 bits the lower band's resolution, a
-// byte; the LFE's channel, plus 1: 0 none; how many core channels follow, a byte, to the last
-// bound one; each one's WAV channel, plus 1, plus 128 where it is that channel as it is, else where
-// bound, the second of its mix, plus 1, plus 129 where it has gains before the mix, and the gains,
-// gain_code()'s, the second's where it has one; then where it has those, their differences from
-// 1, Q15 (zz()), the second's where it has one, and 0, or 1 and the second pair's the same way),
-// into p: its bytes (DP_BIND_MAX at most)
+// What the WAV was (whether it was one, plus 2 where a heights WAV was folded into it, 4 where its
+// own were, its channels, its bytes a sample, a byte each; its size; the CRC-32 of its first 64 KB, 4 bytes; then
+// that heights WAV's the same way, but for whether it was one) and the binding (the offset, signed;
+// the WAV's samples to the core's, 1, 2 or 4: its lower band, then 2, and in the upper 4 bits the
+// lower band's resolution, a byte; the LFE's channel, plus 1: 0 none; how many core channels
+// follow, a byte, to the last bound one; each one's WAV channel, plus 1, plus 128 where it is that
+// channel as it is, else where bound, the second of its mix, plus 1, plus 129 where it has gains
+// before the mix, and the gains, gain_code()'s, the second's where it has one; then where it has
+// those, their differences from 1, Q15 (zz()), the second's where it has one, and 0, or 1 and the
+// second pair's the same way), into p: its bytes (DP_BIND_MAX at most)
 static int bind_put(U8* p, const Bind& b, const WavIn& w) {
   int n = 0, nb = 0;
-  p[n++] = (U8)w.ok;
-  p[n++] = (U8)w.nch;
-  p[n++] = (U8)w.bps;
-  n += put_uv(p + n, w.size);
-  put_le(p + n, w.crc, 4);
-  n += 4;
+  p[n++] = (U8)(w.ok | (w.hw ? 2 : 0) | (w.hself ? 4 : 0));
+  for (const WavIn* v = &w; v; v = v == &w ? w.hw : nullptr) {
+    p[n++] = (U8)v->nch;
+    p[n++] = (U8)v->bps;
+    n += put_uv(p + n, v->size);
+    put_le(p + n, v->crc, 4);
+    n += 4;
+  }
   n += put_uv(p + n, zz(b.off));
   p[n++] = (U8)(b.up * b.dec + 16 * b.dsh);
   p[n++] = (U8)(b.lfe + 1);
@@ -363,6 +367,10 @@ struct BindWav {
   U8 ok, nch, bps;
   U64 size;
   U32 crc;
+  U8 hf, hnch, hbps;  // (whether a heights WAV was folded in, and what it was)
+  U8 hself;           // (whether its own heights were)
+  U64 hsize;
+  U32 hcrc;
 };
 template <class G>
 static bool bind_read(G get, Bind& b, BindWav& w) {
@@ -388,13 +396,24 @@ static bool bind_read(G get, Bind& b, BindWav& w) {
   b.none();
   for (int i = 0; i < 3; i++)
     if ((c[i] = get()) < 0) return false;
-  w.ok = (U8)c[0], w.nch = (U8)c[1], w.bps = (U8)c[2];
-  if (!uv(w.size)) return false;
-  w.crc = 0;
-  for (int i = 0; i < 4; i++) {
-    const int x = get();
-    if (x < 0) return false;
-    w.crc |= (U32)x << (8 * i);
+  if (c[0] != 0 && c[0] != 1 && c[0] != 3 && c[0] != 5) return false;  // (heights in a WAV not used: none)
+  w.ok = (U8)(c[0] & 1), w.hf = (U8)(c[0] >> 1 & 1), w.hself = (U8)(c[0] >> 2), w.nch = (U8)c[1], w.bps = (U8)c[2];
+  auto crc4 = [&](U32& v) {
+    v = 0;
+    for (int i = 0; i < 4; i++) {
+      const int x = get();
+      if (x < 0) return false;
+      v |= (U32)x << (8 * i);
+    }
+    return true;
+  };
+  if (!uv(w.size) || !crc4(w.crc)) return false;
+  w.hnch = w.hbps = 0, w.hsize = 0, w.hcrc = 0;
+  if (w.hf) {
+    const int hn = get(), hb = get();
+    if (hn < 0 || hb < 0) return false;
+    w.hnch = (U8)hn, w.hbps = (U8)hb;
+    if (!uv(w.hsize) || !crc4(w.hcrc)) return false;
   }
   if (!s32(b.off)) return false;
   const int up = get(), lfe = get(), nb = get();
@@ -434,11 +453,20 @@ static bool bind_read(G get, Bind& b, BindWav& w) {
   }
   return true;
 }
-// the WAV as it was (got) and as it is (w): the same?
+// the WAV as it was (got) and as it is (w), and its heights WAV: how they differ (0: they don't)
 static const char* bind_differs(const BindWav& got, const WavIn& w) {
-  if (got.ok != (U8)w.ok || got.nch != (U8)w.nch || got.bps != (U8)w.bps) return "its format";
-  if (got.crc != w.crc) return "its first 64 KB";
-  if (got.size && w.size && got.size != w.size) return "its size";
+  if (got.ok != (U8)w.ok || got.nch != (U8)w.nch || got.bps != (U8)w.bps) return "its format differs";
+  if (got.crc != w.crc) return "its first 64 KB differ";
+  if (got.size && w.size && got.size != w.size) return "its size differs";
+  if (got.hf != (w.hw != nullptr))
+    return got.hf ? "it had a heights WAV folded in, here there is none" : "it had no heights WAV folded in";
+  if (got.hself != (U8)w.hself)
+    return got.hself ? "it had its own heights folded in" : "it had no heights of its own folded in";
+  if (!got.hf) return 0;
+  const WavIn& h = *w.hw;
+  if (got.hnch != (U8)h.nch || got.hbps != (U8)h.bps) return "its heights WAV's format differs";
+  if (got.hcrc != h.crc) return "its heights WAV's first 64 KB differ";
+  if (got.hsize && h.size && got.hsize != h.size) return "its heights WAV's size differs";
   return 0;
 }
 

@@ -1,10 +1,14 @@
 // dtsdpack - lossless compressor for the core of a DTS stream against its lossless audio: a .dtsc
 // (dtssplit's core frames) coded given a WAV of the audio it was coded from (a DTS-HD Master Audio
 // stream's XLL decode), into a .dtsd; and back.
-// Usage: dtsdpack c [options] input.dtsc input.wav output.dtsd
-//        dtsdpack d [options] input.dtsd input.wav output.dtsc
+// Usage: dtsdpack c [options] input.dtsc input.wav [heights.wav] output.dtsd
+//        dtsdpack d [options] input.dtsd input.wav [heights.wav] output.dtsc
 //   c    compress
-//   d    decompress, restoring the core stream byte for byte (with the same WAV)
+//   d    decompress, restoring the core stream byte for byte (with the same WAVs)
+//   heights.wav  a DTS:X stream's heights (dtssplit's prefix.x.wav), folded into the WAV's L, R,
+//        Lsr and Rsr as the stream's 7.1 bed has them: where the WAV is the bed with them out
+//        (WavIn's heights()); a 7.1.4 WAV (FFmpeg's newest DTS:X decode) has its own folded in
+//        without one (own_heights())
 //   -9   (c) the model's level; -8 the same model with the parameters tuned for a DTS:X encoder's
 //        streams, which c takes without a level where the binding mixes two WAV channels, one with
 //        a gain before the mix (Call::pick_level()); d takes it from the file
@@ -12,8 +16,8 @@
 //   -s   (c) input and output sizes per kind of syntax element
 //   -q   no statistics, no progress line
 //   -p   the progress line even where stderr is not a terminal
-// The stream's input and output can be - for stdin and stdout (not with -v); the WAV is read once,
-// from its start, so a pipe does too.
+// The stream's input and output can be - for stdin and stdout (not with -v); the WAVs are read
+// once, from their start, so a pipe does too (one input from stdin at most).
 //
 // How it works. The core stream is cut into core frames and the bytes between them. Each frame is
 // parsed into its record (syntax.inc: dts2tsv's walk of the core, down to every subband sample's
@@ -185,20 +189,23 @@ static void run_show(Progress& pr, const C& c, uint code) {
 
 #include "call.inc"  // Call: a call's files, its progress line, its run; d and c on it
 
-// c -v: d of the output (with the WAV again), compared with the input (its own progress line, ver)
-static int verify(FILE* in, const char* in_name, const char* wav_name, const char* out_name, const Opts& o) {
+// c -v: d of the output (with the WAVs again), compared with the input (its own progress line, ver)
+static int verify(FILE* in, const char* in_name, const char* wav_name, const char* h_name, const char* out_name,
+                  const Opts& o) {
   Call k;
   FILE* t = fopen(out_name, "rb");
   FILE* w = fopen(wav_name, "rb");
+  FILE* h = h_name ? fopen(h_name, "rb") : nullptr;
   int r;
-  if (!t || !w) {
-    fprintf(stderr, "dtsdpack: can't open %s again\n", !t ? out_name : wav_name);
+  if (!t || !w || (h_name && !h)) {
+    fprintf(stderr, "dtsdpack: can't open %s again\n", !t ? out_name : !w ? wav_name : h_name);
     if (t) fclose(t);
     if (w) fclose(w);
+    if (h) fclose(h);
     return E_READ;
   }
   rewind(in);
-  k.init(t, out_name, w, wav_name, in, in_name, 1, o, "ver");
+  k.init(t, out_name, w, wav_name, h, h_name, in, in_name, 1, o, "ver");
   r = k.decode_to();
   fclose(t);
   if (!r && !k.s.differs && fgetc(in) != EOF) {
@@ -214,12 +221,13 @@ static int verify(FILE* in, const char* in_name, const char* wav_name, const cha
   return r;
 }
 
-static int compress(const char* in_name, const char* wav_name, const char* out_name, const Opts& o) {
+static int compress(const char* in_name, const char* wav_name, const char* h_name, const char* out_name,
+                    const Opts& o) {
   Call k;
   Stats st;
   double cost[NCAT], orig[NCAT];
-  int r = k.open(in_name, wav_name, out_name, o, "enc");
-  char bound[192];
+  int r = k.open(in_name, wav_name, h_name, out_name, o, "enc");
+  char bound[320];
   if (r) return r;
   r = k.compress_one(o, st, cost, orig);
   // how the core lined up with the WAV (the summary's)
@@ -235,10 +243,15 @@ static int compress(const char* in_name, const char* wav_name, const char* out_n
       snprintf(bound, sizeof bound, "the WAV not used (at %u Hz, the core at %u)", (unsigned)k.wav.rate, (unsigned)k.core_hz);
     else if (!nb) snprintf(bound, sizeof bound, "the WAV not used (nothing lines up: correlation %.3f)", k.corr);
     else
-      snprintf(bound, sizeof bound, "%d channel%s%s against the WAV%s (offset %d, correlation %.4f%s)", nb,
+      snprintf(bound, sizeof bound, "%d channel%s%s against the WAV%s%s (offset %d, correlation %.4f%s)", nb,
                nb > 1 ? "s" : "", k.bind.lfe >= 0 ? " and the LFE" : "",
                k.bind.up == 2 ? k.bind.dec == 2 ? "'s 64-band analysis at half its rate" : "'s 64-band analysis" : "",
+               k.wav.hw ? ", the heights folded in" : k.wav.hself ? ", its own heights folded in" : "",
                (int)k.bind.off, k.corr, mix);
+  }
+  if (k.hf && !k.wav.hw) {  // (a heights WAV given but not folded in: why)
+    const size_t m = strlen(bound);
+    snprintf(bound + m, sizeof bound - m, "; the heights WAV not used (%s)", k.hwhy);
   }
   r = k.close(r);
   if (!r && !o.quiet) st.report(in_name, cost, orig, (double)k.s.pos, k.level, o.stats, bound);
@@ -263,14 +276,15 @@ static int compress(const char* in_name, const char* wav_name, const char* out_n
     if (k.bind.lfe >= 0) fprintf(stderr, "%s LFE = WAV %d", any++ ? ";" : "  the binding:", k.bind.lfe);
     if (any) fprintf(stderr, "\n");
   }
-  if (!r && o.verify) r = verify(k.in, in_name, wav_name, out_name, o);
+  if (!r && o.verify) r = verify(k.in, in_name, wav_name, h_name, out_name, o);
   if (k.in != stdin) fclose(k.in);
   return r;
 }
 
-static int decompress(const char* in_name, const char* wav_name, const char* out_name, const Opts& o) {
+static int decompress(const char* in_name, const char* wav_name, const char* h_name, const char* out_name,
+                      const Opts& o) {
   Call k;
-  int r = k.open(in_name, wav_name, out_name, o, "dec");
+  int r = k.open(in_name, wav_name, h_name, out_name, o, "dec");
   if (r) return r;
   r = k.close(k.decode_to());
   if (k.in != stdin) fclose(k.in);
@@ -290,12 +304,15 @@ static void usage(void) {
             "           it from the stream";
   }
   fprintf(stderr, "dtsdpack - lossless compressor for a DTS core stream against its lossless audio\n"
-                  "Usage: dtsdpack c [options] input.dtsc input.wav output.dtsd\n"
-                  "       dtsdpack d [options] input.dtsd input.wav output.dtsc\n"
+                  "Usage: dtsdpack c [options] input.dtsc input.wav [heights.wav] output.dtsd\n"
+                  "       dtsdpack d [options] input.dtsd input.wav [heights.wav] output.dtsc\n"
                   "  c     compress the core frames (dtssplit's .dtsc, or any DTS core stream), given\n"
                   "        the WAV of the audio they were coded from (a DTS-HD MA stream's lossless\n"
                   "        decode: ffmpeg -i in.dts -c:a pcm_s24le in.wav)\n"
-                  "  d     decompress, with the same WAV\n"
+                  "  d     decompress, with the same WAVs\n"
+                  "  heights.wav  a DTS:X stream's heights (dtssplit's prefix.x.wav), added into the\n"
+                  "        WAV's L, R, Lsr and Rsr at -3 dB as its 7.1 bed has them: for a WAV of the\n"
+                  "        bed with them out (a 7.1.4 WAV's own are, without one)\n"
                   "  -v    (c) decompress the result again and compare it with the input\n"
                   "  -s    (c) bytes spent per kind of syntax element\n"
                   "  -q    no statistics, no progress line\n"
@@ -334,21 +351,24 @@ int main(int argc, char** argv) {
       return E_USAGE;
     }
   }
-  if (a != argc - 3) {  // (input, wav, output)
+  if (a != argc - 3 && a != argc - 4) {  // (input, wav, the heights' wav where given, output)
     usage();
     return E_USAGE;
   }
-  if (!strcmp(argv[a + 1], "-") && (!strcmp(argv[a], "-"))) {
-    fprintf(stderr, "dtsdpack: the stream and the WAV can't both be stdin\n");
+  const char* const hname = a == argc - 4 ? argv[a + 2] : nullptr;
+  const char* const oname = argv[argc - 1];
+  if (!strcmp(argv[a], "-") + !strcmp(argv[a + 1], "-") + (hname && !strcmp(hname, "-")) > 1) {
+    fprintf(stderr, "dtsdpack: only one of the stream and the WAVs can be stdin\n");
     return E_USAGE;
   }
-  if (o.verify && (!strcmp(argv[a], "-") || !strcmp(argv[a + 1], "-") || !strcmp(argv[a + 2], "-"))) {
-    fprintf(stderr, "dtsdpack: -v reads the input, the WAV and the output again: they can't be stdin or stdout\n");
+  if (o.verify && (!strcmp(argv[a], "-") || !strcmp(argv[a + 1], "-") || (hname && !strcmp(hname, "-")) ||
+                   !strcmp(oname, "-"))) {
+    fprintf(stderr, "dtsdpack: -v reads the input, the WAVs and the output again: they can't be stdin or stdout\n");
     return E_USAGE;
   }
 #ifdef _WIN32
   _setmode(_fileno(stdin), _O_BINARY);
   _setmode(_fileno(stdout), _O_BINARY);
 #endif
-  return argv[1][0] == 'c' ? compress(argv[a], argv[a + 1], argv[a + 2], o) : decompress(argv[a], argv[a + 1], argv[a + 2], o);
+  return argv[1][0] == 'c' ? compress(argv[a], argv[a + 1], hname, oname, o) : decompress(argv[a], argv[a + 1], hname, oname, o);
 }
