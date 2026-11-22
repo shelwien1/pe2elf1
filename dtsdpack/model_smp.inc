@@ -3131,7 +3131,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // where nearer by 4 times the next best's error at least (else -1; a lossless WAV's values are the
   // encoder's input: none is; a VQ subband's all the same, *conf -1); *conf the log2 of that ratio
   // less 2, to 7
-  int scale_search(const CoreRec& r, const CoreSub& s, int ch, int b, int hfb, const S64* v, int n, int p, int* conf) {
+  // (pa: a VQ subband's last scale factor, -1 none: since format 153 the vector the two-stage search
+  // finds at its scale is a candidate too, at its own least-squares scale: a VQ subband's encoder
+  // picks a scale factor 13-25 entries above the RMS rule's a quarter of the time in
+  // `dtswavsample16.wav`, the vector then a quiet one, which the searches about the RMS rule's
+  // didn't find where the shape search's was another: its scale factors there the core's 35% of
+  // the time, the last one's scale 8 or more entries above the search's in 98% of the far misses;
+  // its core 7.5% smaller)
+  int scale_search(const CoreRec& r, const CoreSub& s, int ch, int b, int hfb, const S64* v, int n, int p, int* conf,
+                   int pa = -1) {
     const U32* tab = r.shuff[ch] == 6 ? SF7 : SF6;
     const int nt = sf_entries(r.shuff[ch]), a = s.abits[ch][b];
     S64 lo = 0, hi = 0;
@@ -3153,6 +3161,21 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         const int q2 = g * 32 + select_rank(cand, 32, 0);
         const S128 d = vq_err(v, n, q2, sc);
         if (bd < 0 || d < bd) bd = d, vq = q2;
+      }
+      if (pa >= 0) {  // (the two-stage search's at the last one, at the vector's best scale factor)
+        const S64 sc = tab[clip(pa, 0, nt - 1)];
+        S128 dd[32];
+        hf_group_dists(v, n, sc, dd);
+        for (int g = 0; g < 32; g++) cand[g].k = dd[g], cand[g].i = g;
+        const int g = select_rank(cand, 32, 0);
+        hf_dists(g, v, n, sc, dd);
+        for (int e = 0; e < 32; e++) cand[e].k = dd[e], cand[e].i = e;
+        const int q2 = g * 32 + select_rank(cand, 32, 0), c = vq_scale(v, n, q2, tab, nt);
+        for (int i = c - 1; c >= 0 && i <= c + 1; i++)
+          if (i >= 0 && i < nt) {
+            const S128 d = vq_err(v, n, q2, tab[i]);
+            if (d < bd) bd = d, vq = q2;
+          }
       }
       {  // (the entry most nearly a multiple of the values, at its best scale factor)
         const int qs = hf_shape(v, n), c = vq_scale(v, n, qs, tab, nt);
@@ -4160,7 +4183,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           }
         }
         pc = scale_ceil(v_, n, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]));
-        if (search_on()) ps = scale_search(r, s, ch, b, hfb, v_, n, p, &conf), tried = 1;
+        if (search_on())
+          ps = scale_search(r, s, ch, b, hfb, v_, n, p, &conf, hfb && hist.scale[ch][b] ? hist.scale[ch][b] - 1 : -1),
+          tried = 1;
       }
     }
     // (the better of the two RMS rules, and the search where it is better still: where it isn't
@@ -4170,7 +4195,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (p >= 0) {
       if (tried && ss_rule()) {
         p = pss;
-        if (ps >= 0) near = imax(conf, 0);
+        // (a VQ subband's sureness one up, its unsure result (-1) the bottom alone: since format
+        // 153; before, with the least sure of the rest, right 98.8% of the time where it was 35%:
+        // `dtswavsample16.wav`'s core 3.2% smaller)
+        if (ps >= 0) near = hfb ? imin(conf + 1, SB_N - 1) : imax(conf, 0);
       } else {
         p = pb;
       }
