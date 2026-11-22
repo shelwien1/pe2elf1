@@ -625,6 +625,13 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   it: FFmpeg's encodes' 16-bit decodes 1073569 bytes to 1059977 (1.3%). `dtswavsample14.wav`'s core
   2.2% smaller, `padded.dts`'s 0.27%, the XXCH streams made from FATE's samples 0.4-1.1%, the DTS
   CD's sample's and `dtswavsample16.wav`'s 2 and 5 bytes; the rest the same.
+  Since format 154 the fit has the 4 earlier channels' decoded values of the sample in it too, an
+  8-tap fit, and the fusion holds for ADPCM subbands too, by the whole value, the prediction taken
+  off the fused one: FFmpeg's encodes' 16-bit decodes 1059977 bytes to 1004145 (5.3%; the stereo
+  one's 25%, the 5.1 ones' 0.6-1.5%), its 16-bit decodes of `open bitrate.dts` and `padded.dts`
+  (their own encoders' streams, with ADPCM subbands) 3.7% and 0.1% smaller, the ADPCM subbands'
+  0.15% and 0.02% of it; with those channels' samples either side, or the WAV's next values, in the
+  fit too, bigger again, as at a step of 0.03 or 0.08 for 0.05; the rest the same.
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first
@@ -1692,6 +1699,10 @@ more than 0.5, where its decimation corrected as the model's fixed LFE predictor
 lossless WAV's, or a decoded WAV's: its decoder's interpolation undone): since format 134, FFmpeg's
 decodes of its encodes, whose LFE the decimation makes 0.89-0.91 of and the decoded WAV's correction
 0.985-0.987 (no other channel more than 0.70 and 0.27), `s.2.dts`'s first 3 MB's core 15% smaller;
+and since format 154, in a 16-bit WAV, where none does, by the loudest 1024 of those in the window,
+in the stream's order: such a decode rounds a quiet LFE to 0s (FFmpeg's 16-bit decode of `ES 6.1
+16bit.dts`, whose first 1024 lie under its LSB: its core 40886 bytes to 25803, its LFE bound; in a
+24-bit WAV the 192 kHz quiet-start stream's core 609 bytes to 811 by them);
 where the window has fewer than 16 of them and the WAV can be read again, with those further on,
 from the first that has 16 more within a window's length, as above (the Cymatics stream's frames
 3301-9300 with their LFE made 0 for the first 25.6 s, in the core and the WAV: the LFE went without
@@ -2046,7 +2057,7 @@ files at that level.
 
 ### The format
 
-"dtsdpack", the format's version (153), the level (9, or 8: above) and above it the stream's packing
+"dtsdpack", the format's version (154), the level (9, or 8: above) and above it the stream's packing
 (since format 145: 0 the core's own, 1 little-endian, 2 and 3 14 bits a word big- and
 little-endian); what the WAV was (whether it was one, its channels and bytes a sample, its size and
 the CRC-32 of its first 64 KB) and the binding (the offset; the WAV's samples to the core's, 1, 2 or

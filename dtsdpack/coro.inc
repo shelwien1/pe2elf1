@@ -8,7 +8,7 @@
 enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND };  // the header's fixed part
 enum { DP_BIND_MAX = 3 + 10 + 4 + 5 + 3 + 26 * NCH };                     // (and the binding's bytes at most)
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
-constexpr int DP_VERSION = 153;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
+constexpr int DP_VERSION = 154;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
                                // extension as records; 4: a WAV at twice the core's rate, X96 and XXCH; 5: the
                                // scale factor search; 6: the bit allocation search; 7: the bits after the
                                // subframes as the bytes they end in, the energy's quarter of its bucket, the
@@ -276,7 +276,10 @@ constexpr int DP_VERSION = 153;  // the format's (2: a core channel's binding a 
                                // learned offset, ADPCM subbands too; a 16-bit decode's value fused
                                // with a fit of the subband's decoded values; 153: a decoded WAV's
                                // VQ subband's scale factor by the vector the two-stage search finds
-                               // at the last one too, its unsure search a nearness bucket of its own)
+                               // at the last one too, its unsure search a nearness bucket of its own;
+                               // 154: a 16-bit decode's fit with the earlier channels' decoded values
+                               // of the sample, in ADPCM subbands too; the LFE bound by its loudest
+                               // values where its first bind none)
 
 static void put_le(U8* p, U64 v, int n) {
   for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));

@@ -320,11 +320,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // (since format 152, by subband: the decoded values less the audio's where those lie within 64 of
   // 0, a running mean (each sample a 64th), in 2^-16 of the core's units)
   S64 dv_off[NCH][NSUB];
-  // (and a 16-bit decode's subband values by a 4-tap NLMS fit of their last 4 (yh), its error's
-  // mean square (-1 none yet), and where the index of the audio's value fused with the fit's and
-  // the one before it differ, how often each was the core's, FFmpeg's encoder's apart, halved at
-  // 2^16)
-  double dv_lw[NCH][NSUB][4], dv_le[NCH][NSUB];
+  // (and a 16-bit decode's subband values by an 8-tap NLMS fit of their last 4 (yh) and, since
+  // format 154, the 4 earlier channels' of the sample (tw_y), its error's mean square (-1 none
+  // yet), and where the index of the audio's value fused with the fit's and the one before it
+  // differ, how often each was the core's, FFmpeg's encoder's apart, halved at 2^16)
+  double dv_lw[NCH][NSUB][8], dv_le[NCH][NSUB];
   U32 dv_lq[2][2];
   U32 dv_pos[15][3][8], dv_pq[2], dv_sq[2][2];
   bool abq_stair(int k) const { return abq[k][0] > abq[k][1] + 8 + abq[k][1] / 16; }
@@ -4882,22 +4882,31 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // decoded values (dv_lw) by their noises (the WAV's at half the mean square learned, the fit's
     // error's), taken where its index has been the core's more often than the one before by 16,
     // nearness 0 and that one the other candidate: the noise of the 16-bit rounding hides the finer
-    // steps, the fit, of exact values, much of them; FFmpeg's encodes' 16-bit decodes 1.3% smaller)
-    const int lz = wav->bps == 2 && bnd && !pm && !x96a && !fx && !tq && ss_rule() &&
+    // steps, the fit, of exact values, much of them; FFmpeg's encodes' 16-bit decodes 1.3% smaller.
+    // Since format 154 the fit has the 4 earlier channels' decoded values of the sample in it too
+    // (FFmpeg's stereo encode's 16-bit decode 25% smaller, its 5.1 ones' 0.6-1.5%; with those
+    // channels' samples either side of it too, or the WAV's next values, bigger again, as at a
+    // step of 0.03 or 0.08), and ADPCM subbands too, by the whole value (xq), the prediction
+    // taken off the fused one: `open bitrate.dts`'s 16-bit decode 0.15% smaller)
+    const int lz = wav->bps == 2 && bnd && !x96a && !fx && !tq && ss_rule() &&
                    dist != (S128)1 << 100 && dv_n[ch] > 0.0;
     S64 lzq = qp;
     const S64 lz0 = qp;
-    double lzp = 0.0;
+    double lzp = 0.0, lzh[8] = {};
     if (lz) {
-      const S32* const h = yh[ch][b];
+      for (int k = 0; k < 4; k++) lzh[k] = yh[ch][b][k];
+      for (int k = 0; k < 4; k++) {
+        const int c = ch - 1 - k;
+        if (c >= r.ch0() && b < r.nvqsub[c] && s.abits[c][b]) lzh[4 + k] = tw_y[c][b][j & 7];
+      }
       const double* const w = dv_lw[ch][b];
-      lzp = w[0] * h[0] + w[1] * h[1] + w[2] * h[2] + w[3] * h[3];  // (in the core's units)
+      for (int k = 0; k < 8; k++) lzp += w[k] * lzh[k];  // (in the core's units)
       const double V = dv_le[ch][b], N = 0.5 * dv_n[ch] / 4294967296.0;
       if (V > 0.0) {
         const double x = (double)xq / 65536.0, xf = (x * V + lzp * N) / (V + N);
         S128 d3;
         S64 a3;
-        lzq = requant((S64)(xf * 65536.0), ss, lo, hi, &d3, &a3);
+        lzq = requant((S64)(xf * 65536.0) - shl64(pred, AQ_F), ss, lo, hi, &d3, &a3);
         const U32* const q = dv_lq[hq ? 1 : 0];
         if (lzq != qp && q[1] > q[0] + 16) alt = lz0, qp = lzq, dist = 0;
       }
@@ -4964,14 +4973,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       }
     }
     if (lz) {  // (the fit, its error, the counts)
-      const S32* const h = yh[ch][b];
       double* const w = dv_lw[ch][b];
       const double e = (double)((S64)dequantize((S32)v, ss) + pred) - lzp;
       double& le = dv_le[ch][b];
       le = le < 0.0 ? e * e + 1.0 : le + (e * e - le) / 64.0;
       double en = 1.0;
-      for (int k = 0; k < 4; k++) en += (double)h[k] * h[k];
-      for (int k = 0; k < 4; k++) w[k] += 0.05 * e * h[k] / en;
+      for (int k = 0; k < 8; k++) en += lzh[k] * lzh[k];
+      for (int k = 0; k < 8; k++) w[k] += 0.05 * e * lzh[k] / en;
       if (lzq != lz0) {
         U32* const q = dv_lq[hq ? 1 : 0];
         q[0] += v == lz0, q[1] += v == lzq;

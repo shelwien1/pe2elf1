@@ -6,6 +6,7 @@ constexpr size_t FAR_READ = 64 * MIB;  // (and where nothing lines up in it, up 
 constexpr int PROBES = 64;            // the blocks the alignment is found from
 static_assert(PROBES <= PROBES_MAX, "find_bind()'s");
 constexpr int LFE_PROBES = 1024;      // and the LFE samples its channel is
+constexpr int LFE_ALL = 16384;        // (of those in the window, the loudest of which bind it where the first don't)
 constexpr int MIX_FRAMES = 256;       // and the frames each channel's mix is (find_mixes())
 constexpr int MIX_SEEN = 8192;        // (of the frames read first, at most)
 constexpr int MIX_KEEP = 1024;        // (their first blocks' analyses kept for the second pass)
@@ -603,9 +604,10 @@ struct Call {
     static Probe pr_[4 * PROBES];     // the most energetic so far (a heap would do; few are kept)
     static double en[4 * PROBES];
     static S64 ln[LFE_PROBES], ly[LFE_PROBES];  // the LFE's samples (64x): their places, their values times their steps
+    static S64 la[LFE_ALL], lya[LFE_ALL];       // (and those of the window, as many)
     static U32 fpos[MIX_SEEN], flen[MIX_SEEN];   // the frames that parse, for the mixes: where, how long, their first block
     static S64 ft[MIX_SEEN];
-    int np = 0, nch = 0, filts = -1, nl = 0, nf = 0, up = 1;
+    int np = 0, nch = 0, filts = -1, nl = 0, nf = 0, up = 1, na = 0;
     bool has_lfe = false;
     S64 t = 0;
     lfe_few = false;
@@ -637,8 +639,11 @@ struct Call {
         S64 tb = t;
         for (int sf = 0; sf < r.nsubfs; sf++) {
           const CoreSub& s = r.sub[sf];
-          for (int k = 0; r.lff == 2 && k < 4 * s.nssc && nl < LFE_PROBES; k++)  // (those not 0: a silent start says nothing)
-            if (s.lfe[k] && tb >= t0) ln[nl] = tb / 2 + k, ly[nl++] = s.lfe[k] * lfe_scale(s.lfescale);
+          for (int k = 0; r.lff == 2 && k < 4 * s.nssc && na < LFE_ALL; k++)  // (those not 0: a silent start says nothing)
+            if (s.lfe[k] && tb >= t0) {
+              if (nl < LFE_PROBES) ln[nl] = tb / 2 + k, ly[nl++] = s.lfe[k] * lfe_scale(s.lfescale);
+              la[na] = tb / 2 + k, lya[na++] = s.lfe[k] * lfe_scale(s.lfescale);
+            }
           for (int j = 0; j < s.nssc * 8; j++, tb++) {
             if (tb < t0) continue;
             Probe q;
@@ -680,7 +685,7 @@ struct Call {
     }
     S64 last = 0;
     for (int k = 0; k < nb; k++) last = best[k].t > last ? best[k].t : last;
-    for (int k = 0; k < nl; k++) last = imax(last, 2 * ln[k]);
+    for (int k = 0; k < na; k++) last = imax(last, 2 * la[k]);
     wav.need(t0 > 64 ? 32 * up * (t0 - 64) : 0, 32 * up * (last + 1) + (1536 + 512) * up);  // (from 2048 samples (times up) before t0's)
     bind = find_bind(wav, best, nb, nch, filts, up, &corr);
     bind.dec = (S8)wav.dec;
@@ -691,6 +696,28 @@ struct Call {
     if (bind.map[0] < 0) return;
     lfe_few = has_lfe && nl < 16;
     bind_lfe(ln, ly, nl, up);
+    // (since format 154, a 16-bit WAV's, where those bind none: the loudest LFE_PROBES of the
+    // window's, in the stream's order, as such a decode rounds a quiet LFE to 0s, `ES 6.1
+    // 16bit.dts`'s first 1.4 s; its 16-bit decode's core then 37% smaller. Where the WAV's 24-bit
+    // the LFE it binds so can lose: the 192 kHz quiet-start stream's core 609 bytes to 811)
+    if (bind.lfe < 0 && na > nl && wav.bps == 2) {
+      struct LK {
+        S64 m;
+        int k;
+      };
+      static LK ka[LFE_ALL];
+      static S64 l2[LFE_PROBES], y2[LFE_PROBES];
+      for (int k = 0; k < na; k++) ka[k].m = lya[k] < 0 ? -lya[k] : lya[k], ka[k].k = k;
+      qsort(ka, (size_t)na, sizeof(LK), [](const void* a, const void* b) {
+        const LK &x = *(const LK*)a, &y = *(const LK*)b;
+        return x.m != y.m ? (x.m > y.m ? -1 : 1) : x.k - y.k;
+      });
+      const int m = na < LFE_PROBES ? na : LFE_PROBES;
+      qsort(ka, (size_t)m, sizeof(LK),
+            [](const void* a, const void* b) { return ((const LK*)a)->k - ((const LK*)b)->k; });
+      for (int k = 0; k < m; k++) l2[k] = la[ka[k].k], y2[k] = lya[ka[k].k];
+      bind_lfe(l2, y2, m, up);
+    }
   }
 
   // a pass over (up to MIX_FRAMES of) the nf frames read first, at pre (where, how long, their
