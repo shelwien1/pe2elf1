@@ -317,6 +317,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // index and the one before it differ, how often each was the core's, and the soft threshold's and
   // the audio's, FFmpeg's encoder's apart (dv_sq[1]), each halved at 2^16)
   double dv_n[NCH], dv_r[NCH][NSUB];
+  // (since format 152, by subband: the decoded values less the audio's where those lie within 64 of
+  // 0, a running mean (each sample a 64th), in 2^-16 of the core's units)
+  S64 dv_off[NCH][NSUB];
+  // (and a 16-bit decode's subband values by a 4-tap NLMS fit of their last 4 (yh), its error's
+  // mean square (-1 none yet), and where the index of the audio's value fused with the fit's and
+  // the one before it differ, how often each was the core's, FFmpeg's encoder's apart, halved at
+  // 2^16)
+  double dv_lw[NCH][NSUB][4], dv_le[NCH][NSUB];
+  U32 dv_lq[2][2];
   U32 dv_pos[15][3][8], dv_pq[2], dv_sq[2][2];
   bool abq_stair(int k) const { return abq[k][0] > abq[k][1] + 8 + abq[k][1] / 16; }
   void abq_add(int k, bool s, bool g) {
@@ -950,6 +959,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int k = 0; k < 4; k++) abq[k][0] = abq[k][1] = 0;
     ab2[0] = ab2[1] = 0;
     for (int c = 0; c < NCH; c++) dv_n[c] = -1.0;
+    memset(dv_off, 0, sizeof dv_off), memset(dv_lw, 0, sizeof dv_lw);
+    memset(dv_lq, 0, sizeof dv_lq);
+    for (int c = 0; c < NCH; c++)
+      for (int k = 0; k < NSUB; k++) dv_le[c][k] = -1.0;
     memset(dv_pos, 0, sizeof dv_pos), memset(dv_pq, 0, sizeof dv_pq);
     memset(dv_sq, 0, sizeof dv_sq);
     qff_c[0] = qff_c[1] = qff_n[0] = qff_n[1] = 0;
@@ -4764,13 +4777,18 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // 16, the second most often the other candidate, nearness 0: `padded.dts`'s 241632 such
     // indexes, most in its first 340 frames, quiet at 1509 kbps, the audio's 75.1% of the time,
     // the place's 78.9%)
-    const bool dq = bnd && !pm && !x96a && !fx && !tq && !hq && ss_rule() && ss < ((S64)1 << 22) &&
+    const bool dq = bnd && !x96a && !fx && !tq && !hq && ss_rule() && ss < ((S64)1 << 22) &&
                     dist != (S128)1 << 100;
     S64 dlo = 0, dhi = -1, dy = 0, dqp = qp;
     int dnc = 0, dyc = 0, dact = 0;
     const S64 dq0 = qp;
     if (dq) {
-      dy = rshift(xq, AQ_F);  // (the decoded value)
+      // (the decoded value, less the ADPCM prediction: since format 152 from the audio's value with
+      // the subband's offset (dv_off), ADPCM subbands too: `padded.dts`'s bottom subband's offset
+      // half an LSB in its quiet start, the others' 0, sd 0.05 LSB; its core 0.27% smaller, and
+      // ADPCM subbands too without the offset 0.13% bigger)
+      const S64 dxs = X[ch][b][j] + dv_off[ch][b] - shl64(pred, AQ_F);  // (an ADPCM residual's sign)
+      dy = rshift(X[ch][b][j] + dv_off[ch][b], AQ_F) - pred;
       {
         // (the indexes q whose (q ss + 2^21) >> 22 is dy: from ceil(n0 / ss) to ceil(n1 / ss) - 1)
         const S64 n0 = dy * ((S64)1 << 22) - ((S64)1 << 21), n1 = n0 + ((S64)1 << 22);
@@ -4788,7 +4806,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         for (int k = 0; k < 8; k++)
           if (k != k1 && (k2 < 0 || c[k] > c[k2])) k2 = k;
         auto at = [&](int k) -> S64 {  // (the index at place k)
-          const S64 q = dy == 0 ? (xq < 0 ? -k : k) : dy > 0 ? dlo + k : dhi - k;
+          const S64 q = dy == 0 ? ((pm ? dxs : xq) < 0 ? -k : k) : dy > 0 ? dlo + k : dhi - k;
           return q < dlo ? dlo : q > dhi ? dhi : q;
         };
         dqp = at(k1);
@@ -4830,6 +4848,30 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         if (hq) alt = a2, dist = d2;
         else alt = ds0, dist = 0;
         qp = dsq;
+      }
+    }
+    // (since format 152, a 16-bit decode's: the audio's value fused with the fit of the subband's
+    // decoded values (dv_lw) by their noises (the WAV's at half the mean square learned, the fit's
+    // error's), taken where its index has been the core's more often than the one before by 16,
+    // nearness 0 and that one the other candidate: the noise of the 16-bit rounding hides the finer
+    // steps, the fit, of exact values, much of them; FFmpeg's encodes' 16-bit decodes 1.3% smaller)
+    const int lz = wav->bps == 2 && bnd && !pm && !x96a && !fx && !tq && ss_rule() &&
+                   dist != (S128)1 << 100 && dv_n[ch] > 0.0;
+    S64 lzq = qp;
+    const S64 lz0 = qp;
+    double lzp = 0.0;
+    if (lz) {
+      const S32* const h = yh[ch][b];
+      const double* const w = dv_lw[ch][b];
+      lzp = w[0] * h[0] + w[1] * h[1] + w[2] * h[2] + w[3] * h[3];  // (in the core's units)
+      const double V = dv_le[ch][b], N = 0.5 * dv_n[ch] / 4294967296.0;
+      if (V > 0.0) {
+        const double x = (double)xq / 65536.0, xf = (x * V + lzp * N) / (V + N);
+        S128 d3;
+        S64 a3;
+        lzq = requant((S64)(xf * 65536.0), ss, lo, hi, &d3, &a3);
+        const U32* const q = dv_lq[hq ? 1 : 0];
+        if (lzq != qp && q[1] > q[0] + 16) alt = lz0, qp = lzq, dist = 0;
       }
     }
     M_smp_v D;
@@ -4893,10 +4935,29 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         if (dv_pq[0] + dv_pq[1] >= 1u << 16) dv_pq[0] >>= 1, dv_pq[1] >>= 1;
       }
     }
+    if (lz) {  // (the fit, its error, the counts)
+      const S32* const h = yh[ch][b];
+      double* const w = dv_lw[ch][b];
+      const double e = (double)((S64)dequantize((S32)v, ss) + pred) - lzp;
+      double& le = dv_le[ch][b];
+      le = le < 0.0 ? e * e + 1.0 : le + (e * e - le) / 64.0;
+      double en = 1.0;
+      for (int k = 0; k < 4; k++) en += (double)h[k] * h[k];
+      for (int k = 0; k < 4; k++) w[k] += 0.05 * e * h[k] / en;
+      if (lzq != lz0) {
+        U32* const q = dv_lq[hq ? 1 : 0];
+        q[0] += v == lz0, q[1] += v == lzq;
+        if (q[0] + q[1] >= 1u << 16) q[0] >>= 1, q[1] >>= 1;
+      }
+    }
     if (ds && dsq != ds0) {
       U32* const sq = dv_sq[hq ? 1 : 0];
       sq[0] += v == ds0, sq[1] += v == dsq;
       if (sq[0] + sq[1] >= 1u << 16) sq[0] >>= 1, sq[1] >>= 1;
+    }
+    if (bnd && ss_rule()) {  // (the offset, where the decoder's value lies near 0)
+      const S64 y = (S64)dequantize((S32)v, ss) + pred;
+      if (y >= -64 && y <= 64) dv_off[ch][b] += (shl64(y, AQ_F) - X[ch][b][j] - dv_off[ch][b]) >> 6;
     }
     if (bnd && !x96a && b > 0 && b < 31 && ss_rule()) {  // (the noise, where the decoder's near 0)
       const S64 y = (S64)dequantize((S32)v, ss) + pred;
