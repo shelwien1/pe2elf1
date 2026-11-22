@@ -2112,6 +2112,10 @@ up to a third of a 7-frame DTS-HD MA sample's output).
   source's rule (`dca_xll.c`); a stream whose XLL codes 7.1.4 itself (none at hand) would have its
   heights added the same way, which its core's downmix may not have, and where FFmpeg clipped the
   bed less a height at 24 bits the sum isn't the bed.
+- A heights WAV is taken sample for sample from the WAV's start: dtssplit's `prefix.x.wav` has
+  samples for the frames with DTS:X object audio alone, so for a stream with object data in only
+  some of its frames (none at hand) they would go into the wrong samples past the first frame
+  without: still lossless, but the binding and the model miss them.
 - A stream's frames are taken in its first frame's packing alone: a frame packed another way is
   bytes between frames, kept as bytes, and so is one its packing doesn't make again (a bit flipped
   in a word's top two of the DTS CD's sample: its 4 KB frame 4.1 KB of the output).
