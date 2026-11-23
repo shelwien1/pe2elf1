@@ -693,7 +693,20 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   of 10^-3 0.26%; forgetting by 0.994 or 0.996, within 0.01%; the 7 earlier channels, the same;
   the mean distances against the scale factor 0.03% bigger; this fit's and an NLMS fit's mixed by
   their errors 0.03% smaller, for twice the work; the warm-up of 128 samples, the 7-frame samples
-  2.4% bigger. A channel's side information without the WAV goes by its own past alone (below).
+  2.4% bigger.
+  Since format 158 such a channel's side information goes by the channel before it in the pass
+  too, where that has the field in the subband this subframe and the last: scl's pn says how its
+  first scale factor moved (2 or more down, 1, none, 1 up, 2 or more), and the channel's last one
+  moved by as much is its prediction where that has been the value more often than the last by 4
+  and an 8th; its ABITS, without a first guess, the same way; and where both channels are unbound
+  and 95% of their side fields have been the same (of 32 or more), each field is first a flag of
+  whether it is that one's, as a bound twin's is. Without their WAVs, the 12 no-WAV streams
+  13659882 bytes to 13469575 (1.39%: `open bitrate.dts` 9.3%, its side information, bit
+  allocations and scale factors 411622 bytes to 224498; FATE's 7-frame samples 7.6-11.9%, the rest
+  within 0.1%; `s.2.dts`'s whole core 727 bytes bigger, 0.002%). The prediction always, the
+  others 0.34% bigger (ABITS 0.26%); the flags where 75% have agreed, 0.04%; the band below's
+  move as nb, 132 bytes smaller alone, 35 bigger with the rest. Otherwise a channel's side
+  information without the WAV goes by its own past alone (below).
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first

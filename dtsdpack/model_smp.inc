@@ -877,6 +877,14 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // silent subframe's channels as twins, `Master Audio 7.1.dts` 0.4% bigger.)
   int twin[NCH];   // (the earlier channel: -1 none)
   int dtwin[NCH];  // (else the subframe's: an earlier one of the pass whose analysis is this one's)
+  // (since format 158 a channel the WAV doesn't bind, and the one before it in the pass: their
+  // subframes' side fields' agreement, how many were the same of how many (twin_field()'s, where
+  // 95% were, of 32 or more: stw_on), counted as each subframe ends; and the channel's scale
+  // factors' and ABITS' counts, how often each was its last and how often its last moved as the
+  // earlier channel's moved (code_scale(), model.inc's abits): that prediction first where it has
+  // been the value more often by 4 and an 8th)
+  U32 stw_n[NCH][2], sfx_n[NCH][2], abx_n[NCH][2];
+  bool stw_on[NCH];
   U16 tw_n[6][2];  // (by field, twin_field()'s k: how often the twin's value wasn't (0) and was (1))
   // A lossless WAV's scale factors (code_scale()): the encoder's RMS rule (scale_pred_ms()) on the
   // values with the FFT's noise in them, its power at each sample SP_K of the bottom subband's
@@ -1069,6 +1077,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     ab2[0] = ab2[1] = 0;
     for (int c = 0; c < NCH; c++) dv_n[c] = -1.0;
     memset(dv_off, 0, sizeof dv_off), memset(dv_lw, 0, sizeof dv_lw);
+    memset(stw_n, 0, sizeof stw_n), memset(stw_on, 0, sizeof stw_on);
+    memset(sfx_n, 0, sizeof sfx_n), memset(abx_n, 0, sizeof abx_n);
     memset(nw_y, 0, sizeof nw_y), memset(nw_yp, 0, sizeof nw_yp), memset(nw_n, 0, sizeof nw_n);
     memset(nw_r1, 0, sizeof nw_r1), memset(nw_r2, 0, sizeof nw_r2);
     for (int c = 0; c < NCH; c++)
@@ -4411,8 +4421,34 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.cc = chan_class(ch);
     D.nb = bound[ch] && b ? clip((es[ch][b - 1] - es[ch][b]) / 2, -4, 4) + 4 : 9;
     if (cpl_leak(r, ch, b, 24, 8) >= 0) D.nb = cpl_leak(r, ch, b, 24, 8);
+    // (since format 158 a channel the WAV doesn't bind, its first scale factor where the channel
+    // before it in the pass has one in the subband, on the same table, this subframe and the last:
+    // pn how that moved (2 or more down, 1, none, 1 up, 2 or more: 0, 2, 4, 5, 6), and the
+    // prediction the last one moved by as much, where that has been the value more often than the
+    // last by 4 and an 8th (sfx_n): without their WAVs, the 12 streams 0.83% smaller, `open
+    // bitrate.dts` 5.5%, FATE's 7-frame samples 5.6%, the rest 0.02%; the prediction always, the
+    // others 0.34% bigger; pn alone, 0.36% smaller; the band below's move as nb, 132 bytes
+    // smaller alone, 35 bigger with pn)
+    int pf = -1;
+    if (!bound[ch] && !j && ch - 1 >= r.ch0() && r.shuff[ch - 1] == r.shuff[ch]) {
+      const int c = ch - 1;
+      if (b < r.nsubs[c] && (b >= r.nvqsub[c] || s.abits[c][b]) && hist.scale[c][b]) {
+        const int d = s.scale[c][b][0] - (hist.scale[c][b] - 1);
+        D.pn = d <= -2 ? 0 : d == -1 ? 2 : d == 0 ? 4 : d == 1 ? 5 : 6;
+        if (A) {
+          const U32* const n = sfx_n[ch];
+          pf = (int)clip(A - 1 + d, 0, max - 1);
+          if (n[1] > n[0] + 4 + n[0] / 8) p = pf, D.pk = 1, D.dp = sf_run(r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p);
+        }
+      }
+    }
     const int spu = spk && p >= 0 && p == pr;
     v = scale(D, v, p, A, max, spu && p == p0, sg, spc, spp, spk);
+    if (pf >= 0) {
+      U32* const n = sfx_n[ch];
+      n[0] += v == A - 1, n[1] += v == pf;
+      if (n[0] + n[1] >= 1u << 10) n[0] >>= 1, n[1] >>= 1;
+    }
     if (fc[0] >= 0) {
       U16* const w = ffs_w[imin(s.abits[ch][b], 12)][fb / 5][fb % 5];
       for (int i = 0; i < 4; i++) w[i] += v == fc[i];

@@ -129,10 +129,18 @@ struct Model : ModelX96<f_DEC, LV> {
   // an element of the walk's (v, in lo..hi; nbits its bits where it is a field of them, else 0)
   // a twin's side field as its earlier channel's (B::twin_flag()), where that has one in lo..hi and
   // both are bound in the pass: whether it's that (v then that)
+  // (since format 158 too a channel the WAV doesn't bind, against the one before it in the pass
+  // where that isn't bound either, where 95% of their side fields have been the same (stw_on):
+  // without their WAVs `open bitrate.dts` 2.9% smaller, FATE's 7-frame samples 3.2%, the rest the
+  // same; where 75% have, the rest 0.04% bigger)
   bool twin_field(int fid, int ch, int b, S64& v, S64 lo, S64 hi) {
-    const int tw = B::twin_of(ch);
+    int tw = B::twin_of(ch);
     const CoreRec& r = *rec;
-    if (tw < 0 || !bound[ch] || !bound[tw]) return false;
+    if (!bound[ch]) {
+      if (!B::stw_on[ch] || ch - 1 < r.ch0() || bound[ch - 1]) return false;
+      tw = ch - 1;
+    } else if (tw < 0 || !bound[tw])
+      return false;
     const CoreSub& s = r.sub[cur_sf];
     S64 tv;
     int k;
@@ -447,11 +455,28 @@ struct Model : ModelX96<f_DEC, LV> {
         const int sa = !fs && G && Sn == G ? (sg < 0 ? 0 : sg == G - 1 ? 1 : hist.abits[ch][b] && sg == hist.abits[ch][b] - 1 ? 2 : 3) : -1;
         const int ag = sa >= 0 ? sa : !fs || og2 < 0 ? 0 : og2 == sg ? 1 : og2 == alt ? 2 : 3;
         // (FFmpeg's encoder's ABITS, where made again: ff_abits())
+        // (since format 158 a channel the WAV doesn't bind, without a first guess, where the channel
+        // before it in the pass has ABITS in the subband this subframe and the last, and it had: its
+        // last moved as that moved, the first guess where it has been the value more often than the
+        // last by 4 and an 8th (abx_n): without their WAVs `open bitrate.dts` 1.2% smaller, FATE's
+        // 7-frame samples 1.0%; always, the rest 0.26% bigger)
+        int abp = -1;
+        if (!bound[ch] && !Sn && ch - 1 >= r.ch0() && b < r.nvqsub[ch - 1] && hist.abits[ch - 1][b] && hist.abits[ch][b]) {
+          const int d = s.abits[ch - 1][b] - (hist.abits[ch - 1][b] - 1);
+          const U32* const n = B::abx_n[ch];
+          abp = (int)clip(hist.abits[ch][b] - 1 + d, lo, hi);
+          if (n[1] > n[0] + 4 + n[0] / 8) Sn = abp + 1;
+        }
         if (!twin_field(fid, ch, b, v, lo, hi) && !(B::ffe_ok && !pass && bound[ch] && B::ff_abits(ch, b, v, lo, hi)))
           v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
                          s.pmode[ch][b], lbd, nb, mx, Sn, near_e ? 14 : nn, sc, eq, ms,
                          alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag, fs && ut ? sx : 0, pq1, pq2, B::ss_rule() || B::ab_rule());
         v = checked(v, lo, hi);
+        if (abp >= 0) {
+          U32* const n = B::abx_n[ch];
+          n[0] += v == hist.abits[ch][b] - 1, n[1] += v == abp;
+          if (n[0] + n[1] >= 1u << 10) n[0] >>= 1, n[1] >>= 1;
+        }
         if (!pass && bound[ch]) B::ab_budget_add(r, ch, b, (int)v);
         if (sn) *sn = (U8)(v + 1);
         if (fe != B::FE_NONE) {
@@ -876,6 +901,26 @@ struct Model : ModelX96<f_DEC, LV> {
     B::smp_fill(r, s);
     B::je_learn(r);
     B::smp_subframe_end(r);
+    for (int ch = r.ch0() + 1; ch < r.ch1(); ch++) {  // (two unbound channels' side fields' agreement)
+      if (bound[ch] || bound[ch - 1]) continue;
+      const int e = ch - 1;
+      U32 eq = 0, n = 0;
+      for (int b = 0; b < NSUB; b++) {
+        if (b >= r.nsubs[ch] || b >= r.nsubs[e]) continue;
+        n++, eq += s.pmode[ch][b] == s.pmode[e][b];
+        if (s.pmode[ch][b] && s.pmode[e][b]) n++, eq += s.pvq[ch][b] == s.pvq[e][b];
+        if (b < r.nvqsub[ch] && b < r.nvqsub[e]) {
+          n++, eq += s.abits[ch][b] == s.abits[e][b];
+          if (s.abits[ch][b] && s.abits[e][b])
+            n += 2, eq += (s.tmode[ch][b] == s.tmode[e][b]) + (s.scale[ch][b][0] == s.scale[e][b][0]);
+        } else if (b >= r.nvqsub[ch] && b >= r.nvqsub[e])
+          n += 2, eq += (s.scale[ch][b][0] == s.scale[e][b][0]) + (s.hfvq[ch][b] == s.hfvq[e][b]);
+      }
+      U32* const c = B::stw_n[ch];
+      c[0] += eq, c[1] += n;
+      if (c[1] >= 1u << 12) c[0] >>= 1, c[1] >>= 1;
+      B::stw_on[ch] = c[1] >= 32 && 100 * (U64)c[0] >= 95 * (U64)c[1];
+    }
     for (int ch = r.ch0(); ch < r.ch1(); ch++)
       for (int b = 0; b < NSUB; b++) {
         const int in = b < r.nsubs[ch], q = b < r.nvqsub[ch];
