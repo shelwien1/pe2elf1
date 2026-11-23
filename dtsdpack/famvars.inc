@@ -42,7 +42,10 @@ enum { SF_PMODE, SF_PVQ, SF_TMODE, SF_JSHUFF, SF_JSCALE, SF_HFVQ, SF_LFE, SF_TMS
 //        plane; 109 the sign
 //   smd  the same, where the WAV is decoded (smp's before format 132)
 //   smn  the same, a channel the WAV doesn't bind: its residual from the fit of its decoded
-//        values (smp's or smd's before format 159)
+//        values (smp's or smd's before format 159); since format 160 nl the fit's value against
+//        the residuals' spread in half doublings (0-15: 2^-4 to 2^3.5), pk whether the nearest
+//        earlier channel has no values in the subband, and each decision with an outside
+//        prediction (model_smp.inc's code_index_nw())
 //   vqr  a rank (model_smp.inc's code_rank()): 13-24 its bucket (0; 1; 2-3; 4-7; ...) in unary,
 //        25-63 the bits below the bucket's top, by the bucket and their place (the first two;
 //        the rest)

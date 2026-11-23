@@ -5,6 +5,28 @@
 // every ADPCM predictor and HF VQ vector (vqr); the WAV's LFE channel decimated, nearly every LFE
 // sample. Where the WAV isn't bound to a channel, against the last values and the neighbours'.
 
+// (since format 160) the logistic distribution's tail past a >= 0 (in its units), 1 / (1 + e^a): a
+// table of 64ths to 32 made with + - * / alone, as every machine makes it, linear between; past 32,
+// 0 (model_smp.inc's code_index_nw())
+struct NwLg {
+  double t[32 * 64 + 2];
+};
+static NwLg nw_lg_make(void) {
+  NwLg g;
+  double q = 0.0, u = 1.0;  // (e^-1/64, by its series)
+  for (int k = 0; k < 24; k++) q += u, u *= -1.0 / 64.0 / (double)(k + 1);
+  double e = 1.0;  // (e^-a)
+  for (int i = 0; i < 32 * 64 + 2; i++) g.t[i] = e / (1.0 + e), e *= q;
+  return g;
+}
+static const NwLg nw_lg = nw_lg_make();
+static INLINE double nw_tail(double a) {
+  if (!(a < 32.0)) return 0.0;
+  const double x = a * 64.0;
+  const int i = (int)x;
+  return nw_lg.t[i] + (nw_lg.t[i + 1] - nw_lg.t[i]) * (x - (double)i);
+}
+
 template <int f_DEC, class LV>
 struct ModelSmp : ModelSide<f_DEC, LV> {
   typedef ModelSide<f_DEC, LV> B;
@@ -342,6 +364,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   static constexpr int NW_WARM = 32;
   static_assert((NW_NO & (NW_NO - 1)) == 0 && NW_N % 4 == 0, "nw_y's ring a power of 2, R's rows in 4s");
   static constexpr double NW_TH = 0.95, NW_LAM = 0.995, NW_RIDGE = 1e-5;
+  static constexpr double NW_LS = 0.6;  // (since format 160 the residual's logistic scale, of the spread)
   static constexpr double NW_L2 = NW_LAM * NW_LAM, NW_L4 = NW_L2 * NW_L2, NW_L8 = NW_L4 * NW_L4, NW_L16 = NW_L8 * NW_L8;
   static constexpr double NW_LK = NW_L16 * NW_L16;  // (NW_LAM to the NW_K, 32)
   struct NwFit {
@@ -388,6 +411,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   S32 nw_y[NCH][NSUB][NW_NO];
   U8 nw_yp[NCH][NSUB];
   double nw_ba[NCH][NSUB], nw_bb[NCH][NSUB];
+  double nw_qr[NCH][NSUB];  // (since format 160 the step the spreads are in, over the root of its scale factor; 0 none)
   U8 nw_n[NCH][NSUB], nw_r1[NCH][NSUB], nw_r2[NCH][NSUB];
   // the fit of the sums decayed by NW_LK, NW_K samples' worth of NW_LAM: (R + d I) w = c by
   // Cholesky, d the mean diagonal by NW_RIDGE (w as it was where a pivot isn't positive or w
@@ -1137,7 +1161,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     memset(nw_y, 0, sizeof nw_y), memset(nw_yp, 0, sizeof nw_yp), memset(nw_n, 0, sizeof nw_n);
     memset(lfn_y, 0, sizeof lfn_y), memset(lfn_R, 0, sizeof lfn_R), memset(lfn_c, 0, sizeof lfn_c);
     memset(lfn_v, 0, sizeof lfn_v), lfn_n = 0, lfn_scl = -1;
-    memset(nw_r1, 0, sizeof nw_r1), memset(nw_r2, 0, sizeof nw_r2);
+    memset(nw_r1, 0, sizeof nw_r1), memset(nw_r2, 0, sizeof nw_r2), memset(nw_qr, 0, sizeof nw_qr);
     for (int c = 0; c < NCH; c++)
       for (int k = 0; k < NSUB; k++) nw_ba[c][k] = nw_bb[c][k] = 1.0;
     memset(dv_lq, 0, sizeof dv_lq);
@@ -5150,6 +5174,31 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // side, no smaller; the nearest's either side in place of the third and fourth's of the sample,
     // 0.007% smaller only; 12 of the subband's past in place of 4 of its 16, 0.11%; the 2 nearest's
     // values less their fit's too, 0.08% smaller still, for 28 regressors; smn untuned, 0.03% bigger)
+    // Since format 160 each decision of the residual's with the probability a logistic distribution
+    // about the fit's value, of scale NW_LS of the spread, gives it within lo..hi, as smn's outside
+    // prediction (code_index_nw(): alone it codes `mid.dtsc`'s residuals 0.9% smaller than smn,
+    // `96-24.dts`'s as small; a 50/50 mix of the two 0.6-0.8% smaller still); the spreads following
+    // the subband's step where it changes, by the ratio of the step over the root of its scale
+    // factor (the ABITS' share whole, the scale factor's half: nw_qr); smn's nl the fit's value
+    // against the spread, in half doublings, pk whether the nearest earlier channel has no values
+    // here; smn retuned: the 12 streams 13384188 bytes to 13338083 (0.34%: `mid.dtsc` 1.13%,
+    // `96-24.dts` 0.66%, `master audio 7.1 24bit` 0.60%, `s.2.dts`'s first 3 MB 0.47%, the others
+    // 0.08-0.31%; FATE's 7-frame samples 1.3-2.9% bigger), of which the outside prediction 0.18%,
+    // nl and pk 0.05%, the spreads 0.08%, the retune 0.04%. Against it: the outside prediction's
+    // scale 0.72 or 0.85 of the spread, 570 and 2113 bytes bigger, a Laplace distribution's (best
+    // at 1.0) 0.6% bigger than the logistic's alone on `mid.dtsc`, the scale by the last residuals
+    // too, no smaller; the spreads by the ABITS' share alone 0.04% bigger, by the step whole the 12
+    // streams 784 bytes bigger (`open bitrate.dts` 0.45%, the others 0.10% smaller), the scale
+    // factor's power 0.4 rather than a half 1424 bytes bigger, 0.65 363 smaller (pow() isn't the
+    // same on every machine, a square root is: the logistic's scale 0.72 there), rescaled only
+    // after the warm-up the same, the ratio held within 1/4..4 301 bytes bigger (the 7-frame
+    // samples 0.4-1.2% smaller, the rest bigger; their means from a plain mean for the first 64, no
+    // smaller); their means by 1/32 or 1/128 a sample, 0.01-0.02% bigger; the sample's place in its
+    // 8 as a context, 228 bytes bigger; the samples the fit doesn't serve (`3-1.dts`'s are mostly
+    // such: noise, the fit no nearer than 0) through smn with the indexes' spread, 2322 bytes
+    // smaller with FATE's 7-frame samples 2.8-5.6% bigger, through their own family with the
+    // logistic's probabilities about 0 or about the fit's value, `3-1.dts` 0.02% or 0.07% smaller
+    // only
     const bool nwp = !bound[ch];
     double nwh[NW_N] = {}, nwy = 0.0, nwd = 0.0;
     S64 nwq = 0;
@@ -5174,6 +5223,18 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       nwd = nwd > (double)lo ? nwd : (double)lo;                // lo where a damaged stream's fit isn't
       nwd = nwd < (double)hi ? nwd : (double)hi;                // a number)
       nwq = (S64)llround(nwd);
+      const int tm = s.tmode[ch][b], si = s.scale[ch][b][tm && (j >> 3) >= tm ? 1 : 0];
+      const double sv = (double)(r.shuff[ch] == 6 ? SF7[si & 127] : SF6[si & 63]);
+      const double qr = (double)ss / sqrt(sv > 1.0 ? sv : 1.0);
+      if (qr > 0.0) {  // (the spreads where the step changes)
+        if (nw_qr[ch][b] > 0.0 && qr != nw_qr[ch][b]) {
+          const double m = nw_qr[ch][b] / qr;
+          nw_ba[ch][b] *= m, nw_bb[ch][b] *= m;
+          if (nw_ba[ch][b] < 0.3) nw_ba[ch][b] = 0.3;
+          if (nw_bb[ch][b] < 0.3) nw_bb[ch][b] = 0.3;
+        }
+        nw_qr[ch][b] = qr;
+      }
       nwr = nw_n[ch][b] >= NW_WARM && nw_bb[ch][b] < NW_TH * nw_ba[ch][b];
     }
     M_smp_v D;
@@ -5203,6 +5264,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       D.nr = t < 0.05 ? 15 : t < 0.12 ? 14 : t < 0.25 ? 13 : 12;
       D.m1 = nw_r1[ch][b] ? imin(nw_r1[ch][b] - 1, 21) : 22;
       D.m2 = nw_r2[ch][b] ? imin(nw_r2[ch][b] - 1, 21) : 22;
+      const double q3 = fabs(nwd) / nw_bb[ch][b];
+      int e3 = 0;
+      const double m3 = q3 > 0.0 ? frexp(q3, &e3) : 0.0;
+      D.nl = q3 > 0.0 ? clip(2 * e3 + (m3 >= 0.70710678118654752440 ? 1 : 0) + 6, 0, 15) : 0;
+      D.pk = !(ch - 1 >= r.ch0() && b < r.nvqsub[ch - 1] && s.abits[ch - 1][b]);
     }
     int how;
     // (cb: how many of the channel's last 32 missed, 0, 1-2, 3-7, more (0, 1, 2-3, more before format
@@ -5231,7 +5297,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const S128 hu = !dw ? (S128)lv << 22 : (S128)(wav->bps == 2 ? 256 : 1) << (38 + DW_HC);
     if (nwr) {  // (the residual toward the fit's own value positive)
       const S64 sg = nwd < (double)nwq ? -1 : 1, rlo = sg > 0 ? lo - nwq : nwq - hi, rhi = sg > 0 ? hi - nwq : nwq - lo;
-      v = nwq + sg * code_index_nw(D, ENC ? sg * (v - nwq) : 0, rlo, rhi, &how);
+      v = nwq + sg * code_index_nw(D, ENC ? sg * (v - nwq) : 0, rlo, rhi, &how, sg * (nwd - (double)nwq),
+                                   NW_LS * nw_bb[ch][b]);
     } else
       v = code_index(D, v, bnd, qp, alt, lo, hi, &how, &hcal[b], dist, hu,
                      (pc >= 8 ? 3 : pc >= 3 ? 2 : pc >= 1 ? 1 : 0) + 4 * jd, bnd ? (S128)ss << AQ_F : 0,
@@ -5379,13 +5446,84 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     return code_ix<M_hid_v>(f_hid, f_smd, LV::smd::mt, E, v, pk, qp, alt, lo, hi, how, hc, dist, unit, cb, su, hn, xm);
   }
   // A residual v (in lo..hi) from the fit of a channel the WAV doesn't bind: its magnitude and
-  // sign, by smn's family (code_q())
-  S64 code_index_nw(const M_smp_v& D, S64 v, S64 lo, S64 hi, int* how) {
+  // sign, by smn's family (code_q()); since format 160 each decision of its length, of the two bits
+  // below its top one and of its sign with the probability a logistic distribution about the fit's
+  // value (nc from the residual's 0, toward it positive: 0-1/2) of scale ns gives it, within lo..hi,
+  // as the family's outside prediction (its mantissa's further bits by the family alone)
+  S64 code_index_nw(const M_smp_v& D, S64 v, S64 lo, S64 hi, int* how, double nc, double ns) {
     M_smn_v E;
 #define M_COPY(f) E.f = D.f;
     M_smp_VARS(M_COPY)
 #undef M_COPY
-    return code_ix<M_hid_v>(f_hid, f_smn, LV::smn::mt, E, v, 0, 0, 0, lo, hi, how, nullptr, 0, 0, 0, 0, -1, false);
+    auto& f = f_smn;
+    *how = 2;
+    B::sel(f, E);
+    const double is = 1.0 / ns, hp = (double)hi + 0.5, hn = 0.5 - (double)lo;
+    // (the mass past x, x from 1/2, on either side: the positive's to hi, the negative's to lo)
+    auto tp = [&](double x) { return nw_tail(((x < hp ? x : hp) - nc) * is); };
+    auto tn = [&](double x) { return nw_tail(((x < hn ? x : hn) + nc) * is); };
+    auto mag = [&](S64 a, S64 z) {  // (magnitudes a-z, from 1)
+      const double xa = (double)a - 0.5, xz = (double)z + 0.5;
+      return (tp(xa) - tp(xz)) + (tn(xa) - tn(xz));
+    };
+    auto pr = [](double a0, double a1) {  // (a0 of a0 + a1, as the family's probabilities)
+      const double t = a0 + a1;
+      return t > 1e-300 ? cm_pclip((int)(a0 / t * (double)CM_PONE + 0.5)) : -1;
+    };
+    // the lengths' edges: the masses past 2^n - 1/2 on either side, n to maxnb, those of lengths a-z
+    // their differences
+    const S64 mmax = -lo > hi ? -lo : hi;
+    const int maxnb = imax(bit_len((U64)mmax), 1);
+    double ep[LEN_MAX + 1], en[LEN_MAX + 1];
+    for (int n = 0; n <= maxnb; n++) {
+      const double x = (double)((S64)1 << n) - 0.5;
+      ep[n] = n && ep[n - 1] == 0.0 ? 0.0 : tp(x), en[n] = n && en[n - 1] == 0.0 ? 0.0 : tn(x);
+    }
+    auto lens = [&](int a, int z) {
+      if (z > maxnb) z = maxnb;
+      if (a > z) return 0.0;
+      return a ? (ep[a - 1] - ep[z]) + (en[a - 1] - en[z]) : 1.0 - ep[z] - en[z];
+    };
+    const int depth = U32_BITS - __builtin_clz((unsigned)maxnb);
+    const S64 av = ENC ? (v < 0 ? -v : v) : 0;
+    int nb = ENC ? bit_len((U64)av) : 0, t = 1;
+    for (int d = depth - 1; d >= 0; d--) {
+      const int n0 = (t << (d + 1)) - (1 << depth), n1 = n0 + (1 << d);
+      f.prp = pr(lens(n0, n1 - 1), lens(n1, n1 + (1 << d) - 1));
+      t = 2 * t + f.bit(QN_LEN + t, ENC && ((nb >> d) & 1));
+    }
+    nb = t - (1 << depth);
+    S64 m = 0;
+    if (nb > maxnb) {
+      f.prp = -1;
+      return checked(-1, 0, mmax);
+    }
+    if (nb) {
+      m = 1;
+      for (int p = 0; p < nb - 1; p++) {
+        const int bt = ENC && ((av >> (nb - 2 - p)) & 1);
+        if (p < LEN_TOP) {
+          const int sh = nb - 2 - p;
+          f.prp = pr(mag((2 * m) << sh, ((2 * m + 1) << sh) - 1), mag((2 * m + 1) << sh, ((2 * m + 2) << sh) - 1));
+          m = 2 * m + f.bit(QN_LEN + LEN_NODES + nb * ((1 << LEN_TOP) - 1) + (int)m - 1, bt);
+        } else {
+          f.prp = -1;
+#ifdef DTSD_DUMP  // (as code_len() dumps them)
+          if (ENC) f.dump_.rec('m', nb, p, bt, f.hs, f.prp, f.prpa != nullptr, (i64)m);
+#endif
+          m = 2 * m + f.bitm(tc_node_man(nb, p, (u64)m, LV::smn::mt), bt);
+        }
+      }
+    }
+    int neg = 0;
+    if (m && m <= hi && m <= -lo) {
+      const double xa = (double)m - 0.5, xz = (double)m + 0.5;
+      f.prp = pr(tp(xa) - tp(xz), tn(xa) - tn(xz));
+      neg = f.bit(QN_SIGN, ENC && v < 0);
+    } else if (m > hi)
+      neg = 1;
+    f.prp = -1;
+    return neg ? -m : m;
   }
   template <class VH, class FH, class FS, class VS>
   S64 code_ix(FH& fh, FS& fs, int mt, const VS& D, S64 v, int pk, S64 qp, S64 alt, S64 lo, S64 hi, int* how, HitCal* hc,

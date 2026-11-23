@@ -104,7 +104,7 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 66.36% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 65.87% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3485 (0.27%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 4624 (0.43%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2589 (0.11%) | | |
@@ -721,6 +721,19 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   tuning 0.38%. With the WAV, of the check lists' 67 runs 56 the same but for the format's byte, 10
   smaller (the 192 kHz WAV's quiet start, whose LFE the binding leaves out, 609 bytes to 395; the
   others by 1-3 bytes) and one as big.
+  Since format 160 each decision of such a residual (its length's, the two bits below its top one,
+  its sign) has a logistic distribution's probability as smn's outside prediction, which its mixers
+  weigh with its counters': the distribution about the fit's value, its scale 0.6 of the residuals'
+  mean distance, within the index's range (by itself it codes `mid.dtsc`'s residuals 0.9% smaller
+  than smn did, `96-24.dts`'s as small). The spreads follow the subband's step where it changes (by
+  the step over the root of its scale factor), and smn's nl is the fit's value against the spread,
+  pk whether the nearest earlier channel has no values in the subband. Without their WAVs,
+  `s.2.dts`'s core 33185178 bytes to 32939110 (66.36% of it to 65.87%), the 12 no-WAV streams
+  13384188 to 13338083 (0.34%: `mid.dtsc` 1.13%, `96-24.dts` 0.66%, the others 0.08-0.60%; FATE's
+  7-frame samples 1.3-2.9% bigger), the 55 streams of the check lists 129606865 to 129102621 (0.39%;
+  the short ones, of 2.3-6.6 KB, 1.3-5.1% bigger, 1.6 KB in all); of the 12 streams' 0.34%, the
+  outside prediction 0.18%, nl and pk 0.05%, the spreads 0.08%, smn's retune 0.04%. With the WAV,
+  every run of the check lists the same but for the format's byte.
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first
