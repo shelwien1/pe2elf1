@@ -122,9 +122,11 @@ and decompresses in 4.3 (435 KB). The decoded WAVs' searches cost too; every oth
 at 550 KB of core a second or more both ways (FFmpeg's encodes, where its encoder is made again,
 less: below; `padded.dts`, whose searches run on every value since format 149, 439 KB a second
 compressing, 445 decompressing). The short samples below (7 frames, the 96 kHz and XBR ones 14; 7
-and 14 KB) take 10 to 41 ms each way, 334 to 830 KB a second (FATE's X96 and XCH ones the slowest,
-compressing): some milliseconds of a run are the same for any stream (starting, the WAV's header and
-start, the alignment, the WAV's continuation past its end, the kernel mapping the pages the model
+and 14 KB) take 10 to 41 ms each way at best, 322 to 806 KB a second (FATE's XCH and X96 ones the
+slowest, compressing; the best of 25 runs: this host's speed varies by a quarter from run to run,
+and by their medians those two compress at 262 and 260 KB a second, decompress at 302): some
+milliseconds of a run are the same for any stream (starting, the WAV's header and start, the
+alignment, the WAV's continuation past its end, the kernel mapping the 2400 pages the model
 touches), and the searches run on every value of a stream's first 2048 (the bit allocation search's
 first 512; since format 148 every 8th of them where it has been right 24 times fewer than the first
 guess, as on FATE's samples, X96's from its 256th where no more often), which is all of theirs.
@@ -2190,10 +2192,11 @@ up to a third of a 7-frame DTS-HD MA sample's output).
 or by hand:
 
 ```
-g++ -O3 -fno-stack-clash-protection -march=x86-64-v3 -ffp-contract=off -std=c++11 -fno-exceptions -fno-rtti -ILib3 -pthread -static-libstdc++ -static-libgcc -o dtsdpack dtsdpack.cpp
+g++ -O3 -fno-stack-clash-protection -march=x86-64-v3 -ffp-contract=off -std=c++11 -fno-exceptions -fno-rtti -ILib3 -pthread -static -o dtsdpack dtsdpack.cpp
 ```
 
-AVX2 or not, the files are the same (the last flags only make a short run start sooner);
+AVX2 or not, the files are the same (`-static` only makes a short run start sooner; without
+the static C library, `-static-libstdc++ -static-libgcc`, as `mk.sh` takes then);
 `-DDTSD_ONLY=9` builds level -9 alone (3.7 MB, not 6.9; its `c` takes -9 for every stream and
 its `d` reads -9's files alone). It needs GCC's or Clang's `__int128`. `MOD/` is generated
 from `IDX/` (perl) and kept in the repository, so a plain build needs no perl; `tables.inc` is

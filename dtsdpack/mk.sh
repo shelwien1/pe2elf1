@@ -77,9 +77,16 @@ CXX=${CXX:-g++}
 # (no stack clash probes: the coroutines' 256 KB frame would be written page by page as a run starts)
 CXXFLAGS=${CXXFLAGS:--O3 -fno-stack-clash-protection}
 PARCH=${PARCH--march=x86-64-v3 -ffp-contract=off}  # AVX2; PARCH= for the plain C++, which codes the same
-# the C++ and GCC runtimes linked in (a run starts 1 ms sooner than with the shared libstdc++ to load,
-# a tenth of a 7-frame stream's run); LDLINK= for the shared ones
-LDLINK=${LDLINK--static-libstdc++ -static-libgcc}
+# the whole binary linked statically where the static C library is there (a run starts 0.3 ms
+# sooner than with libc and libm to load, of a 7-frame stream's 20), else the C++ and GCC runtimes
+# (1 ms sooner than with the shared libstdc++ to load); LDLINK= for the shared ones
+if [ -z "${LDLINK+x}" ]; then
+  LDLINK="-static-libstdc++ -static-libgcc"
+  t=$(mktemp -d)
+  printf '#include <cmath>\n#include <cstdio>\nint main(int c, char**) { std::printf("%%g", std::exp((double)c)); }\n' > "$t/s.cpp"
+  if $CXX -std=c++11 -pthread "$t/s.cpp" -static -o "$t/s" 2>/dev/null && "$t/s" > /dev/null; then LDLINK=-static; fi
+  rm -rf "$t"
+fi
 FAMS=$(sed -n 's/^#define DTSD_FAMS(X) //p' famvars.inc | sed 's/X(\([a-z0-9]*\))/\1/g')  # (the model's list)
 [ -n "$FAMS" ] || { echo "mk.sh: no DTSD_FAMS in famvars.inc" >&2; exit 1; }
 LEVELS="9 8"

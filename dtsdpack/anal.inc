@@ -35,8 +35,22 @@ typedef unsigned __int128 U128;
 // x times 2^k (C++11 leaves the left shift of a negative value undefined)
 static INLINE S64 shl64(S64 x, int k) { return (S64)((U64)x << k); }
 static INLINE S128 shl128(S128 x, int k) { return (S128)((U128)x << k); }
+// a (2^63 or more) in doubles, as (double)a rounds it (to the nearest, ties to even): its top 63
+// bits, those under them in the lowest (sticky: a tie only where they are all 0, as the rounding
+// takes 10 more), the conversion's one rounding, then the power of 2 (exact)
+static INLINE double u128_dbl_big(U128 a) {
+  const U64 h = (U64)(a >> 64);
+  const int L = h ? 127 - __builtin_clzll(h) : 63 - __builtin_clzll((U64)a), sh = L - 62;  // (1..65)
+  const U64 q = (U64)(a >> sh) | (U64)((a & (((U128)1 << sh) - 1)) != 0);
+  U64 b = (U64)(1023 + sh) << 52;
+  double p2;
+  memcpy(&p2, &b, sizeof p2);
+  return (double)(S64)q * p2;
+}
 // x in doubles, as (double)x rounds it (to the nearest), in one instruction where it fits in 64 bits
-static INLINE double s128_dbl(S128 x) { return (S128)(S64)x == x ? (double)(S64)x : (double)x; }
+static INLINE double s128_dbl(S128 x) {
+  return (S128)(S64)x == x ? (double)(S64)x : x < 0 ? -u128_dbl_big((U128)0 - (U128)x) : u128_dbl_big((U128)x);
+}
 // the floor square root of t (IEEE's sqrt the start, the integer steps exact)
 static INLINE S64 isqrt128(U128 t) {
   S64 q = (S64)sqrt((double)t);
@@ -1264,14 +1278,17 @@ static void hf_bound_grp_m(const S128* k, const S32 (*W)[16], const double* r, c
 struct HfEnergies {
   S32 e[4][1024];             // each entry's energy over its first 8, 16, 24, 32 values
   double inv[4][1024], nz[4][1024];  // 1 over its square root (0 where it is 0); whether it isn't 0
-  HfEnergies() {
+  HfEnergies() {  // (8 values at a time, then the square roots: a run starts sooner)
     for (int q = 0; q < 1024; q++) {
       S32 s = 0;
-      for (int j = 0; j < 32; j++) {
-        s += HF_VQ[q][j] * HF_VQ[q][j];
-        if ((j & 7) == 7) e[j >> 3][q] = s, inv[j >> 3][q] = s > 0 ? 1 / sqrt((double)s) : 0, nz[j >> 3][q] = s > 0;
+      for (int k = 0; k < 4; k++) {
+        S32 u = 0;
+        for (int j = 8 * k; j < 8 * k + 8; j++) u += HF_VQ[q][j] * HF_VQ[q][j];
+        e[k][q] = s += u;
       }
     }
+    for (int k = 0; k < 4; k++)
+      for (int q = 0; q < 1024; q++) inv[k][q] = e[k][q] > 0 ? 1 / sqrt((double)e[k][q]) : 0, nz[k][q] = e[k][q] > 0;
   }
 };
 static const HfEnergies hf_energies;
@@ -1918,6 +1935,54 @@ static void wav_run(const WavIn& w, int c, S64 E, const S64* q, S64 qa, S32* out
   free(hb);
 }
 
+// LfeFit's sums of f f' for NF of 32 or more, in AVX2: each f, under 2^51, as h 2^26 + l, l in
+// 0..2^26 - 1, so that f_i f_j >> 20 is (h_i h_j) 2^32 + (h_i l_j + l_i h_j) 2^6 + (l_i l_j >> 20),
+// each part's sum in 64 bits for 512 of them; added into G before it is read: the same sums
+template <int NF, bool V>
+struct LfePend {
+  bool add_vec(const S64*, S128 (*)[NF]) { return false; }
+  void fold(S128 (*)[NF]) {}
+};
+#ifdef DTSD_AVX2
+template <int NF>
+struct LfePend<NF, true> {
+  static constexpr int N4 = (NF + 3) & ~3;
+  alignas(32) S64 ph[NF][N4], pc[NF][N4], pl[NF][N4];  // (by f_i, f_j; j past i 4 at a time: not taken)
+  U32 pn;                                              // (the f in them)
+  // f f' into them, where each f is under 2^51 (whether), into G as they fill
+  bool add_vec(const S64* f, S128 (*G)[NF]) {
+    S64 m = 0;
+    for (int i = 0; i < NF; i++) m |= f[i] < 0 ? ~f[i] : f[i];
+    if (m >> 51) return false;
+    alignas(32) S64 hv[N4], lv[N4];
+    for (int i = 0; i < NF; i++) hv[i] = f[i] >> 26, lv[i] = f[i] & (((S64)1 << 26) - 1);
+    for (int i = NF; i < N4; i++) hv[i] = lv[i] = 0;
+    for (int i = 0; i < NF; i++) {
+      const __m256i hi = _mm256_set1_epi64x(hv[i]), li = _mm256_set1_epi64x(lv[i]);
+      for (int j = 0; j <= i; j += 4) {
+        const __m256i hj = _mm256_load_si256((const __m256i*)(hv + j)), lj = _mm256_load_si256((const __m256i*)(lv + j));
+        __m256i* const H = (__m256i*)(ph[i] + j);
+        __m256i* const C = (__m256i*)(pc[i] + j);
+        __m256i* const L = (__m256i*)(pl[i] + j);
+        *H = _mm256_add_epi64(*H, _mm256_mul_epi32(hi, hj));
+        *C = _mm256_add_epi64(*C, _mm256_add_epi64(_mm256_mul_epi32(hi, lj), _mm256_mul_epi32(li, hj)));
+        *L = _mm256_add_epi64(*L, _mm256_srli_epi64(_mm256_mul_epu32(li, lj), 20));
+      }
+    }
+    if (++pn >= 512) fold(G);
+    return true;
+  }
+  void fold(S128 (*G)[NF]) {
+    if (!pn) return;
+    for (int i = 0; i < NF; i++) {
+      for (int j = 0; j <= i; j++) G[i][j] += shl128(ph[i][j], 32) + shl128(pc[i][j], 6) + pl[i][j];
+      for (int j = 0; j < N4; j++) ph[i][j] = pc[i][j] = pl[i][j] = 0;
+    }
+    pn = 0;
+  }
+};
+#endif
+
 // The correction's least squares fit: the decimated samples around each LFE sample (f, NF of
 // them: LFE_NT, or LFE_NF with the last LFE values, as a decoded WAV's LFE is the decoder's
 // interpolation of the values, 8 of them in each of its samples, so with the last ones the fit
@@ -1927,7 +1992,7 @@ static void wav_run(const WavIn& w, int c, S64 E, const S64* q, S64 qa, S32* out
 // each sample, refit() each subframe. (K0: the tap the correction's identity is, ridged toward;
 // -1 none, ridged toward 0. RJ: outliers left out, below.)
 template <int NF, int K0 = LFE_K, int FS = 5, bool RJ = false>
-struct LfeFit {
+struct LfeFit : LfePend<NF, NF >= 32> {
   S128 G[NF][NF], c[NF];  // the sums of f f' and f y
   S64 w[NF];              // the correction (Q30), less its identity (2^30 at K0): 0s the identity
 
@@ -1960,15 +2025,16 @@ struct LfeFit {
     S64 fs[NF];
     for (int i = 0; i < NF; i++) fs[i] = (S64)((S128)f[i] * iv >> 62);
     const S64 ys = (S64)((S128)y * iv >> 62);
-    for (int i = 0; i < NF; i++) {
-      for (int j = 0; j <= i; j++) G[i][j] += (S128)fs[i] * fs[j] >> 20;
-      c[i] += (S128)fs[i] * ys >> 20;
-    }
+    if (!this->add_vec(fs, G))
+      for (int i = 0; i < NF; i++)
+        for (int j = 0; j <= i; j++) G[i][j] += (S128)fs[i] * fs[j] >> 20;
+    for (int i = 0; i < NF; i++) c[i] += (S128)fs[i] * ys >> 20;
   }
   // (G + r I) w = c + r e_K by LDL', r the mean diagonal / 2^23 (w as it was where that fails): L
   // and E = L D by rows, row i's k < i at i (i - 1) / 2 + k, each entry a dot product of the rows
   // before it (sf_dot_sub()), L's by D's reciprocal
   void refit() {
+    this->fold(G);
     S128 tr = 0;
     for (int i = 0; i < NF; i++) {
       for (int j = 0; j <= i; j++) G[i][j] -= G[i][j] >> FS;
