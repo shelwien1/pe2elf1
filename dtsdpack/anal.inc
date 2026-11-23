@@ -544,8 +544,9 @@ static void index_cell(S64 t, S64 ss, S64 lo, S64 hi, S64* xlo, S64* xhi) {
 // the squared distances' sum of the values v (n of them, 2^-AQ_F; 2^-2AQ_F): 4 at a time in
 // doubles where |v| < 2^44 and ss < 2^48 (each index's estimate within 1 of it, and the rest
 // t - 2 q ss that tells it exact, as dev()'s; the point as dequantize() makes it, and the distance,
-// integers within 2^52), the squares in 128 bits
-static S128 quant_err(const S64* v, int n, S64 ss, S64 lo, S64 hi) {
+// integers within 2^52), the squares in 128 bits; where lim >= 0, as soon as the sum reaches lim (no
+// less than lim then: a search that keeps the two least sums needs no more of one past the second)
+static S128 quant_err(const S64* v, int n, S64 ss, S64 lo, S64 hi, S128 lim = -1) {
   QErr q;
   q.set(ss, lo, hi);
   S128 e = 0;
@@ -580,18 +581,24 @@ static S128 quant_err(const S64* v, int n, S64 ss, S64 lo, S64 hi) {
       alignas(32) S64 di[4];
       _mm256_store_si256((__m256i*)di, _mm256_sub_epi64(_mm256_castpd_si256(_mm256_add_pd(d, mg)), mgi));
       for (int k = 0; k < 4; k++) e += (S128)di[k] * di[k];
+      if (lim >= 0 && e >= lim) return e;
     }
   }
 #endif
-  for (; j < n; j++) e += q.err(v[j], &nz);
+  for (; j < n; j++) {
+    e += q.err(v[j], &nz);
+    if (lim >= 0 && e >= lim) return e;
+  }
   return e;
 }
 // the same of a high-frequency VQ vector q at scale factor sc: its entries as the decoder scales them
-static S128 vq_err(const S64* v, int n, int q, S64 sc) {
+// (lim as quant_err()'s, by 4 values)
+static S128 vq_err(const S64* v, int n, int q, S64 sc, S128 lim = -1) {
   S128 e = 0;
   for (int j = 0; j < n; j++) {
     const S64 d = v[j] - shl64(clip23((HF_VQ[q][j] * sc + 8) >> 4), AQ_F);
     e += (S128)d * d;
+    if ((j & 3) == 3 && lim >= 0 && e >= lim) return e;
   }
   return e;
 }
@@ -1006,12 +1013,18 @@ struct Lg2Tab {
         if ((2 * i + 1) >> (9 - k) & 1) p = (U64)((U128)p * r[k] >> 62);
       ex[i] = (U32)((p + ((U64)1 << 30)) >> 31);
     }
+    one = log2x(CO_ONE);
   }
-  // 2^16 log2(x), x >= 1
+  // 2^16 log2(x), x >= 1 (every caller's: counts and priors, probabilities 1..CO_ONE - 1)
   INLINE S32 log2x(U64 x) const {
+#if defined(__GNUC__) || defined(__clang__)
+    const int e = 63 - __builtin_clzll(x);  // (its top bit's place, without ilog2()'s test for 0)
+#else
     const int e = ilog2(x);
+#endif
     return (e << 16) + lg[(x << (63 - e)) >> 55 & 255];
   }
+  S32 one;  // (log2x(CO_ONE), made once)
   // 2^(l / 2^16) in CO_ONE units (l <= 0: a probability), within 1..CO_ONE - 1
   INLINE U32 prob(S64 l) const {
     const S64 q = l + ((S64)CO_PBITS << 16);
@@ -1144,15 +1157,17 @@ static void hf_bound_vec(const S128* k, int g, int n, S128* o) {
 // Group g's entries' distances with each other's over their first 16 values, as hf_bound_vec()'s
 // (the root of the squared distance, exactly), into pd
 static void hf_pair_dists(int g, double (*pd)[32]) {
-  for (int i = 0; i < 32; i++)
-    for (int f = 0; f < 32; f++) {
+  for (int i = 0; i < 32; i++) {
+    pd[i][i] = 0;
+    for (int f = i + 1; f < 32; f++) {  // (each pair once: the same sum either way)
       S32 s2 = 0;
       for (int j = 0; j < 16; j++) {
         const S32 e = HF_VQ[g * 32 + i][j] - HF_VQ[g * 32 + f][j];
         s2 += e * e;
       }
-      pd[i][f] = sqrt((double)s2);
+      pd[i][f] = pd[f][i] = sqrt((double)s2);
     }
+  }
 }
 // The 32 keys k's order, the lower index first of equals, into idx
 static void hf_key_order(const S128* k, int* idx) {

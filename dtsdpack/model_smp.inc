@@ -298,6 +298,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // where the search was tried, found one and it wasn't rule k's, how often rule k's was the core's
   // and the search's (sfq[k], halved the same); the search's tries (to 2048)
   U32 sfr[2], sfq[2][2], ss_n;
+  bool ssr_on;  // (ss_rule(): false where the counts are 0s, as the run starts)
   // how often a scale factor the search was tried on lay below its window (3 under the RMS rule's), of
   // how many (low_on())
   U32 sfl[2];
@@ -3171,7 +3172,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         hf_dists(g, v, n, sc, dd);
         for (int e = 0; e < 32; e++) cand[e].k = dd[e], cand[e].i = e;
         const int q2 = g * 32 + select_rank(cand, 32, 0);
-        const S128 d = vq_err(v, n, q2, sc);
+        const S128 d = vq_err(v, n, q2, sc, bd);
         if (bd < 0 || d < bd) bd = d, vq = q2;
       }
       if (pa >= 0) {  // (the two-stage search's at the last one, at the vector's best scale factor)
@@ -3185,19 +3186,19 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         const int q2 = g * 32 + select_rank(cand, 32, 0), c = vq_scale(v, n, q2, tab, nt);
         for (int i = c - 1; c >= 0 && i <= c + 1; i++)
           if (i >= 0 && i < nt) {
-            const S128 d = vq_err(v, n, q2, tab[i]);
+            const S128 d = vq_err(v, n, q2, tab[i], bd);
             if (d < bd) bd = d, vq = q2;
           }
       }
       {  // (the entry most nearly a multiple of the values, at its best scale factor)
         const int qs = hf_shape(v, n), c = vq_scale(v, n, qs, tab, nt);
         for (int i = imax(p - 3, 0); i <= imin(p + 12, nt - 1); i++) {
-          const S128 d = vq_err(v, n, qs, tab[i]);
+          const S128 d = vq_err(v, n, qs, tab[i], bd);
           if (d < bd) bd = d, vq = qs;
         }
         for (int i = c - 1; c >= 0 && i <= c + 1; i++)  // (and about its least-squares scale, past them)
           if (i > p + 12 && i < nt) {
-            const S128 d = vq_err(v, n, qs, tab[i]);
+            const S128 d = vq_err(v, n, qs, tab[i], bd);
             if (d < bd) bd = d, vq = qs;
           }
       }
@@ -3207,11 +3208,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     auto cand = [&](int i) {
       S128 e;
       if (hfb) {
-        e = vq_err(v, n, vq, tab[i]);
+        e = vq_err(v, n, vq, tab[i], e2);  // (past the second least: neither of the two then)
       } else {
         const S64 ss = step_for(r, ch, a, i);
         if (ss <= 0) return;
-        e = quant_err(v, n, ss, lo, hi);
+        e = quant_err(v, n, ss, lo, hi, e2);
       }
       if (best < 0 || e < e1) e2 = e1, e1 = e, best = i;
       else if (e2 < 0 || e < e2) e2 = e;
@@ -3246,10 +3247,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // rule's against scale_ceil()'s, which won, was taken from its 47th frame on, from never: its core
   // 418846 bytes to 167352, 60% smaller (counted where tried, 186653; where it differs but its none
   // as the rule's, 181522)
-  bool ss_rule() const {
+  bool ss_rule_of() const {
     const int k = sf_base();
     return sfq[k][1] > sfq[k][0] + sfq[k][0] / 32;
   }
+  bool ss_rule() const { return ssr_on; }  // (ss_rule_of()'s, made again where sfr and sfq change)
   // whether the search goes down to 16 under the RMS rule's: where after 256 tries more than an
   // eighth of the scale factors have lain under its window. FFmpeg's encoder takes, at its fine
   // steps, the least scale factor whose range holds the subband's peak (dcaenc.c's
@@ -4351,6 +4353,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         if (++sfl[1] >= 1u << 16) sfl[0] >>= 1, sfl[1] >>= 1;
       }
       if (sfr[0] + sfr[1] >= 1u << 16) sfr[0] >>= 1, sfr[1] >>= 1;
+      ssr_on = ss_rule_of();
     }
     return v;
   }
@@ -5238,14 +5241,14 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         const U32 pm = ux ? p1 : p0;
         // (the rates mixed by the weights for the mean's log2, and the subband's)
         const double mx[4] = {(double)mf / 65536.0, (double)ms / 65536.0, (double)mr / 65536.0, 1.0};
-        int mxb = (int)(((S64)lg2tab.log2x(CO_ONE) - (S64)lg2tab.log2x(pm)) >> 16);
+        int mxb = (int)(((S64)lg2tab.one - (S64)lg2tab.log2x(pm)) >> 16);
         mxb = mxb > HAP_N - 1 ? HAP_N - 1 : mxb;
         double* const md = hmx_d[mxb];
         double* const mb = hmx_b[hc ? (int)(hc - hcal) : NSUB + NSUB96][mxb];
         double xs = (0.5 + md[0] + mb[0]) * mx[0] + (0.5 + md[1] + mb[1]) * mx[1] + (md[2] + mb[2]) * mx[2] + (md[3] + mb[3]) * mx[3];
         xs = xs > -0.05 ? -0.05 : xs < -19.0 ? -19.0 : xs;
         const U32 pq = lg2tab.prob((S64)(xs * 65536.0));
-        const S64 hap_l = (S64)lg2tab.log2x(pq) - (S64)lg2tab.log2x(CO_ONE);  // (its log2, 2^-16)
+        const S64 hap_l = (S64)lg2tab.log2x(pq) - (S64)lg2tab.one;  // (its log2, 2^-16)
         int hap_b = (int)(-hap_l >> 16), hap_f = (int)(-hap_l >> 8) & 255;  // (its bin, 256ths past it)
         if (hap_b >= HAP_N - 1) hap_b = HAP_N - 2, hap_f = 255;
         S64 hap_c[2];
@@ -5265,7 +5268,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         if (hap_s[1] < hap_s[hap_i]) hap_i = 1;
         hit = c->code_bit(hap_p[hap_i], ENC && v == qp);
         {
-          const S64 one = lg2tab.log2x(CO_ONE);
+          const S64 one = lg2tab.one;
           for (int t = 0; t < 3; t++) hap_s[t] += one - lg2tab.log2x(hit ? CO_ONE - hap_p[t] : hap_p[t]);
           if (hap_s[0] + hap_s[1] + hap_s[2] >= (S64)1 << 40) hap_s[0] >>= 1, hap_s[1] >>= 1, hap_s[2] >>= 1;
         }
@@ -5288,7 +5291,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         if (!ux) cupd(cb, hit);
         if (xm) {
           cupd(cb + 8, hit);
-          const S64 one = lg2tab.log2x(CO_ONE);
+          const S64 one = lg2tab.one;
           xm_loss[0] += one - lg2tab.log2x(hit ? CO_ONE - p0 : p0);
           xm_loss[1] += one - lg2tab.log2x(hit ? CO_ONE - p1 : p1);
           if (xm_loss[0] + xm_loss[1] >= (S64)1 << 40) xm_loss[0] >>= 1, xm_loss[1] >>= 1;

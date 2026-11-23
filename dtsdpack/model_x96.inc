@@ -837,12 +837,12 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
           const int g = select_rank(cand, 32, 0);
           for (int e = 0; e < 32; e++) cand[e].k = hf_dist(g * 32 + e, x, m, sc), cand[e].i = e;
           const int q = g * 32 + select_rank(cand, 32, 0);
-          const S128 d = vq_err(x, m, q, sc);
+          const S128 d = vq_err(x, m, q, sc, bd);
           if (bd < 0 || d < bd) bd = d, vq[pp] = q;
         }
         const int qs = hf_shape(x, m);
         for (int i = imax(p - 3, 0); i <= imin(p + 12, SF6_N - 1); i++) {
-          const S128 d = vq_err(x, m, qs, SF6[i]);
+          const S128 d = vq_err(x, m, qs, SF6[i], bd);
           if (d < bd) bd = d, vq[pp] = qs;
         }
       }
@@ -852,9 +852,10 @@ struct ModelX96 : ModelSmp<f_DEC, LV> {
     for (int i = imax(p - 3, 0); i <= imin(p + (ba >= 2 ? 5 : 12), SF6_N - 1); i++) {
       S128 e = 0;
       if (ba >= 2) {
-        e = quant_err(v, n, (S64)LOSSY_QUANT[ba - 1] * SF6[i], lo, hi);
-      } else {
-        for (int pp = 0; pp < np && pp < 2; pp++) e += vq_err(v + 16 * pp, imin(16, n - 16 * pp), vq[pp], SF6[i]);
+        e = quant_err(v, n, (S64)LOSSY_QUANT[ba - 1] * SF6[i], lo, hi, e2);  // (past the second least:
+      } else {                                                                 // neither of the two then)
+        for (int pp = 0; pp < np && pp < 2 && (e2 < 0 || e < e2); pp++)
+          e += vq_err(v + 16 * pp, imin(16, n - 16 * pp), vq[pp], SF6[i], e2 < 0 ? -1 : e2 - e);
       }
       if (best < 0 || e < e1) e2 = e1, e1 = e, best = i;
       else if (e2 < 0 || e < e2) e2 = e;
