@@ -3,7 +3,7 @@
 // Apart from model.inc for IDX/famtune.cpp, which replays a family's decisions without the model.
 
 // the families, X(name) each, in the order the model has them
-#define DTSD_FAMS(X) X(hdr) X(sid) X(sdd) X(jsc) X(abt) X(abd) X(scl) X(scd) X(hit) X(hid) X(smp) X(smd) X(vqr) X(vqp) X(vpd) X(raw)
+#define DTSD_FAMS(X) X(hdr) X(sid) X(sdd) X(jsc) X(abt) X(abd) X(scl) X(scd) X(hit) X(hid) X(smp) X(smd) X(smn) X(vqr) X(vqp) X(vpd) X(raw)
 
 // The fields the hdr family codes, each of their own values (fld): the core frame's header and
 // coding header, a subframe's header fields, then the container's (below), then the XCH
@@ -41,6 +41,8 @@ enum { SF_PMODE, SF_PVQ, SF_TMODE, SF_JSHUFF, SF_JSCALE, SF_HFVQ, SF_LFE, SF_TMS
 //        the bits below the top (2-108: model_core.inc's code_len()), the rest in the mantissa
 //        plane; 109 the sign
 //   smd  the same, where the WAV is decoded (smp's before format 132)
+//   smn  the same, a channel the WAV doesn't bind: its residual from the fit of its decoded
+//        values (smp's or smd's before format 159)
 //   vqr  a rank (model_smp.inc's code_rank()): 13-24 its bucket (0; 1; 2-3; 4-7; ...) in unary,
 //        25-63 the bits below the bucket's top, by the bucket and their place (the first two;
 //        the rest)
@@ -75,6 +77,7 @@ constexpr int M_hit_ND = HT_N, M_hit_MND = 1, M_hit_NG = 1;
 constexpr int M_hid_ND = HT_N, M_hid_MND = 1, M_hid_NG = 1;
 constexpr int M_smp_ND = QN_N, M_smp_MND = TC_MNODE, M_smp_NG = 1;
 constexpr int M_smd_ND = QN_N, M_smd_MND = TC_MNODE, M_smd_NG = 1;
+constexpr int M_smn_ND = QN_N, M_smn_MND = TC_MNODE, M_smn_NG = 1;
 constexpr int M_vqr_ND = VN_N, M_vqr_MND = 1, M_vqr_NG = 1;
 constexpr int M_vqp_ND = VN_N, M_vqp_MND = 1, M_vqp_NG = 1;
 constexpr int M_vpd_ND = VN_N, M_vpd_MND = 1, M_vpd_NG = 1;
@@ -189,6 +192,7 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 #define M_hid_VARS(X) M_hit_VARS(X)  // (hit's, where the WAV is decoded)
 #define M_smp_VARS(X) X(ab) X(hw) X(pk) X(nr) X(nl) X(ql) X(hm) X(pm) X(bd) X(m1) X(m2) X(sq) X(s1)
 #define M_smd_VARS(X) M_smp_VARS(X)  // (smp's, where the WAV is decoded)
+#define M_smn_VARS(X) M_smp_VARS(X)  // (smp's, a channel the WAV doesn't bind)
 #define M_vqr_VARS(X) X(kd) X(cc) X(bd) X(mg) X(gn) X(lh) X(ml) X(nc) X(gr) X(mq)
 #define M_vqp_VARS(X) M_vqr_VARS(X)  // (vqr's, kd VK_PVQ and VK_PVE)
 #define M_vpd_VARS(X) M_vqr_VARS(X)  // (the same, where the WAV is decoded)

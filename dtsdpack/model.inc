@@ -184,8 +184,12 @@ struct Model : ModelX96<f_DEC, LV> {
 #ifdef DTSD_FSTAT
     c->fid = fid;
 #endif
-    if (fid == F_LFEscaleIndex) {  // (coded with the first LFE sample where against the audio's)
-      if (B::lfe_on || B::ffl_use) {
+    if (fid == F_LFEscaleIndex) {  // (coded with the first LFE sample: since format 159 everywhere)
+      if (B::lfn_scl >= 0) {
+        account(CAT_HDR);
+        v = B::lfn_scl;
+        B::lfn_scl = -1;
+      } else if (B::lfe_on || B::ffl_use) {
         account(CAT_SCALE);
         v = B::lfe_scl;
       } else {
@@ -588,11 +592,24 @@ struct Model : ModelX96<f_DEC, LV> {
           hist.lfe = (S32)v + 129;
           break;
         }
+        // (else since format 159 its scale factor first, the values against the fit of the decoded
+        // ones before them (lfn_pred()), the sample before the second guess: without their WAVs
+        // the 12 streams 15825 bytes smaller (0.12%; their LFE values took 40115); the decoded
+        // value before as the first guess, 205 bytes, twice it less the one before that, 3588; an
+        // 8-tap NLMS fit at its best step (0.4), 12263; 16 taps, 385 more; forgetting by 0.98 or
+        // 0.995, the same; the fit's errors' spread as ab, 41 bytes)
+        if (!cur_j) {
+          account(CAT_HDR);
+          B::lfn_scl = (int)checked(hdr_field(F_LFEscaleIndex, 255, ENC ? s.lfescale : 0), 0, 127);
+        }
         account(CAT_SIDE);
-        const S64 u = side_code(SF_LFE, 0, 0, v + 128, lo + 128, hi + 128, 0, hist.lfe,
-                                cur_j ? s.lfe[cur_j - 1] + 129 : 0, 8, 0, 9);
+        const double st = (double)SF7[B::lfn_scl & 127];
+        const S64 pv = clip((S64)llround(B::lfn_pred() / st), lo, hi);
+        const S64 u = side_code(SF_LFE, 0, 0, v + 128, lo + 128, hi + 128, 0, (S32)(pv + 129),
+                                cur_j ? s.lfe[cur_j - 1] + 129 : hist.lfe, 8, 0, 9);
         v = u - 128;
         hist.lfe = (S32)u + 1;
+        B::lfn_learn((double)v * st);
         break;
       }
       default:

@@ -104,7 +104,7 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 66.87% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 66.36% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3485 (0.27%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 4624 (0.43%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2589 (0.11%) | | |
@@ -707,6 +707,20 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   others 0.34% bigger (ABITS 0.26%); the flags where 75% have agreed, 0.04%; the band below's
   move as nb, 132 bytes smaller alone, 35 bigger with the rest. Otherwise a channel's side
   information without the WAV goes by its own past alone (below).
+  Since format 159 that fit has 24 regressors, the 2 nearest earlier channels' values either side of
+  the sample too (where it isn't the first or last of its 8: their blocks lie whole before it),
+  refitted every 32 samples rather than 16, which keeps it as fast; its residuals have a family of
+  their own, smn (smp's and smd's before), tuned on 9 streams' dumps without their WAVs; and an LFE
+  not coded against the audio goes by a least squares fit of its decoded values (each by the 8
+  before it, forgetting by 0.99 a value, refitted every 4th), its scale factor coded with its first
+  value. Without their WAVs, `s.2.dts`'s core 33440778 bytes to 33185178 (66.87% of it to 66.36%),
+  the 12 no-WAV streams 13469575 to 13384188 (0.63%: `96-24.dts`'s 2.0%, `mid.dtsc` 1.25%,
+  `s.2.dts`'s first 3 MB 0.80%, the others 0.11-0.69%; FATE's 7-frame samples 0.5-1.5% bigger), the
+  55 streams of the check lists 130451895 to 129606865 (0.65%; FFmpeg's encodes at 32 and 44.1 kHz
+  0.4-0.5% bigger); of the 12 streams' 0.63%, the regressors 0.16%, the LFE's fit 0.12%, smn's
+  tuning 0.38%. With the WAV, of the check lists' 67 runs 56 the same but for the format's byte, 10
+  smaller (the 192 kHz WAV's quiet start, whose LFE the binding leaves out, 609 bytes to 395; the
+  others by 1-3 bytes) and one as big.
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first

@@ -19,6 +19,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   M_FAM(hid)
   M_FAM(smp)
   M_FAM(smd)
+  M_FAM(smn)
   M_FAM(vqr)
   M_FAM(vqp)
   M_FAM(vpd)
@@ -329,18 +330,20 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   U32 dv_lq[2][2];
   // (since format 157 a channel the WAV doesn't bind, as code_q() has it: its subband values by a
   // least squares fit of their last NW_NO (nw_y, a ring from nw_yp, those of a channel not bound
-  // alone) and the NW_NX earlier channels' of the sample, refitted every NW_K samples (nw_refit()),
-  // each sample weighed by 1 over its step squared and by NW_LAM a sample since; the mean
-  // distance of the indexes from 0 and from the fit's value, in steps (each sample a 64th of it,
-  // from 1, at 0.3 at least), the samples to NW_WARM, and the last two residuals' lengths, 1 +
+  // alone) and the 4 earlier channels' of the sample (since format 159 too the 2 nearest's either
+  // side of it, where it isn't first or last of its 8: NW_NX), refitted every NW_K samples
+  // (nw_refit()), each sample weighed by 1 over its step squared and by NW_LAM a sample since; the
+  // mean distance of the indexes from 0 and from the fit's value, in steps (each sample a 64th of
+  // it, from 1, at 0.3 at least), the samples to NW_WARM, and the last two residuals' lengths, 1 +
   // their bits. A fit's memory is zeroed as its subband's first sample is coded: a bound channel's
   // never are, its pages never touched)
-  static constexpr int NW_NO = 16, NW_NX = 4, NW_N = NW_NO + NW_NX, NW_T = NW_N * (NW_N + 1) / 2, NW_K = 16;
-  static constexpr int NW_RT = 8 * (NW_N / 4) * (NW_N / 4 + 1);  // (R's rows to whole 4s: 240 for 20)
+  static constexpr int NW_NO = 16, NW_NX = 8, NW_N = NW_NO + NW_NX, NW_T = NW_N * (NW_N + 1) / 2, NW_K = 32;
+  static constexpr int NW_RT = 8 * (NW_N / 4) * (NW_N / 4 + 1);  // (R's rows to whole 4s: 336 for 24)
   static constexpr int NW_WARM = 32;
   static_assert((NW_NO & (NW_NO - 1)) == 0 && NW_N % 4 == 0, "nw_y's ring a power of 2, R's rows in 4s");
   static constexpr double NW_TH = 0.95, NW_LAM = 0.995, NW_RIDGE = 1e-5;
-  static constexpr double NW_L2 = NW_LAM * NW_LAM, NW_L4 = NW_L2 * NW_L2, NW_L8 = NW_L4 * NW_L4, NW_LK = NW_L8 * NW_L8;
+  static constexpr double NW_L2 = NW_LAM * NW_LAM, NW_L4 = NW_L2 * NW_L2, NW_L8 = NW_L4 * NW_L4, NW_L16 = NW_L8 * NW_L8;
+  static constexpr double NW_LK = NW_L16 * NW_L16;  // (NW_LAM to the NW_K, 32)
   struct NwFit {
     double R[NW_RT];  // the weighed sums of h h': row i's first i + 1 (from nw_ro(i), to a whole 4)
     double c[NW_N];   // and of h y
@@ -481,6 +484,58 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   S64 lfe_past[LFE_NP];    // the last LFE values (times their steps; [0] the last)
   S64 lfe_p[4 * NSSF];     // and its prediction (the value times its step)
   int lfe_scl;             // their scale factor (the walk has it after them: coded with the first)
+  // (since format 159 the LFE where it isn't against the audio's: its decoded values, newest first
+  // (lfn_y), and a least squares fit of each by the LFN_N before it (lfn_v), forgetting by LFN_LAM
+  // a sample, made again every 4th (lfn_learn()); its scale factor coded with its first value,
+  // as against the audio's (lfn_scl, -1 none))
+  static constexpr int LFN_N = 8;
+  static constexpr double LFN_LAM = 0.99, LFN_RIDGE = 1e-6;
+  double lfn_y[LFN_N], lfn_R[LFN_N][LFN_N], lfn_c[LFN_N], lfn_v[LFN_N];
+  U32 lfn_n;
+  int lfn_scl;
+  // the fit's value of the next LFE sample
+  double lfn_pred() const {
+    double p = 0.0;
+    for (int k = 0; k < LFN_N; k++) p += lfn_v[k] * lfn_y[k];
+    return p;
+  }
+  // the sample decoded as y into the sums (then the values, by one), the fit again every 4th by
+  // Cholesky's factors with a ridge of LFN_RIDGE of the mean diagonal (as it was where a pivot
+  // isn't positive or the fit isn't finite)
+  void lfn_learn(double y) {
+    for (int i = 0; i < LFN_N; i++) {
+      for (int k = 0; k <= i; k++) lfn_R[i][k] = LFN_LAM * lfn_R[i][k] + lfn_y[i] * lfn_y[k];
+      lfn_c[i] = LFN_LAM * lfn_c[i] + lfn_y[i] * y;
+    }
+    for (int k = LFN_N - 1; k > 0; k--) lfn_y[k] = lfn_y[k - 1];
+    lfn_y[0] = y;
+    if (++lfn_n & 3) return;
+    double L[LFN_N][LFN_N], z[LFN_N], w[LFN_N], tr = 0.0;
+    for (int i = 0; i < LFN_N; i++) tr += lfn_R[i][i];
+    if (!(tr > 0.0)) return;
+    const double d = tr / LFN_N * LFN_RIDGE;
+    for (int i = 0; i < LFN_N; i++)
+      for (int k = 0; k <= i; k++) {
+        double a = lfn_R[i][k] + (i == k ? d : 0.0);
+        for (int m = 0; m < k; m++) a -= L[i][m] * L[k][m];
+        if (i > k) L[i][k] = a / L[k][k];
+        else if (!(a > 0.0)) return;
+        else L[i][i] = sqrt(a);
+      }
+    for (int i = 0; i < LFN_N; i++) {
+      double a = lfn_c[i];
+      for (int m = 0; m < i; m++) a -= L[i][m] * z[m];
+      z[i] = a / L[i][i];
+    }
+    for (int i = LFN_N - 1; i >= 0; i--) {
+      double a = z[i];
+      for (int m = i + 1; m < LFN_N; m++) a -= L[m][i] * w[m];
+      w[i] = a / L[i][i];
+    }
+    for (int i = 0; i < LFN_N; i++)
+      if (!(fabs(w[i]) < 1e6)) return;
+    for (int i = 0; i < LFN_N; i++) lfn_v[i] = w[i];
+  }
   S64 lfe_st;              // its step
   int lfe_hm, lfe_lp;      // whether the last was the prediction (as hm), the last less its prediction (as lp)
   // (where a decoded WAV's: how often each of five was the LFE's scale factor, the predictions' RMS
@@ -1080,6 +1135,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     memset(stw_n, 0, sizeof stw_n), memset(stw_on, 0, sizeof stw_on);
     memset(sfx_n, 0, sizeof sfx_n), memset(abx_n, 0, sizeof abx_n);
     memset(nw_y, 0, sizeof nw_y), memset(nw_yp, 0, sizeof nw_yp), memset(nw_n, 0, sizeof nw_n);
+    memset(lfn_y, 0, sizeof lfn_y), memset(lfn_R, 0, sizeof lfn_R), memset(lfn_c, 0, sizeof lfn_c);
+    memset(lfn_v, 0, sizeof lfn_v), lfn_n = 0, lfn_scl = -1;
     memset(nw_r1, 0, sizeof nw_r1), memset(nw_r2, 0, sizeof nw_r2);
     for (int c = 0; c < NCH; c++)
       for (int k = 0; k < NSUB; k++) nw_ba[c][k] = nw_bb[c][k] = 1.0;
@@ -5083,7 +5140,16 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // factor, 0.03%; the fit's and an NLMS fit's mixed by their errors 0.03% smaller, twice the
     // work; the residual where nearer by any 2062 bytes bigger, by a 10th 0.08%; the warm-up 128
     // samples, the 7-frame samples 2.4%, 64, 641 bytes; smd's family from the first sample, 389
-    // bytes smaller, smp's throughout 3279 bigger)
+    // bytes smaller, smp's throughout 3279 bigger.
+    // Since format 159 the fit's regressors the 2 nearest earlier channels' either side of the
+    // sample too (where in its 8: their blocks are whole before it), refitted every 32 samples,
+    // and the residual by a family of its own, smn (code_index_nw(), smp's or smd's before), tuned
+    // on 9 streams' no-WAV dumps: the 12 streams 0.63% smaller with the LFE's fit (model.inc),
+    // FATE's 7-frame samples 0.5-1.5% bigger. Of that the regressors 0.16%, as fast; refitted every
+    // 16 instead, 0.21%, for 8% more instructions. The 4 earlier channels' either side, or 2 either
+    // side, no smaller; the nearest's either side in place of the third and fourth's of the sample,
+    // 0.007% smaller only; 12 of the subband's past in place of 4 of its 16, 0.11%; the 2 nearest's
+    // values less their fit's too, 0.08% smaller still, for 28 regressors; smn untuned, 0.03% bigger)
     const bool nwp = !bound[ch];
     double nwh[NW_N] = {}, nwy = 0.0, nwd = 0.0;
     S64 nwq = 0;
@@ -5092,9 +5158,16 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       const NwFit& f = nw_f[ch][b];
       if (!nw_n[ch][b]) memset(&nw_f[ch][b], 0, sizeof(NwFit));  // (the subband's first)
       for (int k = 0; k < NW_NO; k++) nwh[k] = nw_y[ch][b][(nw_yp[ch][b] + NW_NO - 1 - k) & (NW_NO - 1)];
-      for (int k = 0; k < NW_NX; k++) {
+      for (int k = 0; k < 4; k++) {
         const int c = ch - 1 - k;
         if (c >= r.ch0() && b < r.nvqsub[c] && s.abits[c][b]) nwh[NW_NO + k] = tw_y[c][b][j & 7];
+      }
+      for (int k = 0, jj = j & 7; k < 2; k++) {  // (the 2 nearest's either side of the sample, where in its 8)
+        const int c = ch - 1 - k;
+        if (c >= r.ch0() && b < r.nvqsub[c] && s.abits[c][b]) {
+          if (jj > 0) nwh[NW_NO + 4 + 2 * k] = tw_y[c][b][jj - 1];
+          if (jj < 7) nwh[NW_NO + 5 + 2 * k] = tw_y[c][b][jj + 1];
+        }
       }
       nwy = nw_dot(f.w, nwh, NW_N);
       nwd = (nwy - (double)pred) / ((double)ss / 4194304.0);  // (the fit's index, in steps: in lo..hi,
@@ -5158,8 +5231,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const S128 hu = !dw ? (S128)lv << 22 : (S128)(wav->bps == 2 ? 256 : 1) << (38 + DW_HC);
     if (nwr) {  // (the residual toward the fit's own value positive)
       const S64 sg = nwd < (double)nwq ? -1 : 1, rlo = sg > 0 ? lo - nwq : nwq - hi, rhi = sg > 0 ? hi - nwq : nwq - lo;
-      v = nwq + sg * code_index(D, ENC ? sg * (v - nwq) : 0, 0, 0, 0, rlo, rhi, &how, &hcal[b], 0, 0, 0, 0,
-                                __builtin_popcount(miss[ch][b]), false);
+      v = nwq + sg * code_index_nw(D, ENC ? sg * (v - nwq) : 0, rlo, rhi, &how);
     } else
       v = code_index(D, v, bnd, qp, alt, lo, hi, &how, &hcal[b], dist, hu,
                      (pc >= 8 ? 3 : pc >= 3 ? 2 : pc >= 1 ? 1 : 0) + 4 * jd, bnd ? (S128)ss << AQ_F : 0,
@@ -5305,6 +5377,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     M_smp_VARS(M_COPY)
 #undef M_COPY
     return code_ix<M_hid_v>(f_hid, f_smd, LV::smd::mt, E, v, pk, qp, alt, lo, hi, how, hc, dist, unit, cb, su, hn, xm);
+  }
+  // A residual v (in lo..hi) from the fit of a channel the WAV doesn't bind: its magnitude and
+  // sign, by smn's family (code_q())
+  S64 code_index_nw(const M_smp_v& D, S64 v, S64 lo, S64 hi, int* how) {
+    M_smn_v E;
+#define M_COPY(f) E.f = D.f;
+    M_smp_VARS(M_COPY)
+#undef M_COPY
+    return code_ix<M_hid_v>(f_hid, f_smn, LV::smn::mt, E, v, 0, 0, 0, lo, hi, how, nullptr, 0, 0, 0, 0, -1, false);
   }
   template <class VH, class FH, class FS, class VS>
   S64 code_ix(FH& fh, FS& fs, int mt, const VS& D, S64 v, int pk, S64 qp, S64 alt, S64 lo, S64 hi, int* how, HitCal* hc,

@@ -23,6 +23,8 @@
 #include "smp_p.inc"
 #include "smd_h.inc"
 #include "smd_p.inc"
+#include "smn_h.inc"
+#include "smn_p.inc"
 #include "vqr_h.inc"
 #include "vqr_p.inc"
 #include "vqp_h.inc"
