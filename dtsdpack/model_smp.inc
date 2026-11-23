@@ -326,6 +326,14 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // differ, how often each was the core's, FFmpeg's encoder's apart, halved at 2^16)
   double dv_lw[NCH][NSUB][8], dv_le[NCH][NSUB];
   U32 dv_lq[2][2];
+  // (since format 156 a channel the WAV doesn't bind, as code_q() has it: its subband values by an
+  // 8-tap NLMS fit of their last 4 and the 4 earlier channels' of the sample, the mean distance of
+  // the indexes from 0 and from the fit's value, in steps (each sample a 64th of it, from 1, at
+  // 0.3 at least), the samples to NW_WARM, and the last two residuals' lengths, 1 + their bits)
+  static constexpr double NW_MU = 0.05, NW_TH = 0.95;
+  static constexpr int NW_WARM = 128;
+  double nw_w[NCH][NSUB][8], nw_ba[NCH][NSUB], nw_bb[NCH][NSUB];
+  U8 nw_n[NCH][NSUB], nw_r1[NCH][NSUB], nw_r2[NCH][NSUB];
   U32 dv_pos[15][3][8], dv_pq[2], dv_sq[2][2];
   bool abq_stair(int k) const { return abq[k][0] > abq[k][1] + 8 + abq[k][1] / 16; }
   void abq_add(int k, bool s, bool g) {
@@ -960,6 +968,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     ab2[0] = ab2[1] = 0;
     for (int c = 0; c < NCH; c++) dv_n[c] = -1.0;
     memset(dv_off, 0, sizeof dv_off), memset(dv_lw, 0, sizeof dv_lw);
+    memset(nw_w, 0, sizeof nw_w), memset(nw_n, 0, sizeof nw_n);
+    memset(nw_r1, 0, sizeof nw_r1), memset(nw_r2, 0, sizeof nw_r2);
+    for (int c = 0; c < NCH; c++)
+      for (int k = 0; k < NSUB; k++) nw_ba[c][k] = nw_bb[c][k] = 1.0;
     memset(dv_lq, 0, sizeof dv_lq);
     for (int c = 0; c < NCH; c++)
       for (int k = 0; k < NSUB; k++) dv_le[c][k] = -1.0;
@@ -4911,6 +4923,36 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         if (lzq != qp && q[1] > q[0] + 16) alt = lz0, qp = lzq, dist = 0;
       }
     }
+    // (since format 156, a channel the WAV doesn't bind: its decoded value by an NLMS fit of the
+    // subband's last 4 (yh) and the 4 earlier channels' of the sample (tw_y), as format 154's
+    // 16-bit decodes' fit has it; where the indexes have been nearer that fit's index than 0 by a
+    // 20th, after NW_WARM samples, the index coded as its residual from that one, ql 1 + the
+    // residuals' mean distance in half doublings, nr 15, m1 and m2 the last two residuals' lengths:
+    // without a WAV, `open bitrate.dts` (its two channels nearly the same) 42.6% smaller, the
+    // other streams 0.35-6.3% (`96-24.dts`'s most, `s.2.dts`'s whole core 5.6%, its first 3 MB
+    // 2.5%). Around these settings, the residual where nearer by any 0.04% bigger in all, by a 10th
+    // 0.1%, by a 5th 0.5%; the means by a 32nd 0.02%, by a 16th 0.14%; the fit's step 0.03 0.06%,
+    // 0.02 0.13%; the earlier channels' values of the sample before in the fit too 0.04%; without
+    // nr's mark 0.15%, ql's spread 0.12%, the residuals' lengths 0.02%; without the warm-up FATE's
+    // 7-frame samples 1.8% bigger)
+    const bool nwp = !bound[ch];
+    double nwh[8] = {}, nwy = 0.0, nwd = 0.0;
+    S64 nwq = 0;
+    bool nwr = false;
+    if (nwp) {
+      for (int k = 0; k < 4; k++) nwh[k] = yh[ch][b][k];
+      for (int k = 0; k < 4; k++) {
+        const int c = ch - 1 - k;
+        if (c >= r.ch0() && b < r.nvqsub[c] && s.abits[c][b]) nwh[4 + k] = tw_y[c][b][j & 7];
+      }
+      const double* const w = nw_w[ch][b];
+      for (int k = 0; k < 8; k++) nwy += w[k] * nwh[k];
+      nwd = (nwy - (double)pred) / ((double)ss / 4194304.0);  // (the fit's index, in steps: in lo..hi,
+      nwd = nwd > (double)lo ? nwd : (double)lo;                // lo where a damaged stream's fit isn't
+      nwd = nwd < (double)hi ? nwd : (double)hi;                // a number)
+      nwq = (S64)llround(nwd);
+      nwr = nw_n[ch][b] >= NW_WARM && nw_bb[ch][b] < NW_TH * nw_ba[ch][b];
+    }
     M_smp_v D;
     D.ab = a;
     D.hw = sample_coding(r, ch, a);
@@ -4930,6 +4972,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.m2 = q2[ch][b] ? imin(q2[ch][b] - 1, 21) : 22;
     D.sq = bnd ? svar(qp) : pe ? svar(qc) : 0;
     D.s1 = qs[ch][b];
+    if (nwr) {  // (the residual's: its spread, floor(2 log2) + 5 by frexp(), exact)
+      int e2;
+      const double mt = frexp(nw_bb[ch][b], &e2);
+      D.ql = 1 + clip(2 * e2 + (mt >= 0.70710678118654752440 ? 1 : 0) + 3, 0, 20), D.nr = 15;
+      D.m1 = nw_r1[ch][b] ? imin(nw_r1[ch][b] - 1, 21) : 22;
+      D.m2 = nw_r2[ch][b] ? imin(nw_r2[ch][b] - 1, 21) : 22;
+    }
     int how;
     // (cb: how many of the channel's last 32 missed, 0, 1-2, 3-7, more (0, 1, 2-3, more before format
     // 74): where the WAV isn't what the encoder had, as in the frames after a cut stream's start (its
@@ -4955,9 +5004,27 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // the subband's FFT path)
     const S64 lv = !dw ? bind.up == 1 ? plev[ch][b][j] : tlev[ch][j] : 0;
     const S128 hu = !dw ? (S128)lv << 22 : (S128)(wav->bps == 2 ? 256 : 1) << (38 + DW_HC);
-    v = code_index(D, v, bnd, qp, alt, lo, hi, &how, &hcal[b], dist, hu,
-                   (pc >= 8 ? 3 : pc >= 3 ? 2 : pc >= 1 ? 1 : 0) + 4 * jd, bnd ? (S128)ss << AQ_F : 0,
-                   __builtin_popcount(miss[ch][b]), xm > 0);
+    if (nwr)
+      v = nwq + code_index(D, ENC ? v - nwq : 0, 0, 0, 0, lo - nwq, hi - nwq, &how, &hcal[b], 0, 0, 0, 0,
+                           __builtin_popcount(miss[ch][b]), false);
+    else
+      v = code_index(D, v, bnd, qp, alt, lo, hi, &how, &hcal[b], dist, hu,
+                     (pc >= 8 ? 3 : pc >= 3 ? 2 : pc >= 1 ? 1 : 0) + 4 * jd, bnd ? (S128)ss << AQ_F : 0,
+                     __builtin_popcount(miss[ch][b]), xm > 0);
+    if (nwp) {  // (the fit, the distances, the residual's length)
+      const double e = (double)clip23((S64)dequantize((S32)v, ss) + pred) - nwy;
+      double en = 1.0;
+      for (int k = 0; k < 8; k++) en += nwh[k] * nwh[k];
+      double* const w = nw_w[ch][b];
+      for (int k = 0; k < 8; k++) w[k] += NW_MU * e * nwh[k] / en;
+      const double av = (double)(v < 0 ? -v : v), ar = fabs((double)v - nwd);
+      nw_ba[ch][b] += (av - nw_ba[ch][b]) / 64, nw_bb[ch][b] += (ar - nw_bb[ch][b]) / 64;
+      if (nw_ba[ch][b] < 0.3) nw_ba[ch][b] = 0.3;
+      if (nw_bb[ch][b] < 0.3) nw_bb[ch][b] = 0.3;
+      nw_n[ch][b] += nw_n[ch][b] < NW_WARM;
+      nw_r2[ch][b] = nw_r1[ch][b];
+      nw_r1[ch][b] = (U8)(1 + bit_len((U64)(v < nwq ? nwq - v : v - nwq)));
+    }
     if (lk) bias_learn(b, xu, X[ch][0][j], shl64(pred, AQ_F), ss, lo, hi, v, qp, alt, dist);
     if (dq && dhi >= dlo) {  // (the places, and the counts)
       if (v >= dlo && v <= dhi) {

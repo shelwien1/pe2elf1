@@ -8,7 +8,7 @@
 enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND };  // the header's fixed part
 enum { DP_BIND_MAX = 3 + 10 + 4 + 2 + 10 + 4 + 5 + 3 + 26 * NCH };       // (and the binding's bytes at most)
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
-constexpr int DP_VERSION = 155;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
+constexpr int DP_VERSION = 156;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
                                // extension as records; 4: a WAV at twice the core's rate, X96 and XXCH; 5: the
                                // scale factor search; 6: the bit allocation search; 7: the bits after the
                                // subframes as the bytes they end in, the energy's quarter of its bucket, the
@@ -280,7 +280,9 @@ constexpr int DP_VERSION = 155;  // the format's (2: a core channel's binding a 
                                // 154: a 16-bit decode's fit with the earlier channels' decoded values
                                // of the sample, in ADPCM subbands too; the LFE bound by its loudest
                                // values where its first bind none; 155: a DTS:X stream's heights
-                               // WAV folded into the WAV, and in the header)
+                               // WAV folded into the WAV, and in the header; 156: a channel the WAV
+                               // doesn't bind, its indexes against an NLMS fit of its decoded
+                               // values, where nearer it than 0)
 
 static void put_le(U8* p, U64 v, int n) {
   for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));

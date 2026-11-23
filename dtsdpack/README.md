@@ -59,10 +59,10 @@ for a 96 or 192 kHz WAV) up with its WAV only where it can read on and back (bel
 pipes. The WAV can be any PCM WAV of 16, 24 or 32 bits (RIFF or RF64): FFmpeg's 24-bit decode, or
 its 32-bit one (a 24-bit decode in 32 bits).
 
-A WAV that doesn't line up with the core, or isn't a WAV, isn't an error: the core is then coded
-by the model alone (as about 72% of its size), and the summary line says why. `d` checks that its
-WAV is the one `c` had: its format, its size and the CRC of its first 64 KB are in the header (and
-the heights WAV's, where one was added).
+A WAV that doesn't line up with the core, or isn't a WAV, isn't an error: the core is then coded by
+the model alone (`s.2.dts`'s as 67.9% of its size), and the summary line says why. `d` checks that
+its WAV is the one `c` had: its format, its size and the CRC of its first 64 KB are in the header
+(and the heights WAV's, where one was added).
 
 ```
 $ dtsdpack c -s s2.dtsc s2_full.wav s2.dtsd
@@ -104,7 +104,7 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 71.86% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 67.86% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3485 (0.27%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 4624 (0.43%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2589 (0.11%) | | |
@@ -660,6 +660,23 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   (their own encoders' streams, with ADPCM subbands) 3.7% and 0.1% smaller, the ADPCM subbands'
   0.15% and 0.02% of it; with those channels' samples either side, or the WAV's next values, in the
   fit too, bigger again, as at a step of 0.03 or 0.08 for 0.05; the rest the same.
+  Since format 156 a channel the WAV doesn't bind (every channel, where there is no WAV) has its
+  indexes against a fit of its decoded values: each subband's by an 8-tap NLMS fit (at a step of
+  0.05) of its last 4 and the 4 earlier channels' of the sample, as the 16-bit decodes' above; where
+  the indexes have been nearer the fit's index than 0 by a 20th (the mean distances in steps, a 64th
+  of each sample's, after 128 of the subband's samples), an index is coded as its residual from the
+  fit's, smp's ql then 1 + the residuals' mean distance in half doublings, nr 15, m1 and m2 the last
+  two residuals' lengths. Without their WAVs, `s.2.dts`'s core 35933571 bytes to 33934145 (71.86% of
+  it to 67.86%; its first 3 MB 2.5% smaller), `open bitrate.dts`'s 3570247 to 2048075 (its two
+  channels nearly the same: 42.6%), `96-24.dts`'s 6.3%, `mid.dtsc` 4.1%, `master audio 7.1
+  24bit.dts`'s 3.8%, `Master Audio 7.1.dts`'s 3.0%, `ES 6.1 16bit.dts`'s 1.4%, `dts_es.dts`'s 0.8%,
+  `3-1.dts`'s 0.35%; FATE's 7-frame samples, white noise, as before (the warm-up as long as they
+  are; without it 1.8% bigger); with the WAV, where every channel is bound, every stream the same
+  but for the format's byte. Around those settings: the residual where nearer by any, 0.04% bigger
+  in all, by a 10th 0.1%, by a 5th 0.5%; the means by a 32nd 0.02%, by a 16th 0.14%; the fit's step
+  0.03 0.06%, 0.02 0.13%; the earlier channels' values of the sample before in the fit too 0.04%;
+  without nr's mark 0.15%, without ql's spread 0.12%, without the residuals' lengths 0.02%. A
+  channel's side information without the WAV goes by its own past alone (below).
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first
@@ -1788,7 +1805,9 @@ touched several (a 7-frame stream's run maps 700 fewer pages, a quarter of them)
 - **hit**: whether an index that isn't the audio's is the other side's, and an LFE sample's whether
   it is the audio's.
 - **hid**: a decoded WAV's (as for sdd; hit's until format 132, below).
-- **smp**: the indexes otherwise (and all of them where the WAV isn't bound): magnitude and sign.
+- **smp**: the indexes otherwise (and all of them where the WAV isn't bound, since format 156 as
+  their residuals from a fit of the decoded values, where those have been nearer: above): magnitude
+  and sign.
 - **smd**: a decoded WAV's (as for sdd; smp's until format 132, below).
 - **vqr**: the ranks of the HF VQ vectors (their groups', then theirs in the group).
 - **vqp**: the ranks of the predictors (their blocks', then theirs in the block; vqr's until format
@@ -2109,6 +2128,12 @@ up to a third of a 7-frame DTS-HD MA sample's output).
   MB): a 24-bit stream of 16-bit audio would be taken at 16 bits, untried; a 176.4 kHz one's is
   taken the same way, untried.
 - The LFE is predicted at 64x only (LFF 2); a 128x LFE (LFF 1) is coded by the model alone.
+- Without the WAV a channel's side information (bit allocations, scale factors, predictors, HF VQ
+  vectors) goes by its own past, not by the channel before's: `open bitrate.dts`'s second channel,
+  nearly its first (98.1% of its bit allocations and steps the same), codes them in full again (its
+  scale factors 230 KB of the 2.05 MB). In the other streams at hand the channel before's are the
+  same less often than the channel's own last (28.6-40.8% of the bit allocations, against
+  54.9-68.2%; 5.2-8.3% of the scale factors, against 9.9-19.2%).
 - Heights are added back from a heights WAV, or a 7.1.4 WAV's own (FFmpeg's layout, by its channel
   mask exactly): no FFmpeg build that decodes 7.1.4 was at hand, so its WAVs were made by its
   source's rule (`dca_xll.c`); a stream whose XLL codes 7.1.4 itself (none at hand) would have its
