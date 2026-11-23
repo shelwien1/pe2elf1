@@ -104,7 +104,7 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 67.86% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 66.87% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3485 (0.27%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 4624 (0.43%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2589 (0.11%) | | |
@@ -675,8 +675,25 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   but for the format's byte. Around those settings: the residual where nearer by any, 0.04% bigger
   in all, by a 10th 0.1%, by a 5th 0.5%; the means by a 32nd 0.02%, by a 16th 0.14%; the fit's step
   0.03 0.06%, 0.02 0.13%; the earlier channels' values of the sample before in the fit too 0.04%;
-  without nr's mark 0.15%, without ql's spread 0.12%, without the residuals' lengths 0.02%. A
-  channel's side information without the WAV goes by its own past alone (below).
+  without nr's mark 0.15%, without ql's spread 0.12%, without the residuals' lengths 0.02%.
+  Since format 157 that fit is by least squares, of the subband's last 16 decoded values and the
+  4 earlier channels' of the sample: each sample's values weighed by 1 over its step squared and
+  forgotten by 0.995 a sample, the fit made again every 16 samples (by Cholesky's factors, a ridge
+  of 10^-5 of the sums' mean diagonal), after 32 samples' warm-up; the residual coded toward the
+  fit's own value positive (mirrored where that lies below its index), smp's nr 15 down to 12 as
+  that value lies further from its index (under 0.05, 0.12, 0.25 of the residuals' mean distance,
+  or more). Without their WAVs, `s.2.dts`'s core 33934145 bytes to 33440051 (67.86% of it to
+  66.87%), the 12 no-WAV streams 13807365 to 13659882 (1.07%: `mid.dtsc` 4.5%, `s.2.dts`'s first 3
+  MB 2.2%, `master audio 7.1 24bit.dts`'s and `open bitrate.dts`'s 1.6%, `96-24.dts`'s 1.0%,
+  FATE's 7-frame samples 2.0-3.0%, `Master Audio 7.1.dts`'s 0.03%); with the WAV, where every
+  channel is bound, every stream the same but for the format's byte. A run without the WAV is
+  about 14% slower (`mid.dtsc` 880 to 759 KB/s compressing, by the median of 9 runs here). Against
+  it: format 156's NLMS fit of the last 32 values at its best step, 0.15, 0.42% bigger; 12 values
+  0.10%; refitted every 32 samples 0.04% (every 8, 0.02% smaller, for twice the refits); a ridge
+  of 10^-3 0.26%; forgetting by 0.994 or 0.996, within 0.01%; the 7 earlier channels, the same;
+  the mean distances against the scale factor 0.03% bigger; this fit's and an NLMS fit's mixed by
+  their errors 0.03% smaller, for twice the work; the warm-up of 128 samples, the 7-frame samples
+  2.4% bigger. A channel's side information without the WAV goes by its own past alone (below).
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first
