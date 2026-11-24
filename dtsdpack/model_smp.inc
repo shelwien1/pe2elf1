@@ -414,6 +414,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   NwFit nw_f[NCH][NSUB];
   S32 nw_y[NCH][NSUB][NW_NY];
   U8 nw_yp[NCH][NSUB];
+  struct NwLc {  // (nw_lpc()'s, while ok)
+    S64 al[4];
+    int g, g4, ac;
+    bool ok;
+  } nw_lc[NCH][NSUB];
   double nw_sm[NCH][NSUB], nw_am[NCH][NSUB];
   U8 nw_sn[NCH][NSUB], nw_an[NCH][NSUB];
   double nw_ba[NCH][NSUB], nw_bb[NCH][NSUB];
@@ -1164,7 +1169,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     memset(dv_off, 0, sizeof dv_off), memset(dv_lw, 0, sizeof dv_lw);
     memset(stw_n, 0, sizeof stw_n), memset(stw_on, 0, sizeof stw_on);
     memset(sfx_n, 0, sizeof sfx_n), memset(abx_n, 0, sizeof abx_n);
-    memset(nw_y, 0, sizeof nw_y), memset(nw_yp, 0, sizeof nw_yp), memset(nw_n, 0, sizeof nw_n);
+    memset(nw_y, 0, sizeof nw_y), memset(nw_yp, 0, sizeof nw_yp), memset(nw_n, 0, sizeof nw_n), memset(nw_lc, 0, sizeof nw_lc);
     memset(nw_sm, 0, sizeof nw_sm), memset(nw_sn, 0, sizeof nw_sn), memset(nw_am, 0, sizeof nw_am), memset(nw_an, 0, sizeof nw_an);
     memset(lfn_y, 0, sizeof lfn_y), memset(lfn_R, 0, sizeof lfn_R), memset(lfn_c, 0, sizeof lfn_c);
     memset(lfn_v, 0, sizeof lfn_v), lfn_n = 0, lfn_scl = -1;
@@ -2814,16 +2819,23 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // (since format 161) the LPC (lpc4()) of a channel the WAV doesn't bind: of its subband b's last
   // NW_NY decoded values, the oldest first, into al, its gain in halvings *g and in quarters *g4;
   // their correlation with the values one before as ratio_bucket()'s of 8 (*ac, where asked); *g4
-  // 0 where they are all 0 (lpc4() leaves it)
-  void nw_lpc(int ch, int b, S64* al, int* g, int* g4, int* ac = nullptr) const {
-    S64 x[NW_NY];
-    for (int k = 0; k < NW_NY; k++) x[k] = shl64(nw_y[ch][b][(nw_yp[ch][b] + k) & (NW_NY - 1)], AQ_F);
-    *g4 = 0;
-    lpc4(x, NW_NY, al, g, g4);
-    if (!ac) return;
-    S128 e = 0, cr = 0;
-    for (int k = 0; k < NW_NY; k++) e += (S128)x[k] * x[k], cr += k ? (S128)x[k] * x[k - 1] : 0;
-    *ac = ratio_bucket(cr, e, 8);
+  // 0 where they are all 0 (lpc4() leaves it). Kept (nw_lc) till push_y() changes the ring: PMODE's
+  // and the predictor's the same
+  void nw_lpc(int ch, int b, S64* al, int* g, int* g4, int* ac = nullptr) {
+    NwLc& c = nw_lc[ch][b];
+    if (!c.ok) {
+      S64 x[NW_NY];
+      for (int k = 0; k < NW_NY; k++) x[k] = shl64(nw_y[ch][b][(nw_yp[ch][b] + k) & (NW_NY - 1)], AQ_F);
+      S128 rr[5];
+      lpc4_r(x, NW_NY, rr);
+      c.g4 = 0;
+      lpc4_solve(rr, c.al, &c.g, &c.g4);
+      c.ac = ratio_bucket(rr[1], rr[0], 8);
+      c.ok = true;
+    }
+    for (int k = 0; k < 4; k++) al[k] = c.al[k];
+    *g = c.g, *g4 = c.g4;
+    if (ac) *ac = c.ac;
   }
   // Since format 161 the ADPCM predictor v of a channel the WAV doesn't bind, against the LPC
   // alpha of its subband's last NW_NY decoded values (nw_lpc()): the 64 groups by their codewords'
@@ -6117,7 +6129,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   INLINE void push_y(int ch, int b, S32 y) {
     S32* h = yh[ch][b];
     h[3] = h[2], h[2] = h[1], h[1] = h[0], h[0] = y;
-    if (!bound[ch]) nw_y[ch][b][nw_yp[ch][b]++ & (NW_NY - 1)] = y;
+    if (!bound[ch]) nw_y[ch][b][nw_yp[ch][b]++ & (NW_NY - 1)] = y, nw_lc[ch][b].ok = false;
   }
   // the decoder's samples of the subframe's subbands without indexes: none where ABITS is 0 but the
   // ADPCM prediction, the VQ vector's (and the prediction) past VQSUB, none past SUBS

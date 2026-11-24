@@ -648,12 +648,8 @@ static int gain4(S128 num, S128 den) {
 // Q24 (alpha[k] multiplies the sample k + 1 before, as the codebook's entries do); *gain the
 // prediction gain in halvings (0-15). The encoder's predictor is then the codebook entry nearest
 // alpha (pvq_dist()), over the subframe's samples and the 4 before them.
-static void lpc4(const S64* x, int n, S64* alpha, int* gain, int* gain4_ = nullptr) {
-  S128 r[5];
-  for (int l = 0; l <= 4; l++) {
-    r[l] = 0;
-    for (int i = l; i < n; i++) r[l] += (S128)x[i] * x[i - l];
-  }
+// (the samples' autocorrelation r at lags 0-4, then lpc4_solve(): the normal equations of r)
+static void lpc4_solve(const S128* r, S64* alpha, int* gain, int* gain4_ = nullptr) {
   for (int m = 0; m < 4; m++) alpha[m] = 0;
   *gain = 0;
   if (r[0] <= 0) return;
@@ -684,6 +680,17 @@ static void lpc4(const S64* x, int n, S64* alpha, int* gain, int* gain4_ = nullp
     while (g < 15 && (err << (g + 1)) <= R[0]) g++;
   *gain = g;
   if (gain4_) *gain4_ = err <= 0 ? 63 : gain4(R[0], err);
+}
+static INLINE void lpc4_r(const S64* x, int n, S128* r) {
+  for (int l = 0; l <= 4; l++) {
+    r[l] = 0;
+    for (int i = l; i < n; i++) r[l] += (S128)x[i] * x[i - l];
+  }
+}
+static void lpc4(const S64* x, int n, S64* alpha, int* gain, int* gain4_ = nullptr) {
+  S128 r[5];
+  lpc4_r(x, n, r);
+  lpc4_solve(r, alpha, gain, gain4_);
 }
 // the ADPCM codebook entry q's prediction gain over the n samples x (2^-AQ_F), the 4 before them h
 // (h[0] the last), in the open loop (gain4())
