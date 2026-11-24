@@ -297,7 +297,7 @@ struct Model : ModelX96<f_DEC, LV> {
             ug = imin(g4, 27), gq = clip(g4 - 2, 0, 8);
           }
           v = side_code(SF_PMODE, ch, b, v, 0, 1, 1, hist.pmode[ch][b], b ? s.pmode[ch][b - 1] + 1 : 0,
-                        bound[ch] ? ac[ch][b] : ua, bound[ch] ? imin(B::lpg4[ch][b], 27) : ug, gq, tr);
+                        bound[ch] ? ac[ch][b] : ua, bound[ch] ? imin(B::lpg4[ch][b], 27) : ug, gq, tr, !bound[ch]);
         }
         break;
       }
@@ -634,7 +634,7 @@ struct Model : ModelX96<f_DEC, LV> {
           v = side_code(SF_TMODE, ch, b, v, lo, hi, 0, 1 + (tc >= 3 ? tg : 0), hist.tmode[ch][b], tc,
                         1 + imin(s.abits[ch][b], 26), ec[ch][b], s.pmode[ch][b] ? 0 : B::pm_rise(s, ch, b));
         } else
-          v = side_code(SF_TMODE, ch, b, v, lo, hi, 0, hist.tmode[ch][b], 0, 8, 1 + imin(s.abits[ch][b], 26), 9);
+          v = side_code(SF_TMODE, ch, b, v, lo, hi, 0, hist.tmode[ch][b], 0, 8, 1 + imin(s.abits[ch][b], 26), 9, 0, true);
         break;
       }
       case F_SCALES: {  // (where X96 codes the subband too and the core has little of the decode's
@@ -663,7 +663,7 @@ struct Model : ModelX96<f_DEC, LV> {
         account(CAT_SIDE);
         if (twin_field(fid, ch, b, v, lo, hi)) {
         } else if (bound[ch]) v = B::code_hfvq(r, s, ch, b, v);
-        else v = side_index(SF_HFVQ, ch, b, v, 10, hist.hfvq[ch][b], 8, 0);
+        else v = side_index(SF_HFVQ, ch, b, v, 10, hist.hfvq[ch][b], 8, 0, true);
         break;
       case F_LFE: {  // (against the audio's, or signed: coded 128 up, against the sample before)
         if (!cur_j) B::ffl_use = B::ffl_on();
@@ -701,7 +701,7 @@ struct Model : ModelX96<f_DEC, LV> {
         const double st = (double)SF7[B::lfn_scl & 127];
         const S64 pv = clip((S64)llround(B::lfn_pred() / st), lo, hi);
         const S64 u = side_code(SF_LFE, 0, 0, v + 128, lo + 128, hi + 128, 0, (S32)(pv + 129),
-                                cur_j ? s.lfe[cur_j - 1] + 129 : hist.lfe, 8, 0, 9);
+                                cur_j ? s.lfe[cur_j - 1] + 129 : hist.lfe, 8, 0, 9, 0, true);
         v = u - 128;
         hist.lfe = (S32)u + 1;
         B::lfn_learn((double)v * st);

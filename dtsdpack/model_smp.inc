@@ -130,6 +130,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   M_FAM(vqr)
   M_FAM(vqp)
   M_FAM(vpd)
+  M_FAM(vpn)
   WavIn* wav;     // the WAV (none: ok 0)
   Bind bind;      // how the core lines up with it
   const S64* fir; // the prototype filter of the frame's FILTS
@@ -2808,7 +2809,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     return code_cand(n, nb, v, kd, ch, b, gn, lrank[ch][b][kd], mu, mlu, ord, pq);
   }
   int code_cand(int n, int nb, int v, int kd, int ch, int b, int gn, U8& lh, S128 mu = 0, S128 mlu = 0, const S128* ord = nullptr,
-                const double* pq = nullptr) {
+                const double* pq = nullptr, bool nw = false) {
     M_vqr_v D;
     D.kd = kd;
     D.cc = chan_class(ch);
@@ -2871,7 +2872,14 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const int r0 = ENC ? rank_of(cand, n, at) : 0;
     int r;
     if (kd == VK_PVQ || kd == VK_PVE) {  // (the predictors' ranks, by the vqp family: format 116; vpd's where the WAV is decoded)
-      if (dw_rule()) {
+      if (nw) {  // (since format 167 a channel the WAV doesn't bind: a family of its own, vpn)
+        M_vpn_v E;
+#define M_COPY(f) E.f = D.f;
+        M_vqr_VARS(M_COPY)
+#undef M_COPY
+        B::sel(f_vpn, E);
+        r = code_rank(f_vpn, r0, nb, E, cand, n, pq ? qr : nullptr);
+      } else if (dw_rule()) {
         M_vpd_v E;
 #define M_COPY(f) E.f = D.f;
         M_vqr_VARS(M_COPY)
@@ -3046,10 +3054,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   int code_pvq_nw(const S64* alpha, int fit, int v, int ch, int b, int gn, U8& lb, U8& le) {
     for (int k = 0; k < 64; k++) cand[k].k = pvq_block_dist(k, alpha), cand[k].i = k;
     if (fit >= 0) cand[fit >> 6].k = -1;
-    const int g = code_cand(64, 6, ENC ? v >> 6 : 0, VK_PVQ, ch, b, gn, lb);
+    const int g = code_cand(64, 6, ENC ? v >> 6 : 0, VK_PVQ, ch, b, gn, lb, 0, 0, nullptr, nullptr, true);
     for (int i = 0; i < 64; i++) cand[i].k = pvq_dist(g * 64 + i, alpha), cand[i].i = i;
     if (fit >= 0 && fit >> 6 == g) cand[fit & 63].k = -1;
-    return g * 64 + code_cand(64, 6, ENC ? v & 63 : 0, VK_PVE, ch, b, gn, le);
+    return g * 64 + code_cand(64, 6, ENC ? v & 63 : 0, VK_PVE, ch, b, gn, le, 0, 0, nullptr, nullptr, true);
   }
   // Whether channel ch's subband b is quiet as the encoders seen take it, where they make no
   // prediction: its values' RMS over the subframe under 100 (`s.2.dts`'s subbands that would gain
@@ -3721,12 +3729,16 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   bool dw_rule() const {
     return ss_rule() || ab_rule() || (LV::id == 9 && n_smp >= SP_HN && n_hit * 100 < n_smp * 90);
   }
-  // sid's side information, sdd's where the WAV is decoded (the joint scale factors jsc's either way)
-  S64 side_code(int fld, int ch, int b, S64 v, S64 lo, S64 hi, int bit1, S32 A, S32 P, int ac, int ab, int ec, int tr = 0) {
+  // sid's side information, sdd's where the WAV is decoded (the joint scale factors jsc's either way);
+  // since format 167 sdn's for a channel the WAV doesn't bind (nw), the LFE's too where it isn't bound
+  S64 side_code(int fld, int ch, int b, S64 v, S64 lo, S64 hi, int bit1, S32 A, S32 P, int ac, int ab, int ec, int tr = 0,
+                bool nw = false) {
+    if (nw && fld != SF_JSCALE) return B::template side_val<M_sdn_v>(B::f_sdn, fld, ch, b, v, lo, hi, bit1, A, P, ac, ab, ec, tr);
     if (fld == SF_JSCALE || !dw_rule()) return B::side_code(fld, ch, b, v, lo, hi, bit1, A, P, ac, ab, ec, tr);
     return B::template side_val<M_sdd_v>(B::f_sdd, fld, ch, b, v, lo, hi, bit1, A, P, ac, ab, ec, tr);
   }
-  S64 side_index(int fld, int ch, int b, S64 v, int nbits, S32 A, int ac, int ab) {
+  S64 side_index(int fld, int ch, int b, S64 v, int nbits, S32 A, int ac, int ab, bool nw = false) {
+    if (nw) return B::template side_ix<M_sdn_v>(B::f_sdn, fld, ch, b, v, nbits, A, ac, ab);
     if (!dw_rule()) return B::side_index(fld, ch, b, v, nbits, A, ac, ab);
     return B::template side_ix<M_sdd_v>(B::f_sdd, fld, ch, b, v, nbits, A, ac, ab);
   }

@@ -9,7 +9,7 @@ to code is where the encoder chose otherwise. Decompression, with the same WAV, 
 stream byte for byte.
 
 The core of `s.2.dts` (4 minutes 25 seconds of 5.1 at 1509 kbps; 50008260 bytes) compresses to
-76383 bytes (0.15%); without its audio, dtsdpack's model gets 63.56% and `xz -9e` 88.21%.
+76383 bytes (0.15%); without its audio, dtsdpack's model gets 63.55% and `xz -9e` 88.21%.
 
 The core substream's extensions are coded too: XCH (6.1's back centre) and XXCH (7.1's other
 channels) as more channels, X96 (DTS 96/24's 24-48 kHz band and the core's residuals) as subbands
@@ -104,7 +104,7 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 63.56% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 63.55% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3485 (0.27%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 4624 (0.43%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2589 (0.11%) | | |
@@ -862,6 +862,16 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   14-frame samples 0.6-1.8%, `dts_es.dts` 0.32%, `dtswavsample16.wav` 0.27%, the rest 0.03-0.28%).
   The instructions the same (`mid.dtsc`'s, compressing, 0.02% more; FATE's 7-frame XCH sample 0.05%
   more). With the WAV, every run of the check lists the same but for the format's byte.
+  Since format 167 its side fields and its ADPCM predictors' ranks are families of their own too,
+  sdn and vpn (sid's and vqp's, then, once under 90% of the stream's indexes had been the audio's,
+  the decoded WAVs' sdd and vpd), and the LFE's samples are sdn's where the LFE isn't bound; tuned
+  on dumps without the WAV (format 166's set): the two families' 195033 bytes there to 190886
+  (sdn's 2.9% smaller, vpn's 0.5%). Without their WAVs, `s.2.dts`'s whole core 31786140 bytes to
+  31782609 (63.56% of it to 63.55%), the 55 streams of the check lists 125820849 to 125784931
+  (0.03%: FATE's 7- and 14-frame samples 0.17-1.16%, `Fire__VooDoo_Studio_30_sec.wav` 0.11%, the
+  rest up to 0.05%; two a byte bigger). With the WAV, 56 of the check lists' 67 runs the same but
+  for the format's byte; the 11 where a channel or the LFE isn't bound coded otherwise, the same
+  size but for `z192/z.dtsc`'s, a byte bigger.
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first
@@ -1961,11 +1971,11 @@ FATE's other samples 12-28%, the XXCH ones 16-32% (`xbr_xxch_71_24_48_3840`'s 40
 
 ### The model
 
-Each element is binarised, and each decision goes to one of nineteen families (`fam.inc`, ac3pack's,
-m4vpack's and h264p's): counters chosen by context indices, mixed in the logistic domain, refined
-by APMs, then range coded (`rc.inc`). `famvars.inc` lists the variables the model gives each
-family; `IDX/l9/<family>.idx` declares level -9's indices over them and their tunable parameters,
-and `IDX/l8/` level -8's (the same but for eight families' parameters, below), which
+Each element is binarised, and each decision goes to one of twenty-one families (`fam.inc`,
+ac3pack's, m4vpack's and h264p's): counters chosen by context indices, mixed in the logistic
+domain, refined by APMs, then range coded (`rc.inc`). `famvars.inc` lists the variables the model
+gives each family; `IDX/l9/<family>.idx` declares level -9's indices over them and their tunable
+parameters, and `IDX/l8/` level -8's (the same but for eight families' parameters, below), which
 `IDX/idx2inc.pl` turns into `MOD/l9/` and `MOD/l8/` (`./mk.sh mod`; the format:
 [IDX/IDX-FORMAT.md](IDX/IDX-FORMAT.md)). The tables are mapped zeroed and take memory where they are
 written; the APMs' rows and the third mixer's, by their contexts' decision nodes (an APM's up to
@@ -1980,6 +1990,8 @@ touched several (a 7-frame stream's run maps 700 fewer pages, a quarter of them)
   bound, its predictor, its HF VQ vector and the LFE samples.
 - **sdd**: a decoded WAV's (as the scale factor or the bit allocation search shows it, as for abd,
   or at -9 where under 90% of its indexes have been the audio's; sid's until format 132, below).
+- **sdn**: a channel's the WAV doesn't bind, and the LFE's where it isn't bound (sid's, then sdd's,
+  until format 167, above).
 - **jsc**: the joint scale factors (the core's and X96's), against the source channel's audio or
   their running mean (sid's until format 116, below).
 - **abt**: the bit allocations.
@@ -2002,6 +2014,7 @@ touched several (a 7-frame stream's run maps 700 fewer pages, a quarter of them)
 - **vqp**: the ranks of the predictors (their blocks', then theirs in the block; vqr's until format
   116, below).
 - **vpd**: a decoded WAV's (as for sdd; vqp's until format 132, below).
+- **vpn**: a channel's the WAV doesn't bind (vqp's, then vpd's, until format 167, above).
 - **raw**: bytes kept as bytes, the bits after the subframes, those before the extension's sync word,
   and XXCH's other bits.
 

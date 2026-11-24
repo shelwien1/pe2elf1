@@ -3,7 +3,7 @@
 // Apart from model.inc for IDX/famtune.cpp, which replays a family's decisions without the model.
 
 // the families, X(name) each, in the order the model has them
-#define DTSD_FAMS(X) X(hdr) X(sid) X(sdd) X(jsc) X(abt) X(abd) X(abn) X(scl) X(scd) X(scn) X(hit) X(hid) X(smp) X(smd) X(smn) X(vqr) X(vqp) X(vpd) X(raw)
+#define DTSD_FAMS(X) X(hdr) X(sid) X(sdd) X(sdn) X(jsc) X(abt) X(abd) X(abn) X(scl) X(scd) X(scn) X(hit) X(hid) X(smp) X(smd) X(smn) X(vqr) X(vqp) X(vpd) X(vpn) X(raw)
 
 // The fields the hdr family codes, each of their own values (fld): the core frame's header and
 // coding header, a subframe's header fields, then the container's (below), then the XCH
@@ -26,6 +26,7 @@ enum { SF_PMODE, SF_PVQ, SF_TMODE, SF_JSHUFF, SF_JSCALE, SF_HFVQ, SF_LFE, SF_TMS
 //   sdd  the same, where the WAV is decoded (sid's before format 132; the model's dw_rule(): the
 //        scale factor search or the bit allocation search shows it decoded, as for abd, or at -9
 //        under 90% of the stream's indexes have been the audio's)
+//   sdn  the same, a channel's the WAV doesn't bind (sid's or sdd's before format 167)
 //   jsc  sid's nodes 0-15 (a joint scale factor)
 //   abt  ABITS: code() of its difference from the last (0-12), 13 the last one, 14 the band below's
 //   abd  the same (a decoded WAV's ABITS, abt's before format 118)
@@ -58,8 +59,9 @@ enum { SF_PMODE, SF_PVQ, SF_TMODE, SF_JSHUFF, SF_JSCALE, SF_HFVQ, SF_LFE, SF_TMS
 //        25-63 the bits below the bucket's top, by the bucket and their place (the first two;
 //        the rest)
 //   vqp  the same (the ADPCM predictors' ranks, vqr's before format 116)
-//   vpd  the same, where the WAV is decoded (vqp's before format 132), and since format 161 a
-//        channel's the WAV doesn't bind, by the LPC of its subband's decoded values
+//   vpd  the same, where the WAV is decoded (vqp's before format 132), and from format 161 to 166
+//        a channel's the WAV doesn't bind, by the LPC of its subband's decoded values
+//   vpn  the same, a channel's the WAV doesn't bind (vqp's or vpd's before format 167)
 //   raw  a byte's bits, by their place in its binary tree (1-255)
 enum { HN_SAME = TC_NODE, HN_SAME2, HN_BIT, HN_N };
 enum { SN_SAME = TC_NODE, SN_SAMEP, SN_BIT, SN_IX, SN_IXPOS = SN_IX + 16, SN_N = SN_IXPOS + 16 };
@@ -78,6 +80,7 @@ enum { VK_PVQ, VK_HFG, VK_HFV, VK_PVE, VK_N };
 constexpr int M_hdr_ND = HN_N, M_hdr_MND = TC_MNODE, M_hdr_NG = NHF;
 constexpr int M_sid_ND = SN_N, M_sid_MND = TC_MNODE, M_sid_NG = SF_N;
 constexpr int M_sdd_ND = SN_N, M_sdd_MND = TC_MNODE, M_sdd_NG = SF_N;
+constexpr int M_sdn_ND = SN_N, M_sdn_MND = TC_MNODE, M_sdn_NG = SF_N;
 constexpr int M_jsc_ND = HN_N, M_jsc_MND = TC_MNODE, M_jsc_NG = SF_N;
 constexpr int M_abt_ND = AN_N, M_abt_MND = TC_MNODE, M_abt_NG = 32;
 constexpr int M_abd_ND = AN_N, M_abd_MND = TC_MNODE, M_abd_NG = 32;
@@ -95,6 +98,7 @@ constexpr int M_smn_ND = QN_N, M_smn_MND = TC_MNODE, M_smn_NG = 1;
 constexpr int M_vqr_ND = VN_N, M_vqr_MND = 1, M_vqr_NG = 1;
 constexpr int M_vqp_ND = VN_N, M_vqp_MND = 1, M_vqp_NG = 1;
 constexpr int M_vpd_ND = VN_N, M_vpd_MND = 1, M_vpd_NG = 1;
+constexpr int M_vpn_ND = VN_N, M_vpn_MND = 1, M_vpn_NG = 1;
 constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 
 // Each family's variables, X(name) each, as M_<family>_v has them: what the model fills and the
@@ -209,6 +213,7 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 #define M_hdr_VARS(X) X(fld) X(lv) X(l2) X(pos) X(st) X(nch)
 #define M_sid_VARS(X) X(fld) X(cc) X(bd) X(lv) X(pq) X(st) X(ac) X(ab) X(ec) X(tr)
 #define M_sdd_VARS(X) M_sid_VARS(X)  // (sid's, where the WAV is decoded: the model's dw_rule())
+#define M_sdn_VARS(X) M_sid_VARS(X)  // (sid's, a channel the WAV doesn't bind)
 #define M_jsc_VARS(X) M_sid_VARS(X)  // (sid's, fld SF_JSCALE)
 #define M_abt_VARS(X) X(bd) X(cc) X(la) X(lb) X(es) X(de) X(ls) X(pm) X(st) X(nb) X(mx) X(sn) X(sd) X(nn) X(sc) X(eq) X(sm) X(bg) X(ag) X(sx)
 #define M_abn_VARS(X) M_abt_VARS(X)  // (abt's, a channel the WAV doesn't bind)
@@ -224,6 +229,7 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 #define M_vqr_VARS(X) X(kd) X(cc) X(bd) X(mg) X(gn) X(lh) X(ml) X(nc) X(gr) X(mq)
 #define M_vqp_VARS(X) M_vqr_VARS(X)  // (vqr's, kd VK_PVQ and VK_PVE)
 #define M_vpd_VARS(X) M_vqr_VARS(X)  // (the same, where the WAV is decoded)
+#define M_vpn_VARS(X) M_vqr_VARS(X)  // (the same, a channel the WAV doesn't bind)
 #define M_raw_VARS(X) X(c1) X(c2) X(code) X(at) X(cl)
 
 // the variables as the model gives them to a family

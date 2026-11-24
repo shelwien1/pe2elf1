@@ -14,6 +14,7 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
   using B::code_val;
   M_FAM(sid)
   M_FAM(sdd)
+  M_FAM(sdn)
   M_FAM(jsc)
   M_FAM(abt)
   M_FAM(abd)
