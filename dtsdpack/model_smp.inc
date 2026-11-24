@@ -447,22 +447,30 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // coded: a bound channel's never are, its pages never touched. Since format 161 the ring the
   // last NW_NY, whose LPC the subband's predictor and PMODE go by: nw_lpc(); and the subband's
   // scale factors' and ABITS' running means, each an 8th of theirs (nw_sm, nw_am; nw_sn whether
-  // there is one, nw_an how many ABITS have gone into it, to 255)
-  static constexpr int NW_NO = 16, NW_NX = 8, NW_N = NW_NO + NW_NX, NW_T = NW_N * (NW_N + 1) / 2, NW_K = 32;
-  static constexpr int NW_RT = 8 * (NW_N / 4) * (NW_N / 4 + 1);  // (R's rows to whole 4s: 336 for 24)
-  static constexpr int NW_WARM = 32, NW_NY = 64;
-  static_assert((NW_NY & (NW_NY - 1)) == 0 && NW_NY >= NW_NO && 256 % NW_NY == 0 && NW_N % 4 == 0,
+  // there is one, nw_an how many ABITS have gone into it, to 255). Since format 168, in the
+  // subbands under NW_BL, a long fit beside that one, the short: of NW_NG regressors, the short
+  // fit's NW_NS and then NW_NL more of the subband's past, the 17th to the 56th value before; the
+  // short fit the first NW_NS of the long one's (its sums the first rows of the long one's), both
+  // by one Cholesky (nw_refit()), its own as before; the long one's value taken where the mean
+  // square of its errors, in steps, has been under NW_LT of the short one's, each sample a 64th of
+  // them (nw_el, nw_es)
+  static constexpr int NW_NO = 16, NW_NX = 8, NW_NS = NW_NO + NW_NX, NW_NL = 40, NW_NG = NW_NS + NW_NL, NW_K = 32;
+  static constexpr int NW_BL = 4, NW_WARM = 32, NW_NY = 64;
+  static_assert((NW_NY & (NW_NY - 1)) == 0 && NW_NY >= NW_NO + NW_NL && 256 % NW_NY == 0 && NW_NS % 4 == 0 && NW_NL % 4 == 0,
                 "nw_y's ring a power of 2 (nw_yp's wrap a whole number of them), R's rows in 4s");
-  static constexpr double NW_TH = 0.95, NW_LAM = 0.995, NW_RIDGE = 1e-5;
+  static constexpr double NW_TH = 0.95, NW_LAM = 0.995, NW_RIDGE = 1e-5, NW_LT = 0.95;
   static constexpr double NW_LS = 0.6;  // (since format 160 the residual's logistic scale, of the spread)
   static constexpr double NW_L2 = NW_LAM * NW_LAM, NW_L4 = NW_L2 * NW_L2, NW_L8 = NW_L4 * NW_L4, NW_L16 = NW_L8 * NW_L8;
   static constexpr double NW_LK = NW_L16 * NW_L16;  // (NW_LAM to the NW_K, 32)
-  struct NwFit {
-    double R[NW_RT];  // the weighed sums of h h': row i's first i + 1 (from nw_ro(i), to a whole 4)
-    double c[NW_N];   // and of h y
-    double w[NW_N];   // the fit
-    U32 n;            // the samples since it was refitted
+  template <int N> struct NwFitT {  // (N regressors: NW_NS the short fit, NW_NG the long one)
+    double R[8 * (N / 4) * (N / 4 + 1)];  // the weighed sums of h h': row i's first i + 1 (from nw_ro(i), to a whole 4)
+    double c[N];       // and of h y
+    double w[N];       // the fit
+    double ws[NW_NS];  // (the long one's: the short fit, its first NW_NS's)
+    U32 n;             // the samples since it was refitted
   };
+  typedef NwFitT<NW_NS> NwFit;
+  typedef NwFitT<NW_NG> NwFitL;
   static constexpr int nw_ro(int i) { return 8 * (i / 4) * (i / 4 + 1) + 4 * (i % 4) * (i / 4 + 1); }
   static constexpr int nw_p4(int n) { return (n + 3) & ~3; }  // (n to a whole 4)
   // the sum of a[k] b[k], k < n, n a whole 4: 4 sums, of every fourth from 0, 1, 2, 3 (AVX2's
@@ -481,9 +489,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
 #endif
   }
   // h (in steps) into the sums, y its value (R's rows by 4s: rows 4q to 4q + 3 4 (q + 1) wide)
-  static INLINE void nw_add(NwFit& f, const double* h, double y) {
+  template <int N> static INLINE void nw_add(NwFitT<N>& f, const double* h, double y) {
     double* Ri = f.R;
-    for (int q = 0; q < NW_N / 4; q++)
+    for (int q = 0; q < N / 4; q++)
       for (int m = 0; m < 4; m++) {
         const int i = 4 * q + m, W = 4 * (q + 1);
 #ifdef DTSD_AVX2
@@ -498,6 +506,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       }
   }
   NwFit nw_f[NCH][NSUB];
+  NwFitL nw_fl[NCH][NW_BL];  // (the subbands under NW_BL's, their nw_f's unused)
+  double nw_el[NCH][NW_BL], nw_es[NCH][NW_BL];
   S32 nw_y[NCH][NSUB][NW_NY];
   U8 nw_yp[NCH][NSUB];
   struct NwLc {  // (nw_lpc()'s, while ok)
@@ -552,27 +562,36 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   U8 nw_n[NCH][NSUB], nw_r1[NCH][NSUB], nw_r2[NCH][NSUB];
   // the fit of the sums decayed by NW_LK, NW_K samples' worth of NW_LAM: (R + d I) w = c by
   // Cholesky, d the mean diagonal by NW_RIDGE (w as it was where a pivot isn't positive or w
-  // isn't finite: a damaged stream's)
-  static void nw_refit(NwFit& f) {
+  // isn't finite: a damaged stream's); the long fit's the same, d the short one's first NW_NS's,
+  // the short one's from L's first NW_NS rows (L's columns from the left: the first NW_NS rows
+  // those of the short fit's own L, z's first NW_NS its z), each where its own pivots are positive
+  template <int N> static void nw_refit(NwFitT<N>& f) {
+    constexpr int RT = 8 * (N / 4) * (N / 4 + 1);
     double tr = 0.0;
-    for (int t = 0; t < NW_RT; t++) f.R[t] *= NW_LK;
-    for (int i = 0; i < NW_N; i++) f.c[i] *= NW_LK, tr += f.R[nw_ro(i) + i];
+    for (int t = 0; t < RT; t++) f.R[t] *= NW_LK;
+    for (int i = 0; i < N; i++) f.c[i] *= NW_LK;
+    for (int i = 0; i < NW_NS; i++) tr += f.R[nw_ro(i) + i];
     if (!(tr > 0.0)) return;
-    const double d = tr / NW_N * NW_RIDGE;
+    const double d = tr / NW_NS * NW_RIDGE;
     // (L in R's place, column by column: the column below its diagonal scaled (u), its products
     // taken from the rows below, each by whole 4s, u 0 where they reach left of the column; the
     // entries past a row's own, both builds' alike, read by nothing)
-    alignas(32) double A[NW_RT], u[NW_N];
-    double iL[NW_N], z[NW_N], w[NW_N];
-    for (int t = 0; t < NW_RT; t++) A[t] = f.R[t];
-    for (int i = 0; i < NW_N; i++) A[nw_ro(i) + i] += d;
-    for (int j = 0, rj = 0; j < NW_N; rj += 4 * (j / 4 + 1), j++) {
-      if (!(A[rj + j] > 0.0)) return;
+    alignas(32) double A[RT], u[N];
+    double iL[N], z[N], w[N];
+    for (int t = 0; t < RT; t++) A[t] = f.R[t];
+    for (int i = 0; i < N; i++) A[nw_ro(i) + i] += d;
+    int nf = N;  // (the columns factored: to the first whose pivot isn't positive)
+    for (int j = 0, rj = 0; j < N; rj += 4 * (j / 4 + 1), j++) {
+      if (!(A[rj + j] > 0.0)) {
+        if (j < NW_NS) return;
+        nf = j;
+        break;
+      }
       A[rj + j] = sqrt(A[rj + j]), iL[j] = 1.0 / A[rj + j];
       const int k0 = (j + 1) & ~3;  // (the 4 the column's first below is in)
       for (int k = k0; k <= j; k++) u[k] = 0.0;
-      for (int i = j + 1, ri = rj + 4 * (j / 4 + 1); i < NW_N; ri += 4 * (i / 4 + 1), i++) u[i] = A[ri + j] *= iL[j];
-      for (int i = j + 1, ri = rj + 4 * (j / 4 + 1); i < NW_N; ri += 4 * (i / 4 + 1), i++) {
+      for (int i = j + 1, ri = rj + 4 * (j / 4 + 1); i < N; ri += 4 * (i / 4 + 1), i++) u[i] = A[ri + j] *= iL[j];
+      for (int i = j + 1, ri = rj + 4 * (j / 4 + 1); i < N; ri += 4 * (i / 4 + 1), i++) {
         double* const Ai = A + ri;
         const int W = 4 * (i / 4 + 1);
 #ifdef DTSD_AVX2
@@ -585,19 +604,34 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
 #endif
       }
     }
-    for (int i = 0; i < NW_N; i++) z[i] = f.c[i];
-    for (int j = 0, rj = 0; j < NW_N; rj += 4 * (j / 4 + 1), j++) {  // (L z = c, by L's columns)
+    for (int i = 0; i < N; i++) z[i] = f.c[i];
+    for (int j = 0, rj = 0; j < nf; rj += 4 * (j / 4 + 1), j++) {  // (L z = c, by L's columns)
       z[j] *= iL[j];
-      for (int i = j + 1, ri = rj + 4 * (j / 4 + 1); i < NW_N; ri += 4 * (i / 4 + 1), i++) z[i] -= A[ri + j] * z[j];
+      for (int i = j + 1, ri = rj + 4 * (j / 4 + 1); i < nf; ri += 4 * (i / 4 + 1), i++) z[i] -= A[ri + j] * z[j];
     }
-    for (int i = NW_N - 1; i >= 0; i--) {  // (L' w = z, by L's rows)
+    if (N > NW_NS) {  // (the long fit's short one: L' ws = z on L's first NW_NS rows)
+      double zs[NW_NS], ws[NW_NS];
+      for (int i = 0; i < NW_NS; i++) zs[i] = z[i];
+      for (int i = NW_NS - 1; i >= 0; i--) {
+        const double* const Li = A + nw_ro(i);
+        ws[i] = zs[i] * iL[i];
+        for (int k = 0; k < i; k++) zs[k] -= Li[k] * ws[i];
+      }
+      bool ok = true;
+      for (int i = 0; i < NW_NS; i++)
+        if (!(fabs(ws[i]) < 1e6)) ok = false;
+      if (ok)
+        for (int i = 0; i < NW_NS; i++) f.ws[i] = ws[i];
+    }
+    if (nf < N) return;
+    for (int i = N - 1; i >= 0; i--) {  // (L' w = z, by L's rows)
       const double* const Li = A + nw_ro(i);
       w[i] = z[i] * iL[i];
       for (int k = 0; k < i; k++) z[k] -= Li[k] * w[i];
     }
-    for (int i = 0; i < NW_N; i++)
+    for (int i = 0; i < N; i++)
       if (!(fabs(w[i]) < 1e6)) return;
-    for (int i = 0; i < NW_N; i++) f.w[i] = w[i];
+    for (int i = 0; i < N; i++) f.w[i] = w[i];
   }
   U32 dv_pos[15][3][8], dv_pq[2], dv_sq[2][2];
   bool abq_stair(int k) const { return abq[k][0] > abq[k][1] + 8 + abq[k][1] / 16; }
@@ -1309,6 +1343,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     memset(lfn_y, 0, sizeof lfn_y), memset(lfn_R, 0, sizeof lfn_R), memset(lfn_c, 0, sizeof lfn_c);
     memset(lfn_v, 0, sizeof lfn_v), lfn_n = 0, lfn_scl = -1;
     memset(nw_r1, 0, sizeof nw_r1), memset(nw_r2, 0, sizeof nw_r2), memset(nw_qr, 0, sizeof nw_qr);
+    memset(nw_el, 0, sizeof nw_el), memset(nw_es, 0, sizeof nw_es);
     memset(nw_hs, 0, sizeof nw_hs), memset(nw_hq, 0, sizeof nw_hq);
     memset(nw_ha, 0, sizeof nw_ha), memset(nw_hb, 0, sizeof nw_hb);
     memset(nw_pe, 0, sizeof nw_pe), nw_gs = nw_gn = 0.0, nw_bi = nw_bn = 0.0;
@@ -5481,15 +5516,33 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // such: noise, the fit no nearer than 0) through smn with the indexes' spread, 2322 bytes
     // smaller with FATE's 7-frame samples 2.8-5.6% bigger, through their own family with the
     // logistic's probabilities about 0 or about the fit's value, `3-1.dts` 0.02% or 0.07% smaller
-    // only
-    const bool nwp = !bound[ch];
-    double nwh[NW_N] = {}, nwy = 0.0, nwd = 0.0, nwd0 = 0.0, nwg = 1.0;
+    // only.
+    // Since format 168, in the subbands under NW_BL (4), a long fit beside that one: 40 more of the
+    // subband's past, to the 56th value before (NW_NG regressors, 64), the short fit the first 24
+    // of its sums, the two by one Cholesky (nw_refit()); its value taken where the mean square of
+    // its errors has been under NW_LT (0.95) of the short one's, each sample a 64th of them: 9
+    // streams without their WAVs 10539100 bytes to 10497784 (0.39%: `96-24.dts` 0.81%, `mid.dtsc`
+    // 0.75%, `3-1.dts` 0.73%, open bitrate 0.40%, `s.2.dts`'s first 3 MB 0.29%, the rest 0.004-0.12%),
+    // for 10.8% more instructions (`mid.dtsc`). Against it: a single fit of 8 or 16 more of the past,
+    // 0.01%, the DTS CD sample 0.33% and 0.63% bigger; the long fit in every subband, 8, 16 or 24
+    // more, 0.16%, 0.30% and 0.35% (24: 29.7% more instructions), 40 more under 8 subbands 0.40%
+    // (20.1%), under 2 0.36%, 48 more under 4 0.39%; with 16 more in every subband, taken where
+    // nearer at all, its errors a 32nd a sample, 0.26% (a 16th 0.25%, a 64th 0.27%), at 0.97 of
+    // the short one's 0.28%, at 0.90 and a 64th 0.28%, the two mixed by their errors (inverse)
+    // 0.25%; with 40 more under 8, the long one refitted every 64 samples 0.37%, both forgetting by
+    // 0.996 the same, 0.997 0.36%
+    const bool nwp = !bound[ch], nwl = nwp && b < NW_BL;  // (nwl: the long fit's subband)
+    double nwh[NW_NG] = {}, nwy = 0.0, nwd = 0.0, nwd0 = 0.0, nwg = 1.0, nwys = 0.0, nwyl = 0.0;
     S64 nwq = 0;
     bool nwr = false;
     if (nwp) {
-      const NwFit& f = nw_f[ch][b];
-      if (!nw_n[ch][b]) memset(&nw_f[ch][b], 0, sizeof(NwFit));  // (the subband's first)
+      if (!nw_n[ch][b]) {  // (the subband's first)
+        if (nwl) memset(&nw_fl[ch][b], 0, sizeof(NwFitL));
+        else memset(&nw_f[ch][b], 0, sizeof(NwFit));
+      }
       for (int k = 0; k < NW_NO; k++) nwh[k] = nw_y[ch][b][(nw_yp[ch][b] + NW_NY - 1 - k) & (NW_NY - 1)];
+      if (nwl)
+        for (int k = 0; k < NW_NL; k++) nwh[NW_NS + k] = nw_y[ch][b][(nw_yp[ch][b] + NW_NY - 1 - NW_NO - k) & (NW_NY - 1)];
       for (int k = 0; k < 4; k++) {
         const int c = ch - 1 - k;
         if (c >= r.ch0() && b < r.nvqsub[c] && s.abits[c][b]) nwh[NW_NO + k] = tw_y[c][b][j & 7];
@@ -5501,7 +5554,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           if (jj < 7) nwh[NW_NO + 5 + 2 * k] = tw_y[c][b][jj + 1];
         }
       }
-      nwy = nw_dot(f.w, nwh, NW_N);
+      if (nwl) {
+        const NwFitL& g = nw_fl[ch][b];
+        nwys = nw_dot(g.ws, nwh, NW_NS), nwyl = nw_dot(g.w, nwh, NW_NG);
+        nwy = nw_el[ch][b] < NW_LT * nw_es[ch][b] ? nwyl : nwys;
+      } else
+        nwy = nw_dot(nw_f[ch][b].w, nwh, NW_NS);
       nwd = (nwy - (double)pred) / ((double)ss / 4194304.0);  // (the fit's index, in steps: in lo..hi,
       nwd = nwd > (double)lo ? nwd : (double)lo;                // lo where a damaged stream's fit isn't
       nwd = nwd < (double)hi ? nwd : (double)hi;                // a number)
@@ -5696,12 +5754,21 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
                      __builtin_popcount(miss[ch][b]), xm > 0);
     if (nwp) {  // (the fit's sums, in steps, and its refit; the distances, the residual's length)
       if (ss > 0) {
-        NwFit& f = nw_f[ch][b];
         const double sc = 4194304.0 / (double)ss, ys = (double)clip23((S64)dequantize((S32)v, ss) + pred) * sc;
-        double hs[NW_N];
-        for (int k = 0; k < NW_N; k++) hs[k] = nwh[k] * sc;
-        nw_add(f, hs, ys);
-        if (++f.n == NW_K) f.n = 0, nw_refit(f);
+        double hs[NW_NG];
+        if (nwl) {  // (the long fit's, and the two fits' errors)
+          NwFitL& g = nw_fl[ch][b];
+          for (int k = 0; k < NW_NG; k++) hs[k] = nwh[k] * sc;
+          nw_add(g, hs, ys);
+          if (++g.n == NW_K) g.n = 0, nw_refit(g);
+          const double el = ys - nwyl * sc, es = ys - nwys * sc;
+          nw_el[ch][b] += (el * el - nw_el[ch][b]) / 64.0, nw_es[ch][b] += (es * es - nw_es[ch][b]) / 64.0;
+        } else {
+          NwFit& f = nw_f[ch][b];
+          for (int k = 0; k < NW_NS; k++) hs[k] = nwh[k] * sc;
+          nw_add(f, hs, ys);
+          if (++f.n == NW_K) f.n = 0, nw_refit(f);
+        }
       }
       nw_pe[ch][b] += (double)v * (double)v;
       if (ss > 0 && kpe > kpb) {  // (the louder 8's: the 8-block's energy; at its end, whether it reached the cell)

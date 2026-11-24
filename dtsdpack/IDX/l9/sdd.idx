@@ -14,69 +14,69 @@ Const 0
 
 Index a
  a_fld: fld, 1!00101000
- a_lv: lv, &000001
+ a_lv: lv, &000101
 
 Index b
- b_fld: fld, 1!00000000
- b_lv: lv, &000100
- b_pq: pq, &000000
+ b_fld: fld, 1!00100000
+ b_lv: lv, &000011
+ b_pq: pq, &000111
 
 Index c
  c_fld: fld, 1!00000001
- c_bd: bd, 1!0000000000000000000100001000111
- c_lv: lv, &001001
+ c_bd: bd, 1!0000001001111011101100000000000
+ c_lv: lv, &000010
 
 Index d
- d_fld: fld, 1!00000000
- d_ac: ac, 1!10110000
- d_lv: lv, &000010
+ d_fld: fld, 1!00100010
+ d_ac: ac, 1!11000010
+ d_lv: lv, &000000
 
 Index e
- e_fld: fld, 1!00100100
+ e_fld: fld, 1!00100000
  e_cc: cc, 1!10
- e_bd: bd, 1!1001000000000000000000010001001
+ e_bd: bd, 1!1110010000000000000000000100001
 
 Index h
  h_fld: fld, 1!00010011
- h_ab: ab, 1!001110010000000000000000000
+ h_ab: ab, 1!101001010001001000000000000
  h_lv: lv, &001000
- h_tr: tr, 1!110101111111111111111
+ h_tr: tr, 1!110100001011101001101
 
 Index i
  i_fld: fld, 1!00000011
- i_ec: ec, 1!111111001
+ i_ec: ec, 1!111110001
  i_lv: lv, &000110
- i_tr: tr, 1!11000
+ i_tr: tr, 1!10000
 
 Index j
  j_fld: fld, 1!00101000
- j_pq: pq, &000010
- j_st: st, 1!01
+ j_pq: pq, &000111
+ j_st: st, 1!10
 
 Index k
  k_fld: fld, 1!00100000
- k_bd: bd, 1!1010000000000000000000000010001
- k_ac: ac, 1!11101100
+ k_bd: bd, 1!1110100000001001010100001000001
+ k_ac: ac, 1!11100110
 
 Index l
  l_fld: fld, 1!00010000
  l_lv: lv, &001000
- l_ab: ab, 1!010000000000011000001100000
- l_ac: ac, 1!11100010
+ l_ab: ab, 1!110000000000000000001100001
+ l_ac: ac, 1!11111000
 
 Index s
- s_fld: fld, 1!00110000
- s_lv: lv, &100000
+ s_fld: fld, 1!01000000
+ s_lv: lv, &000110
 
 Index f
  f_fld: fld, 1!00010010
  f_ac: ac, 1!11111110
 
 Index m
- m_fld: fld, 1!00000100
+ m_fld: fld, 1!00100100
 
 Index w
- w_st: st, 1!10
+ w_st: st, 1!11
 
 Index t
  t_fld: fld, 1!00000000
@@ -89,47 +89,47 @@ Index g
  g_fld: fld, 1!11111111
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
-Number rA, 1, 0!00011101
-Number mwA, 1, 0!11010110
-Number rB, 1, 0!10110010
-Number mwB, 1, 0!10101000
+Number rA, 1, 0!11110100
+Number mwA, 1, 0!11010100
+Number rB, 1, 0!11111110
+Number mwB, 1, 0!00000110
 Number rC, 1, 0!00000000
-Number mwC, 1, 0!00011011
+Number mwC, 1, 0!10000001
 Number rD, 1, 0!00000000
-Number mwD, 1, 0!01010111
-Number rE, 1, 0!11111110
-Number mwE, 1, 0!00010100
-Number rH, 1, 0!11101111
-Number mwH, 1, 0!00100000
-Number rI, 1, 0!11111101
+Number mwD, 1, 0!01000000
+Number rE, 1, 0!11100010
+Number mwE, 1, 0!00011000
+Number rH, 1, 0!11111010
+Number mwH, 1, 0!00000001
+Number rI, 1, 0!11111110
 Number mwI, 1, 0!00000000
-Number rJ, 1, 0!01000010
-Number mwJ, 1, 0!00001100
-Number rK, 1, 0!10100111
-Number mwK, 1, 0!00000001
-Number rL, 1, 0!01101100
-Number mwL, 1, 0!00100100
+Number rJ, 1, 0!00000000
+Number mwJ, 1, 0!01000000
+Number rK, 1, 0!10001011
+Number mwK, 1, 0!00000000
+Number rL, 1, 0!01001101
+Number mwL, 1, 0!00000100
 Number lr, 1, 0!01111
-Number mb, 1, 0!01000011
+Number mb, 1, 0!11111111
 #  the mixers' initial weights, in 256ths (format 112): each counter's two probabilities' in the
 #  first three (wp, wq), the outside prediction's there (wo), A's APM refinement's (wa, format
 #  113), each mixer's in the final one (wf); and the final mixer's rate and boost, in 16ths of the
 #  others' (lf, bf, format 113), mixer 2's and 3's rates, in 16ths of mixer 1's (l2, l3, format 114)
 #  and boosts (b2, b3, format 115)
-Number wp, 1, 0!00111010
+Number wp, 1, 0!00100110
 Number wq, 1, 0!00000000
 Number wo, 1, 0!01000000
 Number wa, 1, 0!00000000
-Number wf, 1, 0!01010110
-Number lf, 1, 0!00011111
+Number wf, 1, 0!01011110
+Number lf, 1, 0!00010000
 Number bf, 1, 0!00000000
-Number l2, 1, 0!00000000
+Number l2, 1, 0!00011111
 Number l3, 1, 0!00001111
-Number b2, 1, 0!01000000
+Number b2, 1, 0!00000001
 Number b3, 1, 0!10000000
 Number rS1, 1, 0!01000
 Number rS2, 1, 0!00100
-Number qs, 1, 3!1111000
+Number qs, 1, 3!1101000
 Number qf, 1, 3!0111111
 Number bw, 1, 0!10000
 Number rT, 1, 0!00000000
@@ -139,7 +139,7 @@ Number mt, 1, 0!110
 ! Number lrm, 1, 0!11111
 ! Number mbm, 1, 0!00011001
 Number rG, 1, 0!00000000
-Number mwG, 1, 0!00000001
+Number mwG, 1, 0!00000011
 
 #  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
 #  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.
