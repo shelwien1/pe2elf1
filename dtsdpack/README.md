@@ -805,6 +805,24 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   0.10%, the peak rule 0.03% (FFmpeg's encodes 0.49%); for 1.3% more instructions without the WAV
   (`mid.dtsc`'s, compressing; FATE's 7-frame XCH sample 1.9%). With the WAV, every run of the
   check lists the same but for the format's byte.
+  Since format 164 a third rule, `dtswavsample16.wav`'s encoder's: the scale factor the entry
+  nearest the RMS of the louder of the part's 8-blocks (its subsubframes' values: 88% of its scale
+  factors, 95% at ABITS 8 or more, 98% from 12, where the part's own RMS, at its best ratio to the
+  entry, makes 49%). The others' are format 162's cell: the entry nearest the part's RMS
+  (`mid.dtsc`, `s2h.dts`, `dts_es.dts`, `3-1.dts`, `open bitrate.dts`, `sil/*`: 97-98% at ABITS 8
+  or more), or the least at or over it (`padded.dts`, `dtswavsample14.wav`, `96-24.dts`, `ES 6.1
+  16bit.dts`: 94-95%, its learned ratio some 0.88). Where the part's rule hasn't held and this one
+  has, in 80% of the stream's last 256 or so parts' louder 8-blocks, from 16 of them (its cell
+  `nw_cell()`'s for 8 values, its ratio the stream's own), each index of ABITS 2 or more is weighed
+  by how likely the rest of its 8-block then keep that block's energy under the cell's upper end,
+  and, where no 8-block before it in the part has reached the lower end: at the part's last 8-block,
+  put it in the cell; before that, in the cell or under it as often as a later 8-block has then
+  reached it (`nw_bud()`'s chi-square of the block's rest, with a weight for the lower end); the
+  budget's floor 0.005 (at 0.02, 7139 bytes bigger). Without their WAVs, the 55 streams of the check
+  lists 126739942 bytes to 126531976 (0.16%: `dtswavsample16.wav` 30759423 to 30551457, 0.68%; no
+  other changed); the budget from ABITS 4, 6 or 8 only, 11922, 27742 and 47487 bytes bigger. For
+  0.65% more instructions without the WAV (`mid.dtsc`'s, compressing; FATE's 7-frame XCH sample
+  1.0%). With the WAV, every run of the check lists the same but for the format's byte.
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first

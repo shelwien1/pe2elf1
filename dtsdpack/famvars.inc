@@ -50,7 +50,8 @@ enum { SF_PMODE, SF_PVQ, SF_TMODE, SF_JSHUFF, SF_JSCALE, SF_HFVQ, SF_LFE, SF_TMS
 //        held: nr 0, nl that centre against the spread the scale factor says, ql that spread's;
 //        since format 163 where the stream's parts have kept to a cell of their own too, and at
 //        ABITS 1 and 2 where their peaks have reached the top index (FFmpeg's encodes), ql then
-//        the spread of the parts' mean square at that ABITS
+//        the spread of the parts' mean square at that ABITS; since format 164 where the louder
+//        8's rule has held
 //   vqr  a rank (model_smp.inc's code_rank()): 13-24 its bucket (0; 1; 2-3; 4-7; ...) in unary,
 //        25-63 the bits below the bucket's top, by the bucket and their place (the first two;
 //        the rest)

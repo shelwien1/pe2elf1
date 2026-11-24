@@ -521,6 +521,14 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   NwPc nw_pc[NW_PA];
   S64 nw_pk[NCH][NSUB];
   S8 nw_pf[NCH][NSUB];
+  // (since format 164 the louder 8's rule (nw_cell8()): a part's 8-block's energy so far, nw_be,
+  // its finished ones' largest, nw_bm, and the first that reached the cell's lower end, nw_bh (-1
+  // none); the share of the stream's parts whose largest lay in its cell, nw_ci of nw_cn, and their
+  // ratio to its centre, nw_cgs over nw_cgn; of the 8-blocks with k more after them in the part,
+  // before any reached the cell, how often a later one did, nw_cr[k] of nw_ct[k], 1-3)
+  double nw_be[NCH][NSUB], nw_bm[NCH][NSUB];
+  S8 nw_bh[NCH][NSUB];
+  double nw_ci, nw_cn, nw_cgs, nw_cgn, nw_cr[4], nw_ct[4];
   double nw_hs[NCH][NSUB], nw_hq[NCH][NSUB], nw_ha[NCH][NSUB], nw_hb[NCH][NSUB];
   double nw_qr[NCH][NSUB];  // (since format 160 the step the spreads are in, over the root of its scale factor; 0 none)
   U8 nw_n[NCH][NSUB], nw_r1[NCH][NSUB], nw_r2[NCH][NSUB];
@@ -1280,6 +1288,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     memset(nw_lh, 0, sizeof nw_lh), nw_ln = 0.0, nw_l0 = 0, nw_l1 = NW_HB - 1;
     memset(nw_pc, 0, sizeof nw_pc), memset(nw_pk, 0, sizeof nw_pk), memset(nw_pf, -1, sizeof nw_pf);
     for (int k = 0; k < NW_PA; k++) nw_pc[k].p1 = NW_PH - 1;
+    memset(nw_be, 0, sizeof nw_be), memset(nw_bm, 0, sizeof nw_bm), memset(nw_bh, -1, sizeof nw_bh);
+    nw_ci = nw_cn = nw_cgs = nw_cgn = 0.0, memset(nw_cr, 0, sizeof nw_cr), memset(nw_ct, 0, sizeof nw_ct);
     for (int c = 0; c < NCH; c++)
       for (int k = 0; k < NSUB; k++) nw_ba[c][k] = nw_bb[c][k] = 1.0;
     memset(dv_lq, 0, sizeof dv_lq);
@@ -2924,6 +2934,26 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   }
   // (since format 162) the stream's ratio of the parts' energies to their cells' centres, from 1, 0 or
   // more (nw_cell())
+  // (since format 164) the louder 8's rule, `dtswavsample16.wav`'s encoder's: the scale factor
+  // the entry nearest the RMS of the louder of the part's 8-blocks (its subsubframes' values), 88%
+  // of its scale factors, 95% of those of ABITS 8 or more (the part's RMS at its best ratio 49%):
+  // that 8-block's cell, as nw_cell()'s for 8 values, its ratio the stream's own (nw_g8())
+  double nw_g8(void) const {
+    const double g = (nw_cgs + 4.0) / (nw_cgn + 4.0);
+    return g > 0.0 ? g : 0.0;
+  }
+  void nw_cell8(const CoreRec& r, const CoreSub& s, int ch, int b, int j, S64 ss, double& c0, double& c1, double& cm) const {
+    const int tm = s.tmode[ch][b], part = tm && (j >> 3) >= tm ? 1 : 0;
+    const int si = s.scale[ch][b][part], nt = r.shuff[ch] == 6 ? 128 : 64;
+    const U32* tb = r.shuff[ch] == 6 ? SF7 : SF6;
+    const double st = (double)ss / 4194304.0, tq = (double)tb[si] / st;
+    const double lq = ((double)tb[imax(si - 1, 0)] + (double)tb[si]) / 2.0 / st;
+    const double uq = ((double)tb[si] + (double)tb[imin(si + 1, nt - 1)]) / 2.0 / st;
+    const double g = nw_g8();
+    cm = 8.0 * tq * tq;
+    const double tau = sqrt(cm / 3.0 + 8.0 / 180.0);
+    c0 = 8.0 * lq * lq * g + 8.0 / 12.0 - tau, c1 = 8.0 * uq * uq * g + 8.0 / 12.0 + tau;
+  }
   double nw_g(void) const {
     const double g = (nw_gs + 4.0) / (nw_gn + 4.0);
     return g > 0.0 ? g : 0.0;
@@ -5491,15 +5521,21 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     double ke0 = 0.0, ke1 = 0.0, kem = 0.0, ktq = 0.0;
     if (nwp && ss > 0) {
       nw_cell(r, s, ch, b, j, ss, kpb, kpe, ke0, ke1, kem, ktq);
-      if (j == kpb * 8) nw_pe[ch][b] = 0.0, nw_pk[ch][b] = 0, nw_pf[ch][b] = -1;
+      if (j == kpb * 8) nw_pe[ch][b] = 0.0, nw_pk[ch][b] = 0, nw_pf[ch][b] = -1, nw_bm[ch][b] = 0.0, nw_bh[ch][b] = -1;
+      if (!(j & 7)) nw_be[ch][b] = 0.0;
     }
     const double kt0 = ke0, kt1 = ke1;  // (the rule's own cell, whose share the gate counts)
     // (since format 163, where the rule's cell hasn't held, the learned one, where 94% of the
     // stream's last 512 or so parts have been within 2 doublings, from 64 of them: the 3% and 97%
     // points of their energies against their cells' centres)
     const bool nwth = nw_bn < 16.0 || nw_bi >= 0.8 * nw_bn;
-    const bool nwlc = !nwth && nw_ln >= 64.0 && nw_l1 + 1 - nw_l0 <= 16 && kem > 0.0;
-    const bool nwok = nwth || nwlc;
+    // (since format 164, where the part's rule hasn't held, the louder 8's where it has, in 80% of
+    // the stream's last 256 or so parts' largest 8-blocks, from 16 of them: before the learned cell)
+    double kc0 = 0.0, kc1 = 0.0, kcm = 0.0;
+    if (nwp && ss > 0) nw_cell8(r, s, ch, b, j, ss, kc0, kc1, kcm);
+    const bool nw8 = !nwth && nwp && ss > 0 && kpe > kpb && nw_cn >= 16.0 && nw_ci >= 0.8 * nw_cn;
+    const bool nwlc = !nwth && !nw8 && nw_ln >= 64.0 && nw_l1 + 1 - nw_l0 <= 16 && kem > 0.0;
+    const bool nwok = nwth || nw8 || nwlc;
     if (nwlc) ke0 = kem * nw_le.t[nw_l0], ke1 = kem * nw_le.t[nw_l1 + 1];
     // (since format 163, where neither cell has held, at ABITS 1 and 2 where 97% of the parts' peaks
     // have reached the top index or more, from 32 parts (FFmpeg's encodes): the samples the fit
@@ -5556,7 +5592,24 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // the m after it in its part then put the part's energy in its cell, nw_bud())
     NwBud bud;
     bool bon = false;
-    if ((nwr || nwz) && a >= 2 && ss > 0 && nwok) {
+    // (since format 164, by the louder 8's rule, each index of ABITS 2 or more by how likely the rest
+    // of its 8-block then keep that block's energy under its cell's upper end, and, where no 8-block
+    // before it in the part has reached the lower end: at the part's last, put it in the cell; before
+    // it, in the cell or under it as often as a later 8-block then has reached it (the chi-square
+    // of the block's rest as nw_bud()'s, lam the lower end's weight); its floor 0.005, `dtswavsample
+    // 16.wav` 7139 bytes smaller than at 0.02)
+    if ((nwr || nwz) && a >= 2 && ss > 0 && nw8) {
+      const int nb = kpe - kpb, h = (j >> 3) - kpb, m8 = 7 - (j & 7);
+      const double e = nw_be[ch][b], lo2 = kc0 - e, hi2 = kc1 - e, s2 = (lo2 + hi2 + 2.0 * e) / 16.0;
+      double lam = 1.0;
+      if (nw_bh[ch][b] >= 0) lam = 0.0;
+      else if (h < nb - 1) {
+        const int k = imin(nb - 1 - h, 3);
+        lam = 1.0 - (nw_cr[k] + 0.5) / (nw_ct[k] + 1.0);
+      }
+      if (hi2 > 0.0 && s2 > 0.0)
+        bon = nw_bud(bud, m8, lo2, hi2, s2, nwz ? zq : nwq, nwz ? zs : nwd >= (double)nwq ? 1 : -1, lo, hi, 0.005, lam);
+    } else if ((nwr || nwz) && a >= 2 && ss > 0 && nwok) {
       const int n = (kpe - kpb) * 8, m = n - 1 - (j - kpb * 8);
       const double c0 = nw_pe[ch][b], lo2 = ke0 - c0, hi2 = ke1 - c0;
       const double s2 = (lo2 + hi2 + 2.0 * c0) / (2.0 * (double)n);
@@ -5599,6 +5652,23 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         if (++f.n == NW_K) f.n = 0, nw_refit(f);
       }
       nw_pe[ch][b] += (double)v * (double)v;
+      if (ss > 0 && kpe > kpb) {  // (the louder 8's: the 8-block's energy; at its end, whether it reached the cell)
+        nw_be[ch][b] += (double)v * (double)v;
+        if ((j & 7) == 7) {
+          if (nw_bh[ch][b] < 0 && nw_be[ch][b] >= kc0) nw_bh[ch][b] = (S8)((j >> 3) - kpb);
+          if (nw_be[ch][b] > nw_bm[ch][b]) nw_bm[ch][b] = nw_be[ch][b];
+        }
+        if (a >= 3 && j == kpe * 8 - 1) {  // (the part's end: the share, the ratio, the reach counts)
+          const double E8 = nw_bm[ch][b];
+          nw_ci += (E8 >= kc0 && E8 <= kc1 ? 1.0 : 0.0) - nw_ci / 256.0, nw_cn += 1.0 - nw_cn / 256.0;
+          if (kcm > 0.0) nw_cgs += (E8 - 8.0 / 12.0) / kcm - nw_cgs / 64.0, nw_cgn += 1.0 - nw_cgn / 64.0;
+          const int nb = kpe - kpb, f = nw_bh[ch][b] < 0 ? nb : nw_bh[ch][b];
+          for (int h = 0; h < f && h < nb - 1; h++) {
+            const int k = imin(nb - 1 - h, 3);
+            nw_ct[k] += 1.0 - nw_ct[k] / 256.0, nw_cr[k] += (f < nb ? 1.0 : 0.0) - nw_cr[k] / 256.0;
+          }
+        }
+      }
       if (ss > 0 && kpe > kpb && hi > 0) {  // (the peak rule's: the part's peak, where it first reached the cell)
         NwPc& q = nw_pc[nca];
         const S64 av = v < 0 ? -v : v, p0 = ((S64)q.p0 * hi + 63) / 64;
@@ -5829,7 +5899,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     return bd.n > 1;
   }
-  static bool nw_bud(NwBud& bd, int m, double lo2, double hi2, double s2, S64 nwq, S64 sg, S64 lo, S64 hi, double eps) {
+  // (since format 164 lam the lower end's weight: 1 the cell, 0 none, between the two the cell's and
+  // the part under it, that by 1 - lam)
+  static bool nw_bud(NwBud& bd, int m, double lo2, double hi2, double s2, S64 nwq, S64 sg, S64 lo, S64 hi, double eps,
+                     double lam = 1.0) {
     // (the m indexes' squares' sum as s2 times a chi-square of 1.5 m degrees of freedom, rounded,
     // of the same mean: lighter-tailed than the normal's, the scale factor following the values'
     // level)
@@ -5849,11 +5922,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     };
     const double* ct = m ? nw_chi().t[(m < NW_CM ? m : NW_CM) - 1] : nullptr;
     auto wt = [&](double u) {
-      const double p = m ? nw_chi_cdf(ct, (hi2 - u) / s2) - nw_chi_cdf(ct, (lo2 - u) / s2) : (u >= lo2 && u <= hi2 ? 1.0 : 0.0);
+      const double p = m ? nw_chi_cdf(ct, (hi2 - u) / s2) - lam * nw_chi_cdf(ct, (lo2 - u) / s2) : (u >= lo2 && u <= hi2 ? 1.0 : 0.0);
       return (1.0 - eps) * (p > 0.0 ? p : 0.0) + eps;
     };
     if (!m) {
-      e[k] = 0, w[k++] = lo2 > 0.0 ? eps : 1.0;
+      e[k] = 0, w[k++] = lo2 > 0.0 ? (1.0 - eps) * (1.0 - lam) + eps : 1.0;
       if (lo2 > 0.0) e[k] = isq(lo2), w[k++] = 1.0;
       e[k] = isq(hi2) + ((double)isq(hi2) * (double)isq(hi2) == hi2 ? 1 : 0), w[k++] = eps;
     } else {
