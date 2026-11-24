@@ -104,7 +104,7 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 65.87% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 65.29% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3485 (0.27%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 4624 (0.43%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2589 (0.11%) | | |
@@ -734,6 +734,20 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   the short ones, of 2.3-6.6 KB, 1.3-5.1% bigger, 1.6 KB in all); of the 12 streams' 0.34%, the
   outside prediction 0.18%, nl and pk 0.05%, the spreads 0.08%, smn's retune 0.04%. With the WAV,
   every run of the check lists the same but for the format's byte.
+  Since format 161 such a channel's ADPCM predictor is ranked by the LPC of its subband's last 64
+  decoded values, as the encoders' two-stage search goes (the 64 groups by their codewords'
+  distance from that LPC, then the group's entries by theirs, the last predictor first in both);
+  its PMODE has that LPC's gain and the values' lag-1 correlation as sid's contexts; its first
+  scale factor, where nothing else predicts it, is the last one moved 0.85 of the way to the
+  subband's running mean of them (each new one an 8th of it), scl's nb how far that mean lies; and
+  its ABITS, without a first guess, the subband's ABITS' running mean, rounded, once it has had
+  more than 6. Without their WAVs, `s.2.dts`'s core 32939110 bytes to 32648442 (65.87% of it to
+  65.29%), the 12 no-WAV streams 13338083 to 13240895 (0.73%: `mid.dtsc` 1.33%, `s.2.dts`'s first 3
+  MB 0.96%, `master audio 7.1 24bit.dts` 0.93%, the others 0.33-0.92%), the 55 streams of the
+  check lists 129102621 to 128675547 (0.33%; two bigger, by 4202 bytes and 2); of the 12 streams'
+  0.73%, the scale factors 0.38%, the predictors 0.16%, ABITS 0.16%, PMODE 0.03%; for 6.4% more
+  instructions without the WAV (`mid.dtsc`'s, compressing; FATE's 7-frame XCH sample 3.3%). With
+  the WAV, every run of the check lists the same but for the format's byte.
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first

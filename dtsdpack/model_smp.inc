@@ -351,18 +351,22 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   double dv_lw[NCH][NSUB][8], dv_le[NCH][NSUB];
   U32 dv_lq[2][2];
   // (since format 157 a channel the WAV doesn't bind, as code_q() has it: its subband values by a
-  // least squares fit of their last NW_NO (nw_y, a ring from nw_yp, those of a channel not bound
-  // alone) and the 4 earlier channels' of the sample (since format 159 too the 2 nearest's either
-  // side of it, where it isn't first or last of its 8: NW_NX), refitted every NW_K samples
-  // (nw_refit()), each sample weighed by 1 over its step squared and by NW_LAM a sample since; the
-  // mean distance of the indexes from 0 and from the fit's value, in steps (each sample a 64th of
-  // it, from 1, at 0.3 at least), the samples to NW_WARM, and the last two residuals' lengths, 1 +
-  // their bits. A fit's memory is zeroed as its subband's first sample is coded: a bound channel's
-  // never are, its pages never touched)
+  // least squares fit of their last NW_NO (nw_y, a ring of the last NW_NY from nw_yp, those of a
+  // channel not bound alone) and the 4 earlier channels' of the sample (since format 159 too the 2
+  // nearest's either side of it, where it isn't first or last of its 8: NW_NX), refitted every
+  // NW_K samples (nw_refit()), each sample weighed by 1 over its step squared and by NW_LAM a
+  // sample since; the mean distance of the indexes from 0 and from the fit's value, in steps (each
+  // sample a 64th of it, from 1, at 0.3 at least), the samples to NW_WARM, and the last two
+  // residuals' lengths, 1 + their bits. A fit's memory is zeroed as its subband's first sample is
+  // coded: a bound channel's never are, its pages never touched. Since format 161 the ring the
+  // last NW_NY, whose LPC the subband's predictor and PMODE go by: nw_lpc(); and the subband's
+  // scale factors' and ABITS' running means, each an 8th of theirs (nw_sm, nw_am; nw_sn whether
+  // there is one, nw_an how many ABITS have gone into it, to 255)
   static constexpr int NW_NO = 16, NW_NX = 8, NW_N = NW_NO + NW_NX, NW_T = NW_N * (NW_N + 1) / 2, NW_K = 32;
   static constexpr int NW_RT = 8 * (NW_N / 4) * (NW_N / 4 + 1);  // (R's rows to whole 4s: 336 for 24)
-  static constexpr int NW_WARM = 32;
-  static_assert((NW_NO & (NW_NO - 1)) == 0 && NW_N % 4 == 0, "nw_y's ring a power of 2, R's rows in 4s");
+  static constexpr int NW_WARM = 32, NW_NY = 64;
+  static_assert((NW_NY & (NW_NY - 1)) == 0 && NW_NY >= NW_NO && 256 % NW_NY == 0 && NW_N % 4 == 0,
+                "nw_y's ring a power of 2 (nw_yp's wrap a whole number of them), R's rows in 4s");
   static constexpr double NW_TH = 0.95, NW_LAM = 0.995, NW_RIDGE = 1e-5;
   static constexpr double NW_LS = 0.6;  // (since format 160 the residual's logistic scale, of the spread)
   static constexpr double NW_L2 = NW_LAM * NW_LAM, NW_L4 = NW_L2 * NW_L2, NW_L8 = NW_L4 * NW_L4, NW_L16 = NW_L8 * NW_L8;
@@ -408,8 +412,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       }
   }
   NwFit nw_f[NCH][NSUB];
-  S32 nw_y[NCH][NSUB][NW_NO];
+  S32 nw_y[NCH][NSUB][NW_NY];
   U8 nw_yp[NCH][NSUB];
+  double nw_sm[NCH][NSUB], nw_am[NCH][NSUB];
+  U8 nw_sn[NCH][NSUB], nw_an[NCH][NSUB];
   double nw_ba[NCH][NSUB], nw_bb[NCH][NSUB];
   double nw_qr[NCH][NSUB];  // (since format 160 the step the spreads are in, over the root of its scale factor; 0 none)
   U8 nw_n[NCH][NSUB], nw_r1[NCH][NSUB], nw_r2[NCH][NSUB];
@@ -1159,6 +1165,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     memset(stw_n, 0, sizeof stw_n), memset(stw_on, 0, sizeof stw_on);
     memset(sfx_n, 0, sizeof sfx_n), memset(abx_n, 0, sizeof abx_n);
     memset(nw_y, 0, sizeof nw_y), memset(nw_yp, 0, sizeof nw_yp), memset(nw_n, 0, sizeof nw_n);
+    memset(nw_sm, 0, sizeof nw_sm), memset(nw_sn, 0, sizeof nw_sn), memset(nw_am, 0, sizeof nw_am), memset(nw_an, 0, sizeof nw_an);
     memset(lfn_y, 0, sizeof lfn_y), memset(lfn_R, 0, sizeof lfn_R), memset(lfn_c, 0, sizeof lfn_c);
     memset(lfn_v, 0, sizeof lfn_v), lfn_n = 0, lfn_scl = -1;
     memset(nw_r1, 0, sizeof nw_r1), memset(nw_r2, 0, sizeof nw_r2), memset(nw_qr, 0, sizeof nw_qr);
@@ -2803,6 +2810,37 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     pvr[0] += e0 == v, pvr[1] += q0 == v;
     if (pvr[0] + pvr[1] >= 1u << 16) pvr[0] >>= 1, pvr[1] >>= 1;
     return v;
+  }
+  // (since format 161) the LPC (lpc4()) of a channel the WAV doesn't bind: of its subband b's last
+  // NW_NY decoded values, the oldest first, into al, its gain in halvings *g and in quarters *g4;
+  // their correlation with the values one before as ratio_bucket()'s of 8 (*ac, where asked); *g4
+  // 0 where they are all 0 (lpc4() leaves it)
+  void nw_lpc(int ch, int b, S64* al, int* g, int* g4, int* ac = nullptr) const {
+    S64 x[NW_NY];
+    for (int k = 0; k < NW_NY; k++) x[k] = shl64(nw_y[ch][b][(nw_yp[ch][b] + k) & (NW_NY - 1)], AQ_F);
+    *g4 = 0;
+    lpc4(x, NW_NY, al, g, g4);
+    if (!ac) return;
+    S128 e = 0, cr = 0;
+    for (int k = 0; k < NW_NY; k++) e += (S128)x[k] * x[k], cr += k ? (S128)x[k] * x[k - 1] : 0;
+    *ac = ratio_bucket(cr, e, 8);
+  }
+  // Since format 161 the ADPCM predictor v of a channel the WAV doesn't bind, against the LPC
+  // alpha of its subband's last NW_NY decoded values (nw_lpc()): the 64 groups by their codewords'
+  // distance from it, as the encoders' two-stage search goes (pvq_block_dist()), then the group's
+  // entries by theirs, the last predictor (fit, -1 none) first in both (code_cand()'s ranks):
+  // without their WAVs the 12 streams 21391 bytes smaller (0.16%: `mid.dtsc` 0.53%, `master audio
+  // 7.1 24bit` 0.37%, `s.2.dts`'s first 3 MB 0.28%; their predictors 18-20% smaller). Against
+  // it: the LPC of the last 16 values, 5896 bytes bigger, 32's 1333, 128's 445; the groups by
+  // their nearest entries, the same, all 4096 distances; the last one not first, 1273 bigger;
+  // vqp's ranks rather than vpd's, 471 bigger
+  int code_pvq_nw(const S64* alpha, int fit, int v, int ch, int b, int gn, U8& lb, U8& le) {
+    for (int k = 0; k < 64; k++) cand[k].k = pvq_block_dist(k, alpha), cand[k].i = k;
+    if (fit >= 0) cand[fit >> 6].k = -1;
+    const int g = code_cand(64, 6, ENC ? v >> 6 : 0, VK_PVQ, ch, b, gn, lb);
+    for (int i = 0; i < 64; i++) cand[i].k = pvq_dist(g * 64 + i, alpha), cand[i].i = i;
+    if (fit >= 0 && fit >> 6 == g) cand[fit & 63].k = -1;
+    return g * 64 + code_cand(64, 6, ENC ? v & 63 : 0, VK_PVE, ch, b, gn, le);
   }
   // Whether channel ch's subband b is quiet as the encoders seen take it, where they make no
   // prediction: its values' RMS over the subframe under 100 (`s.2.dts`'s subbands that would gain
@@ -4523,8 +4561,23 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         }
       }
     }
+    // (since format 161 its first scale factor, where it has a last one: nb how far the subband's
+    // scale factors' running mean (nw_sm) lies from that, rounded (-4..4 as 0-8), and where there
+    // is no prediction, the last one moved 0.85 of the way to the mean, rounded, where it moves:
+    // without their WAVs the 12 streams 50072 bytes smaller (0.38%: `s.2.dts`'s first 3 MB 0.45%,
+    // `ES 6.1 16bit.dts` 0.44%, FATE's 7-frame samples 0.5-1.0%). Against it: the whole way 1903
+    // bytes bigger, half of it 9245; with half the way, the mean by a 4th, a 16th or a 32nd, 2668,
+    // 2212 and 7308 bigger, and the RMS of the last 128 decoded values, as the rule's index, in its
+    // place, 11307 bigger (of the last 32, 28769); nb alone, by the last 32's RMS, 0.01% smaller)
+    if (!bound[ch] && !j && A) {
+      const int sm_r = nw_sn[ch][b] ? (int)floor(nw_sm[ch][b] + 0.5) : A - 1;
+      const int sm_s = nw_sn[ch][b] ? (int)llround(0.85 * (nw_sm[ch][b] - (double)(A - 1))) : 0;
+      D.nb = clip(sm_r - (A - 1), -4, 4) + 4;
+      if (p < 0 && sm_s) p = (int)clip(A - 1 + sm_s, 0, max - 1), D.pk = 1;
+    }
     const int spu = spk && p >= 0 && p == pr;
     v = scale(D, v, p, A, max, spu && p == p0, sg, spc, spp, spk);
+    if (!bound[ch] && !j) nw_sm[ch][b] = nw_sn[ch][b] ? nw_sm[ch][b] + ((double)v - nw_sm[ch][b]) / 8 : (double)v, nw_sn[ch][b] = 1;
     if (pf >= 0) {
       U32* const n = sfx_n[ch];
       n[0] += v == A - 1, n[1] += v == pf;
@@ -5206,7 +5259,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (nwp) {
       const NwFit& f = nw_f[ch][b];
       if (!nw_n[ch][b]) memset(&nw_f[ch][b], 0, sizeof(NwFit));  // (the subband's first)
-      for (int k = 0; k < NW_NO; k++) nwh[k] = nw_y[ch][b][(nw_yp[ch][b] + NW_NO - 1 - k) & (NW_NO - 1)];
+      for (int k = 0; k < NW_NO; k++) nwh[k] = nw_y[ch][b][(nw_yp[ch][b] + NW_NY - 1 - k) & (NW_NY - 1)];
       for (int k = 0; k < 4; k++) {
         const int c = ch - 1 - k;
         if (c >= r.ch0() && b < r.nvqsub[c] && s.abits[c][b]) nwh[NW_NO + k] = tw_y[c][b][j & 7];
@@ -6064,7 +6117,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   INLINE void push_y(int ch, int b, S32 y) {
     S32* h = yh[ch][b];
     h[3] = h[2], h[2] = h[1], h[1] = h[0], h[0] = y;
-    if (!bound[ch]) nw_y[ch][b][nw_yp[ch][b]++ & (NW_NO - 1)] = y;
+    if (!bound[ch]) nw_y[ch][b][nw_yp[ch][b]++ & (NW_NY - 1)] = y;
   }
   // the decoder's samples of the subframe's subbands without indexes: none where ABITS is 0 but the
   // ADPCM prediction, the VQ vector's (and the prediction) past VQSUB, none past SUBS

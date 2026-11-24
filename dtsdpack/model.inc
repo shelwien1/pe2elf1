@@ -277,9 +277,18 @@ struct Model : ModelX96<f_DEC, LV> {
         else {  // (a quiet subband, pm_quiet()'s, predicts as one that wouldn't gain; as does an HF VQ
                 // one: the encoders seen predict in none, `s.2.dts` none of its 64 that would gain, the
                 // other lossless WAVs' none of their 86: its core 0.03% smaller, theirs 0.4-0.6%)
-          const int gq = !bound[ch] ? 9 : b >= r.nvqsub[ch] || B::pm_quiet(ch, b) ? 0 : B::pmode_gain(ch, b);
+          // (since format 161 a channel the WAV doesn't bind, by its subband's last 64 decoded values
+          // (nw_lpc()): their correlation with those one before, their LPC's gain in quarters of
+          // halvings and that less 2, 0-8: without their WAVs the 12 streams 4536 bytes smaller, 0.03%)
+          int gq = !bound[ch] ? 9 : b >= r.nvqsub[ch] || B::pm_quiet(ch, b) ? 0 : B::pmode_gain(ch, b), ua = 8, ug = 0;
+          if (!bound[ch]) {
+            S64 al[4];
+            int g, g4;
+            B::nw_lpc(ch, b, al, &g, &g4, &ua);
+            ug = imin(g4, 27), gq = clip(g4 - 2, 0, 8);
+          }
           v = side_code(SF_PMODE, ch, b, v, 0, 1, 1, hist.pmode[ch][b], b ? s.pmode[ch][b - 1] + 1 : 0,
-                        bound[ch] ? ac[ch][b] : 8, bound[ch] ? imin(B::lpg4[ch][b], 27) : 0, gq, tr);
+                        bound[ch] ? ac[ch][b] : ua, bound[ch] ? imin(B::lpg4[ch][b], 27) : ug, gq, tr);
         }
         break;
       }
@@ -318,6 +327,11 @@ struct Model : ModelX96<f_DEC, LV> {
           B::pv_nofit();
         } else if (bound[ch] && !(lw && B::jx_more(B::jx_pr[b], 0, 0))) {
           v = B::code_pvq(r, s, ch, b, v);
+        } else if (!bound[ch]) {  // (since format 161 by the LPC of its last 64 decoded values: code_pvq_nw())
+          S64 al[4];
+          int g, g4;
+          B::nw_lpc(ch, b, al, &g, &g4);
+          v = B::code_pvq_nw(al, hist.pvq[ch][b] - 1, (int)v, ch, b, g, B::lrank[ch][b][VK_PVQ], B::lrank[ch][b][VK_PVE]);
         } else {
           if (bound[ch] && B::ss_rule()) B::pv_nofit();
           v = side_index(SF_PVQ, ch, b, v, 12, hist.pvq[ch][b], 8, 0);
@@ -471,11 +485,24 @@ struct Model : ModelX96<f_DEC, LV> {
           abp = (int)clip(hist.abits[ch][b] - 1 + d, lo, hi);
           if (n[1] > n[0] + 4 + n[0] / 8) Sn = abp + 1;
         }
+        // (since format 161 where there is still none, and the subband has had more than 6 ABITS,
+        // the first guess its ABITS' running mean (nw_am), rounded, where that isn't the last one:
+        // without their WAVs the 12 streams 21189 bytes smaller, 0.16%. Against it: half its distance,
+        // from the start, 14488 bigger, the 7-frame samples too; 0.75 of it after 4, 4544; all of
+        // it after 4, the same but the short streams 50 bigger; 0.9 of it after 6, 1137 bigger)
+        if (!bound[ch] && !Sn && hist.abits[ch][b] && B::nw_an[ch][b] > 6) {
+          const int sh = (int)llround(B::nw_am[ch][b] - (double)(hist.abits[ch][b] - 1));
+          if (sh) Sn = (S32)clip(hist.abits[ch][b] - 1 + sh, lo, hi) + 1;
+        }
         if (!twin_field(fid, ch, b, v, lo, hi) && !(B::ffe_ok && !pass && bound[ch] && B::ff_abits(ch, b, v, lo, hi)))
           v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
                          s.pmode[ch][b], lbd, nb, mx, Sn, near_e ? 14 : nn, sc, eq, ms,
                          alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag, fs && ut ? sx : 0, pq1, pq2, B::ss_rule() || B::ab_rule());
         v = checked(v, lo, hi);
+        if (!bound[ch]) {
+          B::nw_am[ch][b] = B::nw_an[ch][b] ? B::nw_am[ch][b] + ((double)v - B::nw_am[ch][b]) / 8 : (double)v;
+          B::nw_an[ch][b] += B::nw_an[ch][b] < 255;
+        }
         if (abp >= 0) {
           U32* const n = B::abx_n[ch];
           n[0] += v == hist.abits[ch][b] - 1, n[1] += v == abp;

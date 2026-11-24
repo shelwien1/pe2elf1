@@ -50,7 +50,8 @@ enum { SF_PMODE, SF_PVQ, SF_TMODE, SF_JSHUFF, SF_JSCALE, SF_HFVQ, SF_LFE, SF_TMS
 //        25-63 the bits below the bucket's top, by the bucket and their place (the first two;
 //        the rest)
 //   vqp  the same (the ADPCM predictors' ranks, vqr's before format 116)
-//   vpd  the same, where the WAV is decoded (vqp's before format 132)
+//   vpd  the same, where the WAV is decoded (vqp's before format 132), and since format 161 a
+//        channel's the WAV doesn't bind, by the LPC of its subband's decoded values
 //   raw  a byte's bits, by their place in its binary tree (1-255)
 enum { HN_SAME = TC_NODE, HN_SAME2, HN_BIT, HN_N };
 enum { SN_SAME = TC_NODE, SN_SAMEP, SN_BIT, SN_IX, SN_IXPOS = SN_IX + 16, SN_N = SN_IXPOS + 16 };
@@ -99,11 +100,14 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      lv its last value (0 none, else 1 + it, to 63), pq the value of the place before in the
 //      subframe (the subband below's; LFE: the sample before), st whether that one kept its last
 //      value, ac the audio's subband's lag-1 autocorrelation over the subframe (0-7, as -1..1; 8
-//      none; a lossless WAV's TMODE: the transient's class, model_smp.inc's tmode_rule() as whether
-//      the encoders take one makes it, model.inc), ab the subband's ABITS where coded before (1 + it; 0
-//      none; PMODE: the gain of the subband's LPC, in quarters of halvings, to 27), ec how its
-//      energy changes over the subframe's subsubframes (0-8, 9 none; PMODE: model_smp.inc's
-//      pmode_gain()), tr (PMODE, TMODE) how its energy rises against where the encoders seen take a
+//      none; since format 161 a channel's the WAV doesn't bind, PMODE's, of its subband's last 64
+//      decoded values; a lossless WAV's TMODE: the transient's class, model_smp.inc's
+//      tmode_rule() as whether the encoders take one makes it, model.inc), ab the subband's ABITS
+//      where coded before (1 + it; 0 none; PMODE: the gain of the subband's LPC, in quarters of
+//      halvings, to 27; an unbound
+//      channel's, of those 64 values'), ec how its energy changes over the subframe's subsubframes
+//      (0-8, 9 none; PMODE: model_smp.inc's pmode_gain(); an unbound channel's, that gain less 2,
+//      0-8), tr (PMODE, TMODE) how its energy rises against where the encoders seen take a
 //      transient, and make no prediction (model_smp.inc's pm_rise(): 0-5; a decoded WAV's TMODE where
 //      the transient search's is taken, SF_TMSR: 6 + 4 the subband below's TMODE + the channel
 //      before's, each 0 not coded, 1 none, 2 the search's, 3 another, model.inc; 0 for the other fields)
@@ -115,7 +119,9 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      larger, in halves of scale factor steps (-4..4 as 0-8, 9 none), mx the loudest subband's in
 //      the channel less it, in 4 steps (0-15, 16 none), sn the first guess (1 + it, 0 none): the
 //      bit allocation search's (sc), else the staircase's (sm), else the ABITS the subband had the
-//      last time it had this energy, in any channel (the one seen), sd whether sn is the last one
+//      last time it had this energy, in any channel (the one seen); since format 161 a channel's
+//      the WAV doesn't bind, where there is none, its last moved toward the subband's ABITS' running
+//      mean (model.inc), sd whether sn is the last one
 //      (0 none, 1 it is, 2 not), nn the ABITS seen at the energies either side less the one seen
 //      (below's, -1..1 as 0-2 or 3 none, times 4, plus above's; 15 none; 14: that is the nearest
 //      energy's, none having been seen at this one), sc where sn is the bit allocation search's
@@ -142,7 +148,9 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      under nine tenths, 5 more; 0 none or they don't bound the level)
 // scl: kd (0 a subband's first scale factor, 1 its second, after its transient, 2 a high-frequency
 //      VQ subband's, 3 the LFE's), ab its ABITS (1 + it, 0 none), pm whether it predicts, pk whether the audio
-//      predicts the scale factor, pn how near its RMS lies to the midpoint between two (0-7), lp
+//      predicts the scale factor (since format 161 a channel's the WAV doesn't bind, too where its
+//      last moves toward the subband's running mean: model_smp.inc's code_scale()), pn how near
+//      its RMS lies to the midpoint between two (0-7), lp
 //      the last scale factor less the last prediction (0-8, 9 none), hm whether the channel's
 //      scale factor before was the prediction (0 none, 1 it was, 2 not), bd the subband, dp
 //      where the run of the prediction's value in the table ends (anal.inc's sf_run(): 0 none, 1, 2
@@ -151,7 +159,9 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      above the RMS rule's a third and a quarter of the time, its centre's 5%), nb the audio's
 //      energy in the subband below less this one's, in halves of scale factor steps (-4..4 as
 //      0-8, 9 none; the more the band below's, the likelier that; a lossless WAV's top subbands',
-//      31 and 30, VQ: subband 0's or 1's power over their own, in doublings less 24, halved, 0-8),
+//      31 and 30, VQ: subband 0's or 1's power over their own, in doublings less 24, halved, 0-8;
+//      since format 161 a channel's the WAV doesn't bind, how far the subband's scale factors'
+//      running mean lies from the last one, rounded, -4..4 as 0-8),
 //      pl a lossless WAV's RMS's nearness to the boundary as the encoder's arithmetic errs, in
 //      doublings (model_smp.inc's scale_near_lev(): 0-14, 15 none; pn's, outside the VQ subbands)
 // smp: ab ABITS (1-26; 27 an LFE sample's), hw the code (1 Huffman, 2 plain, 3 block codes), pk whether the audio
