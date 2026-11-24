@@ -104,7 +104,7 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 65.29% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 64.21% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3485 (0.27%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 4624 (0.43%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2589 (0.11%) | | |
@@ -748,6 +748,38 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   0.73%, the scale factors 0.38%, the predictors 0.16%, ABITS 0.16%, PMODE 0.03%; for 6.4% more
   instructions without the WAV (`mid.dtsc`'s, compressing; FATE's 7-frame XCH sample 3.3%). With
   the WAV, every run of the check lists the same but for the format's byte.
+  Since format 162 the scale factors' RMS rule bounds such a channel's indexes, part by part (a
+  part: a subband's subsubframes before its transient, or those from it on, 8 to 32 values). The
+  encoders take the entry nearest the RMS of the part's values, so the indexes' energy (their
+  squares' sum) lies in that entry's cell: from the midpoint with the entry below to that with the
+  one above, in steps, times the stream's ratio of the parts' energies to their cells' centres
+  (`nw_g()`, learned: 0.88-1.02 in the long streams that keep to the rule), plus the rounding's n/12
+  and a margin for its spread (`nw_cell()`). Each index of ABITS 2 or more is weighed by how likely
+  the indexes after it in its part then put the part's energy in its cell (`nw_bud()`): 0.98 of that
+  probability, their squares' sum a chi-square of 1.5 times as many degrees of freedom as there are
+  of them (lighter-tailed than independent normal values', the scale factor following their level),
+  each of the variance the cell's centre makes, and 0.02; constant over 16 pieces of the index's
+  square, exact for the part's last index, and the logistic's masses weighed piece by piece. The
+  values the fit doesn't serve (its residuals' spread not under 0.95 of the values', or a subband's
+  first 32) are smn's now too, at every ABITS: about the fit's value times its gain (below), the
+  logistic's scale the RMS the scale factor says, nl that centre against it, nr 0 (smp's or smd's
+  before). And the fit's value is shrunk toward 0 by the subband's least-squares gain of the indexes
+  on it (within 0..1, its sums an 64th a sample less) where the indexes have lain nearer it so, by
+  their mean distances: the fit's 24 regressors over its memory fit some of their noise. All this
+  where the rule has held, in 80% of the stream's last 256 or so parts of ABITS 3 or more, or before
+  16 of them: FFmpeg's encoder takes the least scale factor whose range holds the subband's peak,
+  and 6-13% of its encodes' parts lie in their cells (`mid.dtsc`'s 97%, `padded.dts`'s 92%,
+  `dtswavsample16.wav`'s 62%, FATE's 7-frame samples' 50-67%); without that gate the 55 streams
+  below would have been 59815 bytes bigger (FFmpeg's `f4.dts` by 14%, FATE's 7-frame samples by
+  2-10%), though `dtswavsample16.wav` 202302 smaller. Without their WAVs, `s.2.dts`'s core 32648442
+  bytes to 32111131 (65.29% of it to 64.21%), the 12 no-WAV streams 13240895 to 12991892 (1.88%:
+  1.64-2.15% each but for FATE's 7-frame samples, those -0.45 to 0.39%), the 55 streams of the check
+  lists 128675547 to 127160127 (1.18%; 18 bigger, FFmpeg's encodes by 0.01-0.05%, FATE's 7-frame
+  samples by 1-26 bytes, one other by 166 bytes of 8.7 MB); of the 12 streams' 1.88%, the shrink
+  0.10%, the budget for the fit's residuals 0.63%, the values the fit doesn't serve 1.15% (the
+  chi-square's 1.5 times the degrees of freedom 0.02%); for 36% more instructions without the WAV
+  (`mid.dtsc`'s, compressing: 601 KB/s on this host, 891 before; FATE's 7-frame XCH sample 5.4%).
+  With the WAV, every run of the check lists the same but for the format's byte.
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first

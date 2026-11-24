@@ -45,7 +45,9 @@ enum { SF_PMODE, SF_PVQ, SF_TMODE, SF_JSHUFF, SF_JSCALE, SF_HFVQ, SF_LFE, SF_TMS
 //        values (smp's or smd's before format 159); since format 160 nl the fit's value against
 //        the residuals' spread in half doublings (0-15: 2^-4 to 2^3.5), pk whether the nearest
 //        earlier channel has no values in the subband, and each decision with an outside
-//        prediction (model_smp.inc's code_index_nw())
+//        prediction (model_smp.inc's code_index_nw()); since format 162 also such a channel's
+//        indexes the fit doesn't serve, about its value shrunk by its gain where the RMS rule has
+//        held: nr 0, nl that centre against the spread the scale factor says, ql that spread's
 //   vqr  a rank (model_smp.inc's code_rank()): 13-24 its bucket (0; 1; 2-3; 4-7; ...) in unary,
 //        25-63 the bits below the bucket's top, by the bucket and their place (the first two;
 //        the rest)

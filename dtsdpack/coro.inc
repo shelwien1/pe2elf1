@@ -8,7 +8,7 @@
 enum { DP_MAGIC = 8, DP_AT_VERSION = DP_MAGIC, DP_AT_LEVEL, DP_AT_BIND };  // the header's fixed part
 enum { DP_BIND_MAX = 3 + 10 + 4 + 2 + 10 + 4 + 5 + 3 + 26 * NCH };       // (and the binding's bytes at most)
 static const U8 magic[DP_MAGIC] = {'d', 't', 's', 'd', 'p', 'a', 'c', 'k'};
-constexpr int DP_VERSION = 161;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
+constexpr int DP_VERSION = 162;  // the format's (2: a core channel's binding a mix of two WAV channels; 3: the XCH
                                // extension as records; 4: a WAV at twice the core's rate, X96 and XXCH; 5: the
                                // scale factor search; 6: the bit allocation search; 7: the bits after the
                                // subframes as the bytes they end in, the energy's quarter of its bucket, the
@@ -296,7 +296,11 @@ constexpr int DP_VERSION = 161;  // the format's (2: a core channel's binding a 
                                // value against the spread and the nearest channel's absence, the
                                // spreads following the step; 161: such a channel's ADPCM predictors
                                // ranked by the LPC of its subband's last 64 decoded values, PMODE by
-                               // that LPC's gain, its scale factors and ABITS by their running means)
+                               // that LPC's gain, its scale factors and ABITS by their running means;
+                               // 162: its indexes weighed by how likely the rest of their part then
+                               // keep its energy in the cell its scale factor's RMS rule makes, those
+                               // the fit doesn't serve smn's too, about the fit's value shrunk by its
+                               // gain, where the stream's parts have kept to their cells)
 
 static void put_le(U8* p, U64 v, int n) {
   for (int i = 0; i < n; i++) p[i] = (U8)(v >> (8 * i));

@@ -27,6 +27,57 @@ static INLINE double nw_tail(double a) {
   return nw_lg.t[i] + (nw_lg.t[i + 1] - nw_lg.t[i]) * (x - (double)i);
 }
 
+// the chi-square distribution's CDF of m = 1..47 degrees of freedom (1.5 times a part's samples after
+// the one coded, 31 at most: nw_bud()) at x = i / 8, i to 96 * 8, made with + - * / and sqrt alone,
+// as every machine makes it: P(1/2, x/2) by its series, e^-y y^a sum y^n / G(a + n + 1), P(1, y)
+// 1 - e^-y, and the rest by P(a + 1, y) = P(a, y) - y^a e^-y / G(a + 1); linear between, past 96 1;
+// made where first asked for (a run without the WAV)
+static constexpr int NW_CM = 47, NW_CX = 96;
+struct NwChi {
+  double t[NW_CM][NW_CX * 8 + 2];
+  NwChi() {
+    double q = 0.0, u = 1.0;  // (e^-1/16, by its series)
+    for (int k = 0; k < 24; k++) q += u, u *= -1.0 / 16.0 / (double)(k + 1);
+    double e = 1.0;  // (e^-y)
+    for (int i = 0; i < NW_CX * 8 + 2; i++, e *= q) {
+      const double y = (double)i / 16.0, ry = sqrt(y);
+      double s1 = 0.0, tt = 1.0 / 0.88622692545275801365;  // (1 / G(3/2), then y^n / G(n + 3/2))
+      for (int n = 0; n < 1000 && y > 0.0; n++) {
+        s1 += tt;
+        tt *= y / ((double)n + 1.5);
+        if (tt < s1 * 1e-17) break;
+      }
+      double f[NW_CM + 1];
+      f[1] = e * ry * s1, f[2] = 1.0 - e;
+      double to = e * ry / 0.88622692545275801365, te = e * y;  // (y^a e^-y / G(a + 1), a 1/2 and 1)
+      for (int m = 3; m <= NW_CM; m++)
+        if (m & 1) f[m] = f[m - 2] - to, to *= y / (0.5 * (double)m);
+        else f[m] = f[m - 2] - te, te *= y / (0.5 * (double)m);
+      for (int m = 1; m <= NW_CM; m++) t[m - 1][i] = f[m] < 0.0 ? 0.0 : f[m] > 1.0 ? 1.0 : f[m];
+    }
+  }
+};
+static const NwChi& nw_chi(void) {
+  static const NwChi c;
+  return c;
+}
+static INLINE double nw_chi_cdf(const double* t, double x) {  // (t: m's row, nw_chi().t[m - 1])
+  if (!(x > 0.0)) return 0.0;
+  if (!(x < (double)NW_CX)) return 1.0;
+  const double z = x * 8.0;
+  const int i = (int)z;
+  return t[i] + (t[i + 1] - t[i]) * (z - (double)i);
+}
+// the RMS rule's budget of a part's indexes, as a weight of each residual r (code_q(),
+// code_index_nw()): pieces in r, each its first and last r and its weight, by the square of the index
+// nwq + sg r
+static constexpr int NW_BK = 16;
+struct NwBud {
+  int n;
+  S64 ra[2 * NW_BK + 3], rb[2 * NW_BK + 3];
+  double w[2 * NW_BK + 3];
+};
+
 template <int f_DEC, class LV>
 struct ModelSmp : ModelSide<f_DEC, LV> {
   typedef ModelSide<f_DEC, LV> B;
@@ -422,6 +473,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   double nw_sm[NCH][NSUB], nw_am[NCH][NSUB];
   U8 nw_sn[NCH][NSUB], nw_an[NCH][NSUB];
   double nw_ba[NCH][NSUB], nw_bb[NCH][NSUB];
+  // (since format 162 a part's indexes' energy so far, nw_pe; the stream's ratio of the parts'
+  // energies to their scale factors' cells' centres, nw_gs over nw_gn, and the share of them in
+  // their cells, nw_bi of nw_bn: nw_cell(); the fit's shrink, its sums, nw_hs and nw_hq, and its
+  // switch, the mean distances of the index from the fit's value shrunk and not, nw_ha and nw_hb)
+  double nw_pe[NCH][NSUB], nw_gs, nw_gn, nw_bi, nw_bn;
+  double nw_hs[NCH][NSUB], nw_hq[NCH][NSUB], nw_ha[NCH][NSUB], nw_hb[NCH][NSUB];
   double nw_qr[NCH][NSUB];  // (since format 160 the step the spreads are in, over the root of its scale factor; 0 none)
   U8 nw_n[NCH][NSUB], nw_r1[NCH][NSUB], nw_r2[NCH][NSUB];
   // the fit of the sums decayed by NW_LK, NW_K samples' worth of NW_LAM: (R + d I) w = c by
@@ -1174,6 +1231,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     memset(lfn_y, 0, sizeof lfn_y), memset(lfn_R, 0, sizeof lfn_R), memset(lfn_c, 0, sizeof lfn_c);
     memset(lfn_v, 0, sizeof lfn_v), lfn_n = 0, lfn_scl = -1;
     memset(nw_r1, 0, sizeof nw_r1), memset(nw_r2, 0, sizeof nw_r2), memset(nw_qr, 0, sizeof nw_qr);
+    memset(nw_hs, 0, sizeof nw_hs), memset(nw_hq, 0, sizeof nw_hq);
+    memset(nw_ha, 0, sizeof nw_ha), memset(nw_hb, 0, sizeof nw_hb);
+    memset(nw_pe, 0, sizeof nw_pe), nw_gs = nw_gn = 0.0, nw_bi = nw_bn = 0.0;
     for (int c = 0; c < NCH; c++)
       for (int k = 0; k < NSUB; k++) nw_ba[c][k] = nw_bb[c][k] = 1.0;
     memset(dv_lq, 0, sizeof dv_lq);
@@ -2815,6 +2875,36 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     pvr[0] += e0 == v, pvr[1] += q0 == v;
     if (pvr[0] + pvr[1] >= 1u << 16) pvr[0] >>= 1, pvr[1] >>= 1;
     return v;
+  }
+  // (since format 162) the stream's ratio of the parts' energies to their cells' centres, from 1, 0 or
+  // more (nw_cell())
+  double nw_g(void) const {
+    const double g = (nw_gs + 4.0) / (nw_gn + 4.0);
+    return g > 0.0 ? g : 0.0;
+  }
+  // (since format 162) the RMS rule's cell of the part of channel ch's subband b that its sample j
+  // lies in (the subsubframes before the transient, s.tmode, or those from it on), pb to pe: the
+  // energy of its indexes (their squares' sum) as the encoder's scale factor makes it, the value
+  // nearest the RMS (the RMS rule), from the midpoint with the entry below to that with the one
+  // above, in the step ss: times the stream's ratio of the parts' energies to their cells' centres
+  // (nw_gs / nw_gn, from 1: the encoders' rule meets the indexes less the rounding), plus the
+  // rounding's n / 12 and its spread either way, the root of a third of the centre's; e0..e1, the
+  // centre em (n tq^2, tq the scale factor in steps)
+  void nw_cell(const CoreRec& r, const CoreSub& s, int ch, int b, int j, S64 ss, int& pb, int& pe, double& e0, double& e1,
+               double& em, double& tq) const {
+    const int tm = s.tmode[ch][b], part = tm && (j >> 3) >= tm ? 1 : 0;
+    pb = part ? tm : 0, pe = part ? s.nssc : (tm ? tm : s.nssc);
+    const int si = s.scale[ch][b][part], nt = r.shuff[ch] == 6 ? 128 : 64, n = (pe - pb) * 8;
+    const U32* tb = r.shuff[ch] == 6 ? SF7 : SF6;
+    const double st = (double)ss / 4194304.0;
+    tq = (double)tb[si] / st;
+    const double lq = ((double)tb[imax(si - 1, 0)] + (double)tb[si]) / 2.0 / st;
+    const double uq = ((double)tb[si] + (double)tb[imin(si + 1, nt - 1)]) / 2.0 / st;
+    const double g = nw_g();
+    em = (double)n * tq * tq;
+    const double tau = sqrt(em / 3.0 + (double)n / 180.0);
+    e0 = (double)n * lq * lq * g + (double)n / 12.0 - tau;
+    e1 = (double)n * uq * uq * g + (double)n / 12.0 + tau;
   }
   // (since format 161) the LPC (lpc4()) of a channel the WAV doesn't bind: of its subband b's last
   // NW_NY decoded values, the oldest first, into al, its gain in halvings *g and in quarters *g4;
@@ -5265,7 +5355,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // logistic's probabilities about 0 or about the fit's value, `3-1.dts` 0.02% or 0.07% smaller
     // only
     const bool nwp = !bound[ch];
-    double nwh[NW_N] = {}, nwy = 0.0, nwd = 0.0;
+    double nwh[NW_N] = {}, nwy = 0.0, nwd = 0.0, nwd0 = 0.0, nwg = 1.0;
     S64 nwq = 0;
     bool nwr = false;
     if (nwp) {
@@ -5287,6 +5377,17 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       nwd = (nwy - (double)pred) / ((double)ss / 4194304.0);  // (the fit's index, in steps: in lo..hi,
       nwd = nwd > (double)lo ? nwd : (double)lo;                // lo where a damaged stream's fit isn't
       nwd = nwd < (double)hi ? nwd : (double)hi;                // a number)
+      // (since format 162 the fit's value shrunk toward 0 by the subband's least squares gain of the
+      // indexes on it, g = (sum v nwd + 32) / (sum nwd^2 + 32), each term an 64th a sample less,
+      // within 0..1, where the indexes have lain nearer it so than as it is, by their mean distances
+      // (nw_ha, nw_hb): the fit's 24 regressors over some 200 samples' memory fit some of their noise)
+      nwd0 = nwd;
+      {
+        double g = (nw_hs[ch][b] + 32.0) / (nw_hq[ch][b] + 32.0);
+        g = g < 0.0 ? 0.0 : g > 1.0 ? 1.0 : g;
+        nwg = g;
+        if (nw_ha[ch][b] <= nw_hb[ch][b]) nwd = g * nwd;
+      }
       nwq = (S64)llround(nwd);
       const int tm = s.tmode[ch][b], si = s.scale[ch][b][tm && (j >> 3) >= tm ? 1 : 0];
       const double sv = (double)(r.shuff[ch] == 6 ? SF7[si & 127] : SF6[si & 63]);
@@ -5335,6 +5436,36 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       D.nl = q3 > 0.0 ? clip(2 * e3 + (m3 >= 0.70710678118654752440 ? 1 : 0) + 6, 0, 15) : 0;
       D.pk = !(ch - 1 >= r.ch0() && b < r.nvqsub[ch - 1] && s.abits[ch - 1][b]);
     }
+    // (since format 162 the part's cell, nw_cell(), where the RMS rule has held: in 80% of the
+    // stream's parts or more, nw_bi of nw_bn, or before 16 of them; then the samples the fit doesn't
+    // serve as the fit's are, but about its value shrunk by its gain g (nwg) and with the
+    // logistic's scale the RMS the scale factor says, sqrt(3) / pi its root of g tq^2 + 1 / 12
+    // (nw_cell()'s); smn's contexts as the fit's, nl that centre against the spread, nr 0)
+    int kpb = 0, kpe = 0;
+    double ke0 = 0.0, ke1 = 0.0, kem = 0.0, ktq = 0.0;
+    if (nwp && ss > 0) {
+      nw_cell(r, s, ch, b, j, ss, kpb, kpe, ke0, ke1, kem, ktq);
+      if (j == kpb * 8) nw_pe[ch][b] = 0.0;
+    }
+    const bool nwok = nw_bn < 16.0 || nw_bi >= 0.8 * nw_bn;
+    const bool nwz = nwp && !nwr && ss > 0 && nwok;
+    const double zc = nwz ? nwg * nwd0 : 0.0;
+    const S64 zq = (S64)llround(zc), zs = zc < (double)zq ? -1 : 1;
+    double zsc = 0.0;
+    if (nwz) {
+      zsc = 0.55132889542179204 * sqrt(nw_g() * ktq * ktq + 1.0 / 12.0);
+      int e2;
+      const double mt = frexp(zsc / NW_LS, &e2);
+      D.ql = 1 + clip(2 * e2 + (mt >= 0.70710678118654752440 ? 1 : 0) + 3, 0, 20);
+      D.nr = 0;
+      D.m1 = nw_r1[ch][b] ? imin(nw_r1[ch][b] - 1, 21) : 22;
+      D.m2 = nw_r2[ch][b] ? imin(nw_r2[ch][b] - 1, 21) : 22;
+      const double q3 = fabs(zc) * NW_LS / zsc;
+      int e3 = 0;
+      const double m3 = q3 > 0.0 ? frexp(q3, &e3) : 0.0;
+      D.nl = q3 > 0.0 ? clip(2 * e3 + (m3 >= 0.70710678118654752440 ? 1 : 0) + 6, 0, 15) : 0;
+      D.pk = !(ch - 1 >= r.ch0() && b < r.nvqsub[ch - 1] && s.abits[ch - 1][b]);
+    }
     int how;
     // (cb: how many of the channel's last 32 missed, 0, 1-2, 3-7, more (0, 1, 2-3, more before format
     // 74): where the WAV isn't what the encoder had, as in the frames after a cut stream's start (its
@@ -5360,10 +5491,25 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // the subband's FFT path)
     const S64 lv = !dw ? bind.up == 1 ? plev[ch][b][j] : tlev[ch][j] : 0;
     const S128 hu = !dw ? (S128)lv << 22 : (S128)(wav->bps == 2 ? 256 : 1) << (38 + DW_HC);
+    // (since format 162 the RMS rule's budget, ABITS 2 or more: the index's weight by how likely
+    // the m after it in its part then put the part's energy in its cell, nw_bud())
+    NwBud bud;
+    bool bon = false;
+    if ((nwr || nwz) && a >= 2 && ss > 0 && nwok) {
+      const int n = (kpe - kpb) * 8, m = n - 1 - (j - kpb * 8);
+      const double c0 = nw_pe[ch][b], lo2 = ke0 - c0, hi2 = ke1 - c0;
+      const double s2 = (lo2 + hi2 + 2.0 * c0) / (2.0 * (double)n);
+      if (hi2 > 0.0 && s2 > 0.0 && n > 0)
+        bon = nw_bud(bud, m, lo2, hi2, s2, nwz ? zq : nwq, nwz ? zs : nwd >= (double)nwq ? 1 : -1, lo, hi, 0.02);
+    }
     if (nwr) {  // (the residual toward the fit's own value positive)
       const S64 sg = nwd < (double)nwq ? -1 : 1, rlo = sg > 0 ? lo - nwq : nwq - hi, rhi = sg > 0 ? hi - nwq : nwq - lo;
       v = nwq + sg * code_index_nw(D, ENC ? sg * (v - nwq) : 0, rlo, rhi, &how, sg * (nwd - (double)nwq),
-                                   NW_LS * nw_bb[ch][b]);
+                                   NW_LS * nw_bb[ch][b], bon ? &bud : nullptr);
+    } else if (nwz) {  // (the same about the shrunk fit's value)
+      const S64 rlo = zs > 0 ? lo - zq : zq - hi, rhi = zs > 0 ? hi - zq : zq - lo;
+      v = zq + zs * code_index_nw(D, ENC ? zs * (v - zq) : 0, rlo, rhi, &how, zs * (zc - (double)zq), zsc,
+                                  bon ? &bud : nullptr);
     } else
       v = code_index(D, v, bnd, qp, alt, lo, hi, &how, &hcal[b], dist, hu,
                      (pc >= 8 ? 3 : pc >= 3 ? 2 : pc >= 1 ? 1 : 0) + 4 * jd, bnd ? (S128)ss << AQ_F : 0,
@@ -5377,6 +5523,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         nw_add(f, hs, ys);
         if (++f.n == NW_K) f.n = 0, nw_refit(f);
       }
+      nw_pe[ch][b] += (double)v * (double)v;
+      if (a >= 3 && ss > 0 && j == kpe * 8 - 1) {  // (the part's end: whether in its cell, the ratio)
+        const double E = nw_pe[ch][b];
+        nw_bi += (E >= ke0 && E <= ke1 ? 1.0 : 0.0) - nw_bi / 256.0, nw_bn += 1.0 - nw_bn / 256.0;
+        if (kem > 0.0) nw_gs += (E - (double)((kpe - kpb) * 8) / 12.0) / kem - nw_gs / 64.0, nw_gn += 1.0 - nw_gn / 64.0;
+      }
+      nw_ha[ch][b] += fabs((double)v - nwg * nwd0) - nw_ha[ch][b] / 64.0;
+      nw_hb[ch][b] += fabs((double)v - nwd0) - nw_hb[ch][b] / 64.0;
+      nw_hs[ch][b] += (double)v * nwd0 - nw_hs[ch][b] / 64.0, nw_hq[ch][b] += nwd0 * nwd0 - nw_hq[ch][b] / 64.0;
       const double av = (double)(v < 0 ? -v : v), ar = fabs((double)v - nwd);
       nw_ba[ch][b] += (av - nw_ba[ch][b]) / 64, nw_bb[ch][b] += (ar - nw_bb[ch][b]) / 64;
       if (nw_ba[ch][b] < 0.3) nw_ba[ch][b] = 0.3;
@@ -5515,7 +5670,72 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // below its top one and of its sign with the probability a logistic distribution about the fit's
   // value (nc from the residual's 0, toward it positive: 0-1/2) of scale ns gives it, within lo..hi,
   // as the family's outside prediction (its mantissa's further bits by the family alone)
-  S64 code_index_nw(const M_smp_v& D, S64 v, S64 lo, S64 hi, int* how, double nc, double ns) {
+  // the budget's pieces (NwBud): the index v = nwq + sg r's weight, (1 - eps) P(the m indexes after it
+  // put the part's energy past this one's in lo2..hi2) + eps, each m's of variance s2 (chi-square);
+  // constant over NW_BK pieces of v^2 to hi2 (where m is 0, exact: v^2 in lo2..hi2), eps past; the
+  // pieces in r within lo..hi (the index's range), in order. False where they don't weigh
+  static bool nw_bud(NwBud& bd, int m, double lo2, double hi2, double s2, S64 nwq, S64 sg, S64 lo, S64 hi, double eps) {
+    // (the m indexes' squares' sum as s2 times a chi-square of 1.5 m degrees of freedom, rounded,
+    // of the same mean: lighter-tailed than the normal's, the scale factor following the values'
+    // level)
+    if (m) {
+      const int k = (3 * m + 1) / 2;
+      s2 = s2 * (double)m / (double)k, m = k;
+    }
+    S64 e[NW_BK + 2];
+    double w[NW_BK + 2];
+    int k = 0;  // (|v| from e[i] to e[i + 1] - 1 weighs w[i]; the last, to the end)
+    auto isq = [](double x) {  // (the least integer whose square is x or more)
+      if (!(x > 0.0)) return (S64)0;
+      S64 r = (S64)sqrt(x);
+      while ((double)r * (double)r < x) r++;
+      while (r > 0 && (double)(r - 1) * (double)(r - 1) >= x) r--;
+      return r;
+    };
+    const double* ct = m ? nw_chi().t[(m < NW_CM ? m : NW_CM) - 1] : nullptr;
+    auto wt = [&](double u) {
+      const double p = m ? nw_chi_cdf(ct, (hi2 - u) / s2) - nw_chi_cdf(ct, (lo2 - u) / s2) : (u >= lo2 && u <= hi2 ? 1.0 : 0.0);
+      return (1.0 - eps) * (p > 0.0 ? p : 0.0) + eps;
+    };
+    if (!m) {
+      e[k] = 0, w[k++] = lo2 > 0.0 ? eps : 1.0;
+      if (lo2 > 0.0) e[k] = isq(lo2), w[k++] = 1.0;
+      e[k] = isq(hi2) + ((double)isq(hi2) * (double)isq(hi2) == hi2 ? 1 : 0), w[k++] = eps;
+    } else {
+      for (int i = 0; i < NW_BK; i++) e[k] = isq(hi2 * i / NW_BK), w[k++] = wt(hi2 * (i + 0.5) / NW_BK);
+      e[k] = isq(hi2) + ((double)isq(hi2) * (double)isq(hi2) == hi2 ? 1 : 0), w[k++] = eps;
+    }
+    // (merge equal starts: the later piece wins)
+    int q = 0;
+    for (int i = 0; i < k; i++) {
+      if (q && e[q - 1] >= e[i]) q--;
+      e[q] = e[i], w[q] = w[i], q++;
+    }
+    k = q;
+    // (the pieces in v, in order: the negative ones from the last segment down, then the positive)
+    S64 va[2 * NW_BK + 4], vb[2 * NW_BK + 4];
+    double vw[2 * NW_BK + 4];
+    int np = 0;
+    const S64 BIG = (S64)1 << 60;
+    for (int i = k - 1; i >= 1; i--) {
+      va[np] = i == k - 1 ? -BIG : -(e[i + 1] - 1), vb[np] = -e[i], vw[np++] = w[i];
+    }
+    va[np] = -(k > 1 ? e[1] - 1 : BIG), vb[np] = k > 1 ? e[1] - 1 : BIG, vw[np++] = w[0];
+    for (int i = 1; i < k; i++) va[np] = e[i], vb[np] = i == k - 1 ? BIG : e[i + 1] - 1, vw[np++] = w[i];
+    // (in r, within lo..hi; reversed where sg < 0)
+    const S64 rlo = sg > 0 ? lo - nwq : nwq - hi, rhi = sg > 0 ? hi - nwq : nwq - lo;
+    bd.n = 0;
+    for (int t = 0; t < np; t++) {
+      const int i = sg > 0 ? t : np - 1 - t;
+      const S64 ra = sg > 0 ? (va[i] == -BIG ? -BIG : va[i] - nwq) : (vb[i] == BIG ? -BIG : nwq - vb[i]);
+      const S64 rb = sg > 0 ? (vb[i] == BIG ? BIG : vb[i] - nwq) : (va[i] == -BIG ? BIG : nwq - va[i]);
+      const S64 a2 = ra > rlo ? ra : rlo, b2 = rb < rhi ? rb : rhi;
+      if (a2 > b2) continue;
+      bd.ra[bd.n] = a2, bd.rb[bd.n] = b2, bd.w[bd.n++] = vw[i];
+    }
+    return bd.n > 1;
+  }
+  S64 code_index_nw(const M_smp_v& D, S64 v, S64 lo, S64 hi, int* how, double nc, double ns, const NwBud* bd = nullptr) {
     M_smn_v E;
 #define M_COPY(f) E.f = D.f;
     M_smp_VARS(M_COPY)
@@ -5527,9 +5747,62 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // (the mass past x, x from 1/2, on either side: the positive's to hi, the negative's to lo)
     auto tp = [&](double x) { return nw_tail(((x < hp ? x : hp) - nc) * is); };
     auto tn = [&](double x) { return nw_tail(((x < hn ? x : hn) + nc) * is); };
+    // (with a budget: the tails weighed, piece by piece; the positive pieces' tails from the top, the
+    // negative ones' from the bottom, each piece's at its far end kept, tq and tm: a piece's far end
+    // the next one's near end)
+    double cp[2 * NW_BK + 4], cn[2 * NW_BK + 4], tq[2 * NW_BK + 4], tm[2 * NW_BK + 4], p0w = 0.0;
+    const int nb_ = bd ? bd->n : 0;
+    if (bd) {
+      double acc = 0.0, tt = bd->rb[nb_ - 1] >= 1 ? tp((double)bd->rb[nb_ - 1] + 0.5) : 0.0;
+      for (int i = nb_ - 1; i >= 0; i--) {  // (positive r, 1 on)
+        const S64 a = bd->ra[i] > 1 ? bd->ra[i] : 1;
+        if (bd->rb[i] >= a) {
+          const double tb = tp((double)a - 0.5);
+          tq[i] = tt, acc += bd->w[i] * (tb - tt), tt = tb;
+        }
+        cp[i] = acc;
+      }
+      acc = 0.0, tt = bd->ra[0] <= -1 ? tn((double)(-bd->ra[0]) + 0.5) : 0.0;
+      for (int i = 0; i < nb_; i++) {  // (negative r, -1 down)
+        const S64 b = bd->rb[i] < -1 ? bd->rb[i] : -1;
+        if (b >= bd->ra[i]) {
+          const double tb = tn((double)(-b) - 0.5);
+          tm[i] = tt, acc += bd->w[i] * (tb - tt), tt = tb;
+        }
+        cn[i] = acc;
+      }
+      for (int i = 0; i < nb_; i++)
+        if (bd->ra[i] <= 0 && bd->rb[i] >= 0) p0w = bd->w[i] * (1.0 - tp(0.5) - tn(0.5));
+    }
+    // (the positive r's tail past x, x from 1/2: the piece holding x + 1/2 weighs it to its end; the
+    // pieces in order, found by halving)
+    auto tpw = [&](double x) {
+      if (!bd) return tp(x);
+      const S64 r = (S64)(x + 0.5);
+      int i = 0, k = nb_ - 1;  // (the last piece from r or below, else the first)
+      while (i < k) {
+        const int h = (i + k + 1) >> 1;
+        if (bd->ra[h] <= r) i = h;
+        else k = h - 1;
+      }
+      if (bd->rb[i] < r) return i + 1 < nb_ ? cp[i + 1] : 0.0;
+      return bd->w[i] * (tp(x) - tq[i]) + (i + 1 < nb_ ? cp[i + 1] : 0.0);
+    };
+    auto tnw = [&](double x) {
+      if (!bd) return tn(x);
+      const S64 r = -(S64)(x + 0.5);
+      int i = 0, k = nb_ - 1;  // (the first piece to r or above, else the last)
+      while (i < k) {
+        const int h = (i + k) >> 1;
+        if (bd->rb[h] >= r) k = h;
+        else i = h + 1;
+      }
+      if (bd->ra[i] > r) return i > 0 ? cn[i - 1] : 0.0;
+      return bd->w[i] * (tn(x) - tm[i]) + (i > 0 ? cn[i - 1] : 0.0);
+    };
     auto mag = [&](S64 a, S64 z) {  // (magnitudes a-z, from 1)
       const double xa = (double)a - 0.5, xz = (double)z + 0.5;
-      return (tp(xa) - tp(xz)) + (tn(xa) - tn(xz));
+      return (tpw(xa) - tpw(xz)) + (tnw(xa) - tnw(xz));
     };
     auto pr = [](double a0, double a1) {  // (a0 of a0 + a1, as the family's probabilities)
       const double t = a0 + a1;
@@ -5542,12 +5815,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     double ep[LEN_MAX + 1], en[LEN_MAX + 1];
     for (int n = 0; n <= maxnb; n++) {
       const double x = (double)((S64)1 << n) - 0.5;
-      ep[n] = n && ep[n - 1] == 0.0 ? 0.0 : tp(x), en[n] = n && en[n - 1] == 0.0 ? 0.0 : tn(x);
+      ep[n] = n && ep[n - 1] == 0.0 ? 0.0 : tpw(x), en[n] = n && en[n - 1] == 0.0 ? 0.0 : tnw(x);
     }
     auto lens = [&](int a, int z) {
       if (z > maxnb) z = maxnb;
       if (a > z) return 0.0;
-      return a ? (ep[a - 1] - ep[z]) + (en[a - 1] - en[z]) : 1.0 - ep[z] - en[z];
+      if (a) return (ep[a - 1] - ep[z]) + (en[a - 1] - en[z]);
+      return bd ? p0w + (tpw(0.5) - ep[z]) + (tnw(0.5) - en[z]) : 1.0 - ep[z] - en[z];
     };
     const int depth = U32_BITS - __builtin_clz((unsigned)maxnb);
     const S64 av = ENC ? (v < 0 ? -v : v) : 0;
@@ -5583,7 +5857,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     int neg = 0;
     if (m && m <= hi && m <= -lo) {
       const double xa = (double)m - 0.5, xz = (double)m + 0.5;
-      f.prp = pr(tp(xa) - tp(xz), tn(xa) - tn(xz));
+      f.prp = pr(tpw(xa) - tpw(xz), tnw(xa) - tnw(xz));
       neg = f.bit(QN_SIGN, ENC && v < 0);
     } else if (m > hi)
       neg = 1;
