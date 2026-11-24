@@ -104,7 +104,7 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 64.21% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 64.14% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3485 (0.27%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 4624 (0.43%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2589 (0.11%) | | |
@@ -780,6 +780,31 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   chi-square's 1.5 times the degrees of freedom 0.02%); for 36% more instructions without the WAV
   (`mid.dtsc`'s, compressing: 601 KB/s on this host, 891 before; FATE's 7-frame XCH sample 5.4%).
   With the WAV, every run of the check lists the same but for the format's byte.
+  Since format 163, where the rule's cell hasn't held, the cell the stream's parts have kept to:
+  the 3% and 97% points of their energies against their cells' centres (in eighths of a doubling,
+  each part a 512th less), where those lie within 2 doublings of each other, from 64 parts on, the
+  budget and smn's values the fit doesn't serve going by that cell (the gate still counting the
+  rule's own cells: `dtswavsample16.wav`'s parts lie 62% in them). And the peak rule, FFmpeg's
+  encoder's: it takes the least scale factor that keeps the subband's peak within the quantizer's
+  top index, so that a part's peak index lies at that top or near it (`f4.dts`'s at ABITS 1-6 the
+  top in 99.1-100% of its parts, at 7 the top or one under it, at 8 within 3 of 16, at 9 and 10
+  within 0.85 of the top; `mid.dtsc`'s at ABITS 3 the top in 59%). For each ABITS (11 and up as
+  one) the 3% and 99.7% points of the parts' peaks, in 64ths of the top index (each part a 512th
+  less), make a cell: where the RMS rule's budget isn't used, from 32 parts on, an index whose
+  part's peak hasn't reached the cell's lower end weighs, under that end, 0.98 of how often such
+  parts' peaks have then reached it in as many places after, plus 0.02, and past the cell's upper
+  end 0.02 (`nw_bud_pk()`); and at ABITS 1 and 2, where 97% of the parts' peaks have reached the
+  top index and neither RMS cell has held, the values the fit doesn't serve are smn's too, the
+  logistic's scale the parts' root mean square at that ABITS (from ABITS 3 on, smp's coding of
+  them is better: `f4.dts` 0.5% bigger so at 3-6, 4.3% at 7-11, 8.5% from 12). smn retuned on
+  format 162's no-WAV dumps. Without their WAVs, `s.2.dts`'s core 32111131 bytes to 32074689
+  (64.21% of it to 64.14%), the 12 no-WAV streams 12991892 to 12986033 (0.05%), the 55 streams of
+  the check lists 127160127 to 126739942 (0.33%: `dtswavsample16.wav` 1.02%, FFmpeg's encodes
+  0.13-1.94%, the others within 0.19%; 4 bigger, `sil/v.dtsc` by 1164 bytes of 4.2 MB, `Master
+  Audio 5.0` by 55, two short ones by 2 and 8); of that, the learned cell 0.20%, smn's retune
+  0.10%, the peak rule 0.03% (FFmpeg's encodes 0.49%); for 1.3% more instructions without the WAV
+  (`mid.dtsc`'s, compressing; FATE's 7-frame XCH sample 1.9%). With the WAV, every run of the
+  check lists the same but for the format's byte.
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first

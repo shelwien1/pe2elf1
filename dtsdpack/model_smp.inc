@@ -68,6 +68,39 @@ static INLINE double nw_chi_cdf(const double* t, double x) {  // (t: m's row, nw
   const int i = (int)z;
   return t[i] + (t[i + 1] - t[i]) * (z - (double)i);
 }
+// (since format 163) the learned cell's bins, eighths of a doubling of a part's energy against its
+// cell's centre from 2^-4 to 2^8: t[k] = 2^(k / 8 - 4), made with sqrt and ldexp alone (code_q())
+static constexpr int NW_HB = 96;
+struct NwLe {
+  double t[NW_HB + 1];
+  NwLe() {
+    double f[8];
+    f[0] = 1.0, f[4] = sqrt(2.0), f[2] = sqrt(f[4]), f[1] = sqrt(f[2]);
+    f[3] = f[1] * f[2], f[5] = f[1] * f[4], f[6] = f[2] * f[4], f[7] = f[3] * f[4];
+    for (int k = 0; k <= NW_HB; k++) t[k] = ldexp(f[k % 8], k / 8 - 4);
+  }
+  int bin(double x) const {  // (the last k with t[k] <= x, 0 to NW_HB - 1; 0 below t[0])
+    int a = 0, z = NW_HB - 1;
+    while (a < z) {
+      const int h = (a + z + 1) >> 1;
+      if (t[h] <= x) a = h;
+      else z = h - 1;
+    }
+    return a;
+  }
+};
+static const NwLe nw_le;
+// (since format 163) the peak rule's cell (FFmpeg's encoder's: the least scale factor that keeps the
+// subband's peak within the quantizer's top index): for each ABITS, 11 and up as one, its parts'
+// peaks in 64ths of the top index, NW_PH bins (the last past it), a part's NW_PM places (code_q())
+static constexpr int NW_PA = 12, NW_PH = 66, NW_PM = NSMP;
+struct NwPc {
+  double h[NW_PH], n;             // (the peaks' bins, each part a 512th less, and how many)
+  int p0, p1;                     // (their 3% and 99.7% points' bins)
+  double rc[NW_PM], rt[NW_PM];    // (of the places, m after them, where the part's peak hadn't reached
+                                  // the cell, how many it reached later, rc of rt, each a 256th less)
+  double ks, kn;                  // (the parts' mean squares over the top's square, each a 64th less)
+};
 // the RMS rule's budget of a part's indexes, as a weight of each residual r (code_q(),
 // code_index_nw()): pieces in r, each its first and last r and its weight, by the square of the index
 // nwq + sg r
@@ -478,6 +511,16 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // their cells, nw_bi of nw_bn: nw_cell(); the fit's shrink, its sums, nw_hs and nw_hq, and its
   // switch, the mean distances of the index from the fit's value shrunk and not, nw_ha and nw_hb)
   double nw_pe[NCH][NSUB], nw_gs, nw_gn, nw_bi, nw_bn;
+  // (since format 163 the learned cell: the stream's parts' energies against their cells' centres,
+  // nw_lh in nw_le's bins (each part a 512th less), nw_ln of them; the 3% and 97% points' bins,
+  // nw_l0 and nw_l1)
+  double nw_lh[NW_HB], nw_ln;
+  int nw_l0, nw_l1;
+  // (since format 163 the peak rule's cells, by ABITS (NwPc); a part's peak so far, nw_pk, and its
+  // place where it first reached the cell, nw_pf, -1 not yet)
+  NwPc nw_pc[NW_PA];
+  S64 nw_pk[NCH][NSUB];
+  S8 nw_pf[NCH][NSUB];
   double nw_hs[NCH][NSUB], nw_hq[NCH][NSUB], nw_ha[NCH][NSUB], nw_hb[NCH][NSUB];
   double nw_qr[NCH][NSUB];  // (since format 160 the step the spreads are in, over the root of its scale factor; 0 none)
   U8 nw_n[NCH][NSUB], nw_r1[NCH][NSUB], nw_r2[NCH][NSUB];
@@ -1234,6 +1277,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     memset(nw_hs, 0, sizeof nw_hs), memset(nw_hq, 0, sizeof nw_hq);
     memset(nw_ha, 0, sizeof nw_ha), memset(nw_hb, 0, sizeof nw_hb);
     memset(nw_pe, 0, sizeof nw_pe), nw_gs = nw_gn = 0.0, nw_bi = nw_bn = 0.0;
+    memset(nw_lh, 0, sizeof nw_lh), nw_ln = 0.0, nw_l0 = 0, nw_l1 = NW_HB - 1;
+    memset(nw_pc, 0, sizeof nw_pc), memset(nw_pk, 0, sizeof nw_pk), memset(nw_pf, -1, sizeof nw_pf);
+    for (int k = 0; k < NW_PA; k++) nw_pc[k].p1 = NW_PH - 1;
     for (int c = 0; c < NCH; c++)
       for (int k = 0; k < NSUB; k++) nw_ba[c][k] = nw_bb[c][k] = 1.0;
     memset(dv_lq, 0, sizeof dv_lq);
@@ -5445,15 +5491,30 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     double ke0 = 0.0, ke1 = 0.0, kem = 0.0, ktq = 0.0;
     if (nwp && ss > 0) {
       nw_cell(r, s, ch, b, j, ss, kpb, kpe, ke0, ke1, kem, ktq);
-      if (j == kpb * 8) nw_pe[ch][b] = 0.0;
+      if (j == kpb * 8) nw_pe[ch][b] = 0.0, nw_pk[ch][b] = 0, nw_pf[ch][b] = -1;
     }
-    const bool nwok = nw_bn < 16.0 || nw_bi >= 0.8 * nw_bn;
-    const bool nwz = nwp && !nwr && ss > 0 && nwok;
+    const double kt0 = ke0, kt1 = ke1;  // (the rule's own cell, whose share the gate counts)
+    // (since format 163, where the rule's cell hasn't held, the learned one, where 94% of the
+    // stream's last 512 or so parts have been within 2 doublings, from 64 of them: the 3% and 97%
+    // points of their energies against their cells' centres)
+    const bool nwth = nw_bn < 16.0 || nw_bi >= 0.8 * nw_bn;
+    const bool nwlc = !nwth && nw_ln >= 64.0 && nw_l1 + 1 - nw_l0 <= 16 && kem > 0.0;
+    const bool nwok = nwth || nwlc;
+    if (nwlc) ke0 = kem * nw_le.t[nw_l0], ke1 = kem * nw_le.t[nw_l1 + 1];
+    // (since format 163, where neither cell has held, at ABITS 1 and 2 where 97% of the parts' peaks
+    // have reached the top index or more, from 32 parts (FFmpeg's encodes): the samples the fit
+    // doesn't serve the same, but with the logistic's scale the parts' root mean square at that
+    // ABITS, sqrt(3) / pi of the root of ks hi^2 + 1 / 12)
+    const int nca = a < NW_PA ? a : NW_PA - 1;
+    const NwPc& nwc = nw_pc[nca];
+    const bool nwpk = !nwok && nwp && ss > 0 && kpe > kpb && hi > 0 && a <= 2 && nwc.n >= 32.0 && nwc.p0 >= 48;
+    const bool nwz = nwp && !nwr && ss > 0 && (nwok || nwpk);
     const double zc = nwz ? nwg * nwd0 : 0.0;
     const S64 zq = (S64)llround(zc), zs = zc < (double)zq ? -1 : 1;
     double zsc = 0.0;
     if (nwz) {
-      zsc = 0.55132889542179204 * sqrt(nw_g() * ktq * ktq + 1.0 / 12.0);
+      const double ms = nwok ? nw_g() * ktq * ktq : nwc.ks / nwc.kn * (double)hi * (double)hi;
+      zsc = 0.55132889542179204 * sqrt(ms + 1.0 / 12.0);
       int e2;
       const double mt = frexp(zsc / NW_LS, &e2);
       D.ql = 1 + clip(2 * e2 + (mt >= 0.70710678118654752440 ? 1 : 0) + 3, 0, 20);
@@ -5502,6 +5563,20 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (hi2 > 0.0 && s2 > 0.0 && n > 0)
         bon = nw_bud(bud, m, lo2, hi2, s2, nwz ? zq : nwq, nwz ? zs : nwd >= (double)nwq ? 1 : -1, lo, hi, 0.02);
     }
+    // (since format 163 the peak rule's budget where the RMS rule's isn't, from 32 parts at the
+    // ABITS: an index whose part's peak hasn't reached the cell's lower end p0 weighs, where under
+    // it, 0.98 of how often such parts' peaks have then reached it in the m places after, plus
+    // 0.02, any past the cell's upper end p1 0.02 (nw_bud_pk()); FFmpeg's encodes: at ABITS 1-6
+    // 99% of their parts' peaks the top index, at 7-10 within 0.84 of it)
+    if (!bon && (nwr || nwz) && nwp && ss > 0 && kpe > kpb && hi > 0 && nwc.n >= 32.0) {
+      const S64 p0 = ((S64)nwc.p0 * hi + 63) / 64;
+      const S64 p1 = nwc.p1 >= NW_PH - 1 ? (S64)1 << 60 : (((S64)nwc.p1 + 1) * hi - 1) / 64;
+      const int m = (kpe - kpb) * 8 - 1 - (j - kpb * 8);
+      const bool got = nw_pk[ch][b] >= p0;
+      const double R = m ? (nwc.rc[m] + 0.5) / (nwc.rt[m] + 1.0) : 0.0;
+      bon = nw_bud_pk(bud, got ? 0 : p0, p1, got ? 1.0 : 0.98 * R + 0.02, 0.02, nwz ? zq : nwq,
+                      nwz ? zs : nwd >= (double)nwq ? 1 : -1, lo, hi);
+    }
     if (nwr) {  // (the residual toward the fit's own value positive)
       const S64 sg = nwd < (double)nwq ? -1 : 1, rlo = sg > 0 ? lo - nwq : nwq - hi, rhi = sg > 0 ? hi - nwq : nwq - lo;
       v = nwq + sg * code_index_nw(D, ENC ? sg * (v - nwq) : 0, rlo, rhi, &how, sg * (nwd - (double)nwq),
@@ -5524,9 +5599,52 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         if (++f.n == NW_K) f.n = 0, nw_refit(f);
       }
       nw_pe[ch][b] += (double)v * (double)v;
+      if (ss > 0 && kpe > kpb && hi > 0) {  // (the peak rule's: the part's peak, where it first reached the cell)
+        NwPc& q = nw_pc[nca];
+        const S64 av = v < 0 ? -v : v, p0 = ((S64)q.p0 * hi + 63) / 64;
+        if (av > nw_pk[ch][b]) nw_pk[ch][b] = av;
+        if (nw_pf[ch][b] < 0 && av >= p0) nw_pf[ch][b] = (S8)(j - kpb * 8);
+        if (j == kpe * 8 - 1) {  // (the part's end: the counts, the peak's bin, the cell, the mean square)
+          const int n = (kpe - kpb) * 8, f = nw_pf[ch][b] < 0 ? n : nw_pf[ch][b];
+          for (int i = 0; i < f; i++) {
+            const int m = n - 1 - i;
+            q.rt[m] += 1.0 - q.rt[m] / 256.0, q.rc[m] += (f < n ? 1.0 : 0.0) - q.rc[m] / 256.0;
+          }
+          const S64 pk = nw_pk[ch][b];
+          for (int i = 0; i < NW_PH; i++) q.h[i] -= q.h[i] / 512.0;
+          q.h[pk > hi ? NW_PH - 1 : (int)(pk * 64 / hi)] += 1.0, q.n += 1.0 - q.n / 512.0;
+          double c = 0.0;
+          int l0 = -1, l1 = NW_PH - 1;
+          for (int i = 0; i < NW_PH; i++) {
+            c += q.h[i];
+            if (l0 < 0 && c >= 0.03 * q.n) l0 = i;
+            if (c >= 0.997 * q.n) {
+              l1 = i;
+              break;
+            }
+          }
+          q.p0 = l0 < 0 ? 0 : l0, q.p1 = l1;
+          q.ks += nw_pe[ch][b] / ((double)n * (double)hi * (double)hi) - q.ks / 64.0, q.kn += 1.0 - q.kn / 64.0;
+        }
+      }
       if (a >= 3 && ss > 0 && j == kpe * 8 - 1) {  // (the part's end: whether in its cell, the ratio)
         const double E = nw_pe[ch][b];
-        nw_bi += (E >= ke0 && E <= ke1 ? 1.0 : 0.0) - nw_bi / 256.0, nw_bn += 1.0 - nw_bn / 256.0;
+        nw_bi += (E >= kt0 && E <= kt1 ? 1.0 : 0.0) - nw_bi / 256.0, nw_bn += 1.0 - nw_bn / 256.0;
+        if (kem > 0.0) {  // (the learned cell's histogram and its 3% and 97% points)
+          for (int i = 0; i < NW_HB; i++) nw_lh[i] -= nw_lh[i] / 512.0;
+          nw_lh[nw_le.bin(E / kem)] += 1.0, nw_ln += 1.0 - nw_ln / 512.0;
+          double c = 0.0;
+          int lo = -1, hi = NW_HB - 1;
+          for (int i = 0; i < NW_HB; i++) {
+            c += nw_lh[i];
+            if (lo < 0 && c >= 0.03 * nw_ln) lo = i;
+            if (c >= 0.97 * nw_ln) {
+              hi = i;
+              break;
+            }
+          }
+          nw_l0 = lo < 0 ? 0 : lo, nw_l1 = hi;
+        }
         if (kem > 0.0) nw_gs += (E - (double)((kpe - kpb) * 8) / 12.0) / kem - nw_gs / 64.0, nw_gn += 1.0 - nw_gn / 64.0;
       }
       nw_ha[ch][b] += fabs((double)v - nwg * nwd0) - nw_ha[ch][b] / 64.0;
@@ -5674,6 +5792,43 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // put the part's energy past this one's in lo2..hi2) + eps, each m's of variance s2 (chi-square);
   // constant over NW_BK pieces of v^2 to hi2 (where m is 0, exact: v^2 in lo2..hi2), eps past; the
   // pieces in r within lo..hi (the index's range), in order. False where they don't weigh
+  // (since format 163) the peak rule's budget as nw_bud()'s pieces: |v| under p0 weighs wl, from p0 to
+  // p1 1, past p1 eps (p0 0: none under it; p1 1 << 60: none past it)
+  static bool nw_bud_pk(NwBud& bd, S64 p0, S64 p1, double wl, double eps, S64 nwq, S64 sg, S64 lo, S64 hi) {
+    const S64 BIG = (S64)1 << 60;
+    S64 e[3];
+    double w[3];
+    int k = 0;  // (|v| from e[i] to e[i + 1] - 1 weighs w[i]; the last, to the end)
+    if (p0 > 0) e[k] = 0, w[k++] = wl;
+    e[k] = p0, w[k++] = 1.0;
+    if (p1 < BIG) e[k] = p1 + 1, w[k++] = eps;
+    return nw_bud_v(bd, e, w, k, nwq, sg, lo, hi);
+  }
+  // (nw_bud()'s pieces e and w, k of them, in v, then in r within lo..hi: whether more than one)
+  static bool nw_bud_v(NwBud& bd, const S64* e, const double* w, int k, S64 nwq, S64 sg, S64 lo, S64 hi) {
+    // (the pieces in v, in order: the negative ones from the last segment down, then the positive)
+    S64 va[2 * NW_BK + 4], vb[2 * NW_BK + 4];
+    double vw[2 * NW_BK + 4];
+    int np = 0;
+    const S64 BIG = (S64)1 << 60;
+    for (int i = k - 1; i >= 1; i--) {
+      va[np] = i == k - 1 ? -BIG : -(e[i + 1] - 1), vb[np] = -e[i], vw[np++] = w[i];
+    }
+    va[np] = -(k > 1 ? e[1] - 1 : BIG), vb[np] = k > 1 ? e[1] - 1 : BIG, vw[np++] = w[0];
+    for (int i = 1; i < k; i++) va[np] = e[i], vb[np] = i == k - 1 ? BIG : e[i + 1] - 1, vw[np++] = w[i];
+    // (in r, within lo..hi; reversed where sg < 0)
+    const S64 rlo = sg > 0 ? lo - nwq : nwq - hi, rhi = sg > 0 ? hi - nwq : nwq - lo;
+    bd.n = 0;
+    for (int t = 0; t < np; t++) {
+      const int i = sg > 0 ? t : np - 1 - t;
+      const S64 ra = sg > 0 ? (va[i] == -BIG ? -BIG : va[i] - nwq) : (vb[i] == BIG ? -BIG : nwq - vb[i]);
+      const S64 rb = sg > 0 ? (vb[i] == BIG ? BIG : vb[i] - nwq) : (va[i] == -BIG ? BIG : nwq - va[i]);
+      const S64 a2 = ra > rlo ? ra : rlo, b2 = rb < rhi ? rb : rhi;
+      if (a2 > b2) continue;
+      bd.ra[bd.n] = a2, bd.rb[bd.n] = b2, bd.w[bd.n++] = vw[i];
+    }
+    return bd.n > 1;
+  }
   static bool nw_bud(NwBud& bd, int m, double lo2, double hi2, double s2, S64 nwq, S64 sg, S64 lo, S64 hi, double eps) {
     // (the m indexes' squares' sum as s2 times a chi-square of 1.5 m degrees of freedom, rounded,
     // of the same mean: lighter-tailed than the normal's, the scale factor following the values'
@@ -5711,29 +5866,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (q && e[q - 1] >= e[i]) q--;
       e[q] = e[i], w[q] = w[i], q++;
     }
-    k = q;
-    // (the pieces in v, in order: the negative ones from the last segment down, then the positive)
-    S64 va[2 * NW_BK + 4], vb[2 * NW_BK + 4];
-    double vw[2 * NW_BK + 4];
-    int np = 0;
-    const S64 BIG = (S64)1 << 60;
-    for (int i = k - 1; i >= 1; i--) {
-      va[np] = i == k - 1 ? -BIG : -(e[i + 1] - 1), vb[np] = -e[i], vw[np++] = w[i];
-    }
-    va[np] = -(k > 1 ? e[1] - 1 : BIG), vb[np] = k > 1 ? e[1] - 1 : BIG, vw[np++] = w[0];
-    for (int i = 1; i < k; i++) va[np] = e[i], vb[np] = i == k - 1 ? BIG : e[i + 1] - 1, vw[np++] = w[i];
-    // (in r, within lo..hi; reversed where sg < 0)
-    const S64 rlo = sg > 0 ? lo - nwq : nwq - hi, rhi = sg > 0 ? hi - nwq : nwq - lo;
-    bd.n = 0;
-    for (int t = 0; t < np; t++) {
-      const int i = sg > 0 ? t : np - 1 - t;
-      const S64 ra = sg > 0 ? (va[i] == -BIG ? -BIG : va[i] - nwq) : (vb[i] == BIG ? -BIG : nwq - vb[i]);
-      const S64 rb = sg > 0 ? (vb[i] == BIG ? BIG : vb[i] - nwq) : (va[i] == -BIG ? BIG : nwq - va[i]);
-      const S64 a2 = ra > rlo ? ra : rlo, b2 = rb < rhi ? rb : rhi;
-      if (a2 > b2) continue;
-      bd.ra[bd.n] = a2, bd.rb[bd.n] = b2, bd.w[bd.n++] = vw[i];
-    }
-    return bd.n > 1;
+    return nw_bud_v(bd, e, w, q, nwq, sg, lo, hi);
   }
   S64 code_index_nw(const M_smp_v& D, S64 v, S64 lo, S64 hi, int* how, double nc, double ns, const NwBud* bd = nullptr) {
     M_smn_v E;
