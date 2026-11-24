@@ -556,7 +556,7 @@ struct Model : ModelX96<f_DEC, LV> {
         else if (!twin_field(fid, ch, b, v, lo, hi) && !(B::ffe_ok && !pass && bound[ch] && B::ff_abits(ch, b, v, lo, hi)))
           v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
                          s.pmode[ch][b], lbd, nb, mx, Sn, near_e ? 14 : nn, sc, eq, ms,
-                         alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag, (fs && ut) || nws ? sx : 0, pq1, pq2, B::ss_rule() || B::ab_rule());
+                         alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag, (fs && ut) || nws ? sx : 0, pq1, pq2, B::ss_rule() || B::ab_rule(), !bound[ch]);
         v = checked(v, lo, hi);
         if (nws) B::nwd_n[0] += v > nws - 1, B::nwd_n[1] += v < nws - 1;
         if (nsv) {

@@ -9,7 +9,7 @@ to code is where the encoder chose otherwise. Decompression, with the same WAV, 
 stream byte for byte.
 
 The core of `s.2.dts` (4 minutes 25 seconds of 5.1 at 1509 kbps; 50008260 bytes) compresses to
-76383 bytes (0.15%); without its audio, dtsdpack's model gets 71.86% and `xz -9e` 88.21%.
+76383 bytes (0.15%); without its audio, dtsdpack's model gets 63.56% and `xz -9e` 88.21%.
 
 The core substream's extensions are coded too: XCH (6.1's back centre) and XXCH (7.1's other
 channels) as more channels, X96 (DTS 96/24's 24-48 kHz band and the core's residuals) as subbands
@@ -104,7 +104,7 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 63.63% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 63.56% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3485 (0.27%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 4624 (0.43%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2589 (0.11%) | | |
@@ -853,6 +853,15 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   smaller a stream, left out. The instructions the same without the WAV (`mid.dtsc`'s,
   compressing, 0.05% fewer; FATE's 7-frame XCH sample 0.2% more). With the WAV, every run of the
   check lists the same but for the format's byte.
+  Since format 166 such a channel's ABITS and scale factors are families of their own, abn and scn
+  (abt's and scl's before; their variables the same), tuned on dumps without the WAV (`s2h.dts`,
+  `mid.dtsc`, `dts_es.dts`, 1 MB cuts of seven more, FFmpeg's `f4.dts`, FATE's three 7-frame samples
+  each 16 times): the two families' 399161 bytes there to 387927 (abn's 9.2% smaller, scn's 1.3%).
+  Without their WAVs, `s.2.dts`'s whole core 31821770 bytes to 31786140 (63.63% of it to 63.56%),
+  the 55 streams of the check lists 126068166 to 125820849 (0.20%, none bigger: FATE's 7- and
+  14-frame samples 0.6-1.8%, `dts_es.dts` 0.32%, `dtswavsample16.wav` 0.27%, the rest 0.03-0.28%).
+  The instructions the same (`mid.dtsc`'s, compressing, 0.02% more; FATE's 7-frame XCH sample 0.05%
+  more). With the WAV, every run of the check lists the same but for the format's byte.
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first
@@ -1952,7 +1961,7 @@ FATE's other samples 12-28%, the XXCH ones 16-32% (`xbr_xxch_71_24_48_3840`'s 40
 
 ### The model
 
-Each element is binarised, and each decision goes to one of sixteen families (`fam.inc`, ac3pack's,
+Each element is binarised, and each decision goes to one of nineteen families (`fam.inc`, ac3pack's,
 m4vpack's and h264p's): counters chosen by context indices, mixed in the logistic domain, refined
 by APMs, then range coded (`rc.inc`). `famvars.inc` lists the variables the model gives each
 family; `IDX/l9/<family>.idx` declares level -9's indices over them and their tunable parameters,
@@ -1976,15 +1985,19 @@ touched several (a 7-frame stream's run maps 700 fewer pages, a quarter of them)
 - **abt**: the bit allocations.
 - **abd**: a decoded WAV's (as the scale factor or the bit allocation search shows it; abt's until
   format 118, below).
+- **abn**: a channel's the WAV doesn't bind (abt's until format 166, above).
 - **scl**: the scale factors, against the RMS's (the LFE's too).
 - **scd**: a decoded WAV's (as the scale factor search shows it; scl's until format 118, below).
+- **scn**: a channel's the WAV doesn't bind (scl's until format 166, above).
 - **hit**: whether an index that isn't the audio's is the other side's, and an LFE sample's whether
   it is the audio's.
 - **hid**: a decoded WAV's (as for sdd; hit's until format 132, below).
-- **smp**: the indexes otherwise (and all of them where the WAV isn't bound, since format 156 as
-  their residuals from a fit of the decoded values, where those have been nearer: above): magnitude
-  and sign.
+- **smp**: the indexes otherwise (and from format 156 to 158 all of them where the WAV isn't bound,
+  as their residuals from a fit of the decoded values, where those have been nearer: above):
+  magnitude and sign.
 - **smd**: a decoded WAV's (as for sdd; smp's until format 132, below).
+- **smn**: a channel's the WAV doesn't bind, its indexes' residuals from the fit of its decoded
+  values (smp's and smd's until format 159, above).
 - **vqr**: the ranks of the HF VQ vectors (their groups', then theirs in the group).
 - **vqp**: the ranks of the predictors (their blocks', then theirs in the block; vqr's until format
   116, below).

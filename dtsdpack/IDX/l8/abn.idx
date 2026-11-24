@@ -1,0 +1,166 @@
+#  dtsdpack's abn family at level -8: its context indices and its tunable parameters.
+#  IDX/IDX-FORMAT.md is the format; ../../mk.sh regenerates MOD/l8/abn_h.inc and _p.inc from
+#  this file and family.inc.  famvars.inc says what each variable is.
+#
+#  The bit allocations (ABITS) of a channel the WAV doesn't bind, against the last ones, the subband
+#  below's, and the energy its first scale factor is (abt's until format 166, its start).
+
+Prefix D8_abn
+Debug 1
+Const 0
+
+Index a
+ a_bd: bd, 1!0100011110000110111000101110000
+ a_es: es, &01001000
+
+Index b
+ b_la: la, 1!001011011111100010001010100
+ b_lb: lb, 1!100100100100001000000000100
+
+Index c
+ c_sn: sn, 1!001000000111010100010110111
+ c_la: la, 1!001001000110001110010000000
+
+Index d
+ d_sn: sn, 1!001011001100000000000000011
+ d_sd: sd, 1!10
+ d_de: de, 1!000000000
+ d_sc: sc, 1!10000101000000
+ d_sm: sm, 1!0010000010111000
+ d_bg: bg, 1!1101000
+ d_ag: ag, 1!1100
+ d_sx: sx, 1!11101
+
+Index e
+ e_bd: bd, 1!0001100111011101001000001110000
+ e_sn: sn, 1!001100000100000000000001101
+
+Index h
+ h_lb: lb, 1!101111110001011010111000100
+ h_es: es, &00010110
+ h_bd: bd, 1!0110000001100011111011001000000
+
+Index i
+ i_es: es, &00001011
+ i_nb: nb, 1!101110110
+ i_la: la, 1!000000100111010011000100100
+
+Index j
+ j_es: es, &00000000
+ j_de: de, 1!001100111
+ j_pm: pm, 1!1
+
+Index k
+ k_sn: sn, 1!000111000000000000000101011
+ k_nn: nn, 1!000000000000001
+ k_sc: sc, 1!11110000001010
+ k_eq: eq, 1!0001
+ k_sm: sm, 1!0110000011010000
+ k_bg: bg, 1!0101010
+ k_ag: ag, 1!1010
+ k_sx: sx, 1!00001
+
+Index l
+ l_bd: bd, 1!0000111011111111111000110100000
+ l_cc: cc, 1!11
+ l_la: la, 1!100010011100011101001010000
+
+Index s
+ s_sn: sn, 1!000110011100000000000001010
+ s_sd: sd, 1!10
+ s_nn: nn, 1!000000000000000
+ s_sc: sc, 1!01111110110000
+ s_sm: sm, 1!0100100011001001
+ s_bg: bg, 1!1010111
+ s_ag: ag, 1!1010
+ s_sx: sx, 1!01001
+
+Index f
+ f_es: es, &01100000
+
+Index m
+ m_nn: nn, 1!001001000000001
+
+Index w
+ w_st: st, 1!100110001
+
+Index t
+ t_bd: bd, 1!0000000000000000000000000000000
+
+Index n
+#  Frozen: the mantissa mixer it is for mixes only by a hint, and nothing gives this family one.
+! n_la: la, 1!111111111111111111111111111
+
+Index g
+ g_bd: bd, 1!1111111111111111111111111111111
+
+#  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
+Number rA, 1, 0!00101001
+Number mwA, 1, 0!11111101
+Number rB, 1, 0!11111000
+Number mwB, 1, 0!11010010
+Number rC, 1, 0!00000000
+Number mwC, 1, 0!10000000
+Number rD, 1, 0!11111101
+Number mwD, 1, 0!00000001
+Number rE, 1, 0!00000000
+Number mwE, 1, 0!11111100
+Number rH, 1, 0!11111100
+Number mwH, 1, 0!11111111
+Number rI, 1, 0!11101101
+Number mwI, 1, 0!11011001
+Number rJ, 1, 0!00000000
+Number mwJ, 1, 0!10011111
+Number rK, 1, 0!11111111
+Number mwK, 1, 0!00010100
+Number rL, 1, 0!10011110
+Number mwL, 1, 0!11111101
+Number lr, 1, 0!10111
+Number mb, 1, 0!01000100
+#  the mixers' initial weights, in 256ths (format 112): each counter's two probabilities' in the
+#  first three (wp, wq), the outside prediction's there (wo), A's APM refinement's (wa, format
+#  113), each mixer's in the final one (wf); and the final mixer's rate and boost, in 16ths of the
+#  others' (lf, bf, format 113), mixer 2's and 3's rates, in 16ths of mixer 1's (l2, l3, format 114)
+#  and boosts (b2, b3, format 115)
+Number wp, 1, 0!00111111
+Number wq, 1, 0!00000001
+Number wo, 1, 0!01100011
+Number wa, 1, 0!00000110
+Number wf, 1, 0!01101011
+Number lf, 1, 0!00010010
+Number bf, 1, 0!00010010
+Number l2, 1, 0!00010010
+Number l3, 1, 0!00010000
+Number b2, 1, 0!00010011
+Number b3, 1, 0!00010000
+Number rS1, 1, 0!01000
+Number rS2, 1, 0!01000
+Number qs, 1, 3!1100101
+Number qf, 1, 3!1001001
+Number bw, 1, 0!01000
+Number rT, 1, 0!00000010
+Number mwT, 1, 0!00010000
+Number mt, 1, 0!100
+#  the mantissa mixer's rates: frozen (Index n)
+! Number lrm, 1, 0!11111
+! Number mbm, 1, 0!00011001
+Number rG, 1, 0!00000000
+Number mwG, 1, 0!00100110
+
+#  Rows per table, as log2: a table whose index Volume fits in 2^h rows is direct, one that
+#  does not is hashed into 2^h rows and contexts share them.  Frozen: left live these only grow.
+! Number hA, 1, 0!10110
+! Number hB, 1, 0!10110
+! Number hC, 1, 0!10110
+! Number hD, 1, 0!10110
+! Number hE, 1, 0!10110
+! Number hH, 1, 0!10110
+! Number hI, 1, 0!10110
+! Number hJ, 1, 0!10110
+! Number hK, 1, 0!10110
+! Number hL, 1, 0!10110
+! Number hS, 1, 0!10110
+! Number hF, 1, 0!10110
+! Number hM, 1, 0!10110
+! Number hT, 1, 0!10110
+! Number hN, 1, 0!10110

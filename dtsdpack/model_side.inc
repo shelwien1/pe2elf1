@@ -17,6 +17,7 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
   M_FAM(jsc)
   M_FAM(abt)
   M_FAM(abd)
+  M_FAM(abn)
   int sst;  // sid: whether the value before in the subframe kept its last one (0 none, 1 kept, 2 changed)
   int ast;  // abt: the same of the subband below's ABITS
 
@@ -88,7 +89,7 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
   // allocation search's rule say (the abd family's: its own parameters, since format 118)
   S64 abits_code(int ch, int b, S64 v, S64 lo, S64 hi, S32 A, S32 Bw, int es, int de, int ls, int pm, int lbd,
                  int nb, int mx, S32 Sn, int nn, int sc, int eq, int sm, S32 Alt = 0, int bg = 0, int ag = 0, int sx = 0,
-                 int pq = -1, int pq2 = -1, int dec = 0) {
+                 int pq = -1, int pq2 = -1, int dec = 0, int nw = 0) {
     M_abt_v D;
     D.bd = b;
     D.cc = chan_class(ch);
@@ -111,7 +112,13 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
     D.ag = ag;
     D.sx = sx;
     const S32 c1 = Sn ? Sn : A, c2 = Alt ? Alt : Sn ? A : Bw;
-    if (dec) {
+    if (nw) {  // (since format 166 a channel the WAV doesn't bind: a family of its own)
+      M_abn_v E;
+#define M_COPY(f) E.f = D.f;
+      M_abt_VARS(M_COPY)
+#undef M_COPY
+      v = abits_val(f_abn, E, v, lo, hi, c1, c2, b, pq, pq2);
+    } else if (dec) {
       M_abd_v E;
 #define M_COPY(f) E.f = D.f;
       M_abt_VARS(M_COPY)

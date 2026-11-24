@@ -121,6 +121,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   using B::cat;
   M_FAM(scl)
   M_FAM(scd)
+  M_FAM(scn)
   M_FAM(hit)
   M_FAM(hid)
   M_FAM(smp)
@@ -4527,7 +4528,14 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   }
   // (scl's, or scd's where the scale factor search shows the WAV decoded: ss_rule())
   S64 scale(M_scl_v& D, S64 v, int p, S32 A, int max, int spu = 0, int sg = 0, const int* spc = nullptr,
-            const double* spp = nullptr, int spk = 0) {
+            const double* spp = nullptr, int spk = 0, bool nw = false) {
+    if (nw) {  // (since format 166 a channel the WAV doesn't bind: a family of its own)
+      M_scn_v E;
+#define M_COPY(f) E.f = D.f;
+      M_scl_VARS(M_COPY)
+#undef M_COPY
+      return scale_val(f_scn, E, v, p, A, max, spu, sg, spc, spp, spk);
+    }
     if (!ss_rule()) return scale_val(f_scl, D, v, p, A, max, spu, sg, spc, spp, spk);
     M_scd_v E;
 #define M_COPY(f) E.f = D.f;
@@ -4786,7 +4794,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (p < 0 && sm_s) p = (int)clip(A - 1 + sm_s, 0, max - 1), D.pk = 1;
     }
     const int spu = spk && p >= 0 && p == pr;
-    v = scale(D, v, p, A, max, spu && p == p0, sg, spc, spp, spk);
+    v = scale(D, v, p, A, max, spu && p == p0, sg, spc, spp, spk, !bound[ch]);
     if (!bound[ch] && !j) nw_sm[ch][b] = nw_sn[ch][b] ? nw_sm[ch][b] + ((double)v - nw_sm[ch][b]) / 8 : (double)v, nw_sn[ch][b] = 1;
     if (pf >= 0) {
       U32* const n = sfx_n[ch];
