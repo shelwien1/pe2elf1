@@ -104,7 +104,7 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 64.14% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 63.63% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3485 (0.27%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 4624 (0.43%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2589 (0.11%) | | |
@@ -823,6 +823,36 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   other changed); the budget from ABITS 4, 6 or 8 only, 11922, 27742 and 47487 bytes bigger. For
   0.65% more instructions without the WAV (`mid.dtsc`'s, compressing; FATE's 7-frame XCH sample
   1.0%). With the WAV, every run of the check lists the same but for the format's byte.
+  Since format 165 such a channel codes each subband's first scale factor before its ABITS, where
+  it has one: first whether the ABITS is 0 (a flag, by whether the last one was: none, 0 or more),
+  then, where it isn't, the scale factor (scl's ab the last ABITS, the subband's not yet known:
+  `s.2.dts`'s first 3 MB's scale factors 0.1% bigger), then the ABITS against the energy that scale
+  factor is, as a bound channel's go by its WAV's: abt's es, de and nb are its scale factor's, nn
+  the ABITS seen at the scale factors either side. The ABITS a subband had the last time it had that
+  scale factor, in any channel, is its ABITS 86% of the time in `s.2.dts`'s first 3 MB, where the
+  last ABITS is 63%; it is the first guess where its misses have weighed less than those of the
+  guess as before (each 1 + the log2 of its distance, in 16ths, the last 256 or so weighing most:
+  `nw_gpen()`; by their hits alone `open bitrate.dts` 0.26% bigger and `dtswavsample16.wav` 0.04%,
+  whose encoder's ABITS go another way: both guesses right 42-46% of the time there, the one seen
+  at the scale factor further off). The second guess is then the ABITS seen at the nearest scale
+  factor, within 8, where it differs (89% of the first guess's misses in `s.2.dts`'s first 3 MB; on
+  the side the subframe's misses have gone, where both lie as near: a miss goes their way 72% of the
+  time), sm how near that lies and on which side (1-8 below, 9-16 above: the first guess misses 27%
+  of the time a step from it, 3% at two, under 1% further), sx which way the subframe's misses have
+  gone. Without their WAVs, `s.2.dts`'s whole core 32074689 bytes to 31821770 (64.14% of it to
+  63.63%; its first 3 MB's bit allocations 13739 bytes to 5298), the 55 streams of the check lists
+  126531976 to 126068166 (0.37%: `ES 6.1 16bit.dts` 1.11%, `96-24.dts` 0.96%, `mid.dtsc` 0.89%,
+  `padded.dts` 0.75%, `open bitrate.dts` 0.35%, FFmpeg's encodes 0.004-0.45%; 21 bigger:
+  `dtswavsample16.wav` by 10511 bytes, 0.03%, the DTS CD's sample and its packings by 426-454, the
+  short ones by 2-30). Against it: the order chosen by subframe, its scale factors first where the
+  ABITS seen at them have done better, else as before, a little bigger on every stream tried (the
+  two orders' statistics mixed); the zero flag by the subband below's and the channel before's too,
+  49 bytes bigger on 12 streams; the guess seen at the scale factor only once 1024 ABITS have been,
+  the short ones 2-15 bytes bigger than format 164's, not 2-30, but the long ones 23-93 bytes bigger
+  than without it; the scale factor's ab the ABITS as format 164 would have guessed them, 3-8 bytes
+  smaller a stream, left out. The instructions the same without the WAV (`mid.dtsc`'s,
+  compressing, 0.05% fewer; FATE's 7-frame XCH sample 0.2% more). With the WAV, every run of the
+  check lists the same but for the format's byte.
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first

@@ -529,6 +529,22 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   double nw_be[NCH][NSUB], nw_bm[NCH][NSUB];
   S8 nw_bh[NCH][NSUB];
   double nw_ci, nw_cn, nw_cgs, nw_cgn, nw_cr[4], nw_ct[4];
+  // (since format 165 a channel the WAV doesn't bind codes each subband's first scale factor with
+  // its ABITS (model.inc): it, 1 + it, 0 none, this subframe, nw_e0; how often its ABITS have been 0
+  // and not, by whether the last one was (none, 0, more), nwz_n (nw_zflag()); the subframe's ABITS
+  // above and below the ABITS seen at their energy, nwd_n; and the misses of the first guess as before
+  // and of the one seen at the energy, each by its distance and the last 256 or so weighing most,
+  // nwg_p (nw_gpen()))
+  S16 nw_e0[NCH][NSUB];
+  U16 nwz_n[3][2];
+  int nwd_n[2];
+  int nwg_p[2];
+  // (a miss's weight, in 16ths: 1 + the log2 of its distance, to 16)
+  static int nw_gpen(int g, int v) {
+    static const U8 L16[17] = {0, 0, 16, 25, 32, 37, 41, 45, 48, 51, 53, 55, 57, 59, 61, 63, 64};
+    const int d = v > g ? v - g : g - v;
+    return d ? 16 + L16[d < 16 ? d : 16] : 0;
+  }
   double nw_hs[NCH][NSUB], nw_hq[NCH][NSUB], nw_ha[NCH][NSUB], nw_hb[NCH][NSUB];
   double nw_qr[NCH][NSUB];  // (since format 160 the step the spreads are in, over the root of its scale factor; 0 none)
   U8 nw_n[NCH][NSUB], nw_r1[NCH][NSUB], nw_r2[NCH][NSUB];
@@ -1139,6 +1155,15 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   U32 tw_t[2];  // (how often the audio's index was a twin's where the earlier channel's decoded value's
                 // wasn't, and the other way around)
   int twin_of(int ch) const { return ch < NCH ? (twin[ch] >= 0 ? twin[ch] : dtwin[ch]) : -1; }
+  // whether an unbound channel's subband's ABITS is 0 (z), by its last ABITS (k: none, 0, more)
+  int nw_zflag(int k, int z) {
+    U16* const n = nwz_n[k];
+    U32 p = (U32)((U64)(2 * n[0] + 1) * CO_ONE / (2 * ((U64)n[0] + n[1]) + 2));
+    p = p < 1 ? 1 : p > CO_ONE - 1 ? CO_ONE - 1 : p;
+    const int bit = c->code_bit(p, z);
+    if (++n[bit] >= 4096) n[0] >>= 1, n[1] >>= 1;
+    return bit;
+  }
   // whether v is the twin's value tv, at the field k's odds so far (v then tv)
   bool twin_flag(int k, S64& v, S64 tv) {
     U16* const n = tw_n[k];
@@ -1290,6 +1315,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int k = 0; k < NW_PA; k++) nw_pc[k].p1 = NW_PH - 1;
     memset(nw_be, 0, sizeof nw_be), memset(nw_bm, 0, sizeof nw_bm), memset(nw_bh, -1, sizeof nw_bh);
     nw_ci = nw_cn = nw_cgs = nw_cgn = 0.0, memset(nw_cr, 0, sizeof nw_cr), memset(nw_ct, 0, sizeof nw_ct);
+    memset(nw_e0, 0, sizeof nw_e0);
+    for (int k = 0; k < 3; k++) nwz_n[k][0] = 32, nwz_n[k][1] = 1;
+    nwd_n[0] = nwd_n[1] = 0, nwg_p[0] = nwg_p[1] = 0;
     for (int c = 0; c < NCH; c++)
       for (int k = 0; k < NSUB; k++) nw_ba[c][k] = nw_bb[c][k] = 1.0;
     memset(dv_lq, 0, sizeof dv_lq);
@@ -1455,6 +1483,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // channels, and their subbands' energy and how it goes
   void smp_subframe(const CoreRec& r, int sf) {
     const CoreSub& s = r.sub[sf];
+    memset(nw_e0, 0, sizeof nw_e0);
+    nwd_n[0] = nwd_n[1] = 0;
     level_start(r.xpass ? 1 : 0);
     t0 = tframe + r.nblk;
     fb0 = r.nblk;
@@ -4512,8 +4542,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // first entry above 0.99 times the RMS (a 96/24 encoder's); the scale factor search (a decoded
   // WAV's; where it isn't sure, the better of the others'), its sureness then the context the RMS
   // rule's nearness is
-  S64 code_scale(const CoreRec& r, const CoreSub& s, int ch, int b, int j, S64 v, int pex = -1) {
-    const int hfb = b >= r.nvqsub[ch], tm = hfb ? 0 : s.tmode[ch][b];
+  // (early: an unbound channel's first, coded with its ABITS, before them and its TMODE: since format 165)
+  S64 code_scale(const CoreRec& r, const CoreSub& s, int ch, int b, int j, S64 v, int pex = -1, bool early = false) {
+    const int hfb = b >= r.nvqsub[ch], tm = hfb || early ? 0 : s.tmode[ch][b];
     const int max = r.shuff[ch] == 6 ? 128 : 64;
     M_scl_v D;
     int p = -1, pc = -1, ps = -1, near = SB_N - 1, conf = 0, tried = 0, nlev = -1;
@@ -4707,7 +4738,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     D.dp = p >= 0 ? sf_run(r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), p) : 0;
     D.kd = hfb ? 2 : j;
-    D.ab = hfb ? 0 : vvar(s.abits[ch][b] + 1, 27);
+    D.ab = hfb ? 0 : early ? vvar(hist.abits[ch][b], 27) : vvar(s.abits[ch][b] + 1, 27);  // (early: the last ABITS)
     D.pm = s.pmode[ch][b];
     D.pk = p >= 0;
     D.pn = nlev >= 0 && p == pr && !hfb ? imin(nlev, SB_N - 1) : near;
@@ -4729,8 +4760,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     int pf = -1;
     if (!bound[ch] && !j && ch - 1 >= r.ch0() && r.shuff[ch - 1] == r.shuff[ch]) {
       const int c = ch - 1;
-      if (b < r.nsubs[c] && (b >= r.nvqsub[c] || s.abits[c][b]) && hist.scale[c][b]) {
-        const int d = s.scale[c][b][0] - (hist.scale[c][b] - 1);
+      const bool kn = early ? b < r.nvqsub[c] && nw_e0[c][b] : b < r.nsubs[c] && (b >= r.nvqsub[c] || s.abits[c][b]);
+      if (kn && hist.scale[c][b]) {
+        const int d = (early ? nw_e0[c][b] - 1 : s.scale[c][b][0]) - (hist.scale[c][b] - 1);
         D.pn = d <= -2 ? 0 : d == -1 ? 2 : d == 0 ? 4 : d == 1 ? 5 : 6;
         if (A) {
           const U32* const n = sfx_n[ch];

@@ -127,7 +127,9 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      bit allocation search's (sc), else the staircase's (sm), else the ABITS the subband had the
 //      last time it had this energy, in any channel (the one seen); since format 161 a channel's
 //      the WAV doesn't bind, where there is none, its last moved toward the subband's ABITS' running
-//      mean (model.inc), sd whether sn is the last one
+//      mean (model.inc); since format 165 such a channel's es its first scale factor (1 + it), coded
+//      before its ABITS, and sn the ABITS seen at it where those have missed less than the guess as
+//      before, sm and sx then as model.inc says, sd whether sn is the last one
 //      (0 none, 1 it is, 2 not), nn the ABITS seen at the energies either side less the one seen
 //      (below's, -1..1 as 0-2 or 3 none, times 4, plus above's; 15 none; 14: that is the nearest
 //      energy's, none having been seen at this one), sc where sn is the bit allocation search's
@@ -153,7 +155,8 @@ constexpr int M_raw_ND = BYTE_VALUES, M_raw_MND = 1, M_raw_NG = 1;
 //      sn; else by the share of them that makes another ABITS, 2 under a tenth, 3 under half, 4
 //      under nine tenths, 5 more; 0 none or they don't bound the level)
 // scl: kd (0 a subband's first scale factor, 1 its second, after its transient, 2 a high-frequency
-//      VQ subband's, 3 the LFE's), ab its ABITS (1 + it, 0 none), pm whether it predicts, pk whether the audio
+//      VQ subband's, 3 the LFE's), ab its ABITS (1 + it, 0 none; since format 165 a channel's the WAV
+//      doesn't bind, its first, coded before them, the last ones), pm whether it predicts, pk whether the audio
 //      predicts the scale factor (since format 161 a channel's the WAV doesn't bind, too where its
 //      last moves toward the subband's running mean: model_smp.inc's code_scale()), pn how near
 //      its RMS lies to the midpoint between two (0-7), lp

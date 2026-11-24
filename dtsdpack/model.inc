@@ -177,6 +177,15 @@ struct Model : ModelX96<f_DEC, LV> {
     if (tv < lo || tv > hi) return false;
     return B::twin_flag(k, v, tv);
   }
+  // (since format 165 an unbound channel's first scale factor, coded with its ABITS, as the channel
+  // before's, where that one's was coded so too: twin_field()'s)
+  bool twin_s0(int ch, int b, S64& v) {
+    const CoreRec& r = *rec;
+    if (!B::stw_on[ch] || ch - 1 < r.ch0() || bound[ch - 1]) return false;
+    const int tw = ch - 1;
+    if (b >= r.nvqsub[tw] || !B::nw_e0[tw][b]) return false;
+    return B::twin_flag(4, v, B::nw_e0[tw][b] - 1);
+  }
   bool code(int fid, S64& v, S64 lo, S64 hi, int nbits) {
     const CoreRec& r = *rec;
     const CoreSub& s = r.sub[cur_sf];
@@ -343,27 +352,45 @@ struct Model : ModelX96<f_DEC, LV> {
       case F_ABITS: {  // (against the audio's energy, as the scale factor its RMS makes, and how it changed)
         account(CAT_ABITS);
         int e = bound[ch] ? es[ch][b] : 0;
-        const int srch = e && B::ab_search_on();
+        // (since format 165 a channel the WAV doesn't bind: whether the subband's ABITS is 0, by the
+        // last one (nw_zflag()); where not, its first scale factor, coded here (code_scale(), early),
+        // the energy its ABITS then go by, as a bound channel's go by its WAV's: the ABITS seen at it,
+        // in any channel, guess them 86% of the time in `s.2.dts`'s first 3 MB, the last ABITS 63%)
+        bool zk = false;
+        if (!bound[ch] && hi >= 1) {
+          if (lo <= 0) zk = B::nw_zflag(hist.abits[ch][b] ? (hist.abits[ch][b] == 1 ? 1 : 2) : 0, ENC && v == 0);
+          if (!zk) {
+            if (lo < 1) lo = 1;
+            account(CAT_SCALE);
+            S64 s0 = ENC ? s.scale[ch][b][0] : 0;
+            if (!twin_s0(ch, b, s0)) s0 = B::code_scale(r, s, ch, b, 0, s0, -1, true);
+            s0 = checked(s0, 0, r.shuff[ch] == 6 ? 127 : 63);
+            B::nw_e0[ch][b] = (S16)(1 + s0);
+            account(CAT_ABITS);
+            e = (int)(1 + s0);
+          }
+        }
+        const int srch = bound[ch] && e && B::ab_search_on();
         S64 x[NSMP];
         int nx = 0;
-        if (e && (s.pmode[ch][b] || srch)) nx = B::scale_values(s, ch, b, 0, s.nssc, x);
+        if (bound[ch] && e && (s.pmode[ch][b] || srch)) nx = B::scale_values(s, ch, b, 0, s.nssc, x);
         // (the staircase's guess at the values' fine energy, less the level: model_smp.inc; the
         // subframe's first ABITS sets the level's centre)
         const int pass = r.xpass ? 1 : 0;
         if (!B::abl[pass].set) B::level_centre(r, s, pass, pos), B::ap_start(pass);
         auto& st = B::ab_st[pass][b];
-        const S32 fe = e ? B::fe_s[ch][b] : B::FE_NONE;
+        const S32 fe = bound[ch] && e ? B::fe_s[ch][b] : B::FE_NONE;
         // (the allocation table's, where it has missed less than the staircases: model_smp.inc)
         const int sg0 = fe != B::FE_NONE ? B::level_guess(pass, st, fe) : -1;
         int tm = 0;
         const int tg = fe != B::FE_NONE ? B::ap_guess(pass, b, fe, &tm) : -1, ut = tg >= 0 && B::ap_rule(pass);
         // (and how its guess stands against the levels the subframe's ABITS so far allow: sx)
         int shr = -1;
-        const int sx = ut ? B::ap_strad(pass, ch, b, tg, &shr) : 0;
+        int sx = ut ? B::ap_strad(pass, ch, b, tg, &shr) : 0;
         const int sg = ut ? tg : sg0;
         const int sm = ut ? tm : fe != B::FE_NONE ? B::level_margin(pass, st, fe, sg0) : 0;
-        int eq = e ? B::eq[ch][b] : 4;
-        if (e && s.pmode[ch][b]) {  // (an ADPCM subband's: its prediction's residual's)
+        int eq = bound[ch] && e ? B::eq[ch][b] : 4;
+        if (bound[ch] && e && s.pmode[ch][b]) {  // (an ADPCM subband's: its prediction's residual's)
           int near;
           e = 1 + scale_pred(x, nx, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), &near);
           eq = scale_quarter(x, nx, r.shuff[ch] == 6 ? SF7 : SF6, sf_entries(r.shuff[ch]), e - 1);
@@ -374,7 +401,10 @@ struct Model : ModelX96<f_DEC, LV> {
         const int ls = hist.scale[ch][b] && hist.pscale[ch][b] ? dvar(hist.scale[ch][b] - hist.pscale[ch][b]) : 9;
         const int lbd = b && hist.abits[ch][b - 1] ? dvar(s.abits[ch][b - 1] - (hist.abits[ch][b - 1] - 1)) : 9;
         int nb = 9, mx = 16;
-        if (e) {
+        if (e && !bound[ch]) {  // (an unbound channel's: the subband below's this subframe, the one above's the last)
+          const int n1 = b ? B::nw_e0[ch][b - 1] : 0, n2 = b + 1 < NSUB ? hist.scale[ch][b + 1] : 0;
+          if (n1 || n2) nb = clip((e - imax(n1, n2)) / 2, -4, 4) + 4;
+        } else if (e) {
           const int n1 = b ? es[ch][b - 1] : 0, n2 = b + 1 < NSUB ? es[ch][b + 1] : 0;
           nb = clip((e - imax(n1, n2)) / 2, -4, 4) + 4;
           mx = imin((B::esmax[ch] - e) / 4, 15);
@@ -417,7 +447,8 @@ struct Model : ModelX96<f_DEC, LV> {
           else if (a0 <= a1) G = B::abits_search(r, ch, x, nx, g, a0, a1, e - 1, &gc, &gd, ~0ull, nullptr, af0, af1);
         }
         B::abfit_a[ch][b] = G - 1, B::abfit_d[ch][b] = gd;
-        S32 Sn = sv;
+        S32 Sn = bound[ch] ? sv : 0;
+        const S32 nsv = !bound[ch] && !zk ? sv : 0;  // (an unbound channel's: the ABITS seen at its energy)
         int fs = 0;  // (whether the first guess is the staircase's)
         const int qk = srch && G && sg >= 0 && (G - 1 - sg >= 2 || sg - (G - 1) >= 2) ? imin(gc, 3) : -1;
         const bool ovr = srch && G && B::ab_rule() && qk >= 0 && B::abq_stair(qk);
@@ -434,10 +465,10 @@ struct Model : ModelX96<f_DEC, LV> {
         // (`dtswavsample14.wav`'s staircase's as the second right 3.4 times as often;
         // `dtswavsample16.wav`'s table's, the one it takes, less often, and its core 0.3% bigger:
         // the counts lag where they turn))
-        const int ms = Sn == sg + 1 ? sm : 0;
+        int ms = Sn == sg + 1 ? sm : 0;
         const S32 la = hist.abits[ch][b];
         const bool s2 = sc && sg >= 0 && sg != G - 1;
-        const int alt = ovr ? G - 1 : ms ? (ms <= 8 ? sg - 1 : sg + 1) : s2 && B::ab2[0] > B::ab2[1] + 8 + B::ab2[1] / 8 ? sg : -1;
+        int alt = ovr ? G - 1 : ms ? (ms <= 8 ? sg - 1 : sg + 1) : s2 && B::ab2[0] > B::ab2[1] + 8 + B::ab2[1] / 8 ? sg : -1;
         // (the share of the levels the subframe's ABITS allow at which the table says the first guess
         // is the first node's outside prediction (its miss's), and the share at which it says the
         // second candidate, of the rest, the second node's; each within 1/64 of 0 and 1. Since format
@@ -479,7 +510,7 @@ struct Model : ModelX96<f_DEC, LV> {
         // last by 4 and an 8th (abx_n): without their WAVs `open bitrate.dts` 1.2% smaller, FATE's
         // 7-frame samples 1.0%; always, the rest 0.26% bigger)
         int abp = -1;
-        if (!bound[ch] && !Sn && ch - 1 >= r.ch0() && b < r.nvqsub[ch - 1] && hist.abits[ch - 1][b] && hist.abits[ch][b]) {
+        if (!bound[ch] && !zk && !Sn && ch - 1 >= r.ch0() && b < r.nvqsub[ch - 1] && hist.abits[ch - 1][b] && hist.abits[ch][b]) {
           const int d = s.abits[ch - 1][b] - (hist.abits[ch - 1][b] - 1);
           const U32* const n = B::abx_n[ch];
           abp = (int)clip(hist.abits[ch][b] - 1 + d, lo, hi);
@@ -494,11 +525,44 @@ struct Model : ModelX96<f_DEC, LV> {
           const int sh = (int)llround(B::nw_am[ch][b] - (double)(hist.abits[ch][b] - 1));
           if (sh) Sn = (S32)clip(hist.abits[ch][b] - 1 + sh, lo, hi) + 1;
         }
-        if (!twin_field(fid, ch, b, v, lo, hi) && !(B::ffe_ok && !pass && bound[ch] && B::ff_abits(ch, b, v, lo, hi)))
+        // (since format 165 an unbound channel's ABITS seen at its energy is the first guess, where its
+        // misses have weighed less than those of the guess as before (nw_gpen(): `dtswavsample16.wav`'s
+        // encoder's ABITS go another way, by the counts of hits its core 2.4% bigger); the second guess
+        // then the ABITS seen at the nearest energy, within 8, where it differs (89% of the first's
+        // misses; the side the subframe's misses have gone, where both lie as near: 72% of a miss's
+        // way), sm how near that lies and on which side (1-8 below, 9-16 above, by 1-8 steps: misses
+        // 27% at 1, 3% at 2, under 1% from 3), sx which way the subframe's misses have gone (1 neither,
+        // 2 up, 3 down))
+        int nws = 0, og1 = -1;
+        if (nsv) {
+          og1 = Sn ? Sn - 1 : hist.abits[ch][b] ? hist.abits[ch][b] - 1 : -1;
+          if (B::nwg_p[1] + 32 < B::nwg_p[0]) {
+            Sn = nws = nsv;
+            int kl = 0, kh = 0, al = -1, ah = -1;
+            for (int k = 1; k <= 8 && (!kl || !kh); k++) {
+              if (!kl && e - k >= 1 && sn[-k] && sn[-k] != *sn) kl = k, al = sn[-k] - 1;
+              if (!kh && e + k <= 128 && sn[k] && sn[k] != *sn) kh = k, ah = sn[k] - 1;
+            }
+            const int dn = B::nwd_n[0] > B::nwd_n[1] ? 1 : B::nwd_n[1] > B::nwd_n[0] ? -1 : 0;
+            const bool up = kh && (!kl || kh < kl || (kh == kl && dn > 0));
+            if (kl || kh) {
+              alt = up ? ah : al;
+              ms = up ? 9 + imin(kh - 1, 7) : 1 + imin(kl - 1, 7);
+            }
+            sx = dn > 0 ? 2 : dn < 0 ? 3 : 1;
+          }
+        }
+        if (zk) v = 0;
+        else if (!twin_field(fid, ch, b, v, lo, hi) && !(B::ffe_ok && !pass && bound[ch] && B::ff_abits(ch, b, v, lo, hi)))
           v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
                          s.pmode[ch][b], lbd, nb, mx, Sn, near_e ? 14 : nn, sc, eq, ms,
-                         alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag, fs && ut ? sx : 0, pq1, pq2, B::ss_rule() || B::ab_rule());
+                         alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag, (fs && ut) || nws ? sx : 0, pq1, pq2, B::ss_rule() || B::ab_rule());
         v = checked(v, lo, hi);
+        if (nws) B::nwd_n[0] += v > nws - 1, B::nwd_n[1] += v < nws - 1;
+        if (nsv) {
+          int* const p = B::nwg_p;
+          p[0] += B::nw_gpen(og1 < 0 ? 0 : og1, (int)v) - (p[0] >> 8), p[1] += B::nw_gpen((int)nsv - 1, (int)v) - (p[1] >> 8);
+        }
         if (!bound[ch]) {
           B::nw_am[ch][b] = B::nw_an[ch][b] ? B::nw_am[ch][b] + ((double)v - B::nw_am[ch][b]) / 8 : (double)v;
           B::nw_an[ch][b] += B::nw_an[ch][b] < 255;
@@ -577,6 +641,10 @@ struct Model : ModelX96<f_DEC, LV> {
                         // values, a decoded WAV's, the scale factor of the core's own where they say it:
                         // `96-24.dts`'s subband 31's 3355 times, all right, its core 0.2% smaller)
         account(CAT_SCALE);
+        if (!bound[ch] && !cur_j && b < r.nvqsub[ch] && B::nw_e0[ch][b]) {  // (coded with the ABITS: since format 165)
+          v = B::nw_e0[ch][b] - 1;
+          break;
+        }
         const int pex = bound[ch] && B::jx_low(b) && B::ss_rule() && s.abits[ch][b] ? B::jx_core_scale(r, s, ch, b) : -1;
         if (!twin_field(fid, ch, b, v, lo, hi)) v = code_scale(r, s, ch, b, cur_j, v, pex);
         break;
@@ -975,7 +1043,7 @@ struct Model : ModelX96<f_DEC, LV> {
         hist.scale[ch][b] = in && (!q || s.abits[ch][b]) ? s.scale[ch][b][0] + 1 : 0;
         hist.pscale[ch][b] = in && (!q || s.abits[ch][b]) ? pscale[ch][b] : 0;
         if (in && !q) hist.hfvq[ch][b] = s.hfvq[ch][b] + 1;
-        hist.energy[ch][b] = bound[ch] && q ? B::eab[ch][b] : 0;
+        hist.energy[ch][b] = q ? B::eab[ch][b] : 0;  // (since format 165 an unbound channel's too: its first scale factor)
         if (r.joinx[ch] && b >= r.nsubs[ch] && b < r.nsubs[r.joinx[ch] - 1]) hist.jscale[ch][b] = s.jscale[ch][b] + 129;
         pscale[ch][b] = 0;
       }
