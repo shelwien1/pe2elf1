@@ -40,7 +40,9 @@ namespace pdd {
 #include "pdf_crypt.inc"
 #include "pdf_filt.inc"
 #include "pdf_bmp.inc"
+#include "pdf_t1.inc"
 #include "pdf_class.inc"
+#include "pdf_lift.inc"
 #include "pdf_emit.inc"
 
 static const int kSyntaxLevelMax = 1;  // 1 = items + raw object text (M1..M4)
@@ -71,7 +73,9 @@ struct StreamRec {
   size_t decoded = 0;        // bytes after filters (before BMP wrap)
   uint8_t wantCipher = CI_NONE;
   bool bmp = false;
+  bool t1 = false;           // Type 1 encryption removed
   size_t storedSize = 0;     // stored form size (data moves into the dump at emit)
+  uint64_t storedHash = 0;   // of the stored form, for the verify shortcut
 };
 
 struct FilterRef {
@@ -142,6 +146,7 @@ class Encoder {
         try {
           analyze();
           emit();
+          applyLifts();
         } catch (const Error& e) {
           modelled = false;
           storedReason = std::string("encoder error: ") + e.what();
@@ -157,7 +162,21 @@ class Encoder {
       auto t1 = std::chrono::steady_clock::now();
       std::string why;
       try {
-        Bytes re = decodeDump(dump, 0, nullptr);
+        FastRestore fast = [&](size_t k, const StreamDesc& sd, const Bytes& stored, Bytes& payload) {
+          if (k >= streams.size()) return false;
+          const StreamRec& s = streams[k];
+          const StreamDesc& e = s.desc;
+          if (sd.cipher != e.cipher || sd.num != e.num || sd.gen != e.gen || memcmp(sd.iv, e.iv, 16) != 0 ||
+              sd.layers.size() != e.layers.size() || stored.size() != s.storedSize ||
+              fnv1a64(stored.data(), stored.size()) != s.storedHash)
+            return false;
+          for (size_t i = 0; i < sd.layers.size(); i++)
+            if (sd.layers[i].type != e.layers[i].type || sd.layers[i].recon != e.layers[i].recon) return false;
+          const Item& it = seg.items[s.item];
+          payload.assign(in_.begin() + it.dataStart, in_.begin() + it.dataEnd);
+          return true;
+        };
+        Bytes re = decodeDump(dump, 0, nullptr, &fast);
         if (re != in_) why = "restored file differs from input";
       } catch (const Error& e) {
         why = e.what();
@@ -182,6 +201,8 @@ class Encoder {
     for (int c = 0; c < CF_COUNT; c++)
       if (!dump.classFile[c].empty())
         writeFile(prefix + "." + kClassFileSuffix[c], dump.classFile[c].data(), dump.classFile[c].size());
+    for (int a = 0; a < AX_COUNT; a++)
+      if (!dump.aux[a].empty()) writeFile(prefix + "." + kAuxSuffix[a], dump.aux[a].data(), dump.aux[a].size());
     for (size_t i = 0; i < dump.ownData.size(); i++) {
       const Bytes& b = dump.ownData[i];
       writeFile(ownFileName(prefix, (uint32_t)i, dump.ownExt[i]), b.data(), b.size());
@@ -211,9 +232,26 @@ class Encoder {
     return std::chrono::duration<double>(std::chrono::steady_clock::now() - t).count();
   }
 
+  void applyLifts() {
+    Bytes sk, nu, hx;
+    int ft = dump.hdr.map.fileOf[CH_T];
+    if (ft != 0 && !dump.chan[ft].empty() && liftApply(LIFT_OBJ, dump.chan[ft], sk, nu, hx) && hx.empty()) {
+      dump.chan[ft].swap(sk);
+      dump.aux[AX_TXN].swap(nu);
+      dump.hdr.flags |= kFlagLiftT;
+    }
+    if (!dump.classFile[CF_CS].empty() && liftApply(LIFT_CS, dump.classFile[CF_CS], sk, nu, hx)) {
+      dump.classFile[CF_CS].swap(sk);
+      dump.aux[AX_CSN].swap(nu);
+      dump.aux[AX_CSH].swap(hx);
+      dump.hdr.flags |= kFlagLiftCS;
+    }
+  }
+
   void emitStored() {
     stored = true;
-    dump.hdr.flags |= 1;
+    dump.hdr.flags = kFlagStored;
+    for (auto& a : dump.aux) a.clear();
     dump.chan.assign(dump.hdr.map.suffix.size(), Bytes());
     for (auto& c : dump.classFile) c.clear();
     dump.ownData.clear();
@@ -486,6 +524,23 @@ class Encoder {
       s.data.swap(bmp);
       s.bmp = true;
     }
+    // Type 1 fonts: remove eexec and charstring encryption
+    for (auto& s : streams) {
+      if (s.remain != R_DONE) continue;
+      const char* sig = sniffExt(s.data.data(), s.data.size());
+      if (s.desc.cls != SC_FONT_T1 && !(sig && !strcmp(sig, "pfa"))) continue;
+      Bytes out, recon;
+      FilterParams fp;
+      bool ok = layerDecode(ctx_, L_T1, fp, s.data, out, recon);
+      if (!ok) {
+        fp.t1Charstrings = false;
+        ok = layerDecode(ctx_, L_T1, fp, s.data, out, recon);
+      }
+      if (!ok) continue;
+      s.desc.layers.push_back({L_T1, std::move(recon)});
+      s.data.swap(out);
+      s.t1 = true;
+    }
     // extension and storage
     for (auto& s : streams) {
       uint8_t cls = s.desc.cls;
@@ -499,6 +554,8 @@ class Encoder {
         else ext = "g4";
       } else if (s.bmp) {
         ext = "bmp";
+      } else if (s.t1) {
+        ext = "t1d";
       } else if (const char* sig = sniffExt(s.data.data(), s.data.size())) {
         ext = sig;
       } else {
@@ -573,6 +630,7 @@ class Encoder {
   void accountStream(StreamRec& s) {
     const Item& it = seg.items[s.item];
     s.storedSize = s.data.size();
+    s.storedHash = fnv1a64(s.data.data(), s.data.size());
     st.extents[it.extent]++;
     auto& c = st.cls[s.desc.cls];
     c.count++;
@@ -689,6 +747,11 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
       total += E.dump.classFile[c].size();
       printf("  .%s %s", kClassFileSuffix[c], human(E.dump.classFile[c].size()).c_str());
     }
+  for (int a = 0; a < AX_COUNT; a++)
+    if (!E.dump.aux[a].empty()) {
+      total += E.dump.aux[a].size();
+      printf("  .%s %s", kAuxSuffix[a], human(E.dump.aux[a].size()).c_str());
+    }
   uint64_t own = 0;
   for (auto& b : E.dump.ownData) own += b.size();
   total += own;
@@ -704,7 +767,9 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
          pct(rawb, in.size()), pct(st.typedBytes, st.payloadBytes), rAlone ? "" : "~",
          pct(recon, st.layeredPayload), human(recon).c_str(), (unsigned long long)st.reconBlobs,
          (unsigned long long)st.reconRefs);
-  printf("time: encode %.2fs, verify %.2fs\n", E.tEncode, E.tVerify);
+  printf("time: encode %.2fs (preflate: %llu streams, %s unpacked, analyze %.2fs, re-encode %.2fs), verify %.2fs\n",
+         E.tEncode, (unsigned long long)gFlateProf.streams, human(gFlateProf.unpacked).c_str(), gFlateProf.dec,
+         gFlateProf.enc, E.tVerify);
   if (opt.verbose) {
     printf("streams:\n  %-6s %-9s %-12s %-28s %-9s %9s %9s %-6s %s\n", "item", "obj", "class", "filters", "state",
            "payload", "stored", "store", "ext/layers");
@@ -892,6 +957,7 @@ static int realMain(int argc, char** argv) {
       uint64_t total = 0;
       for (size_t f = 0; f < E.dump.chan.size(); f++) total += E.chanFileSize(f);
       for (auto& c : E.dump.classFile) total += c.size();
+      for (auto& a : E.dump.aux) total += a.size();
       for (auto& b : E.dump.ownData) total += b.size();
       fprintf(stderr, "%s: %llu -> %llu bytes in %zu files%s\n", pos[0].c_str(), (unsigned long long)in.size(),
               (unsigned long long)total, E.dump.ownData.size() + E.dump.chan.size(),
@@ -909,6 +975,7 @@ static int realMain(int argc, char** argv) {
   d.chan[0].swap(meta);
   for (size_t f = 1; f < d.chan.size(); f++) readFile(prefix + "." + d.hdr.map.suffix[f], d.chan[f]);
   for (int c = 0; c < CF_COUNT; c++) readFile(prefix + "." + kClassFileSuffix[c], d.classFile[c]);
+  for (int a = 0; a < AX_COUNT; a++) readFile(prefix + "." + kAuxSuffix[a], d.aux[a]);
   Bytes out = decodeDump(d, meta0, [&](uint32_t ord, const std::string& ext) {
     Bytes b;
     std::string name = ownFileName(prefix, ord, ext);

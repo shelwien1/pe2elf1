@@ -31,6 +31,13 @@ static const uint32_t kFormatVersion = 1;
 enum ClassFile { CF_CS, CF_CMAP, CF_COUNT };
 static const char* const kClassFileSuffix[CF_COUNT] = {"cs", "cmap"};
 
+// Aux files: outputs of whole-file transforms (number lifting, pdf_lift.inc).
+enum AuxFile { AX_TXN, AX_CSN, AX_CSH, AX_COUNT };
+static const char* const kAuxSuffix[AX_COUNT] = {"txn", "csn", "csh"};
+
+// header flags
+static const uint64_t kFlagStored = 1, kFlagLiftT = 2, kFlagLiftCS = 4;
+
 struct ChanMap {
   int fileOf[CH_COUNT];
   std::vector<std::string> suffix;  // per physical file; file 0 is always "meta" (holds S)
@@ -104,6 +111,7 @@ struct DumpFiles {
   Bytes classFile[CF_COUNT];
   std::vector<std::string> ownExt;   // own files by ordinal
   std::vector<Bytes> ownData;
+  Bytes aux[AX_COUNT];
 };
 
 static void serializeHeader(const DumpHeader& h, Bytes& out) {
@@ -222,8 +230,8 @@ class ChanReader {
  public:
   // ownLoader: fetches own file by (ordinal, ext); used when the dump comes from disk.
   typedef std::function<Bytes(uint32_t, const std::string&)> OwnLoader;
-  ChanReader(const DumpFiles& d, size_t meta0, OwnLoader loader)
-      : d_(d), loader_(std::move(loader)) {
+  ChanReader(const DumpFiles& d, size_t meta0, OwnLoader loader, const std::vector<Bytes>* ownData = nullptr)
+      : d_(d), loader_(std::move(loader)), ownData_(ownData ? ownData : &d.ownData) {
     pos_.assign(d.chan.size(), 0);
     if (!pos_.empty()) pos_[0] = meta0;
     for (int i = 0; i < CF_COUNT; i++) cfPos_[i] = 0;
@@ -264,7 +272,7 @@ class ChanReader {
     cfPos_[cf] += n;
   }
   Bytes own(uint32_t ordinal, const std::string& ext) {
-    if (ordinal < d_.ownData.size()) return d_.ownData[ordinal];
+    if (ordinal < ownData_->size()) return (*ownData_)[ordinal];
     if (!loader_) fail("own file %08X missing", ordinal);
     return loader_(ordinal, ext);
   }
@@ -279,6 +287,7 @@ class ChanReader {
  private:
   const DumpFiles& d_;
   OwnLoader loader_;
+  const std::vector<Bytes>* ownData_;
   std::vector<size_t> pos_;
   size_t cfPos_[CF_COUNT];
 };

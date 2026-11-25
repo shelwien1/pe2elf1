@@ -1,0 +1,400 @@
+// pdf_lift.inc -- number lifting for PDF text (content streams, object text).
+//
+// xz models digits as text and cannot see that the numbers after "Td" or inside "/Widths" form
+// their own population. The lift transform replaces every canonically spelled number with a
+// marker byte and stores the values as varints, grouped by context, in a separate buffer; in
+// content-stream mode canonical hex strings move to a binary buffer as well.
+//
+// The grouping is computed by lexing the *skeleton* (text with markers), which both sides have,
+// so encoder and decoder always agree on it; the lexer only has to be good, not right. The
+// encoder runs the inverse and compares before using the result.
+//
+// Skeleton bytes: 0x00 X = literal byte X (X <= 3), 0x01 = number, 0x02 = hex string with
+// upper-case (or no) letters, 0x03 = hex string with lower-case letters.
+// Number value: varint(zigzag(mantissa) * 8 + code); code 0 = integer, 1..6 = "I.F" with that
+// many fraction digits, 7 = escape followed by varint(scale * 4 + form), form bit0 = no integer
+// part (".5"), bit1 = trailing dot ("5.").
+
+enum LiftMode { LIFT_CS, LIFT_OBJ };
+
+struct LiftNum {
+  int64_t m;
+  uint32_t code, ext;
+};
+
+static inline bool liftCtl(uint8_t c) { return c <= 3; }
+
+// canonical number spelling -> value; false if the token is not lifted
+static bool liftParseNum(const uint8_t* p, size_t n, LiftNum& v) {
+  size_t i = 0;
+  bool neg = false;
+  if (i < n && p[i] == '-') { neg = true; i++; }
+  size_t is = i;
+  while (i < n && p[i] >= '0' && p[i] <= '9') i++;
+  size_t ie = i;
+  bool dot = false;
+  size_t fs = i, fe = i;
+  if (i < n && p[i] == '.') {
+    dot = true;
+    fs = ++i;
+    while (i < n && p[i] >= '0' && p[i] <= '9') i++;
+    fe = i;
+  }
+  if (i != n) return false;
+  size_t il = ie - is, fl = fe - fs;
+  if (il == 0 && fl == 0) return false;
+  if (il > 1 && p[is] == '0') return false;  // leading zeros
+  if (il + fl > 18) return false;
+  int64_t m = 0;
+  for (size_t k = is; k < ie; k++) m = m * 10 + (p[k] - '0');
+  for (size_t k = fs; k < fe; k++) m = m * 10 + (p[k] - '0');
+  if (neg) {
+    if (m == 0) return false;  // "-0", "-0.0": sign not representable
+    m = -m;
+  }
+  v.m = m;
+  v.ext = 0;
+  if (!dot) v.code = 0;
+  else if (il > 0 && fl >= 1 && fl <= 6) v.code = (uint32_t)fl;
+  else {
+    v.code = 7;
+    v.ext = (uint32_t)(fl * 4 + (il == 0 ? 1 : 0) + (fl == 0 ? 2 : 0));
+  }
+  return true;
+}
+
+static void liftSpellNum(const LiftNum& v, Bytes& out) {
+  uint64_t a = v.m < 0 ? (uint64_t)(-v.m) : (uint64_t)v.m;
+  size_t scale = 0;
+  bool omitInt = false, trail = false;
+  if (v.code >= 1 && v.code <= 6) scale = v.code;
+  else if (v.code == 7) {
+    scale = v.ext / 4;
+    omitInt = v.ext & 1;
+    trail = (v.ext & 2) != 0;
+  }
+  char digits[24];
+  int nd = 0;
+  do { digits[nd++] = (char)('0' + a % 10); a /= 10; } while (a);
+  while ((size_t)nd <= scale) digits[nd++] = '0';  // at least one integer digit
+  if (v.m < 0) out.push_back('-');
+  int intDigits = nd - (int)scale;
+  if (!(omitInt && intDigits == 1 && digits[nd - 1] == '0'))
+    for (int k = nd - 1; k >= (int)scale; k--) out.push_back((uint8_t)digits[k]);
+  if (scale || trail || v.code != 0) {
+    if (v.code != 0) out.push_back('.');
+    for (int k = (int)scale - 1; k >= 0; k--) out.push_back((uint8_t)digits[k]);
+  }
+}
+
+// ---- grouping lexer (runs on the skeleton, identical on both sides) ---------------------------
+struct LiftGroups {
+  std::vector<uint32_t> ofMarker;  // group id per number marker
+  uint32_t count = 0;
+};
+
+static void liftGroup(LiftMode mode, const uint8_t* s, size_t n, LiftGroups& g) {
+  std::unordered_map<std::string, uint32_t> ids;
+  struct Pend { size_t idx; uint8_t slot; };
+  std::vector<Pend> pend;
+  std::string key;  // OBJ: last name at array depth 0
+  int arr = 0, operands = 0;
+  size_t markers = 0;
+  g.ofMarker.clear();
+  auto flush = [&](const uint8_t* t, size_t tl) {
+    for (auto& p : pend) {
+      std::string k;
+      if (mode == LIFT_OBJ) k = key;
+      k.push_back((char)p.slot);
+      k.append((const char*)t, tl);
+      auto it = ids.find(k);
+      uint32_t id;
+      if (it == ids.end()) { id = (uint32_t)ids.size(); ids.emplace(k, id); }
+      else id = it->second;
+      if (g.ofMarker.size() <= p.idx) g.ofMarker.resize(p.idx + 1);
+      g.ofMarker[p.idx] = id;
+    }
+    pend.clear();
+  };
+  auto marker = [&]() {
+    uint8_t slot = mode == LIFT_CS ? (uint8_t)(arr ? 7 : std::min(operands, 6)) : (uint8_t)(arr ? 1 : 0);
+    pend.push_back({markers++, slot});
+    if (!arr) operands++;
+  };
+  // skips over a region, still accounting for any unescaped number marker inside it
+  auto skipTo = [&](size_t& i, size_t end) {
+    while (i < end) {
+      if (s[i] == 0) { i += 2; continue; }
+      if (s[i] == 1) marker();
+      i++;
+    }
+    if (i > end) i = end;
+  };
+  size_t i = 0;
+  while (i < n) {
+    uint8_t c = s[i];
+    if (c == 0) { i += 2; continue; }
+    if (c == 1) { marker(); i++; continue; }
+    if (c == 2 || c == 3) { if (!arr) operands++; i++; continue; }
+    if (isWS(c)) { i++; continue; }
+    if (c == '%') {
+      size_t j = i;
+      while (j < n && s[j] != '\r' && s[j] != '\n') j += s[j] == 0 ? 2 : 1;
+      skipTo(i, std::min(j, n));
+      continue;
+    }
+    if (c == '(') {
+      size_t j = i + 1;
+      int depth = 1;
+      while (j < n && depth) {
+        if (s[j] == 0) { j += 2; continue; }
+        if (s[j] == '\\') { j += 2; continue; }
+        if (s[j] == '(') depth++;
+        else if (s[j] == ')') depth--;
+        j++;
+      }
+      skipTo(i, std::min(j, n));
+      if (!arr) operands++;
+      continue;
+    }
+    if (c == '<') {
+      if (i + 1 < n && s[i + 1] == '<') {
+        if (mode == LIFT_OBJ) flush(s + i, 2);
+        i += 2;
+        continue;
+      }
+      size_t j = i + 1;
+      while (j < n && s[j] != '>') j += s[j] == 0 ? 2 : 1;
+      skipTo(i, std::min(j + 1, n));
+      if (!arr) operands++;
+      continue;
+    }
+    if (c == '>') {
+      size_t l = (i + 1 < n && s[i + 1] == '>') ? 2 : 1;
+      if (mode == LIFT_OBJ) flush(s + i, l);
+      i += l;
+      continue;
+    }
+    if (c == '[') {
+      if (!arr) operands++;
+      arr++;
+      i++;
+      continue;
+    }
+    if (c == ']') {
+      if (mode == LIFT_OBJ) flush(s + i, 1);
+      arr = std::max(0, arr - 1);
+      i++;
+      continue;
+    }
+    if (c == '{' || c == '}' || c == ')') { i++; continue; }
+    if (c == '/') {
+      size_t j = i + 1;
+      while (j < n && isRegular(s[j]) && !liftCtl(s[j])) j++;
+      if (mode == LIFT_OBJ && !arr) {
+        flush((const uint8_t*)"/", 1);
+        key.assign((const char*)s + i, j - i);
+      } else if (!arr) {
+        operands++;
+      }
+      i = j;
+      continue;
+    }
+    // regular run
+    size_t j = i;
+    while (j < n && isRegular(s[j]) && !liftCtl(s[j])) j++;
+    bool numeric = (c >= '0' && c <= '9') || c == '-' || c == '+' || c == '.';
+    if (numeric) {
+      if (!arr) operands++;
+    } else {
+      flush(s + i, j - i);
+      if (mode == LIFT_CS) {
+        operands = 0;
+        arr = 0;
+        if (j - i == 2 && s[i] == 'I' && s[i + 1] == 'D') {
+          // inline image data up to whitespace "EI" (whitespace or end)
+          size_t k = j + 1;
+          while (k + 2 <= n && !(s[k] == 'E' && s[k + 1] == 'I' && isWS(s[k - 1]) && (k + 2 == n || isWS(s[k + 2]))))
+            k += s[k] == 0 ? 2 : 1;
+          i = j;
+          skipTo(i, std::min(k, n));
+          continue;
+        }
+      }
+    }
+    i = j;
+  }
+  flush(nullptr, 0);
+  g.ofMarker.resize(markers);
+  g.count = (uint32_t)ids.size();
+}
+
+// ---- forward / inverse -----------------------------------------------------------------------
+static inline void liftLit(Bytes& out, uint8_t c) {
+  if (liftCtl(c)) out.push_back(0);
+  out.push_back(c);
+}
+
+static void liftForward(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums, Bytes& hex) {
+  const uint8_t* p = in.data();
+  size_t n = in.size(), i = 0;
+  skel.clear();
+  nums.clear();
+  hex.clear();
+  skel.reserve(n);
+  std::vector<LiftNum> vals;
+  auto copy = [&](size_t a, size_t b) {
+    for (size_t k = a; k < b; k++) liftLit(skel, p[k]);
+  };
+  while (i < n) {
+    uint8_t c = p[i];
+    if (isWS(c)) { liftLit(skel, c); i++; continue; }
+    if (c == '%') {
+      size_t j = i;
+      while (j < n && p[j] != '\r' && p[j] != '\n') j++;
+      copy(i, j);
+      i = j;
+      continue;
+    }
+    if (c == '(') {
+      size_t j = i + 1;
+      int depth = 1;
+      while (j < n && depth) {
+        if (p[j] == '\\') { j += 2; continue; }
+        if (p[j] == '(') depth++;
+        else if (p[j] == ')') depth--;
+        j++;
+      }
+      j = std::min(j, n);
+      copy(i, j);
+      i = j;
+      continue;
+    }
+    if (c == '<') {
+      if (i + 1 < n && p[i + 1] == '<') { skel.push_back('<'); skel.push_back('<'); i += 2; continue; }
+      size_t j = i + 1;
+      bool ok = true, upper = false, lower = false;
+      while (j < n && p[j] != '>') {
+        int v = hexVal(p[j]);
+        if (v < 0) ok = false;
+        if (p[j] >= 'a' && p[j] <= 'f') lower = true;
+        if (p[j] >= 'A' && p[j] <= 'F') upper = true;
+        j++;
+      }
+      if (j >= n) ok = false;
+      size_t nd = j - i - 1;
+      if (mode == LIFT_CS && ok && nd % 2 == 0 && !(upper && lower)) {
+        skel.push_back(lower ? 3 : 2);
+        putVarTo(hex, nd / 2);
+        for (size_t k = i + 1; k < j; k += 2) hex.push_back((uint8_t)(hexVal(p[k]) * 16 + hexVal(p[k + 1])));
+        i = j + 1;
+        continue;
+      }
+      j = std::min(j + 1, n);
+      copy(i, j);
+      i = j;
+      continue;
+    }
+    if (isDelim(c) && c != '/') { skel.push_back(c); i++; continue; }
+    if (c == '/') {
+      size_t j = i + 1;
+      while (j < n && isRegular(p[j])) j++;
+      copy(i, j);
+      i = j;
+      continue;
+    }
+    size_t j = i;
+    while (j < n && isRegular(p[j])) j++;
+    LiftNum v;
+    if (liftParseNum(p + i, j - i, v)) {
+      skel.push_back(1);
+      vals.push_back(v);
+      i = j;
+      continue;
+    }
+    copy(i, j);
+    if (mode == LIFT_CS && j - i == 2 && p[i] == 'I' && p[i + 1] == 'D') {
+      size_t k = j + 1;
+      while (k + 2 <= n && !(p[k] == 'E' && p[k + 1] == 'I' && isWS(p[k - 1]) && (k + 2 == n || isWS(p[k + 2])))) k++;
+      k = std::min(k, n);
+      copy(j, k);
+      i = k;
+      continue;
+    }
+    i = j;
+  }
+  LiftGroups g;
+  liftGroup(mode, skel.data(), skel.size(), g);
+  if (g.ofMarker.size() != vals.size()) {  // cannot happen; the caller verifies anyway
+    nums.clear();
+    return;
+  }
+  std::vector<Bytes> per(g.count);
+  for (size_t k = 0; k < vals.size(); k++) {
+    Bytes& b = per[g.ofMarker[k]];
+    putVarTo(b, zigzag(vals[k].m) * 8 + vals[k].code);
+    if (vals[k].code == 7) putVarTo(b, vals[k].ext);
+  }
+  for (auto& b : per) nums.insert(nums.end(), b.begin(), b.end());
+}
+
+static bool liftInverse(LiftMode mode, const Bytes& skel, const Bytes& nums, const Bytes& hex, Bytes& out) {
+  LiftGroups g;
+  liftGroup(mode, skel.data(), skel.size(), g);
+  std::vector<size_t> cnt(g.count, 0);
+  for (uint32_t id : g.ofMarker) cnt[id]++;
+  std::vector<std::vector<LiftNum>> per(g.count);
+  RBuf nr(nums);
+  for (uint32_t id = 0; id < g.count; id++) {
+    per[id].resize(cnt[id]);
+    for (auto& v : per[id]) {
+      uint64_t x = nr.var();
+      v.code = (uint32_t)(x & 7);
+      v.m = unzigzag(x >> 3);
+      v.ext = v.code == 7 ? (uint32_t)nr.var() : 0;
+    }
+  }
+  if (nr.p != nums.size()) return false;
+  std::vector<size_t> next(g.count, 0);
+  RBuf hr(hex);
+  out.clear();
+  out.reserve(skel.size() * 2);
+  size_t mk = 0;
+  static const char* U = "0123456789ABCDEF";
+  static const char* L = "0123456789abcdef";
+  for (size_t i = 0; i < skel.size(); i++) {
+    uint8_t c = skel[i];
+    if (c == 0) {
+      if (++i >= skel.size()) return false;
+      out.push_back(skel[i]);
+    } else if (c == 1) {
+      if (mk >= g.ofMarker.size()) return false;
+      uint32_t id = g.ofMarker[mk++];
+      liftSpellNum(per[id][next[id]++], out);
+    } else if (c == 2 || c == 3) {
+      size_t len = hr.len();
+      const char* hx = c == 3 ? L : U;
+      out.push_back('<');
+      for (size_t k = 0; k < len; k++) {
+        uint8_t b = hr.u8();
+        out.push_back((uint8_t)hx[b >> 4]);
+        out.push_back((uint8_t)hx[b & 15]);
+      }
+      out.push_back('>');
+    } else {
+      out.push_back(c);
+    }
+  }
+  return mk == g.ofMarker.size() && hr.p == hex.size();
+}
+
+// forward + verify; false if the transform does not reproduce the input
+static bool liftApply(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums, Bytes& hex) {
+  try {
+    liftForward(mode, in, skel, nums, hex);
+    Bytes back;
+    return liftInverse(mode, skel, nums, hex, back) && back == in;
+  } catch (const Error&) {
+    return false;
+  }
+}

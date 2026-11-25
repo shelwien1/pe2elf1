@@ -5,8 +5,8 @@
 //                re-encodes byte-exactly (each decoder checks this itself, through layerEncode).
 //   layerEncode  (both sides):   decoded bytes + recon -> PDF-side bytes.
 
-enum LayerType : uint8_t { L_NONE, L_FLATE, L_LZW, L_AHX, L_A85, L_RL, L_PNG, L_TIFF, L_BMP, L_COUNT };
-static const char* const kLayerName[L_COUNT] = {"-", "Flate", "LZW", "AHx", "A85", "RL", "PNG", "TIFF", "BMP"};
+enum LayerType : uint8_t { L_NONE, L_FLATE, L_LZW, L_AHX, L_A85, L_RL, L_PNG, L_TIFF, L_BMP, L_T1, L_COUNT };
+static const char* const kLayerName[L_COUNT] = {"-", "Flate", "LZW", "AHx", "A85", "RL", "PNG", "TIFF", "BMP", "T1"};
 
 struct Layer {
   uint8_t type = L_NONE;
@@ -20,6 +20,7 @@ struct CodecCtx {
 // Predictor / filter parameters from /DecodeParms (encoder side only).
 struct FilterParams {
   int predictor = 1, colors = 1, bpc = 8, columns = 1, earlyChange = 1;
+  bool t1Charstrings = true;  // L_T1: also remove charstring encryption
 };
 
 // recon record reader
@@ -109,6 +110,16 @@ static bool zlibHeaderValid(uint8_t cmf, uint8_t flg) {
 
 static const size_t kMetaBlockSize = (size_t)1 << 26;
 
+// encoder-side timing (seconds) and volume, reported by the info mode
+struct FlateProf {
+  double dec = 0, enc = 0;
+  uint64_t unpacked = 0, streams = 0;
+};
+static FlateProf gFlateProf;
+static double nowSec() {
+  return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
 static bool flateDecode(const CodecCtx& ctx, const Bytes& in, Bytes& out, Bytes& recon) {
   size_t off;
   uint8_t mode;
@@ -124,6 +135,12 @@ static bool flateDecode(const CodecCtx& ctx, const Bytes& in, Bytes& out, Bytes&
   std::vector<byte> diff;
   uint64_t dsize = 0;
   bool terminated = false;  // synthetic final block appended (stream ends after a sync flush)
+  double t0 = nowSec();
+  struct ProfGuard {
+    double t0;
+    Bytes& out;
+    ~ProfGuard() { gFlateProf.dec += nowSec() - t0; gFlateProf.unpacked += out.size(); gFlateProf.streams++; }
+  } guard{t0, out};
   {
     SpanIn si(in.data() + off, in.size() - off);
     VecOut vo(out, kMaxDecoded);
@@ -152,7 +169,11 @@ static bool flateDecode(const CodecCtx& ctx, const Bytes& in, Bytes& out, Bytes&
   if (!terminated) {
     Bytes re;
     VecOut ro(re);
-    if (!preflate_reencode(ro, diff, out, [] {})) return false;
+    double t1 = nowSec();
+    bool rok = preflate_reencode(ro, diff, out, [] {});
+    gFlateProf.enc += nowSec() - t1;
+    gFlateProf.dec -= nowSec() - t1;
+    if (!rok) return false;
     if (re.size() != dsize || memcmp(re.data(), in.data() + off, dsize) != 0) return false;
   }
   recon.clear();
@@ -862,6 +883,8 @@ static bool lzwTestEncode(const Bytes& in, Bytes& out, int early) {
 // ---------------------------------------------------------------------------------------------
 
 static bool bmpEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out);  // pdf_bmp.inc
+static bool t1EncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out);   // pdf_t1.inc
+static bool t1DecodeLayer(const Bytes& in, Bytes& out, Bytes& recon, bool charstrings);
 
 static bool layerEncode(const CodecCtx& ctx, uint8_t type, const Bytes& recon, const Bytes& in, Bytes& out) {
   switch (type) {
@@ -873,6 +896,7 @@ static bool layerEncode(const CodecCtx& ctx, uint8_t type, const Bytes& recon, c
     case L_PNG: return pngEncode(recon, in, out);
     case L_TIFF: return tiffEncode(recon, in, out);
     case L_BMP: return bmpEncodeLayer(recon, in, out);
+    case L_T1: return t1EncodeLayer(recon, in, out);
   }
   fail("unknown layer type %d", type);
 }
@@ -891,6 +915,7 @@ static bool layerDecode(const CodecCtx& ctx, uint8_t type, const FilterParams& f
       case L_RL: ok = rlDecode(in, out, recon); break;
       case L_PNG: ok = pngDecode(fp, in, out, recon); break;
       case L_TIFF: ok = tiffDecode(fp, in, out, recon); break;
+      case L_T1: ok = t1DecodeLayer(in, out, recon, fp.t1Charstrings); break;
       default: return false;
     }
     if (!ok) return false;

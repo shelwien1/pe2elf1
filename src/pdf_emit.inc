@@ -186,14 +186,38 @@ static void restorePayload(const CodecCtx& ctx, const Bytes& fileKey, const Stre
   }
 }
 
-static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader loader) {
-  ChanReader r(d, meta0, std::move(loader));
+// Optional shortcut for the encoder's own verify: given the k-th stream's descriptor and stored
+// bytes as read back from the dump, supply the payload if they are identical to what the
+// encoder already verified layer by layer (so re-running the layer encoders cannot differ).
+typedef std::function<bool(size_t, const StreamDesc&, const Bytes&, Bytes&)> FastRestore;
+
+static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader loader,
+                        const FastRestore* fast = nullptr) {
+  // undo whole-file transforms first
+  DumpFiles tmp;
+  const DumpFiles* use = &d;
+  if (d.hdr.flags & (kFlagLiftT | kFlagLiftCS)) {
+    tmp.hdr = d.hdr;
+    tmp.chan = d.chan;
+    for (int c = 0; c < CF_COUNT; c++) tmp.classFile[c] = d.classFile[c];
+    if (d.hdr.flags & kFlagLiftT) {
+      int f = d.hdr.map.fileOf[CH_T];
+      if (f == 0) fail("bad lift flag");
+      if (!liftInverse(LIFT_OBJ, d.chan[f], d.aux[AX_TXN], Bytes(), tmp.chan[f])) fail("text number lift: bad data");
+    }
+    if (d.hdr.flags & kFlagLiftCS)
+      if (!liftInverse(LIFT_CS, d.classFile[CF_CS], d.aux[AX_CSN], d.aux[AX_CSH], tmp.classFile[CF_CS]))
+        fail("content number lift: bad data");
+    use = &tmp;
+  }
+  ChanReader r(*use, meta0, std::move(loader), &d.ownData);
   CodecCtx ctx;
-  ctx.zlibHdr[0] = d.hdr.zlibHdr[0];
+  ctx.zlibHdr[0] = use->hdr.zlibHdr[0];
   ctx.zlibHdr[1] = d.hdr.zlibHdr[1];
   ReadState st;
   std::vector<std::string> ordExt;
   Bytes out;
+  size_t streamNo = 0;
   out.reserve((size_t)std::min<uint64_t>(d.hdr.origSize, (uint64_t)1 << 32));
   for (;;) {
     uint8_t tag = r.u8(CH_S);
@@ -219,8 +243,14 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
         size_t n = r.len(CH_N);
         const uint8_t* p = r.get(CH_T, n);
         out.insert(out.end(), p, p + n);
-        restorePayload(ctx, d.hdr.fileKey, sd, data);
-        out.insert(out.end(), data.begin(), data.end());
+        Bytes payload;
+        if (fast && (*fast)(streamNo, sd, data, payload)) {
+          out.insert(out.end(), payload.begin(), payload.end());
+        } else {
+          restorePayload(ctx, d.hdr.fileKey, sd, data);
+          out.insert(out.end(), data.begin(), data.end());
+        }
+        streamNo++;
         n = r.len(CH_N);
         p = r.get(CH_T, n);
         out.insert(out.end(), p, p + n);
