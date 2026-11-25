@@ -47,6 +47,7 @@ namespace pdd {
 #include "pdf_filt.inc"
 #include "pdf_bmp.inc"
 #include "pdf_tiff.inc"
+#include "pdf_icc.inc"
 #include "pdf_ccitt.inc"
 #include "pdf_t1.inc"
 #include "pdf_objstm.inc"
@@ -117,7 +118,8 @@ struct Stats {
   uint64_t reconBlobs = 0, reconRefs = 0;
   uint64_t typedBytes = 0, payloadBytes = 0, layeredPayload = 0;
   uint64_t bmpCount = 0;
-  uint64_t derived = 0, stringsDecrypted = 0, sigBlobs = 0, rgbaMerged = 0, b64Blobs = 0, b64Bytes = 0, xmpThumbs = 0;
+  uint64_t derived = 0, stringsDecrypted = 0, sigBlobs = 0, rgbaMerged = 0, b64Blobs = 0, b64Bytes = 0, xmpThumbs = 0,
+           iccRefs = 0;
 };
 
 class Encoder {
@@ -263,20 +265,22 @@ class Encoder {
   }
 
   void applyLifts() {
-    Bytes sk, nu, hx;
+    Bytes sk, nu, hx, ss;
     int ft = dump.hdr.map.fileOf[CH_T];
     if (opt_.syntaxLevel < 2) return;
-    if (ft != 0 && !dump.chan[ft].empty() && liftApply(LIFT_OBJ, dump.chan[ft], sk, nu, hx) && hx.empty()) {
+    if (ft != 0 && !dump.chan[ft].empty() && liftApply(LIFT_OBJ, dump.chan[ft], sk, nu, hx, ss) && hx.empty() &&
+        ss.empty()) {
       dump.chan[ft].swap(sk);
       dump.aux[AX_TXN].swap(nu);
       dump.hdr.flags |= kFlagLiftT;
     }
     if (opt_.syntaxLevel < 3) return;
     Bytes inl;
-    if (!dump.classFile[CF_CS].empty() && liftApply(LIFT_CS, dump.classFile[CF_CS], sk, nu, hx, &ctx_, &inl)) {
+    if (!dump.classFile[CF_CS].empty() && liftApply(LIFT_CS, dump.classFile[CF_CS], sk, nu, hx, ss, &ctx_, &inl)) {
       dump.classFile[CF_CS].swap(sk);
       dump.aux[AX_CSN].swap(nu);
       dump.aux[AX_CSH].swap(hx);
+      dump.aux[AX_CSS].swap(ss);
       dump.aux[AX_CSI].swap(inl);
       dump.hdr.flags |= kFlagLiftCS;
     }
@@ -845,6 +849,17 @@ class Encoder {
       s.data.swap(jpeg);
       st.xmpThumbs++;
     }
+    // well-known ICC profiles: a table index instead of the data
+    for (auto& s : streams) {
+      if (s.remain != R_DONE || s.bmp || s.tif || s.data.size() < 128) continue;
+      int k = iccLookup(s.data);
+      if (k < 0) continue;
+      Bytes recon{(uint8_t)k}, back;
+      if (!layerEncode(ctx_, L_ICCREF, recon, Bytes(), back) || back != s.data) continue;
+      s.desc.layers.push_back({L_ICCREF, std::move(recon)});
+      s.data.clear();
+      st.iccRefs++;
+    }
     // object streams: header table derived from the members
     for (auto& s : streams) {
       if (s.desc.cls != SC_OBJSTM || s.remain != R_DONE || opt_.syntaxLevel < 2) continue;
@@ -1222,6 +1237,7 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
   if (st.bmpCount) printf("bmp3 images: %llu\n", (unsigned long long)st.bmpCount);
   if (st.rgbaMerged) printf("RGB + soft mask merged (-a): %llu\n", (unsigned long long)st.rgbaMerged);
   if (st.xmpThumbs) printf("XMP thumbnails as JPEG: %llu\n", (unsigned long long)st.xmpThumbs);
+  if (st.iccRefs) printf("ICC profiles from the built-in table: %llu\n", (unsigned long long)st.iccRefs);
   if (st.derived)
     printf("derived fields: %llu\n", (unsigned long long)(st.derived - st.stringsDecrypted - st.sigBlobs - st.b64Blobs));
   if (st.b64Blobs)

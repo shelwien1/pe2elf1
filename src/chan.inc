@@ -25,7 +25,7 @@ static const char* const kChanSuffix[CH_COUNT] = {"meta", "num", "txt", "str", "
 static const char* const kDefaultChanMap = "SN,TX,O,F,R,B";
 
 static const uint8_t kMagic[8] = {'P', 'D', 'F', 'D', 'U', 'M', 'P', 0x1A};
-static const uint32_t kFormatVersion = 5;
+static const uint32_t kFormatVersion = 6;
 
 // Class files: all streams of a class concatenated, regardless of size.
 enum ClassFile { CF_CS, CF_CMAP, CF_COUNT };
@@ -33,8 +33,8 @@ static const char* const kClassFileSuffix[CF_COUNT] = {"cs", "cmap"};
 
 // Aux files: outputs of whole-file transforms (number lifting, pdf_lift.inc), signature blobs,
 // base64 blobs of object text (data, recon).
-enum AuxFile { AX_TXN, AX_CSN, AX_CSH, AX_CMB, AX_CSI, AX_P7S, AX_B64, AX_B64R, AX_COUNT };
-static const char* const kAuxSuffix[AX_COUNT] = {"txn", "csn", "csh", "cmb", "csi", "p7s", "b64", "b64r"};
+enum AuxFile { AX_TXN, AX_CSN, AX_CSH, AX_CMB, AX_CSI, AX_P7S, AX_B64, AX_B64R, AX_CSS, AX_COUNT };
+static const char* const kAuxSuffix[AX_COUNT] = {"txn", "csn", "csh", "cmb", "csi", "p7s", "b64", "b64r", "css"};
 
 // header flags
 static const uint64_t kFlagStored = 1, kFlagLiftT = 2, kFlagLiftCS = 4, kFlagCmap = 8;

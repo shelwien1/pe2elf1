@@ -216,11 +216,11 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
     if (d.hdr.flags & kFlagLiftT) {
       int f = d.hdr.map.fileOf[CH_T];
       if (f == 0) fail("bad lift flag");
-      if (!liftInverse(LIFT_OBJ, d.chan[f], d.aux[AX_TXN], Bytes(), tmp.chan[f])) fail("text number lift: bad data");
+      if (!liftInverse(LIFT_OBJ, d.chan[f], d.aux[AX_TXN], Bytes(), Bytes(), tmp.chan[f])) fail("text number lift: bad data");
     }
     if (d.hdr.flags & kFlagLiftCS)
-      if (!liftInverse(LIFT_CS, d.classFile[CF_CS], d.aux[AX_CSN], d.aux[AX_CSH], tmp.classFile[CF_CS], &ctx,
-                       &d.aux[AX_CSI]))
+      if (!liftInverse(LIFT_CS, d.classFile[CF_CS], d.aux[AX_CSN], d.aux[AX_CSH], d.aux[AX_CSS], tmp.classFile[CF_CS],
+                       &ctx, &d.aux[AX_CSI]))
         fail("content number lift: bad data");
     if (d.hdr.flags & kFlagCmap)
       if (!cmapInverse(d.classFile[CF_CMAP], d.aux[AX_CMB], tmp.classFile[CF_CMAP])) fail("cmap transform: bad data");
