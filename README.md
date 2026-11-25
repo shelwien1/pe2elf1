@@ -206,8 +206,8 @@ Speed of `c`, single thread, 120 files run one after another:
 
 | Mode | Aggregate | Slowest files |
 |---|---|---|
-| default (every layer verified) | 1.58 MB/s | 5 files over 50 KB run at 395–430 KB/s |
-| `-n` (no verification) | 2.31 MB/s | 566 KB/s; all files above 500 KB/s |
+| default (every layer verified) | 1.73 MB/s | 3 files over 50 KB run at 429–484 KB/s |
+| `-n` (no verification) | 2.65 MB/s | 712 KB/s; all files over 50 KB above 700 KB/s |
 
 Almost all the time is preflate: the analysis plus the re-encode that verifies each Flate layer.
 The slow files have level-9 text streams or highly compressible images, where preflate costs
