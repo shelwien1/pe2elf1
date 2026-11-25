@@ -9,7 +9,7 @@ to code is where the encoder chose otherwise. Decompression, with the same WAV, 
 stream byte for byte.
 
 The core of `s.2.dts` (4 minutes 25 seconds of 5.1 at 1509 kbps; 50008260 bytes) compresses to
-76383 bytes (0.15%); without its audio, dtsdpack's model gets 62.80% and `xz -9e` 88.21%.
+76383 bytes (0.15%); without its audio, dtsdpack's model gets 62.74% and `xz -9e` 88.21%.
 
 The core substream's extensions are coded too: XCH (6.1's back centre) and XXCH (7.1's other
 channels) as more channels, X96 (DTS 96/24's 24-48 kHz band and the core's residuals) as subbands
@@ -104,7 +104,7 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 62.80% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 62.74% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3485 (0.27%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 4624 (0.43%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2589 (0.11%) | | |
@@ -995,6 +995,58 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   decompressing (in a quieter hour 346 to 341 and 360 to 354), the XCH sample 273 to 276 and 278 to
   271 (of 61 runs, 292 to 282 and 295 to 282), and with its WAV 193 to 200 and 280 to 281. With the
   WAV, every run of the check lists the size format 170's build makes, 1455804 bytes in all.
+  Since format 172 the logistic's scale and the fits' weights go by a blend of two spreads, the
+  residuals' mean distance from the fit's value a 64th a sample (as the spread was) and an 8th: (1 -
+  w) of the slow one and w of the fast, w the channel's, from 0, kept within 0..1 and stepped each
+  sample by 0.005 of the gradient of the residual's log-loss under the logistic, (1 - x tanh(x / 2))
+  (fast - slow) / s at x = |r| / (0.75 s), s the blend it was coded at (tanh(x / 2) as 1 - 2 times
+  the logistic's tail, from its table: + - * / and the table alone, as every machine computes them),
+  where the fit's value is the coder's and s 0.5 or more; the slow one is still what the fit's use
+  and the family's contexts go by. A stream's channels go to the speed its residuals' spread changes
+  at: `Fire__VooDoo_Studio_30_sec.wav`'s weights near 1, `mid.dtsc`'s near 0. And the long fit's 4
+  oldest values, the 53rd to the 56th before, are the 4 earlier channels' fit errors of the sample,
+  its size the same. Without their WAVs, `s.2.dts`'s whole core 31402725 bytes to 31376045 (62.80%
+  of it to 62.74%), the 55 streams of the check lists 123818319 to 123578038 (0.194%: FFmpeg's
+  16-bit `e16.dts` 1.26%, `Fire__VooDoo_Studio_30_sec.wav` and its two packings 0.65%, FFmpeg's 32
+  and 44.1 kHz encodes 0.65% and 0.33%, `dtswavsample16.wav` 0.29%, `chs/m.dtsc` 0.26%, FFmpeg's
+  `f4.dts` and its packing 0.24%, `chs/n.dtsc` 0.22%, `96-24.dts` and its packings 0.19%,
+  `dtswavsample14.wav` and `lfe/l0.dtsc` 0.13%, `mid.dtsc` 0.11%, the rest up to 0.10%; 12 bigger:
+  `3-1.dts` by 216 bytes (0.010%), FATE's short samples by 5-64 bytes, `z192/z.dtsc` by 12,
+  `dx4/cs.dtsc` by 3). On 9 of the streams 10333421 bytes to 10312315 (0.204%: Fire 0.66%,
+  `96-24.dts` 0.19%, `mid.dtsc` 0.11%, the rest up to 0.05%, `3-1.dts` 0.010% bigger; the errors
+  about 0.02% of it): the blend in every place of the spread, the fit's use and the contexts too,
+  0.195% (the fit then taken where it isn't the better: FFmpeg's `f4.dts` 1.03% bigger), in the
+  logistic's scale alone 0.09% on `f4.dts` (0.24% with the weights), with the contexts too 0.202%;
+  the fast spread in the spread's place, a 16th a sample, 0.109% smaller (Fire 0.43%, but
+  `s2h.dtsc`, `dts_es.dtsc` and `mid.dtsc` 0.03-0.09% bigger), from subband 8 or 16 up 0.042% and
+  0.009%; one weight for the stream, a 16th or an 8th 0.155% and 0.182%, from 0.25 0.183%, by three
+  groups of subbands 0.178%, each subband's 0.180% (FATE's XCH sample 23-86 bytes bigger); the
+  channel's, the fast one an 11th or a 6th 0.183% and 0.191%, its steps 0.003, 0.008 or 0.012
+  0.191%, 0.199%, 0.201% (the XCH sample to 87 bytes bigger), the slow one a 96th or a 128th 0.198%
+  and 0.196% (these with the blend in every place); the earlier channels' errors as 4 more
+  regressors of the long fit 0.028% (2.4% more instructions), of both fits 0.040% (the XCH sample
+  3.9% bigger), in the short fit's place of the 2 nearest's either side 0.24% bigger (`96-24.dts`
+  1.0%), in the cascade's least squares fit (the 4 errors with 2 or 4 values) 0.001-0.002% bigger,
+  its sums forgetting too fast for them, among the blend's inputs 0.023-0.026% bigger (Fire 0.2%),
+  with a ridge of each input's own diagonal 0.008-0.020%. Offline, on format 170's `mid.dtsc`: the
+  surround channels' errors are 2.6-5.2% less in RMS by a fit on the 4 earlier channels' errors,
+  1.5-2.9% by the 2 nearest's; the subband below's values and errors (it is coded before, its whole
+  8), at the sample and either side, predict none of it; Fire's residuals over their spread are
+  Laplace's, `mid.dtsc`'s the logistic's, but their ideal cost under a Laplace distribution (at a
+  plain 64th-a-sample spread) is only 0.6% under the logistic's on Fire and 0.7% over it on
+  `mid.dtsc`, where the model codes them 5% and 2% under it (by the decisions' costs, its families
+  gain about 200 bytes over the logistic on `mid.dtsc`, 68 KB on Fire, most at the lengths' first
+  decisions); and the z path's indexes, coded at 1.15-1.4 bits a sample at the coarsest allocation,
+  have no neighbour (the earlier channels', the last sample's, the subband below's, the 8's nonzeros
+  so far) that lowers their entropy by more than 3%, the model under each one alone already. The
+  family's all but sure decisions (by the logistic, under 1 in 1000) sent to the coder straight:
+  1.3% fewer instructions but 0.013% bigger (Fire 0.04%, the XCH sample 1.5%). For 0.06% more
+  instructions without the WAV (`mid.dtsc`'s, compressing; FATE's 7-frame XCH sample 0.13% fewer,
+  with its WAV 0.26% fewer): the medians of 15 runs interleaved with format 171's build on this
+  host, `mid.dtsc` without its WAV 340 KB/s to 341 compressing and 322 to 328 decompressing, the XCH
+  sample 275 to 272 and 283 to 253 (its best 334 to 358 and 350 to 326: too short a run to time
+  apart), and with its WAV 260 to 257 and 286 to 299. With the WAV, every run of the check lists the
+  size format 171's build makes, 1455804 bytes in all.
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first
@@ -2445,7 +2497,7 @@ files at that level.
 
 ### The format
 
-"dtsdpack", the format's version (171), the level (9, or 8: above) and above it the stream's packing
+"dtsdpack", the format's version (172), the level (9, or 8: above) and above it the stream's packing
 (since format 145: 0 the core's own, 1 little-endian, 2 and 3 14 bits a word big- and
 little-endian); what the WAV was (whether it was one, and since format 155 whether a heights WAV was
 added into it, its channels and bytes a sample, its size and the CRC-32 of its first 64 KB; then the

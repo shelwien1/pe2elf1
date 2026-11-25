@@ -451,14 +451,17 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // scale factors' and ABITS' running means, each an 8th of theirs (nw_sm, nw_am; nw_sn whether
   // there is one, nw_an how many ABITS have gone into it, to 255). Since format 168, in the
   // subbands under NW_BL, a long fit beside that one, the short: of NW_NG regressors, the short
-  // fit's NW_NS and then NW_NL more of the subband's past, the 17th to the 56th value before; the
+  // fit's NW_NS and then NW_NL more, NW_NLP of the subband's past, the 17th to the 52nd value
+  // before (to the 56th before format 172), and since format 172 the NW_NE earlier channels' fit
+  // errors of the sample (nwc_r's, 0 where there is none); the
   // short fit the first NW_NS of the long one's (its sums the first rows of the long one's), both
   // by one Cholesky (nw_refit()), its own as before; the long one's value taken where the mean
   // square of its errors, in steps, has been under NW_LT of the short one's, each sample a 64th of
   // them (nw_el, nw_es)
-  static constexpr int NW_NO = 16, NW_NX = 8, NW_NS = NW_NO + NW_NX, NW_NL = 40, NW_NG = NW_NS + NW_NL, NW_K = 16;
+  static constexpr int NW_NO = 16, NW_NX = 8, NW_NS = NW_NO + NW_NX, NW_NLP = 36, NW_NE = 4, NW_NL = NW_NLP + NW_NE,
+                       NW_NG = NW_NS + NW_NL, NW_K = 16;
   static constexpr int NW_BL = 4, NW_WARM = 32, NW_NY = 64;
-  static_assert((NW_NY & (NW_NY - 1)) == 0 && NW_NY >= NW_NO + NW_NL && 256 % NW_NY == 0 && NW_NS % 4 == 0 && NW_NL % 4 == 0,
+  static_assert((NW_NY & (NW_NY - 1)) == 0 && NW_NY >= NW_NO + NW_NLP && 256 % NW_NY == 0 && NW_NS % 4 == 0 && NW_NL % 4 == 0,
                 "nw_y's ring a power of 2 (nw_yp's wrap a whole number of them), R's rows in 4s");
   static constexpr double NW_TH = 0.95, NW_LAM = 0.9985, NW_LAML = 0.9965, NW_RIDGE = 1e-5, NW_LT = 0.95;
   static constexpr double NW_LS = 0.75;  // (since format 160 the residual's logistic scale, of the spread: 0.6 before format 170)
@@ -614,6 +617,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   double nw_sm[NCH][NSUB], nw_am[NCH][NSUB];
   U8 nw_sn[NCH][NSUB], nw_an[NCH][NSUB];
   double nw_ba[NCH][NSUB], nw_bb[NCH][NSUB];
+  // (since format 172 the spread nw_bb a blend of two, (1 - w) nw_bs + w nw_bf, nw_bs a 64th a
+  // sample as nw_bb was, nw_bf an NW_BF-th; the channel's w, nw_bw, from 0 in 0..1, learned by
+  // the logistic's log-loss of the fit's residuals: by NW_BE of its gradient a sample, where the
+  // spread is NW_BM or more; the blend the logistic's scale and the fits' weights', the slow one
+  // what the fit's use and smn's contexts go by)
+  double nw_bs[NCH][NSUB], nw_bf[NCH][NSUB], nw_bw[NCH];
+  static constexpr double NW_BF = 8.0, NW_BE = 0.005, NW_BM = 0.5;
   // (since format 162 a part's indexes' energy so far, nw_pe; the stream's ratio of the parts'
   // energies to their scale factors' cells' centres, nw_gs over nw_gn, and the share of them in
   // their cells, nw_bi of nw_bn: nw_cell(); the fit's shrink, its sums, nw_hs and nw_hq, and its
@@ -1454,7 +1464,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int k = 0; k < 3; k++) nwz_n[k][0] = 32, nwz_n[k][1] = 1;
     nwd_n[0] = nwd_n[1] = 0, nwg_p[0] = nwg_p[1] = 0;
     for (int c = 0; c < NCH; c++)
-      for (int k = 0; k < NSUB; k++) nw_ba[c][k] = nw_bb[c][k] = 1.0;
+      for (int k = 0; k < NSUB; k++) nw_ba[c][k] = nw_bb[c][k] = nw_bs[c][k] = nw_bf[c][k] = 1.0;
+    for (int c = 0; c < NCH; c++) nw_bw[c] = 0.0;
     memset(dv_lq, 0, sizeof dv_lq);
     for (int c = 0; c < NCH; c++)
       for (int k = 0; k < NSUB; k++) dv_le[c][k] = -1.0;
@@ -5711,6 +5722,36 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // 0.044%, 0.044% and 0.042% smaller without those, with them and at a 256th 0.088% at 4; by e^2
     // / s^2, 0.060%; NWC_GS 4, 8 or 32 0.087%, 0.090%, 0.088%; a 64th, a 128th, a 512th a sample (by
     // the log, at 4) 0.056%, 0.082%, 0.086%; the two fits' switch measured alike too, 0.002% smaller
+    // Since format 172 the spread a blend of the residuals' mean distances a 64th a sample (as it
+    // was, nw_bs) and an NW_BF-th (nw_bf), (1 - w) nw_bs + w nw_bf, w the channel's (nw_bw), from 0
+    // within 0..1, by NW_BE of the gradient of the residual's log-loss under the logistic a sample
+    // (the update's), the blend the logistic's scale and the fits' weights' (and the cascade's
+    // measures'), the slow one what the fit's use (nwr) and smn's contexts go by: with the long
+    // fit's errors below, on 9 no-WAV streams 10333421 bytes to 10312315 (0.204%:
+    // `Fire__VooDoo_Studio_30_sec.wav` 0.66%, its weights near 1, `96-24.dts` 0.19%, `mid.dtsc`
+    // 0.11%, its weights near 0, `open_bitrate.dts` and `Master_Audio_5.0_96khz.dts` 0.05%,
+    // `dts_es.dtsc` 0.03%, `s2h.dtsc` 0.015%, the XCH sample 6 bytes; `3-1.dts` 0.010% bigger).
+    // Against it: the blend in every place of the spread, the fit's use and the contexts too, 0.195%,
+    // but FFmpeg's `f4.dts` 1.03% bigger (by the use alone), the logistic's scale alone 0.09% on it
+    // (0.24% with the weights), with the contexts too 0.202%; the fast spread alone in its place, a
+    // 16th a sample, 0.109% smaller (Fire 0.43%, but `s2h.dtsc` 0.07%, `dts_es.dtsc` 0.09%,
+    // `mid.dtsc` 0.03% bigger), from subband 8 or 16 up 0.042% and 0.009%; one weight for the
+    // stream (steps of 0.002), the fast one a 16th 0.155%, an 8th 0.182%, from 0.25 0.183%, by
+    // three groups of subbands 0.178%, each subband's (0.005) 0.180% (the XCH sample 23-86 bytes
+    // bigger); the channel's, the fast one an 11th or 6th 0.183% and 0.191% (the 8th 0.195%), steps
+    // of 0.003, 0.008 or 0.012 0.191%, 0.199%, 0.201% (the XCH sample to 87 bytes bigger), the slow
+    // one a 96th or 128th 0.198% and 0.196% (these with the blend in every place).
+    // Since format 172 too the long fit's 4 oldest values, the 53rd to 56th before, the 4 earlier
+    // channels' fit errors of the sample (NW_NE): 0.022% smaller still (`96-24.dts` 0.14%,
+    // `mid.dtsc` 0.10%; `3-1.dts` 0.011% bigger), the fit's size the same. Against it: as 4 more of
+    // the long fit's 0.028% (2.4% more instructions), of both fits' 0.040% (the XCH sample 3.9%
+    // bigger, 2-3% more instructions), in the short fit's place of the 2 nearest's either side
+    // 0.24% bigger (`96-24.dts` 1.0%); in the cascade's least squares fit (the 4 errors and 2 or 4
+    // values) 0.001-0.002% bigger, its sums forgetting too fast for them; among the blend's inputs
+    // 0.023-0.026% bigger (Fire 0.2%), with a ridge of each one's own diagonal 0.008-0.020%.
+    // (Offline, on format 170's `mid.dtsc`: the surround channels' errors 2.6-5.2% less in RMS by a
+    // fit on the four earlier channels' errors, 1.5-2.9% by the 2 nearest's; the subband below's
+    // values and errors, at the sample and either side, nothing.)
     const bool nwp = !bound[ch], nwl = nwp && b < NW_BL;  // (nwl: the long fit's subband)
     double nwh[NW_NG] = {}, nwy = 0.0, nwd = 0.0, nwd0 = 0.0, nwg = 1.0, nwys = 0.0, nwyl = 0.0;
     double nwx[NWC_K], nwxc[4] = {}, nwco = 0.0, nwcx = 0.0, nwbv = 0.0;  // (the cascade's: its inputs in steps (nwx set where it's read), its two parts, their blend)
@@ -5726,8 +5767,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         nwc_m1[ch][b] = nwc_mo[ch][b] = nwc_m2[ch][b] = 0.0, nwc_p[ch][b] = 0;
       }
       for (int k = 0; k < NW_NO; k++) nwh[k] = nw_y[ch][b][(nw_yp[ch][b] + NW_NY - 1 - k) & (NW_NY - 1)];
-      if (nwl)
-        for (int k = 0; k < NW_NL; k++) nwh[NW_NS + k] = nw_y[ch][b][(nw_yp[ch][b] + NW_NY - 1 - NW_NO - k) & (NW_NY - 1)];
+      if (nwl) {
+        for (int k = 0; k < NW_NLP; k++) nwh[NW_NS + k] = nw_y[ch][b][(nw_yp[ch][b] + NW_NY - 1 - NW_NO - k) & (NW_NY - 1)];
+        for (int k = 0; k < NW_NE; k++) {  // (since format 172 the earlier channels' fit errors of the sample)
+          const int c = ch - 1 - k;
+          if (c >= r.ch0() && b < r.nvqsub[c] && s.abits[c][b] && !bound[c]) nwh[NW_NS + NW_NLP + k] = nwc_r[c][b][j & 7];
+        }
+      }
       for (int k = 0; k < 4; k++) {
         const int c = ch - 1 - k;
         if (c >= r.ch0() && b < r.nvqsub[c] && s.abits[c][b]) nwh[NW_NO + k] = tw_y[c][b][j & 7];
@@ -5786,13 +5832,16 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (qr > 0.0) {  // (the spreads where the step changes)
         if (nw_qr[ch][b] > 0.0 && qr != nw_qr[ch][b]) {
           const double m = nw_qr[ch][b] / qr;
-          nw_ba[ch][b] *= m, nw_bb[ch][b] *= m;
+          nw_ba[ch][b] *= m, nw_bs[ch][b] *= m, nw_bf[ch][b] *= m;
           if (nw_ba[ch][b] < 0.3) nw_ba[ch][b] = 0.3;
+          if (nw_bs[ch][b] < 0.3) nw_bs[ch][b] = 0.3;
+          if (nw_bf[ch][b] < 0.3) nw_bf[ch][b] = 0.3;
+          nw_bb[ch][b] = (1.0 - nw_bw[ch]) * nw_bs[ch][b] + nw_bw[ch] * nw_bf[ch][b];
           if (nw_bb[ch][b] < 0.3) nw_bb[ch][b] = 0.3;
         }
         nw_qr[ch][b] = qr;
       }
-      nwr = nw_n[ch][b] >= NW_WARM && nw_bb[ch][b] < NW_TH * nw_ba[ch][b];
+      nwr = nw_n[ch][b] >= NW_WARM && nw_bs[ch][b] < NW_TH * nw_ba[ch][b];  // (the slow spread's, since format 172)
     }
     M_smp_v D;
     D.ab = a;
@@ -5815,13 +5864,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     D.s1 = qs[ch][b];
     if (nwr) {  // (the residual's: its spread, floor(2 log2) + 5 by frexp(), exact)
       int e2;
-      const double mt = frexp(nw_bb[ch][b], &e2);
-      const double t = fabs(nwd - (double)nwq) / nw_bb[ch][b];  // (nr: how far the fit's value from its index)
+      const double mt = frexp(nw_bs[ch][b], &e2);  // (the slow spread's, since format 172)
+      const double t = fabs(nwd - (double)nwq) / nw_bs[ch][b];  // (nr: how far the fit's value from its index)
       D.ql = 1 + clip(2 * e2 + (mt >= 0.70710678118654752440 ? 1 : 0) + 3, 0, 20);
       D.nr = t < 0.05 ? 15 : t < 0.12 ? 14 : t < 0.25 ? 13 : 12;
       D.m1 = nw_r1[ch][b] ? imin(nw_r1[ch][b] - 1, 21) : 22;
       D.m2 = nw_r2[ch][b] ? imin(nw_r2[ch][b] - 1, 21) : 22;
-      const double q3 = fabs(nwd) / nw_bb[ch][b];
+      const double q3 = fabs(nwd) / nw_bs[ch][b];
       int e3 = 0;
       const double m3 = q3 > 0.0 ? frexp(q3, &e3) : 0.0;
       D.nl = q3 > 0.0 ? clip(2 * e3 + (m3 >= 0.70710678118654752440 ? 1 : 0) + 6, 0, 15) : 0;
@@ -6086,8 +6135,21 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       nw_hb[ch][b] += fabs((double)v - nwd0) - nw_hb[ch][b] / 64.0;
       nw_hs[ch][b] += (double)v * nwd0 - nw_hs[ch][b] / 64.0, nw_hq[ch][b] += nwd0 * nwd0 - nw_hq[ch][b] / 64.0;
       const double av = (double)(v < 0 ? -v : v), ar = fabs((double)v - nwd);
-      nw_ba[ch][b] += (av - nw_ba[ch][b]) / 64, nw_bb[ch][b] += (ar - nw_bb[ch][b]) / 64;
+      // (since format 172 the blend's weight by the gradient of the residual's log-loss at the
+      // spread s it was coded at: d/dw of -log p, the logistic's density at x = |r| / (NW_LS s),
+      // (1 - x tanh(x / 2)) (nw_bf - nw_bs) / s, tanh(x / 2) as 1 - 2 nw_tail(x))
+      if (nwr && ss > 0 && nw_bb[ch][b] >= NW_BM) {
+        const double sb = nw_bb[ch][b], x = ar / (NW_LS * sb), th = 1.0 - 2.0 * nw_tail(x);
+        double& w = nw_bw[ch];
+        w -= NW_BE * (1.0 - x * th) / sb * (nw_bf[ch][b] - nw_bs[ch][b]);
+        w = w < 0.0 ? 0.0 : w > 1.0 ? 1.0 : w;
+      }
+      nw_ba[ch][b] += (av - nw_ba[ch][b]) / 64, nw_bs[ch][b] += (ar - nw_bs[ch][b]) / 64;
+      nw_bf[ch][b] += (ar - nw_bf[ch][b]) / NW_BF;
       if (nw_ba[ch][b] < 0.3) nw_ba[ch][b] = 0.3;
+      if (nw_bs[ch][b] < 0.3) nw_bs[ch][b] = 0.3;
+      if (nw_bf[ch][b] < 0.3) nw_bf[ch][b] = 0.3;
+      nw_bb[ch][b] = (1.0 - nw_bw[ch]) * nw_bs[ch][b] + nw_bw[ch] * nw_bf[ch][b];
       if (nw_bb[ch][b] < 0.3) nw_bb[ch][b] = 0.3;
       nw_n[ch][b] += nw_n[ch][b] < NW_WARM;
       nw_r2[ch][b] = nw_r1[ch][b];
