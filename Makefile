@@ -1,6 +1,6 @@
 # pdfdump -- single translation unit: src/pdfdump.cpp + src/*.inc
 CXX      ?= g++
-CXXFLAGS ?= -std=c++17 -O2
+CXXFLAGS ?= -std=c++17 -O3
 SRC      := src/pdfdump.cpp $(wildcard src/*.inc)
 
 pdfdump: $(SRC)

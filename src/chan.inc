@@ -318,10 +318,19 @@ static uint32_t crc32_update(uint32_t crc, const uint8_t* p, size_t n) {
   return ~crc;
 }
 
-static uint64_t fnv1a64(const uint8_t* p, size_t n) {
-  uint64_t h = 1469598103934665603ull;
-  for (size_t i = 0; i < n; i++) { h ^= p[i]; h *= 1099511628211ull; }
-  return h;
+// encoder-side lookup hash (dedup, verify shortcut); not part of the dump format
+static uint64_t hash64(const uint8_t* p, size_t n) {
+  uint64_t h = 0x9E3779B97F4A7C15ull ^ (uint64_t)n;
+  for (; n >= 8; p += 8, n -= 8) {
+    uint64_t w;
+    memcpy(&w, p, 8);
+    h = (h ^ w) * 0xFF51AFD7ED558CCDull;
+    h ^= h >> 29;
+  }
+  for (; n; p++, n--) h = (h ^ *p) * 0x100000001B3ull;
+  h ^= h >> 33;
+  h *= 0xC4CEB9FE1A85EC53ull;
+  return h ^ (h >> 33);
 }
 
 static bool readFile(const std::string& name, Bytes& out) {

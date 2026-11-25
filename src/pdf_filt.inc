@@ -97,7 +97,13 @@ struct VecOut : public ::OutputStream {
   explicit VecOut(Bytes& v_, size_t lim = SIZE_MAX) : v(v_), limit(lim) {}
   size_t write(const byte* buf, const size_t sz) override {
     if (sz > limit - std::min(limit, v.size())) throw Error("decoded stream exceeds size limit");
-    v.insert(v.end(), buf, buf + sz);
+    if (sz == 1) {  // preflate writes literals one at a time
+      v.push_back(buf[0]);
+      return 1;
+    }
+    size_t o = v.size();
+    v.resize(o + sz);
+    if (sz) memcpy(v.data() + o, buf, sz);
     return sz;
   }
 };

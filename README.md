@@ -42,12 +42,15 @@ measurement behind each.
 ## Build
 
 Single translation unit: `src/pdfdump.cpp` includes the `src/*.inc` modules. `src/preflate.inc`
-(from ziprec) is included unmodified and is the only code that isn't ours.
+(from ziprec) is the only code that isn't ours. It carries two speed-only edits, each marked
+`pdfdump:` (an 8-bytes-at-a-time match compare, and the hash-chain walk rejecting a candidate on
+bytes `bestLen-1..bestLen` before calling the compare); match lengths, and so every dump, are
+unchanged (checked byte for byte on the test set).
 
-    make                      # g++ -std=c++17 -O2 -pthread -o pdfdump src/pdfdump.cpp
+    make                      # g++ -std=c++17 -O3 -pthread -o pdfdump src/pdfdump.cpp
     make pdfdump-asan         # ASan + UBSan build
-    clang++ -std=c++17 -O2 -pthread -o pdfdump src/pdfdump.cpp
-    x86_64-w64-mingw32-g++-posix -std=c++17 -O2 -static -o pdfdump.exe src/pdfdump.cpp
+    clang++ -std=c++17 -O3 -pthread -o pdfdump src/pdfdump.cpp
+    x86_64-w64-mingw32-g++-posix -std=c++17 -O3 -static -o pdfdump.exe src/pdfdump.cpp
     cl /O2 /std:c++17 /EHsc src\pdfdump.cpp          (MSVC, untested)
 
 Tested with g++ 13.3 and clang 18 on Linux x86-64; the thread pool is also clean under
@@ -276,4 +279,4 @@ inserted, duplicated ranges), and the 117 files of the 005 set.
     src/pdf_cmap.inc    CMap bfchar/bfrange blocks as binary
     src/pdf_derive.inc  derived fields: placeholders, stream facts, xref section state
     src/pdf_emit.inc    item records, stream descriptors, recon dictionary, decoder
-    src/preflate.inc    from ziprec, unmodified
+    src/preflate.inc    from ziprec (speed-only edits marked "pdfdump:")

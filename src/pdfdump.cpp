@@ -170,7 +170,7 @@ class Encoder {
           const StreamDesc& e = s.desc;
           if (sd.cipher != e.cipher || sd.num != e.num || sd.gen != e.gen || memcmp(sd.iv, e.iv, 16) != 0 ||
               sd.layers.size() != e.layers.size() || stored.size() != s.storedSize ||
-              fnv1a64(stored.data(), stored.size()) != s.storedHash)
+              hash64(stored.data(), stored.size()) != s.storedHash)
             return false;
           for (size_t i = 0; i < sd.layers.size(); i++)
             if (sd.layers[i].type != e.layers[i].type || sd.layers[i].recon != e.layers[i].recon) return false;
@@ -463,7 +463,7 @@ class Encoder {
     const Obj& d = seg.objs[it.obj];
     if (s.wantCipher != CI_NONE || d.get("F") || it.dataEnd - it.dataStart < 64) return -1;
     std::string key = chainKey(getFilters(d));
-    uint64_t h = fnv1a64(in_.data() + it.dataStart, it.dataEnd - it.dataStart) ^ fnv1a64((const uint8_t*)key.data(), key.size());
+    uint64_t h = hash64(in_.data() + it.dataStart, it.dataEnd - it.dataStart) ^ hash64((const uint8_t*)key.data(), key.size());
     auto& v = cache_[h];
     for (int k : v) {
       const StreamRec& o = streams[k];
@@ -1032,7 +1032,7 @@ class Encoder {
           w.u8(CH_S, I_STREAM);
           uint64_t h = 0;
           if (s.desc.storage == ST_FILE && opt_.dedup) {
-            h = fnv1a64(s.data.data(), s.data.size()) ^ ((uint64_t)s.data.size() * 0x9E3779B97F4A7C15ull);
+            h = hash64(s.data.data(), s.data.size()) ^ ((uint64_t)s.data.size() * 0x9E3779B97F4A7C15ull);
             auto f = dedup.find(h);
             if (f != dedup.end())
               for (uint32_t k : f->second)
@@ -1088,7 +1088,7 @@ class Encoder {
   void accountStream(StreamRec& s) {
     const Item& it = seg.items[s.item];
     s.storedSize = s.data.size();
-    s.storedHash = fnv1a64(s.data.data(), s.data.size());
+    s.storedHash = hash64(s.data.data(), s.data.size());
     st.extents[it.extent]++;
     auto& c = st.cls[s.desc.cls];
     c.count++;

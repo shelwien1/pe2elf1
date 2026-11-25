@@ -3049,6 +3049,19 @@ uint PreflatePredictorState::prefixCompare(const byte* s1, const byte* s2, const
   const byte* scan = s2+3;
   const byte* match = s1+3;
   const byte* scanend = s2+maxLen;
+#if defined(__GNUC__) && defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+  // pdfdump: 8 bytes at a time (same result as the byte loop below)
+  while( scanend-scan>=8 ) {
+    uint64_t a, b;
+    memcpy(&a, scan, 8);
+    memcpy(&b, match, 8);
+    if( a!=b ) {
+      return (uint)(scan-s2)+(uint)(__builtin_ctzll(a^b)>>3);
+    }
+    scan += 8;
+    match += 8;
+  }
+#endif
   while( scan<scanend&&*scan==*match ) {
     ++scan;
     ++match;
@@ -3107,6 +3120,18 @@ PreflateToken PreflatePredictorState::match(const uint hashHead, const uint prev
   uint bestLen = prevLen;
   do {
     const byte* match = input-chainIt.dist();
+    // pdfdump: prefixCompare's first test without the call, and byte bestLen-1 with it (a longer
+    // match needs both equal)
+    if( bestLen>0 ) {
+      uint16_t m2, i2;
+      memcpy(&m2, match+bestLen-1, 2);
+      memcpy(&i2, input+bestLen-1, 2);
+      if( m2!=i2 ) {
+        continue;
+      }
+    } else if( match[0]!=input[0] ) {
+      continue;
+    }
     uint matchLength = prefixCompare(match, input, bestLen, h.maxLen);
     if( matchLength>bestLen ) {
       bestLen = matchLength;
