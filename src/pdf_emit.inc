@@ -218,6 +218,7 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
   std::vector<std::string> ordExt;
   Bytes out;
   ObjPositions objPos;
+  ctx.objPos = &objPos;
   size_t streamNo = 0;
   out.reserve((size_t)std::min<uint64_t>(d.hdr.origSize, (uint64_t)1 << 32));
   for (;;) {

@@ -111,3 +111,96 @@ static bool objstmEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out) {
   out.insert(out.end(), in.begin(), in.end());
   return true;
 }
+
+// ---- XRef stream rows (L_XREFROWS) ------------------------------------------------------------
+// Decoded XRef stream rows (fields of /W widths, objects listed by /Index) are replaced by
+// residuals against predictions: type 1 -> offset and generation of the latest definition of
+// that object written so far (CodecCtx::objPos, tracked identically on both sides); type 2 ->
+// container = previous type-2 container, index = previous index + 1 in the same container;
+// other types -> 0. Output per row: the type byte (when /W[0] > 0), zigzag varint residuals.
+//
+// Recon: u8 W0 W1 W2, var number of /Index ranges, (start, count) pairs, var tail length + tail.
+
+static bool xrefRowsGeometry(const std::vector<uint64_t>& w) {
+  return w.size() == 3 && w[0] <= 1 && w[1] <= 8 && w[2] <= 8 && w[0] + w[1] + w[2] > 0;
+}
+
+static void xrefRowsPredict(const ObjPositions* op, uint64_t num, uint64_t type, uint64_t f2, int64_t& lastC,
+                            int64_t& lastI, bool second, uint64_t& pred) {
+  if (type == 1) {
+    uint64_t off = 0;
+    uint32_t gen = 0;
+    if (op) op->get(num, off, gen);
+    pred = second ? gen : off;
+  } else if (type == 2) {
+    if (!second) pred = lastC < 0 ? 0 : (uint64_t)lastC;
+    else pred = ((int64_t)f2 == lastC && lastI >= 0) ? (uint64_t)(lastI + 1) : 0;
+  } else {
+    pred = 0;
+  }
+}
+
+static bool xrefRowsDecodeLayer(const CodecCtx& ctx, const Bytes& in, const std::vector<uint64_t>& W,
+                                const std::vector<std::pair<uint64_t, uint64_t>>& index, Bytes& out, Bytes& recon) {
+  if (!xrefRowsGeometry(W)) return false;
+  size_t rl = (size_t)(W[0] + W[1] + W[2]);
+  uint64_t rows = 0;
+  for (auto& r : index) rows += r.second;
+  if (rows == 0 || rows > in.size() / rl) return false;
+  out.clear();
+  size_t p = 0;
+  int64_t lastC = -1, lastI = -1;
+  for (auto& rg : index)
+    for (uint64_t k = 0; k < rg.second; k++) {
+      uint64_t f[3] = {W[0] ? 0u : 1u, 0, 0};
+      for (int i = 0; i < 3; i++)
+        if (W[i]) {
+          uint64_t v = 0;
+          for (uint64_t b = 0; b < W[i]; b++) v = v << 8 | in[p++];
+          f[i] = v;
+        }
+      uint64_t num = rg.first + k, pred;
+      if (W[0]) out.push_back((uint8_t)f[0]);
+      xrefRowsPredict(ctx.objPos, num, f[0], f[1], lastC, lastI, false, pred);
+      putVarTo(out, zigzag((int64_t)(f[1] - pred)));
+      xrefRowsPredict(ctx.objPos, num, f[0], f[1], lastC, lastI, true, pred);
+      putVarTo(out, zigzag((int64_t)(f[2] - pred)));
+      if (f[0] == 2) { lastC = (int64_t)f[1]; lastI = (int64_t)f[2]; }
+    }
+  recon.clear();
+  for (int i = 0; i < 3; i++) recon.push_back((uint8_t)W[i]);
+  putVarTo(recon, index.size());
+  for (auto& r : index) { putVarTo(recon, r.first); putVarTo(recon, r.second); }
+  putLenBytesTo(recon, in.data() + p, in.size() - p);
+  return true;
+}
+
+static bool xrefRowsEncodeLayer(const CodecCtx& ctx, const Bytes& recon, const Bytes& in, Bytes& out) {
+  RBuf r(recon);
+  std::vector<uint64_t> W(3);
+  for (auto& w : W) w = r.u8();
+  if (!xrefRowsGeometry(W)) return false;
+  size_t ni = r.len();
+  std::vector<std::pair<uint64_t, uint64_t>> index(ni);
+  for (auto& x : index) { x.first = r.var(); x.second = r.var(); }
+  RBuf q(in);
+  out.clear();
+  int64_t lastC = -1, lastI = -1;
+  for (auto& rg : index) {
+    if (rg.second > in.size()) return false;
+    for (uint64_t k = 0; k < rg.second; k++) {
+      uint64_t f[3] = {1, 0, 0}, num = rg.first + k, pred;
+      if (W[0]) f[0] = q.u8();
+      xrefRowsPredict(ctx.objPos, num, f[0], 0, lastC, lastI, false, pred);
+      f[1] = pred + (uint64_t)unzigzag(q.var());
+      xrefRowsPredict(ctx.objPos, num, f[0], f[1], lastC, lastI, true, pred);
+      f[2] = pred + (uint64_t)unzigzag(q.var());
+      if (f[0] == 2) { lastC = (int64_t)f[1]; lastI = (int64_t)f[2]; }
+      for (int i = 0; i < 3; i++)
+        for (uint64_t b = W[i]; b-- > 0;) out.push_back((uint8_t)(f[i] >> (8 * b)));
+    }
+  }
+  if (q.p != in.size()) return false;
+  r.appendTo(r.len(), out);
+  return true;
+}

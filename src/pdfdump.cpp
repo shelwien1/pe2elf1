@@ -619,6 +619,47 @@ class Encoder {
       s.desc.layers.push_back({L_OBJSTM, std::move(recon)});
       s.data.swap(out);
     }
+    // XRef streams: rows predicted from object positions known to the decoder at that point
+    for (auto& s : streams) {
+      if (s.desc.cls != SC_XREF || s.remain != R_DONE) continue;
+      const Obj& d = seg.objs[seg.items[s.item].obj];
+      const Obj* W = idx_.resolve(d.get("W"));
+      const Obj* Ix = idx_.resolve(d.get("Index"));
+      const Obj* Sz = idx_.resolve(d.get("Size"));
+      if (!W || W->t != Obj::ARR || W->a.size() != 3) continue;
+      FilterParams fp;
+      bool ok = true;
+      for (auto& w : W->a) {
+        if (w.t != Obj::INT || w.i < 0 || w.i > 8) ok = false;
+        fp.xrefW.push_back(w.t == Obj::INT ? (uint64_t)w.i : 0);
+      }
+      if (Ix && Ix->t == Obj::ARR && Ix->a.size() % 2 == 0) {
+        for (size_t k = 0; k + 1 < Ix->a.size(); k += 2) {
+          if (Ix->a[k].t != Obj::INT || Ix->a[k + 1].t != Obj::INT || Ix->a[k].i < 0 || Ix->a[k + 1].i < 0) ok = false;
+          else fp.xrefIndex.push_back({(uint64_t)Ix->a[k].i, (uint64_t)Ix->a[k + 1].i});
+        }
+      } else if (!Ix && Sz && Sz->t == Obj::INT && Sz->i > 0) {
+        fp.xrefIndex.push_back({0, (uint64_t)Sz->i});
+      } else {
+        ok = false;
+      }
+      if (!ok) continue;
+      ObjPositions snap;
+      for (int i = 0; i <= s.item; i++) {
+        const Item& it = seg.items[i];
+        if (it.kind != Item::OBJ && it.kind != Item::STREAM) continue;
+        uint32_t num, gen;
+        size_t hl = (it.kind == Item::STREAM ? it.dataStart : it.end) - it.start;
+        if (objHeaderOf(in_.data() + it.start, hl, num, gen)) snap.add(num, gen, it.start);
+      }
+      ctx_.objPos = &snap;
+      Bytes out, recon;
+      bool done = layerDecode(ctx_, L_XREFROWS, fp, s.data, out, recon);
+      ctx_.objPos = nullptr;
+      if (!done) continue;
+      s.desc.layers.push_back({L_XREFROWS, std::move(recon)});
+      s.data.swap(out);
+    }
     // extension and storage
     for (auto& s : streams) {
       uint8_t cls = s.desc.cls;
