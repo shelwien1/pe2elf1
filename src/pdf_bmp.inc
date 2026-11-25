@@ -23,6 +23,8 @@ static bool bmpWrap(const BmpSpec& sp, const Bytes& raw, Bytes& bmp, Bytes& reco
   size_t brow = (prow + 3) & ~(size_t)3;
   if (sp.height > raw.size() / prow) return false;
   size_t need = prow * sp.height;
+  // a long tail means the image parameters do not describe the data: leave it raw
+  if (raw.size() - need > 256) return false;
   size_t npal = sp.bpp <= 8 ? ((size_t)1 << sp.bpp) : 0;
   uint64_t off = 14 + 40 + 4 * npal;
   uint64_t total = off + (uint64_t)brow * sp.height;

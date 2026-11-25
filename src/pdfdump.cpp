@@ -902,8 +902,8 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
          E.tEncode, (unsigned long long)gFlateProf.streams, human(gFlateProf.unpacked).c_str(), gFlateProf.dec,
          gFlateProf.enc, E.tVerify);
   if (opt.verbose) {
-    printf("streams:\n  %-6s %-9s %-12s %-28s %-9s %9s %9s %-6s %s\n", "item", "obj", "class", "filters", "state",
-           "payload", "stored", "store", "ext/layers");
+    printf("streams:\n  %-6s %-9s %-12s %-28s %-9s %9s %9s %7s %-6s %s\n", "item", "obj", "class", "filters", "state",
+           "payload", "stored", "recon", "store", "ext/layers");
     for (auto& s : E.streams) {
       const Item& it = E.seg.items[s.item];
       std::string fl;
@@ -913,8 +913,10 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
       for (auto& l : s.desc.layers) ly += std::string(ly.empty() ? "" : "+") + kLayerName[l.type];
       char obj[32];
       snprintf(obj, sizeof(obj), "%u %u", it.num, it.gen);
-      printf("  %-6d %-9s %-12s %-28s %-9s %9zu %9zu %-6s .%s %s%s%s\n", s.item, obj, kClassName[s.desc.cls],
-             fl.c_str(), kRemainName[s.remain], s.payload, s.storedSize, kStorageName[s.desc.storage],
+      size_t rc = 0;
+      for (auto& l : s.desc.layers) rc += l.recon.size();
+      printf("  %-6d %-9s %-12s %-28s %-9s %9zu %9zu %7zu %-6s .%s %s%s%s\n", s.item, obj, kClassName[s.desc.cls],
+             fl.c_str(), kRemainName[s.remain], s.payload, s.storedSize, rc, kStorageName[s.desc.storage],
              s.desc.ext.c_str(), ly.c_str(), s.desc.cipher ? " +" : "", s.desc.cipher ? kCipherName[s.desc.cipher] : "");
     }
   }
