@@ -42,6 +42,7 @@ namespace pdd {
 #include "pdf_crypt.inc"
 #include "pdf_filt.inc"
 #include "pdf_bmp.inc"
+#include "pdf_tiff.inc"
 #include "pdf_ccitt.inc"
 #include "pdf_t1.inc"
 #include "pdf_objstm.inc"
@@ -83,7 +84,10 @@ struct StreamRec {
   size_t decoded = 0;        // bytes after filters (before BMP wrap)
   uint8_t wantCipher = CI_NONE;
   bool bmp = false;
+  bool tif = false;          // stored as a TIFF file
   bool t1 = false;           // Type 1 encryption removed
+  const Obj* stopParms = nullptr;  // /DecodeParms of the filter at which undoing stopped
+  bool stopLast = false;           // ... and that filter is the last one
   size_t storedSize = 0;     // stored form size (data moves into the dump at emit)
   uint64_t storedHash = 0;   // of the stored form, for the verify shortcut
 };
@@ -489,29 +493,19 @@ class Encoder {
     if (d.get("F")) {
       s.stop = "external";  // data lives in an external file; in-file bytes are not filtered
     } else if (opt_.filterLevel == 0) {
-      if (!fl.empty()) { s.remain = R_ENCODED; s.stop = fl[0].name; }
+      if (!fl.empty()) {
+        s.remain = R_ENCODED;
+        s.stop = fl[0].name;
+        s.stopParms = fl[0].parms;
+        s.stopLast = fl.size() == 1;
+      }
     } else {
       for (auto& f : fl) {
         if (f.name == "Crypt") continue;
+        s.stopParms = f.parms;
+        s.stopLast = &f == &fl.back();
         if (f.name == "CCITTFaxDecode" && opt_.ccitt) {
-          FilterParams fp;
-          if (f.parms) {
-            auto geti = [&](const char* k, int& v) {
-              const Obj* o = idx_.resolve(f.parms->get(k));
-              if (o && o->t == Obj::INT) v = (int)std::max<int64_t>(-1000000, std::min<int64_t>(1000000, o->i));
-            };
-            auto getb = [&](const char* k, bool& v) {
-              const Obj* o = idx_.resolve(f.parms->get(k));
-              if (o && o->t == Obj::BOOL) v = o->i != 0;
-            };
-            geti("K", fp.ccittK);
-            geti("Columns", fp.ccittCols);
-            geti("Rows", fp.ccittRows);
-            getb("EndOfLine", fp.ccittEol);
-            getb("EncodedByteAlign", fp.ccittAlign);
-            getb("EndOfBlock", fp.ccittEob);
-            getb("BlackIs1", fp.ccittBlack1);
-          }
+          FilterParams fp = ccittParams(f.parms);
           Bytes out, recon;
           if (layerDecode(ctx_, L_CCITT, fp, cur, out, recon)) {
             s.desc.layers.push_back({L_CCITT, std::move(recon)});
@@ -537,6 +531,27 @@ class Encoder {
     }
     s.data.swap(cur);
     s.decoded = s.data.size();
+  }
+
+  FilterParams ccittParams(const Obj* parms) {
+    FilterParams fp;
+    if (!parms) return fp;
+    auto geti = [&](const char* k, int& v) {
+      const Obj* o = idx_.resolve(parms->get(k));
+      if (o && o->t == Obj::INT) v = (int)std::max<int64_t>(-1000000, std::min<int64_t>(1000000, o->i));
+    };
+    auto getb = [&](const char* k, bool& v) {
+      const Obj* o = idx_.resolve(parms->get(k));
+      if (o && o->t == Obj::BOOL) v = o->i != 0;
+    };
+    geti("K", fp.ccittK);
+    geti("Columns", fp.ccittCols);
+    geti("Rows", fp.ccittRows);
+    getb("EndOfLine", fp.ccittEol);
+    getb("EncodedByteAlign", fp.ccittAlign);
+    getb("EndOfBlock", fp.ccittEob);
+    getb("BlackIs1", fp.ccittBlack1);
+    return fp;
   }
 
   // offset bias: with junk before %PDF-, some files count offsets from the header. Pick the bias
@@ -619,7 +634,7 @@ class Encoder {
       auto f = streamsByNum_.find((uint32_t)ref->i);
       if (f == streamsByNum_.end()) return nullptr;
       const StreamRec& t = streams[f->second.back()];
-      return t.remain == R_DONE && !t.bmp ? &t.data : nullptr;
+      return t.remain == R_DONE && !t.bmp && !t.tif ? &t.data : nullptr;
     };
     for (auto& s : streams) {
       if (s.desc.cls != SC_IMAGE || s.remain != R_DONE) continue;
@@ -631,6 +646,57 @@ class Encoder {
       s.desc.layers.push_back({L_BMP, std::move(recon)});
       s.data.swap(bmp);
       s.bmp = true;
+    }
+    // streams matching a TIFF subformat (own files only) go into a TIFF container
+    for (auto& s : streams) {
+      if (s.bmp || s.data.size() < opt_.smallThreshold) continue;
+      const Obj& d = seg.objs[seg.items[s.item].obj];
+      TiffSpec t;
+      if (s.remain == R_TERMINAL && s.stop == "CCITTFaxDecode" && s.stopLast) {
+        FilterParams fp = ccittParams(s.stopParms);
+        const Obj* H = idx_.resolve(d.get2("Height", "H"));
+        int64_t rows = fp.ccittRows > 0 ? fp.ccittRows : H && H->t == Obj::INT ? H->i : 0;
+        if (rows <= 0 || rows > 0x7FFFFFFF || fp.ccittCols <= 0) continue;
+        if (fp.ccittK < 0 && !fp.ccittAlign && !fp.ccittEol) t.compression = 4;
+        else if (fp.ccittK >= 0 && fp.ccittEol) {
+          t.compression = 3;
+          t.t4 = (fp.ccittK > 0 ? 1 : 0) | (fp.ccittAlign ? 4 : 0);
+        } else if (fp.ccittK == 0 && fp.ccittAlign) t.compression = 2;
+        else continue;
+        t.width = (uint32_t)fp.ccittCols;
+        t.height = (uint32_t)rows;
+        // fax decoders yield 1 = black whatever the photometric says: WhiteIsZero, unless the
+        // PDF shows the image the other way round (/BlackIs1 or a high-to-low /Decode)
+        ImgColor g;
+        bool inv = fp.ccittBlack1 ^ (imageColor(idx_, d, streamData, g) && g.inverted);
+        t.photometric = inv ? 1 : 0;
+      } else if (s.desc.cls == SC_IMAGE && (s.remain == R_ENCODED || s.remain == R_DONE)) {
+        if (!imageTiffSpec(idx_, d, streamData, t)) continue;
+        if (s.remain == R_DONE) {
+          if (s.data.size() / t.height < ((size_t)t.width * t.spp * t.bps + 7) / 8) continue;
+        } else {
+          if (!s.stopLast) continue;
+          FilterParams fp = params(s.stopParms);
+          if (s.stop == "FlateDecode") t.compression = 8;
+          else if (s.stop == "LZWDecode" && fp.earlyChange == 1) t.compression = 5;
+          else if (s.stop == "RunLengthDecode") t.compression = 32773;
+          else continue;
+          if (s.stop != "RunLengthDecode" && fp.predictor == 2) {
+            if (fp.colors != t.spp || fp.bpc != t.bps || fp.columns != (int)t.width || (t.bps != 8 && t.bps != 16)) continue;
+            t.predictor = 2;
+          } else if (s.stop != "RunLengthDecode" && fp.predictor > 1) {
+            continue;
+          }
+        }
+      } else {
+        continue;
+      }
+      Bytes tif, back;
+      if (!tiffWrap(t, s.data, tif)) continue;
+      if (!layerEncode(ctx_, L_TIFW, Bytes(), tif, back) || back != s.data) continue;
+      s.desc.layers.push_back({L_TIFW, Bytes()});
+      s.data.swap(tif);
+      s.tif = true;
     }
     // Type 1 fonts: remove eexec and charstring encryption
     for (auto& s : streams) {
@@ -738,7 +804,9 @@ class Encoder {
     for (auto& s : streams) {
       uint8_t cls = s.desc.cls;
       std::string ext;
-      if (s.remain == R_ENCRYPTED) {
+      if (s.tif) {
+        ext = "tif";
+      } else if (s.remain == R_ENCRYPTED) {
         ext = "enc";
       } else if (s.remain == R_TERMINAL) {
         if (s.stop == "DCTDecode") ext = "jpg";
@@ -1148,6 +1216,31 @@ static int selfTest() {
     ok = rlEncode(rr, sample, rl) && rlDecode(rl, out, recon) && out == sample && rlEncode(recon, out, re) && re == rl;
     check("runlength round trip", ok ? "ok" : "mismatch", "ok");
   }
+  {
+    Bytes strip, tif, back;
+    for (int i = 0; i < 777; i++) strip.push_back((uint8_t)(i * 37));
+    TiffSpec t;
+    t.width = 7;
+    t.height = 3;
+    t.bps = 2;
+    t.photometric = 3;
+    grayRamp(t.palette, 2, false);
+    uint32_t w = 0, h = 0, cm = 0;
+    bool ok = tiffWrap(t, strip, tif) && tifwEncodeLayer(Bytes(), tif, back) && back == strip &&
+              tiffTag(tif, 256, w) && tiffTag(tif, 257, h) && w == 7 && h == 3 && !tiffTag(tif, 320, cm);
+    t = TiffSpec();
+    t.width = 5;
+    t.height = 9;
+    t.bps = 16;
+    t.spp = 4;
+    t.photometric = 5;
+    t.compression = 8;
+    t.predictor = 2;
+    ok = ok && tiffWrap(t, strip, tif) && tifwEncodeLayer(Bytes(), tif, back) && back == strip;
+    Bytes cut(tif.begin(), tif.end() - 1);
+    ok = ok && !tifwEncodeLayer(Bytes(), cut, back) && !tifwEncodeLayer(Bytes{1}, tif, back);
+    check("tiff wrap round trip", ok ? "ok" : "mismatch", "ok");
+  }
   printf("%s\n", bad ? "SELFTEST FAILED" : "all ok");
   return bad ? 1 : 0;
 }
@@ -1169,7 +1262,8 @@ static void usage() {
           "  -D       disable dedup of extracted streams\n"
           "  -d       do not derive computable fields (/Length, xref offsets, ...)\n"
           "  -g       decode CCITT fax images (G3 1D, G4) to bitmaps (BMP); off by default: xz\n"
-          "           compresses the bitmaps worse than the fax data, a bilevel recompressor may not\n"
+          "           compresses the bitmaps worse than the fax data, a bilevel recompressor may not.\n"
+          "           Without -g, fax data whose parameters match a TIFF subformat is stored as .tif\n"
           "  -c MAP   channel->file map, e.g. S,N,T,X,O,F,R,B (default %s)\n"
           "  -n       no verification: skip the final in-memory restore and the per-stream Flate re-encode\n"
           "  -v / -q  per-stream report / quiet\n",

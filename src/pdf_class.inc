@@ -232,38 +232,34 @@ struct Classifier {
 };
 
 // ---- raw image description for BMP3 ------------------------------------------------------------
-static bool imageBmpSpec(const ObjIndex& idx, const Obj& d, const std::function<const Bytes*(const Obj*)>& streamData,
-                         BmpSpec& sp) {
+// Image XObject sample layout from its dictionary.
+struct ImgColor {
+  uint32_t width = 0, height = 0;
+  int64_t bpc = -1;
+  bool mask = false, inverted = false;  // /ImageMask; /Decode starts high-to-low
+  int comps = 0;                        // components; -1 Indexed; 0 unknown
+  std::vector<uint32_t> palette;        // Indexed over gray / RGB: 2^bpc entries, 0x00RRGGBB
+};
+
+static bool imageColor(const ObjIndex& idx, const Obj& d, const std::function<const Bytes*(const Obj*)>& streamData,
+                       ImgColor& g) {
   auto num = [&](const char* k, const char* ab) -> int64_t {
     const Obj* o = idx.resolve(d.get2(k, ab));
     return o && o->t == Obj::INT ? o->i : -1;
   };
-  int64_t W = num("Width", "W"), H = num("Height", "H"), bpc = num("BitsPerComponent", "BPC");
-  if (W <= 0 || H <= 0) return false;
+  int64_t W = num("Width", "W"), H = num("Height", "H");
+  if (W <= 0 || H <= 0 || W > 0x7FFFFFFF || H > 0x7FFFFFFF) return false;
+  g = ImgColor();
+  g.width = (uint32_t)W;
+  g.height = (uint32_t)H;
+  g.bpc = num("BitsPerComponent", "BPC");
   const Obj* im = idx.resolve(d.get2("ImageMask", "IM"));
-  bool mask = im && im->t == Obj::BOOL && im->i;
+  g.mask = im && im->t == Obj::BOOL && im->i;
   const Obj* dec = idx.resolve(d.get2("Decode", "D"));
-  bool inverted = dec && dec->t == Obj::ARR && dec->a.size() >= 2 && dec->a[0].isNum() && dec->a[0].num() > dec->a[1].num();
-  sp.width = (uint32_t)W;
-  sp.height = (uint32_t)H;
-  sp.palette.clear();
-  auto ramp = [&](int bits, bool inv) {
-    int nent = 1 << bits;
-    for (int i = 0; i < nent; i++) {
-      int v = i * 255 / (nent - 1);
-      if (inv) v = 255 - v;
-      sp.palette.push_back((uint32_t)(v * 0x010101));
-    }
-  };
-  if (mask) {
-    sp.bpp = 1;
-    ramp(1, inverted);
-    return true;
-  }
-  if (bpc != 1 && bpc != 4 && bpc != 8) return false;
+  g.inverted = dec && dec->t == Obj::ARR && dec->a.size() >= 2 && dec->a[0].isNum() && dec->a[0].num() > dec->a[1].num();
+  if (g.mask) return true;
   const Obj* cs = idx.resolve(d.get2("ColorSpace", "CS"));
-  if (!cs) return false;
-  int comps = 0;
+  if (!cs) return true;
   const Obj* indexedBase = nullptr;
   const Obj* lookup = nullptr;
   int64_t hival = -1;
@@ -299,9 +295,8 @@ static bool imageBmpSpec(const ObjIndex& idx, const Obj& d, const std::function<
     }
     return 0;
   };
-  comps = compsOf(cs, 0);
-  if (comps == -1) {
-    sp.bpp = (int)bpc;
+  g.comps = compsOf(cs, 0);
+  if (g.comps == -1 && g.bpc >= 1 && g.bpc <= 8) {
     int bc = compsOf(indexedBase, 1);
     const Obj* lk = idx.resolve(lookup);
     const uint8_t* lp = nullptr;
@@ -311,7 +306,7 @@ static bool imageBmpSpec(const ObjIndex& idx, const Obj& d, const std::function<
       const Bytes* b = streamData(lookup);
       if (b) { lp = b->data(); ln = b->size(); }
     }
-    int nent = 1 << sp.bpp;
+    int nent = 1 << g.bpc;
     if ((bc == 3 || bc == 1) && lp && hival >= 0) {
       for (int i = 0; i < nent; i++) {
         uint32_t c = 0;
@@ -319,18 +314,74 @@ static bool imageBmpSpec(const ObjIndex& idx, const Obj& d, const std::function<
           if (bc == 3) c = ((uint32_t)lp[3 * i] << 16) | (lp[3 * i + 1] << 8) | lp[3 * i + 2];
           else c = lp[i] * 0x010101u;
         }
-        sp.palette.push_back(c);
+        g.palette.push_back(c);
       }
-    } else {
-      ramp(sp.bpp, false);
     }
+  }
+  return true;
+}
+
+static void grayRamp(std::vector<uint32_t>& pal, int bits, bool inv) {
+  int nent = 1 << bits;
+  for (int i = 0; i < nent; i++) {
+    int v = i * 255 / (nent - 1);
+    if (inv) v = 255 - v;
+    pal.push_back((uint32_t)(v * 0x010101));
+  }
+}
+
+static bool imageBmpSpec(const ObjIndex& idx, const Obj& d, const std::function<const Bytes*(const Obj*)>& streamData,
+                         BmpSpec& sp) {
+  ImgColor g;
+  if (!imageColor(idx, d, streamData, g)) return false;
+  sp.width = g.width;
+  sp.height = g.height;
+  sp.palette.clear();
+  if (g.mask) {
+    sp.bpp = 1;
+    grayRamp(sp.palette, 1, g.inverted);
     return true;
   }
-  if (comps == 3 && bpc == 8) { sp.bpp = 24; return true; }
-  if (comps == 4 && bpc == 8) { sp.bpp = 32; return true; }
-  if (comps == 1) {
-    sp.bpp = (int)bpc;
-    ramp(sp.bpp, inverted);
+  if (g.bpc != 1 && g.bpc != 4 && g.bpc != 8) return false;
+  if (g.comps == -1) {
+    sp.bpp = (int)g.bpc;
+    if (!g.palette.empty()) sp.palette = g.palette;
+    else grayRamp(sp.palette, sp.bpp, false);
+    return true;
+  }
+  if (g.comps == 3 && g.bpc == 8) { sp.bpp = 24; return true; }
+  if (g.comps == 4 && g.bpc == 8) { sp.bpp = 32; return true; }
+  if (g.comps == 1) {
+    sp.bpp = (int)g.bpc;
+    grayRamp(sp.palette, sp.bpp, g.inverted);
+    return true;
+  }
+  return false;
+}
+
+// uncompressed-TIFF layout of the samples: gray / palette 1-16 bits, RGB and CMYK 8 or 16 bits
+static bool imageTiffSpec(const ObjIndex& idx, const Obj& d, const std::function<const Bytes*(const Obj*)>& streamData,
+                          TiffSpec& t) {
+  ImgColor g;
+  if (!imageColor(idx, d, streamData, g)) return false;
+  t = TiffSpec();
+  t.width = g.width;
+  t.height = g.height;
+  if (g.mask) { t.bps = 1; t.photometric = g.inverted ? 0 : 1; return true; }
+  int b = (int)g.bpc;
+  bool deep = b == 8 || b == 16;
+  if (g.comps == 1 && (b == 1 || b == 2 || b == 4 || deep)) { t.bps = b; t.photometric = g.inverted ? 0 : 1; return true; }
+  if (g.comps == -1 && (b == 1 || b == 2 || b == 4 || b == 8)) {
+    t.bps = b;
+    t.photometric = 3;
+    if (!g.palette.empty()) t.palette = g.palette;
+    else grayRamp(t.palette, b, false);
+    return true;
+  }
+  if ((g.comps == 3 || g.comps == 4) && deep) {
+    t.bps = b;
+    t.spp = g.comps;
+    t.photometric = g.comps == 3 ? 2 : 5;
     return true;
   }
   return false;

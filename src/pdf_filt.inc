@@ -5,8 +5,8 @@
 //                re-encodes byte-exactly (each decoder checks this itself, through layerEncode).
 //   layerEncode  (both sides):   decoded bytes + recon -> PDF-side bytes.
 
-enum LayerType : uint8_t { L_NONE, L_FLATE, L_LZW, L_AHX, L_A85, L_RL, L_PNG, L_TIFF, L_BMP, L_T1, L_OBJSTM, L_XREFROWS, L_CCITT, L_COUNT };
-static const char* const kLayerName[L_COUNT] = {"-", "Flate", "LZW", "AHx", "A85", "RL", "PNG", "TIFF", "BMP", "T1", "ObjStm", "XRefRows", "CCITT"};
+enum LayerType : uint8_t { L_NONE, L_FLATE, L_LZW, L_AHX, L_A85, L_RL, L_PNG, L_TIFF, L_BMP, L_T1, L_OBJSTM, L_XREFROWS, L_CCITT, L_TIFW, L_COUNT };
+static const char* const kLayerName[L_COUNT] = {"-", "Flate", "LZW", "AHx", "A85", "RL", "PNG", "TIFF", "BMP", "T1", "ObjStm", "XRefRows", "CCITT", "TIF"};
 
 struct Layer {
   uint8_t type = L_NONE;
@@ -894,7 +894,9 @@ static bool lzwTestEncode(const Bytes& in, Bytes& out, int early) {
 // ---------------------------------------------------------------------------------------------
 // filter names
 
-static bool isPseudoLayerType(uint8_t t) { return t == L_BMP || t == L_T1 || t == L_OBJSTM || t == L_XREFROWS; }
+static bool isPseudoLayerType(uint8_t t) {
+  return t == L_BMP || t == L_T1 || t == L_OBJSTM || t == L_XREFROWS || t == L_TIFW;
+}
 
 static std::string normFilter(const std::string& f) {
   static const char* const ab[][2] = {{"AHx", "ASCIIHexDecode"}, {"A85", "ASCII85Decode"}, {"LZW", "LZWDecode"},
@@ -925,6 +927,7 @@ static bool objstmEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out); 
 static bool objstmDecodeLayer(const Bytes& in, int64_t N, int64_t First, Bytes& out, Bytes& recon);
 static bool xrefRowsEncodeLayer(const CodecCtx& ctx, const Bytes& recon, const Bytes& in, Bytes& out);
 static bool ccittEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out);  // pdf_ccitt.inc
+static bool tifwEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out);   // pdf_tiff.inc
 struct CcittParams;
 static bool ccittDecodeFP(const FilterParams& fp, const Bytes& in, Bytes& out, Bytes& recon);
 static bool xrefRowsDecodeLayer(const CodecCtx& ctx, const Bytes& in, const std::vector<uint64_t>& W,
@@ -944,6 +947,7 @@ static bool layerEncode(const CodecCtx& ctx, uint8_t type, const Bytes& recon, c
     case L_OBJSTM: return objstmEncodeLayer(recon, in, out);
     case L_XREFROWS: return xrefRowsEncodeLayer(ctx, recon, in, out);
     case L_CCITT: return ccittEncodeLayer(recon, in, out);
+    case L_TIFW: return tifwEncodeLayer(recon, in, out);
   }
   fail("unknown layer type %d", type);
 }

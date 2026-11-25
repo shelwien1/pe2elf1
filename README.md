@@ -28,7 +28,8 @@ redundancy inventory of §2A, M6, M7, M9 stage 1, and the M10 ideas that measure
 | Linearization (M9 stage 1) | forward slots: linearization dict `/L /E /T /H`, first-page xref entries, forward `/Prev` `startxref` `/XRefStm`; the decoder patches them once all positions are known. First-page XRef streams are restored after the last item when that predicts better |
 | Encrypted strings | strings of top-level objects of encrypted files stored as plaintext (spelling policy, cipher and AES IV kept in the placeholder; `d` re-encrypts) |
 | Inline images with filters | `BI … ID <data> EI` whose filters (Flate, LZW, A85, AHx, RL, predictors) can be undone exactly → decoded data and recon in `.csi` |
-| Derived fields | stream `/Length` (direct and indirect object), `/DL`, `/Length1-3`, ObjStm `/N /First`, image `/Width /Height` (BMP header, JPEG SOF), EmbeddedFile `/Params /Size /CheckSum`, `startxref`, trailer `/Prev /Size /XRefStm`, XRef stream `/Prev`: replaced by placeholders the decoder fills in |
+| TIFF container (`L_TIFW`) | streams matching a TIFF subformat become the single strip of a baseline TIFF (`.tif`): CCITT fax data (compression 4 = G4, 3 = G3 with EOLs, 2 = 1D byte-aligned), image data left Flate/LZW/RunLength-encoded (8, 5, 32773, Predictor 1 or 2), and raw samples BMP can't hold (2 or 16 bpc, 2-bit palette, data longer than the image). Nothing is re-coded; `d` takes the strip back out |
+| Derived fields | stream `/Length` (direct and indirect object), `/DL`, `/Length1-3`, ObjStm `/N /First`, image `/Width /Height` and `/DecodeParms /Columns /Rows` (BMP / TIFF header, JPEG SOF), EmbeddedFile `/Params /Size /CheckSum`, `startxref`, trailer `/Prev /Size /XRefStm`, XRef stream `/Prev`: replaced by placeholders the decoder fills in |
 | Small text streams | XMP and other small text streams go to `.txt`, not `.bin` |
 
 Plan items measured and not adopted are listed under "xz results" below. Not built, because
@@ -61,7 +62,7 @@ Tested with g++ 13.3 and clang 18 on Linux x86-64.
 | `-p N` | small-stream threshold: a stream whose stored form is under N bytes goes to `<P>.bin` instead of its own file | 1024 |
 | `-D` | disable dedup of extracted files | dedup on |
 | `-d` | do not derive computable fields | derive on |
-| `-g` | decode CCITT fax images (Group 4, Group 3 1D) to 1 bpp BMP; exact re-encode with the T.4/T.6 mode rules | off |
+| `-g` | decode CCITT fax images (Group 4, Group 3 1D) to 1 bpp BMP; exact re-encode with the T.4/T.6 mode rules. Without it, fax data matching a TIFF subformat is stored as `.tif` | off |
 | `-c MAP` | channel→file map, e.g. `S,N,T,X,O,F,R,B` to split every channel | `SN,TX,O,F,R,B` |
 | `-n` | no verification: skip the final in-memory restore and the per-stream Flate re-encode (about 1.8× faster on Flate-heavy files) | verify on |
 | `-v` / `-q` | per-stream report / quiet | |
@@ -88,7 +89,7 @@ Tested with g++ 13.3 and clang 18 on Linux x86-64.
 Files that would be empty are not written; the header records which ones exist, so `d` never
 reads a stale file left by an earlier dump with the same prefix.
 
-Extension precedence: terminal filter (`.jpg`, `.jp2`/`.j2k`, `.jb2`, `.g4`) → BMP3 wrap →
+Extension precedence: TIFF container (`.tif`) → terminal filter (`.jpg`, `.jp2`/`.j2k`, `.jb2`, `.g4`) → BMP3 wrap →
 signature (`.jpg .png .gif .tif .jp2 .j2k .pdf .zip .ttf .otf .pfa .ps .icc .xml`) → attachment
 file name → class default (`.ttf .cff .otf .pfa .icc .xml .js .ai .jb2g .img`) → `.z` (still
 compressed), `.enc` (still encrypted) or `.bin`. Type 1 fonts with the encryption removed are
@@ -98,6 +99,14 @@ Raw images (all filters undone, 1/4/8 bpc gray or indexed, 8 bpc RGB or CMYK, im
 written as BMP3. Restore reads only width, height, bit count and pixel offset from the BMP, so the
 palette is a display aid and can't affect the round trip.
 
+Image streams BMP can't take, and CCITT fax data, go into a big-endian baseline TIFF when they
+match a TIFF subformat (see the table above) and are big enough for their own file (`-p`). The
+TIFF holds the stream bytes unchanged as one strip; restore reads `StripOffsets` and
+`StripByteCounts` and nothing else. Fax TIFFs are WhiteIsZero, BlackIsZero when `/BlackIs1` or a
+high-to-low `/Decode` inverts the image in the PDF, so they display like the PDF does (checked
+against poppler's `pdfimages` on the test files). Fax data that matches no subformat (G4 with
+`/EncodedByteAlign`, G3 without EOLs and not byte-aligned) stays `.g4`.
+
 ## How it stays lossless
 
 - Items tile the file. Every byte belongs to a header/xref/trailer text item, an object, a stream,
@@ -105,7 +114,7 @@ palette is a display aid and can't affect the round trip.
 - Every layer is verified when it's undone. A filter layer is undone only if re-encoding the
   decoded data through the decoder's own routine gives back the original bytes. Otherwise the
   layer stays encoded and the stream gets `.z`. The same applies to ciphers (AES needs canonical
-  padding) and to the BMP wrap.
+  padding) and to the BMP and TIFF wraps.
 - `c` runs the complete decoder on the in-memory dump and compares the result with the input
   before writing anything. On a mismatch, which would mean a bug, it writes stored mode and says
   so. `d` checks the restored file's size and CRC-32 against the header.
@@ -214,6 +223,7 @@ inserted, duplicated ranges), and the 117 files of the 005 set.
     src/pdf_seg.inc     segmenter: items, stream extents, raw regions, xref sections, trailers
     src/pdf_filt.inc    Flate (preflate wrapper), LZW, AHx, A85, RL, PNG/TIFF predictors
     src/pdf_bmp.inc     BMP3 wrap/unwrap
+    src/pdf_tiff.inc    TIFF container for streams matching a TIFF subformat
     src/pdf_ccitt.inc   CCITT G3/G4 decoder and re-encoder (opt-in layer)
     src/pdf_crypt.inc   MD5, SHA-256/384/512, RC4, AES, standard security handler
     src/pdf_class.inc   ObjStm expansion, classification, signatures, image description

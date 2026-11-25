@@ -9,7 +9,7 @@
 //   L  stream /Length = payload size        l  value of an indirect /Length object
 //   D  decoded size (/DL, TrueType /Length1, EmbeddedFile /Params /Size)
 //   1 2 3  Type 1 /Length1 /Length2 /Length3 (cleartext, encrypted part, trailer)
-//   N F  ObjStm /N /First                   W H  image /Width /Height (BMP header, JPEG SOF)
+//   N F  ObjStm /N /First                   W H  image /Width /Height, /DecodeParms /Columns /Rows (BMP / TIFF header, JPEG SOF)
 //   C c  EmbeddedFile /Params /CheckSum: MD5 of the decoded data, upper / lower case hex digits
 //   S  startxref value = start of the latest xref section
 //   P  /Prev = start of the xref section before the current one
@@ -35,7 +35,6 @@ struct DeriveState {
                                                   // whose /Length refers to it
 };
 
-static bool isPseudoLayer(uint8_t t) { return t == L_BMP || t == L_T1 || t == L_OBJSTM || t == L_XREFROWS; }
 
 // JPEG SOFn dimensions
 static bool jpegDims(const Bytes& d, int64_t& w, int64_t& h) {
@@ -64,11 +63,15 @@ static bool jpegDims(const Bytes& d, int64_t& w, int64_t& h) {
 static void streamFacts(const CodecCtx& ctx, const StreamDesc& sd, const Bytes& stored, bool wantDecoded,
                         bool wantMd5, StreamFacts& f) {
   // image dimensions straight from the stored form
-  bool bmp = false;
-  for (auto& l : sd.layers) bmp |= l.type == L_BMP;
+  bool bmp = false, tif = false;
+  uint32_t tw, th;
+  for (auto& l : sd.layers) bmp |= l.type == L_BMP, tif |= l.type == L_TIFW;
   if (bmp && stored.size() >= 26 && stored[0] == 'B' && stored[1] == 'M') {
     f.w = rd32(&stored[18]);
     f.h = (int32_t)rd32(&stored[22]);
+  } else if (tif && tiffTag(stored, 256, tw) && tiffTag(stored, 257, th)) {
+    f.w = tw;
+    f.h = th;
   } else {
     jpegDims(stored, f.w, f.h);
   }
@@ -86,7 +89,7 @@ static void streamFacts(const CodecCtx& ctx, const StreamDesc& sd, const Bytes& 
   if (!wantDecoded && !wantMd5 && f.objstmN < 0) return;
   // decoded data: stored form with the pseudo layers (innermost) undone
   Bytes cur = stored;
-  for (size_t k = sd.layers.size(); k-- > 0 && isPseudoLayer(sd.layers[k].type);) {
+  for (size_t k = sd.layers.size(); k-- > 0 && isPseudoLayerType(sd.layers[k].type);) {
     Bytes out;
     if (!layerEncode(ctx, sd.layers[k].type, sd.layers[k].recon, cur, out)) return;
     if (sd.layers[k].type == L_OBJSTM) f.objstmFirst = (int64_t)(out.size() - cur.size());
@@ -641,6 +644,8 @@ static void derivChoose(const uint8_t* p, size_t n, int kind, uint8_t cls, const
         else if (t.path == "/First" && cls == SC_OBJSTM) tryCodes(t, {'F'});
         else if (t.path == "/Width") tryCodes(t, {'W'});
         else if (t.path == "/Height") tryCodes(t, {'H'});
+        else if (t.path == "/DecodeParms/Columns" || t.path == "/DecodeParms[]/Columns") tryCodes(t, {'W'});
+        else if (t.path == "/DecodeParms/Rows" || t.path == "/DecodeParms[]/Rows") tryCodes(t, {'H'});
         else if (t.path == "/Params/Size") tryCodes(t, {'D'});
         else if (t.path == "/Prev" && cls == SC_XREF) tryCodes(t, {'p'});
       } else if (t.path == "/Params/CheckSum" && t.b - t.a == 32) {
