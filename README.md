@@ -238,10 +238,10 @@ for every `-j`):
 
 | Mode | Aggregate | Slowest files |
 |---|---|---|
-| default, 4 threads | 3.28 MB/s | every file at or above 513 KB/s; files over 50 KB at 810 KB/s or more |
-| `-n` (no verification), 4 threads | 4.49 MB/s | every file at or above 678 KB/s |
-| `-j 1` (single thread) | 1.74 MB/s | 4 files over 50 KB at 368–459 KB/s |
-| `-j 1 -n` | 2.65 MB/s | files over 50 KB at 712 KB/s or more |
+| default, 4 threads | 4.46 MB/s | every file at 677 KB/s or more |
+| `-n` (no verification), 4 threads | 6.26 MB/s | every file at 876 KB/s or more |
+| `-j 1` (single thread) | 2.27 MB/s | every file at 632 KB/s or more |
+| `-j 1 -n` | 3.39 MB/s | every file at 809 KB/s or more |
 
 Almost all the time is preflate: the analysis plus the re-encode that verifies each Flate layer.
 The slow files have level-9 text streams or highly compressible images, where preflate costs
