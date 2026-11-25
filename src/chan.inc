@@ -31,9 +31,10 @@ static const uint32_t kFormatVersion = 5;
 enum ClassFile { CF_CS, CF_CMAP, CF_COUNT };
 static const char* const kClassFileSuffix[CF_COUNT] = {"cs", "cmap"};
 
-// Aux files: outputs of whole-file transforms (number lifting, pdf_lift.inc), signature blobs.
-enum AuxFile { AX_TXN, AX_CSN, AX_CSH, AX_CMB, AX_CSI, AX_P7S, AX_COUNT };
-static const char* const kAuxSuffix[AX_COUNT] = {"txn", "csn", "csh", "cmb", "csi", "p7s"};
+// Aux files: outputs of whole-file transforms (number lifting, pdf_lift.inc), signature blobs,
+// base64 blobs of object text (data, recon).
+enum AuxFile { AX_TXN, AX_CSN, AX_CSH, AX_CMB, AX_CSI, AX_P7S, AX_B64, AX_B64R, AX_COUNT };
+static const char* const kAuxSuffix[AX_COUNT] = {"txn", "csn", "csh", "cmb", "csi", "p7s", "b64", "b64r"};
 
 // header flags
 static const uint64_t kFlagStored = 1, kFlagLiftT = 2, kFlagLiftCS = 4, kFlagCmap = 8;

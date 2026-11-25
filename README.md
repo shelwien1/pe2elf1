@@ -32,6 +32,7 @@ redundancy inventory of §2A, M6, M7, M9 stage 1, and the M10 ideas that measure
 | Derived fields | stream `/Length` (direct and indirect object), `/DL`, `/Length1-3`, ObjStm `/N /First`, image `/Width /Height` and `/DecodeParms /Columns /Rows` (BMP / TIFF header, JPEG SOF), EmbeddedFile `/Params /Size /CheckSum`, `startxref`, trailer `/Prev /Size /XRefStm`, XRef stream `/Prev`: replaced by placeholders the decoder fills in |
 | Signature blobs | a hex `/Contents` string holding one DER SEQUENCE and then only zero bytes (the space a signature dictionary reserves) → the DER element to `.p7s` (CMS / PKCS#7, elements concatenated), case and padding length in the placeholder |
 | RGB + soft mask (`-a`, `L_RGBA` / `L_ALPHA`) | an RGB image and its 8-bit `/SMask` of the same size as one BGRA BMP on the image; the mask's stream keeps no data and is restored, deferred, from the alpha bytes |
+| Base64 blobs in object text | a canonical base64 run of 1024+ characters (JavaScript data, `data:` URIs) that decodes to a zlib stream, or sits in quotes → decoded bytes to `.b64`, zlib streams inflated through preflate (recon in `.b64r`). linux.pdf (Linux in a PDF: a RISC-V kernel and ELF files as base64 zlib in the `/JS` string): dump.xz 3.89 → 3.21 MB (−17.5%) |
 | Small text streams | XMP and other small text streams go to `.txt`, not `.bin` |
 
 Plan items measured and not adopted are listed under "xz results" below, with the exact
@@ -92,6 +93,8 @@ ThreadSanitizer (`-fsanitize=thread`). MinGW needs the posix thread model (`-pos
 | `<P>.cmap` | all decoded CMaps (`/ToUnicode`, embedded encodings), concatenated, `bfchar`/`bfrange` bodies replaced by markers |
 | `<P>.cmb` | those bodies as binary |
 | `<P>.p7s` | signature blobs (DER CMS / PKCS#7), concatenated in file order |
+| `<P>.b64` | base64 blobs of object text, decoded (and inflated where they were zlib streams), concatenated |
+| `<P>.b64r` | per blob: data length, Flate recon |
 | `<P>%08X.<ext>` | one file per extracted stream; ordinal in file order |
 
 Files that would be empty are not written; the header records which ones exist, so `d` never

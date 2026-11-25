@@ -12,4 +12,6 @@ mkdir -p "$DEST"
 grep -v '^#' "$LIST" | cut -f1 | sed 's#^#005/#' > "$TMP/names"
 tar -xJf "$TMP/005.tar.xz" -C "$TMP" -T "$TMP/names"
 mv "$TMP"/005/* "$DEST"/
+# single files: JavaScript with base64 + zlib blobs in object text (Linux in a PDF)
+curl -sSL -o "$DEST/linux.pdf" https://linux.doompdf.dev/linux.pdf || echo "linux.pdf: download failed" >&2
 echo "$(ls "$DEST" | wc -l) files in $DEST"

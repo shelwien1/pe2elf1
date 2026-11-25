@@ -16,6 +16,7 @@
 //   Z  trailer /Size = end of the latest classic xref section (max start + count)
 //   X  /XRefStm = start of the latest XRef stream object
 //   e  encrypted string, stored as plaintext   f  forward slot   G  signature blob (.p7s)
+//   B  base64 blob (.b64, .b64r)
 
 static const uint8_t kDerivEsc = 4;
 
@@ -519,6 +520,120 @@ static void sigStrings(const uint8_t* p, size_t n, std::vector<DerivEdit>& edits
   }
 }
 
+// ---- base64 blobs in object text ------------------------------------------------------------------
+// A run of >= 1024 base64 characters (not all hex digits) that decodes and re-encodes to itself
+// (JavaScript data, data: URIs, ...) and either decodes to a zlib stream or sits in quotes
+// ("...", '...', or after the comma of a data: URI): placeholder 0x04 'B' u8 flags; bit0 = the decoded bytes were
+// a zlib/deflate stream, stored inflated (L_FLATE recon in .b64r), bit1 = no '=' padding. The data
+// goes to the .b64 aux file; .b64r holds per blob var data length [, Flate recon with its length].
+
+static const char kB64Alpha[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static int b64Val(uint8_t c) {
+  if (c >= 'A' && c <= 'Z') return c - 'A';
+  if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+  if (c >= '0' && c <= '9') return c - '0' + 52;
+  if (c == '+') return 62;
+  if (c == '/') return 63;
+  return -1;
+}
+
+static void b64Encode(const uint8_t* p, size_t n, bool pad, Bytes& out) {
+  size_t i = 0;
+  for (; i + 3 <= n; i += 3) {
+    uint32_t v = (uint32_t)p[i] << 16 | (uint32_t)p[i + 1] << 8 | p[i + 2];
+    for (int k = 18; k >= 0; k -= 6) out.push_back((uint8_t)kB64Alpha[(v >> k) & 63]);
+  }
+  if (n - i == 1) {
+    uint32_t v = (uint32_t)p[i] << 16;
+    out.push_back((uint8_t)kB64Alpha[v >> 18]);
+    out.push_back((uint8_t)kB64Alpha[(v >> 12) & 63]);
+    if (pad) { out.push_back('='); out.push_back('='); }
+  } else if (n - i == 2) {
+    uint32_t v = (uint32_t)p[i] << 16 | (uint32_t)p[i + 1] << 8;
+    out.push_back((uint8_t)kB64Alpha[v >> 18]);
+    out.push_back((uint8_t)kB64Alpha[(v >> 12) & 63]);
+    out.push_back((uint8_t)kB64Alpha[(v >> 6) & 63]);
+    if (pad) out.push_back('=');
+  }
+}
+
+// n alphabet characters (no '='); false if n % 4 == 1 or the unused low bits are not zero
+static bool b64Decode(const uint8_t* p, size_t n, Bytes& out) {
+  if (n % 4 == 1) return false;
+  out.clear();
+  out.reserve(n / 4 * 3 + 2);
+  uint32_t acc = 0;
+  int bits = 0;
+  for (size_t i = 0; i < n; i++) {
+    acc = acc << 6 | (uint32_t)b64Val(p[i]);
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out.push_back((uint8_t)(acc >> bits));
+      acc &= (1u << bits) - 1;
+    }
+  }
+  return acc == 0;
+}
+
+struct B64Blobs {
+  const Bytes* data = nullptr;
+  const Bytes* rec = nullptr;
+  size_t dpos = 0, rpos = 0, index = 0;
+  const std::vector<Bytes>* fastZ = nullptr;  // encoder verify: the original zlib bytes per blob
+  const CodecCtx* ctx = nullptr;
+};
+
+// encoder: placeholders for the base64 runs of one object; data and recon appended
+static void b64Strings(const CodecCtx& ctx, const uint8_t* p, size_t n, std::vector<DerivEdit>& edits, Bytes& data,
+                       Bytes& rec, std::vector<Bytes>* orig, uint64_t& blobBytes) {
+  size_t taken = edits.size();
+  size_t i = 0;
+  while (i < n) {
+    if (b64Val(p[i]) < 0) { i++; continue; }
+    size_t a = i;
+    bool hexOnly = true;
+    while (i < n && b64Val(p[i]) >= 0) {
+      hexOnly &= hexVal(p[i]) >= 0;
+      i++;
+    }
+    size_t b = i, len = b - a;
+    size_t eq = 0;
+    while (i < n && p[i] == '=' && eq < 2) { i++; eq++; }
+    if (len < 1024 || hexOnly) continue;
+    if (eq && (len + eq) % 4) continue;
+    bool overlap = false;
+    for (size_t k = 0; k < taken; k++) overlap |= edits[k].a < i && a < edits[k].b;
+    if (overlap) continue;
+    Bytes dec, back;
+    if (!b64Decode(p + a, len, dec)) continue;
+    bool pad = eq > 0 || len % 4 == 0;
+    b64Encode(dec.data(), dec.size(), pad, back);
+    if (back.size() != i - a || memcmp(back.data(), p + a, back.size()) != 0) continue;
+    uint8_t flags = pad ? 0 : 2;
+    Bytes out, recon;
+    if (dec.size() >= 2 && zlibHeaderValid(dec[0], dec[1]) &&
+        layerDecode(ctx, L_FLATE, FilterParams(), dec, out, recon)) {
+      flags |= 1;
+      putVarTo(rec, out.size());
+      putLenBytesTo(rec, recon.data(), recon.size());
+      data.insert(data.end(), out.begin(), out.end());
+      blobBytes += out.size();
+      if (orig) orig->push_back(std::move(dec));
+    } else {
+      // not a zlib stream: only quoted runs ("...", '...', data:...;base64,...") count as base64;
+      // a run of name characters such as a /CharSet string (/A/B/C...) also matches the alphabet
+      uint8_t prev = a ? p[a - 1] : 0, next = i < n ? p[i] : 0;
+      if (!(prev == '"' || prev == '\'' || prev == ',') || !(next == '"' || next == '\'')) continue;
+      putVarTo(rec, dec.size());
+      data.insert(data.end(), dec.begin(), dec.end());
+      blobBytes += dec.size();
+      if (orig) orig->push_back(Bytes());
+    }
+    edits.push_back({a, i, {kDerivEsc, 'B', flags}});
+  }
+}
+
 // ---- forward slots (plan 3.6, M9) ---------------------------------------------------------------
 // Positions that point at later parts of the file (linearization dictionary, first-page trailer and
 // xref): placeholder 0x04 'f' u8 width, u8 mode, var target, zigzag delta. The decoder writes
@@ -561,7 +676,7 @@ static bool fwdApply(Bytes& out, const std::vector<uint64_t>& itemStart, const s
 // decoder: placeholders resolved
 static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const DeriveState& ds, uint32_t objNum,
                         Bytes& out, const DerivCrypt* dc = nullptr, std::vector<FwdPatch>* fwd = nullptr,
-                        SigBlobs* sig = nullptr) {
+                        SigBlobs* sig = nullptr, B64Blobs* b64 = nullptr) {
   out.clear();
   for (size_t i = 0; i < n; i++) {
     if (p[i] != kDerivEsc) { out.push_back(p[i]); continue; }
@@ -581,6 +696,30 @@ static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const 
       out.insert(out.end(), fp.width, '0');
       fwd->push_back(fp);
       i += r.p;
+      continue;
+    }
+    if (p[i] == 'B') {
+      if (!b64 || !b64->data || !b64->rec || i + 1 >= n) return false;
+      uint8_t flags = p[++i];
+      if (flags > 3) return false;
+      RBuf rr(*b64->rec);
+      rr.p = b64->rpos;
+      uint64_t dl = rr.var();
+      if (dl > b64->data->size() - b64->dpos) return false;
+      Bytes v(b64->data->begin() + b64->dpos, b64->data->begin() + b64->dpos + dl);
+      b64->dpos += dl;
+      if (flags & 1) {
+        Bytes rc, z;
+        rr.bytes(rr.len(), rc);
+        if (b64->fastZ && b64->index < b64->fastZ->size() && !(*b64->fastZ)[b64->index].empty())
+          z = (*b64->fastZ)[b64->index];
+        else if (!b64->ctx || !layerEncode(*b64->ctx, L_FLATE, rc, v, z))
+          return false;
+        v.swap(z);
+      }
+      b64->rpos = rr.p;
+      b64->index++;
+      b64Encode(v.data(), v.size(), !(flags & 2), out);
       continue;
     }
     if (p[i] == 'G') {

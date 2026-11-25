@@ -202,7 +202,7 @@ static void restorePayload(const CodecCtx& ctx, const Bytes& fileKey, const Stre
 typedef std::function<bool(size_t, const StreamDesc&, const Bytes&, Bytes&)> FastRestore;
 
 static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader loader,
-                        const FastRestore* fast = nullptr) {
+                        const FastRestore* fast = nullptr, const std::vector<Bytes>* blobFast = nullptr) {
   CodecCtx ctx;
   ctx.zlibHdr[0] = d.hdr.zlibHdr[0];
   ctx.zlibHdr[1] = d.hdr.zlibHdr[1];
@@ -244,6 +244,11 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
   std::vector<uint64_t> itemStart;
   std::vector<FwdPatch> fwd, local;
   SigBlobs sig{&d.aux[AX_P7S], 0};
+  B64Blobs b64;
+  b64.data = &d.aux[AX_B64];
+  b64.rec = &d.aux[AX_B64R];
+  b64.fastZ = blobFast;
+  b64.ctx = &ctx;
   struct Deferred { uint64_t pos; StreamDesc sd; Bytes data; size_t streamNo; };
   std::vector<Deferred> deferred;
   auto rebase = [&](uint64_t base) {
@@ -268,7 +273,7 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
         bool hdr = tag == I_OBJ && objHeaderOf(p, n, num, gen);
         if (hdr) objPos.add(num, gen, out.size() - bias);
         DerivCrypt dc{&d.hdr.fileKey, num, hdr ? gen : 0};
-        if (!derivDecode(p, n, noFacts, ds, num, txt, &dc, &local, &sig)) fail("bad derived field in item text");
+        if (!derivDecode(p, n, noFacts, ds, num, txt, &dc, &local, &sig, &b64)) fail("bad derived field in item text");
         rebase(out.size());
         out.insert(out.end(), txt.begin(), txt.end());
         break;
@@ -310,7 +315,7 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
         f.payloadKnown = true;
         f.payloadLen = payload.size();
         DerivCrypt dc{&d.hdr.fileKey, num, gen};
-        if (!derivDecode(p, n, f, ds, num, txt, &dc, &local, &sig)) fail("bad derived field in stream dictionary");
+        if (!derivDecode(p, n, f, ds, num, txt, &dc, &local, &sig, &b64)) fail("bad derived field in stream dictionary");
         rebase(out.size());
         out.insert(out.end(), txt.begin(), txt.end());
         if (defer) deferred.push_back({out.size(), sd, std::move(data), streamNo});
@@ -332,7 +337,8 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
       default: fail("bad item tag %d", tag);
     }
   }
-  if (!r.allConsumed() || sig.pos != sig.data->size()) fail("dump has unconsumed data");
+  if (!r.allConsumed() || sig.pos != sig.data->size() || b64.dpos != b64.data->size() || b64.rpos != b64.rec->size())
+    fail("dump has unconsumed data");
   // forward-dependent streams: every object position is known now
   for (auto& df : deferred) {
     Bytes payload;

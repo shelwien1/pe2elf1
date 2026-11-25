@@ -116,7 +116,7 @@ struct Stats {
   uint64_t reconBlobs = 0, reconRefs = 0;
   uint64_t typedBytes = 0, payloadBytes = 0, layeredPayload = 0;
   uint64_t bmpCount = 0;
-  uint64_t derived = 0, stringsDecrypted = 0, sigBlobs = 0, rgbaMerged = 0;
+  uint64_t derived = 0, stringsDecrypted = 0, sigBlobs = 0, rgbaMerged = 0, b64Blobs = 0, b64Bytes = 0;
 };
 
 class Encoder {
@@ -178,7 +178,7 @@ class Encoder {
           payload.assign(in_.begin() + it.dataStart, in_.begin() + it.dataEnd);
           return true;
         };
-        Bytes re = decodeDump(dump, 0, nullptr, &fast);
+        Bytes re = decodeDump(dump, 0, nullptr, &fast, &b64Orig_);
         if (re != in_) why = "restored file differs from input";
       } catch (const Error& e) {
         why = e.what();
@@ -237,6 +237,7 @@ class Encoder {
   std::deque<std::vector<std::pair<uint32_t, Obj>>> members_;
   std::unordered_map<int, int> streamOfItem_;
   std::unordered_map<uint32_t, std::vector<int>> streamsByNum_;
+  std::vector<Bytes> b64Orig_;  // original zlib bytes per base64 blob (verify shortcut)
   std::unordered_map<uint64_t, std::vector<int>> cache_;
   uint64_t bias_ = 0;  // offset bias (plan 4, step 1)
 
@@ -978,6 +979,9 @@ class Encoder {
         size_t before = edits.size();
         sigStrings(in_.data() + a, b - a, edits, dump.aux[AX_P7S]);
         st.sigBlobs += edits.size() - before;
+        before = edits.size();
+        b64Strings(ctx_, in_.data() + a, b - a, edits, dump.aux[AX_B64], dump.aux[AX_B64R], &b64Orig_, st.b64Bytes);
+        st.b64Blobs += edits.size() - before;
       }
       // strings of top-level objects of an encrypted file: stored decrypted
       if ((kind == 1 || kind == 2) && opt_.derive && !sec.key.empty() && num != sec.encNum && cls != SC_XREF) {
@@ -1194,7 +1198,11 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
   }
   if (st.bmpCount) printf("bmp3 images: %llu\n", (unsigned long long)st.bmpCount);
   if (st.rgbaMerged) printf("RGB + soft mask merged (-a): %llu\n", (unsigned long long)st.rgbaMerged);
-  if (st.derived) printf("derived fields: %llu\n", (unsigned long long)(st.derived - st.stringsDecrypted - st.sigBlobs));
+  if (st.derived)
+    printf("derived fields: %llu\n", (unsigned long long)(st.derived - st.stringsDecrypted - st.sigBlobs - st.b64Blobs));
+  if (st.b64Blobs)
+    printf("base64 blobs in object text: %llu (%llu bytes decoded to .b64)\n", (unsigned long long)st.b64Blobs,
+           (unsigned long long)st.b64Bytes);
   if (st.sigBlobs)
     printf("signature blobs: %llu (%llu bytes of DER in .p7s)\n", (unsigned long long)st.sigBlobs,
            (unsigned long long)E.dump.aux[AX_P7S].size());
