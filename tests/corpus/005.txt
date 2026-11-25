@@ -1,0 +1,69 @@
+# Files kept from 005.tar.xz: each adds at least one feature no earlier file has
+# (producer/creator, filter chain, stream class, state, cipher, extent recovery, ...).
+# Greedy set cover over the 117 files, preferring small ones. Format: name<TAB>size<TAB>features
+0000473_YCbCr.pdf	201638	producer:pdflib+pdi #p# (com/win#)
+09105669_recomp.pdf	687650	producer:openpdf #-snapshot; modified using itext
+1.pdf	15081	class:type1; creator:tex; ext:.ps; ext:.t1d; layer:T1; producer:pdftex-#; ver:1.5
+10.1007_11894063_24.pdf	476532	class:attachment; creator:dvips(k) #a copyright # radical eye soft; ext:.g4; filter:CCITTFaxDecode; producer:acrobat distiller # (windows)
+1902-zv.pdf	386109	cipher:+RC4; creator:abbyy pdf transformer #; producer:pdf-xchange # (windows xp)
+2025_01_13_Иммуногистохимическое_исследование.pdf	32794	creator:wkhtmltopdf #; producer:qt #
+2606.03570v1.DCV5.STC.m03.pdf	437196	creator:arxiv genpdf (tex#pdf:a#ea)
+2831423011_15062023.pdf	95357	producer:mpdf #
+3.pdf	40605	creator:apache fop version #; producer:apache fop version #
+345-Archive including PDF, text file in Latex and images-34-1-10-20110301.pdf	251842	producer:esp ghostscript #
+9262-7117-3343-8170.pdf	315049	chain:FlateDecode,DCTDecode; creator:pb#ua; producer:pb#ua; raw-region
+Ch 11-12.pdf	66874	creator:pages; producer:macos version # (build #g#) quartz pdfco
+Dell PowerEdge Operate Version 2.0 certificate.pdf	41952	creator:microsoft office word; ext:.bmp; extent:Length-ref; layer:BMP; producer:aspose#words for #net #; ver:1.7
+Designing a Bijective Arithmetic Coder for Byte Mapping.pdf	66334	producer:weasyprint #
+Finite Core Interpretation of Gravity.pdf	179223	creator:microsoft word
+Grabowski_1999_preproc.pdf	124791	creator:adobeps#drv version #
+HCMS_2962.pdf	144998	producer:itext by lowagie#com (r#b;p#)
+IA-420F EAU Anomalies V0.5 U042622.pdf	125885	creator:microsoft® word for microsoft #; producer:microsoft® word for microsoft #
+JEPA.v10.pdf	510811	producer:xdvipdfmx (#)
+LatticeSemi_GAL22V10.pdf	600465	creator:pdfium; producer:pdfium
+MX8733-LIZEElectronic.pdf	223549	creator:google; producer:google
+Main-16  2.pdf	281121	producer:miktex pdftex-#
+Model3d_Prez_2.pdf	832438	creator:latex with beamer class
+Nikola Tesla - My Inventions_ The Autobiography of Nikola Tesla-Experimenter Pub. Co. (1919).pdf	508087	creator:calibre # [http://calibre-ebook#com]; producer:calibre # [http://calibre-ebook#com]
+PKZIP_Algorithm.pdf	696952	creator:microsoft word - pkzip term paper#docx; producer:dopdf ver # build # (windows # - version
+PSRC.pipe-subm-ieee10.pdf	607362	creator:tex output #:#; producer:dvipdfm #d, copyright © #, by mark a# wi
+RISCVGreenCardv8-20151013.pdf	250883	producer:mac os x # quartz pdfcontext
+Roz.pdf	785563	creator:adobe acrobat pro #; producer:adobe acrobat pro #
+Source code for Razor compressor.pdf	926207	creator:mozilla/# (windows nt #; win#; x#) apple; producer:skia/pdf m#
+T-REC-V.44-200011-I!!PDF-E.pdf	591661	chain:ASCII85Decode,LZWDecode; class:function; class:palette; class:unknown; creator:international telecommunication union; encoded:image; ext:.z; filter:LZWDecode; layer:LZW; producer:itu - electronic publishing service; state:encoded; ver:1.3
+Tarasov_Ot.pdf	990015	producer:foxit phantom - foxit corporation
+To reanimation of Russian programming language.pdf	365157	producer:abbyy finereader #
+Turing.Transformers.2506.12027v2.pdf	364168	creator:arxiv genpdf (tex#pdf:); producer:pikepdf #
+anewmops.pdf	128515	creator:writer; producer:libreoffice #
+arria-10-product-table.pdf	78369	creator:adobe indesign # (windows)
+batista2008.pdf	89373	ext:.img; producer:itextsharp # (based on itext #)
+cert_thamm.pdf	377343	creator:microsoft® powerpoint® #; producer:microsoft® powerpoint® #
+cyberleninka.ru_article_n_pauki-v-bankah-est-li-alternativa-syrievoy-ekonomike.pdf	252641	creator:pscript#dll version #
+drive_google_com_file_d_1dkUuZrnCJEEzttx5LCOQk2zIKm1Fa3Jv_vi.pdf	16601	creator:pdfcrowd#com v#; producer:skia/pdf
+formirovanie-etnicheskoy-karty-gruzii-i-sovremennye-migratsionnye-protsessy.pdf	128357	creator:pagemaker #
+fsstcompression.pdf	756291	creator:latex with hyperref package; extent:endstream-scan
+g144poster.A1.pdf	116368	creator:illustrator
+gdcc_prize_table_november2023_public.pdf	51877	creator:excel; producer:macos version # (build #c#) quartz pdfco
+harakteristiki-algoritma-szhatiya-dannyh-bez-poter-na-osnove-psevdoregulyarnyh-chisel.pdf	848396	creator:adobe acrobat pro dc #; producer:adobe acrobat pro dc #; modified using i
+hash.krapivin.2501.02305v1.pdf	261544	creator:latex with hyperref; producer:gpl ghostscript #
+instruction_matrix.pdf	155399	creator:google sheets
+invoice-5132828.pdf	11637	creator:dompdf
+kombinatornyy-sposob-szhatiya-ne-szhimaemyh-dannyh.pdf	569089	creator:microsoft® office word #(foxit advanced ; producer:cyberleninka
+kru_01.pdf	18293	producer:cairo # (https://cairographics#org)
+marvell_structera_a_2504_near_memory_accelerator_product_brief.pdf	200578	creator:adobe indesign # (macintosh)
+mdmspe.pdf	27075	class:cff; creator:dvipsk #a copyright #-# radical eye soft; ext:.cff; producer:acrobat distiller command # for solaris ; ver:1.2
+memmgmt.3314221.3314582.pdf	449000	creator:latex with acmart #/#/# v# typesetting a; producer:pdftex-#; modified using itext # by #t#x
+orthogonal_initialization_and_weight_compression.pdf	149527	producer:reportlab pdf library - (opensource)
+payment_rules_without_authorization_020625.pdf	154097	class:cidtogidmap; creator:onlyoffice/#; producer:onlyoffice/#
+pegaso_translation_ru.pdf	5415	chain:ASCII85Decode,FlateDecode; classic-xref; creator:(unspecified); filter:ASCII85Decode; layer:A85; producer:reportlab pdf library - www#reportlab#co; recon>5%; ver:1.4
+quickassist-adapter-8950-brief.pdf	114151	cipher:+AES-128; class:cidset; class:cmap; class:content; class:hint; class:icc; class:image; class:objstm; class:truetype; class:xml; class:xref; creator:adobe indesign cs# (windows); encrypted; ext:.bin; ext:.icc; ext:.jpg; ext:.ttf; ext:.xml; extent:Length; filter:DCTDecode; filter:FlateDecode; layer:Flate; layer:ObjStm; layer:PNG; linearized; linearized-dict; multi-eof; producer:adobe pdf library #; state:decoded; state:terminal; ver:1.6; xrefstream
+softecc_ddopson-meng.pdf	335711	creator:dvips(k) #b copyright # radical eye soft; producer:afpl ghostscript #
+test5.pdf	242751	creator:microsoft® word #; producer:microsoft® word #
+wp_Convey_HC2_Architectual_Overview.pdf	949369	creator:adobe indesign cs# (#)
+x86-intrin-cheatsheet-v2.1.pdf	849642	creator:microsoft® visio® #; producer:microsoft® visio® #
+Заборских.pdf	549572	creator:producer:; producer:creationdate:
+Новый алгоритм дедапа для E9.pdf	85209	producer:microsoft: print to pdf
+Отомэ_игра_академия_Цирус_Глава_2.pdf	71478	creator:microsoft® word ltsc; producer:microsoft® word ltsc
+Спросить.pdf	575542	creator:microsoft® office word #; producer:microsoft® office word #
+Структуры_в_IDA.pdf	172108	producer:macos версия # (выпуск #h#) quartz pdfco
+Структуры_в_IDA_v4.pdf	672725	producer:macos версия # (выпуск #g#) quartz pdfco
