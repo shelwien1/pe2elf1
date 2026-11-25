@@ -11,9 +11,10 @@
 //
 // Skeleton bytes: 0x00 X = literal byte X (X <= 3), 0x01 = number, 0x02 = hex string with
 // upper-case (or no) letters, 0x03 = hex string with lower-case letters.
-// Number value: varint(zigzag(mantissa) * 8 + code); code 0 = integer, 1..6 = "I.F" with that
-// many fraction digits, 7 = escape followed by varint(scale * 4 + form), form bit0 = no integer
-// part (".5"), bit1 = trailing dot ("5.").
+// Number value: zigzag(mantissa) * 8 + code; code 0 = integer, 1..6 = "I.F" with that many
+// fraction digits, 7 = escape followed by varint(scale * 4 + form), form bit0 = no integer part
+// (".5"), bit1 = trailing dot ("5."). Numbers file: one mode byte per group (see liftEncodeGroup),
+// then the groups' values in group order.
 
 enum LiftMode { LIFT_CS, LIFT_OBJ };
 
@@ -229,6 +230,73 @@ static void liftGroup(LiftMode mode, const uint8_t* s, size_t n, LiftGroups& g) 
   g.count = (uint32_t)ids.size();
 }
 
+// ---- per-group number coding -----------------------------------------------------------------
+// Group mode byte: bits 0-1 = 0 varint, 1 varint of delta, 2 fixed width, 3 fixed width of delta;
+// bits 2-5 = width in bytes for the fixed modes. A value is zigzag(m or m - prev) * 8 + code,
+// followed by varint(ext) when code is 7. The mode is chosen by an order-1 entropy estimate.
+
+static uint64_t liftWord(const LiftNum& v, int64_t prev, bool delta) {
+  return zigzag(delta ? v.m - prev : v.m) * 8 + v.code;
+}
+
+static void liftEncodeGroup(const std::vector<LiftNum>& v, uint8_t mode, Bytes& out) {
+  bool delta = mode & 1, fixed = (mode & 2) != 0;
+  int w = mode >> 2;
+  int64_t prev = 0;
+  for (auto& x : v) {
+    uint64_t word = liftWord(x, prev, delta);
+    prev = x.m;
+    if (fixed)
+      for (int k = w - 1; k >= 0; k--) out.push_back((uint8_t)(word >> (8 * k)));
+    else
+      putVarTo(out, word);
+    if (x.code == 7) putVarTo(out, x.ext);
+  }
+}
+
+struct LiftEntropy {
+  std::vector<uint32_t> pair, ctx;
+  std::vector<uint32_t> touched;
+  LiftEntropy() : pair(65536, 0), ctx(256, 0) {}
+  // order-1 entropy estimate of b, in bits
+  double bits(const Bytes& b) {
+    if (b.size() < 2) return 8.0 * b.size();
+    for (size_t i = 1; i < b.size(); i++) {
+      uint32_t k = (uint32_t)b[i - 1] << 8 | b[i];
+      if (!pair[k]++) touched.push_back(k);
+      ctx[b[i - 1]]++;
+    }
+    double h = 0;
+    for (uint32_t k : touched) h -= pair[k] * std::log2((double)pair[k] / ctx[k >> 8]);
+    for (uint32_t k : touched) { pair[k] = 0; ctx[k >> 8] = 0; }
+    touched.clear();
+    return h + 8;
+  }
+};
+
+static uint8_t liftChooseMode(const std::vector<LiftNum>& v, LiftEntropy& est) {
+  if (v.size() < 32) return 0;
+  int w[2] = {1, 1};
+  for (int d = 0; d < 2; d++) {
+    int64_t prev = 0;
+    for (auto& x : v) {
+      uint64_t word = liftWord(x, prev, d != 0);
+      prev = x.m;
+      while (w[d] < 8 && (word >> (8 * w[d]))) w[d]++;
+    }
+  }
+  uint8_t best = 0;
+  double bestBits = 0;
+  for (uint8_t m = 0; m < 4; m++) {
+    uint8_t mode = (uint8_t)(m | ((m & 2) ? w[m & 1] << 2 : 0));
+    Bytes b;
+    liftEncodeGroup(v, mode, b);
+    double h = est.bits(b);
+    if (m == 0 || h < bestBits) { bestBits = h; best = mode; }
+  }
+  return best;
+}
+
 // ---- forward / inverse -----------------------------------------------------------------------
 static inline void liftLit(Bytes& out, uint8_t c) {
   if (liftCtl(c)) out.push_back(0);
@@ -329,13 +397,17 @@ static void liftForward(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums
     nums.clear();
     return;
   }
-  std::vector<Bytes> per(g.count);
-  for (size_t k = 0; k < vals.size(); k++) {
-    Bytes& b = per[g.ofMarker[k]];
-    putVarTo(b, zigzag(vals[k].m) * 8 + vals[k].code);
-    if (vals[k].code == 7) putVarTo(b, vals[k].ext);
+  std::vector<std::vector<LiftNum>> per(g.count);
+  for (size_t k = 0; k < vals.size(); k++) per[g.ofMarker[k]].push_back(vals[k]);
+  Bytes modes, data;
+  LiftEntropy est;
+  for (auto& v : per) {
+    uint8_t mode = liftChooseMode(v, est);
+    modes.push_back(mode);
+    liftEncodeGroup(v, mode, data);
   }
-  for (auto& b : per) nums.insert(nums.end(), b.begin(), b.end());
+  nums.swap(modes);
+  nums.insert(nums.end(), data.begin(), data.end());
 }
 
 static bool liftInverse(LiftMode mode, const Bytes& skel, const Bytes& nums, const Bytes& hex, Bytes& out) {
@@ -345,12 +417,23 @@ static bool liftInverse(LiftMode mode, const Bytes& skel, const Bytes& nums, con
   for (uint32_t id : g.ofMarker) cnt[id]++;
   std::vector<std::vector<LiftNum>> per(g.count);
   RBuf nr(nums);
+  std::vector<uint8_t> modes(g.count);
+  for (auto& m : modes) m = nr.u8();
   for (uint32_t id = 0; id < g.count; id++) {
+    bool delta = modes[id] & 1, fixed = (modes[id] & 2) != 0;
+    int w = modes[id] >> 2;
+    if (fixed && (w < 1 || w > 8)) return false;
+    int64_t prev = 0;
     per[id].resize(cnt[id]);
     for (auto& v : per[id]) {
-      uint64_t x = nr.var();
+      uint64_t x = 0;
+      if (fixed)
+        for (int k = 0; k < w; k++) x = x << 8 | nr.u8();
+      else
+        x = nr.var();
       v.code = (uint32_t)(x & 7);
-      v.m = unzigzag(x >> 3);
+      v.m = unzigzag(x >> 3) + (delta ? prev : 0);
+      prev = v.m;
       v.ext = v.code == 7 ? (uint32_t)nr.var() : 0;
     }
   }

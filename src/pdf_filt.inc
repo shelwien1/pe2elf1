@@ -15,6 +15,7 @@ struct Layer {
 
 struct CodecCtx {
   uint8_t zlibHdr[2] = {0x78, 0x9C};
+  bool verify = true;  // encoder: re-encode each Flate layer and compare (off with -n)
 };
 
 // Predictor / filter parameters from /DecodeParms (encoder side only).
@@ -167,7 +168,7 @@ static bool flateDecode(const CodecCtx& ctx, const Bytes& in, Bytes& out, Bytes&
     }
   }
   if (dsize == 0 || dsize > in.size() - off) return false;
-  if (!terminated) {
+  if (!terminated && ctx.verify) {
     Bytes re;
     VecOut ro(re);
     double t1 = nowSec();

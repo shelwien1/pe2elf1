@@ -194,6 +194,14 @@ class Encoder {
   }
 
   void writeFiles(const std::string& prefix) {
+    // record which files exist, so that d ignores stale files of an earlier dump with this prefix
+    dump.hdr.present = 1;
+    for (size_t f = 1; f < dump.chan.size(); f++)
+      if (!dump.chan[f].empty()) dump.hdr.present |= (uint64_t)1 << f;
+    for (int c = 0; c < CF_COUNT; c++)
+      if (!dump.classFile[c].empty()) dump.hdr.present |= (uint64_t)1 << (kPresentClass + c);
+    for (int a = 0; a < AX_COUNT; a++)
+      if (!dump.aux[a].empty()) dump.hdr.present |= (uint64_t)1 << (kPresentAux + a);
     Bytes meta;
     serializeHeader(dump.hdr, meta);
     meta.insert(meta.end(), dump.chan[0].begin(), dump.chan[0].end());
@@ -229,6 +237,7 @@ class Encoder {
   std::deque<std::vector<std::pair<uint32_t, Obj>>> members_;
   std::unordered_map<int, int> streamOfItem_;
   std::unordered_map<uint32_t, std::vector<int>> streamsByNum_;
+  std::unordered_map<uint64_t, std::vector<int>> cache_;
 
   // mostly printable ASCII / UTF-8 text (XMP, PostScript, JavaScript, ...)
   static bool isText(const Bytes& b) {
@@ -405,6 +414,45 @@ class Encoder {
       }
     ctx_.zlibHdr[0] = dump.hdr.zlibHdr[0];
     ctx_.zlibHdr[1] = dump.hdr.zlibHdr[1];
+    ctx_.verify = !opt_.noVerify;
+  }
+
+  // filter chain + parameters as a cache key
+  std::string chainKey(const std::vector<FilterRef>& fl) const {
+    std::string k;
+    for (auto& f : fl) {
+      FilterParams fp = params(f.parms);
+      char b[96];
+      snprintf(b, sizeof(b), "%s/%d/%d/%d/%d/%d;", f.name.c_str(), fp.predictor, fp.colors, fp.bpc, fp.columns,
+               fp.earlyChange);
+      k += b;
+    }
+    return k;
+  }
+
+  // identical unencrypted payload + identical chain -> identical result; reuse it
+  bool fromCache(StreamRec& s, const Obj& d, const std::vector<FilterRef>& fl) {
+    const Item& it = seg.items[s.item];
+    if (s.wantCipher != CI_NONE || d.get("F") || it.dataEnd - it.dataStart < 64) return false;
+    std::string key = chainKey(fl);
+    uint64_t h = fnv1a64(in_.data() + it.dataStart, it.dataEnd - it.dataStart) ^ fnv1a64((const uint8_t*)key.data(), key.size());
+    auto& v = cache_[h];
+    for (int k : v) {
+      const StreamRec& o = streams[k];
+      const Item& oi = seg.items[o.item];
+      if (oi.dataEnd - oi.dataStart == it.dataEnd - it.dataStart &&
+          memcmp(in_.data() + oi.dataStart, in_.data() + it.dataStart, it.dataEnd - it.dataStart) == 0 &&
+          chainKey(getFilters(seg.objs[oi.obj])) == key) {
+        s.desc.layers = o.desc.layers;
+        s.data = o.data;
+        s.remain = o.remain;
+        s.stop = o.stop;
+        s.decoded = o.decoded;
+        return true;
+      }
+    }
+    v.push_back((int)(&s - streams.data()));
+    return false;
   }
 
   void processStream(StreamRec& s) {
@@ -416,6 +464,7 @@ class Encoder {
     for (auto& f : fl) s.chain.push_back(f.name);
     uint8_t ci = streamCipher(d, it.num, fl);
     s.wantCipher = ci;
+    if (fromCache(s, d, fl)) return;
     if (ci != CI_NONE) {
       Bytes pt;
       if (sec.key.empty() || !cipherDecrypt(ci, sec.key, it.num, it.gen, cur.data(), cur.size(), pt, s.desc.iv)) {
@@ -924,7 +973,7 @@ static void usage() {
           "  -p N     small-stream threshold: streams below N bytes share <P>.bin (default 1024)\n"
           "  -D       disable dedup of extracted streams\n"
           "  -c MAP   channel->file map, e.g. S,N,T,X,O,F,R,B (default %s)\n"
-          "  -n       skip the final in-memory verify\n"
+          "  -n       no verification: skip the final in-memory restore and the per-stream Flate re-encode\n"
           "  -v / -q  per-stream report / quiet\n",
           kSyntaxLevelMax, kDefaultChanMap);
 }
@@ -1014,9 +1063,13 @@ static int realMain(int argc, char** argv) {
   size_t meta0 = parseHeader(meta, d.hdr);
   d.chan.resize(d.hdr.map.suffix.size());
   d.chan[0].swap(meta);
-  for (size_t f = 1; f < d.chan.size(); f++) readFile(prefix + "." + d.hdr.map.suffix[f], d.chan[f]);
-  for (int c = 0; c < CF_COUNT; c++) readFile(prefix + "." + kClassFileSuffix[c], d.classFile[c]);
-  for (int a = 0; a < AX_COUNT; a++) readFile(prefix + "." + kAuxSuffix[a], d.aux[a]);
+  auto need = [&](const std::string& name, int bit, Bytes& out) {
+    if (!(d.hdr.present >> bit & 1)) return;
+    if (!readFile(name, out)) fail("cannot read %s", name.c_str());
+  };
+  for (size_t f = 1; f < d.chan.size(); f++) need(prefix + "." + d.hdr.map.suffix[f], (int)f, d.chan[f]);
+  for (int c = 0; c < CF_COUNT; c++) need(prefix + "." + kClassFileSuffix[c], kPresentClass + c, d.classFile[c]);
+  for (int a = 0; a < AX_COUNT; a++) need(prefix + "." + kAuxSuffix[a], kPresentAux + a, d.aux[a]);
   Bytes out = decodeDump(d, meta0, [&](uint32_t ord, const std::string& ext) {
     Bytes b;
     std::string name = ownFileName(prefix, ord, ext);
