@@ -166,7 +166,8 @@ static bool flateDecode(const CodecCtx& ctx, const Bytes& in, Bytes& out, Bytes&
       if (!preflate_decode(v2, diff, dsize, s2, [] {}, 0, kMetaBlockSize) || dsize != buf.size()) return false;
       Bytes re;
       VecOut ro(re);
-      if (!preflate_reencode(ro, diff, out, [] {}) || re != buf) return false;
+      SpanIn ui(out.data(), out.size());
+      if (!preflate_reencode(ro, diff, ui, out.size(), [] {}) || re != buf) return false;
       dsize = c - off;
       terminated = true;
     }
@@ -176,7 +177,8 @@ static bool flateDecode(const CodecCtx& ctx, const Bytes& in, Bytes& out, Bytes&
     Bytes re;
     VecOut ro(re);
     double t1 = nowSec();
-    bool rok = preflate_reencode(ro, diff, out, [] {});
+    SpanIn ui(out.data(), out.size());  // not the vector overload: its MemStream memcpy()s from null for empty data
+    bool rok = preflate_reencode(ro, diff, ui, out.size(), [] {});
     gFlateProf.enc += nowSec() - t1;
     gFlateProf.dec -= nowSec() - t1;
     if (!rok) return false;
@@ -216,7 +218,8 @@ static bool flateEncode(const CodecCtx& ctx, const Bytes& recon, const Bytes& in
   r.bytes(r.len(), diffB);
   std::vector<byte> diff(diffB.begin(), diffB.end());
   VecOut vo(out);
-  if (!preflate_reencode(vo, diff, in, [] {})) return false;
+  SpanIn ui(in.data(), in.size());
+  if (!preflate_reencode(vo, diff, ui, in.size(), [] {})) return false;
   uint8_t tmode = r.u8();
   if (tmode == 2) {
     if (out.size() < 2) return false;

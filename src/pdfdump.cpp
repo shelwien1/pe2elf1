@@ -898,6 +898,9 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
          pct(rawb, in.size()), pct(st.typedBytes, st.payloadBytes), rAlone ? "" : "~",
          pct(recon, st.layeredPayload), human(recon).c_str(), (unsigned long long)st.reconBlobs,
          (unsigned long long)st.reconRefs);
+  if (gObjstmExact + gObjstmInexact)
+    printf("objstm headers: %llu offsets exact, %llu with corrections, %llu with sequential numbers\n",
+           (unsigned long long)gObjstmExact, (unsigned long long)gObjstmInexact, (unsigned long long)gObjstmNumsSeq);
   printf("time: encode %.2fs (preflate: %llu streams, %s unpacked, analyze %.2fs, re-encode %.2fs), verify %.2fs\n",
          E.tEncode, (unsigned long long)gFlateProf.streams, human(gFlateProf.unpacked).c_str(), gFlateProf.dec,
          gFlateProf.enc, E.tVerify);

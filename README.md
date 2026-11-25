@@ -10,20 +10,25 @@ files; `d` rebuilds the original byte-for-byte. Design and roadmap: [docs/pdfdum
 
 ## Status
 
-Milestones **M0–M4** of the plan are implemented. Together they are the "complete lossless
-extractor" checkpoint: every stream payload is decoded as far as it can be re-encoded exactly and
-written as a typed file, encrypted files included. Object syntax is still stored as raw text.
-Syntax compaction (M5–M9: token coder, xref/ObjStm regeneration, content-stream parsing,
-linearization) is not built yet; `-s` above 1 is clamped to 1.
+Milestones **M0–M4** of the plan are implemented: every stream payload is decoded as far as it
+can be re-encoded exactly and written as a typed file, encrypted files included. On top of that,
+the PDF-specific data is transformed so that xz compresses it better. This covers parts of
+M5–M8 and the M10 list:
 
-| M | Scope | State |
-|---|---|---|
-| M0 | CLI, channels, header, stored mode, final in-memory verify, corpus harness | done |
-| M1 | Sequential segmenter, stream extents (`/Length`, indirect `/Length`, `endstream`/`endobj` scan), raw regions, read-only lexer | done |
-| M2 | Filter engine: Flate via `preflate.inc`, LZW, ASCIIHex, ASCII85, RunLength, PNG and TIFF predictors, recon dictionary | done |
-| M3 | ObjStm expansion (read-only), classification, signature-based extensions, typed files, BMP3, small-stream file, dedup | done |
-| M4 | Standard security handler R2–R6 (RC4-40/128, AES-128, AES-256), key in header, IVs in channel R | done |
-| M5+ | syntax compaction | not started |
+| Transform | What it removes / reorders |
+|---|---|
+| Type 1 decryption (`L_T1`) | eexec and charstring encryption of embedded Type 1 fonts → `.t1d` |
+| Number lifting, content streams | numbers → `.csn`, grouped by (operator, operand slot); canonical hex strings → `.csh` (binary) |
+| Number lifting, object text | numbers of `.txt` → `.txn`, grouped by (key, in-array, terminator) |
+| Adaptive number coding | per group: varint or fixed width, raw or delta (order-1 entropy estimate) |
+| ObjStm headers (`L_OBJSTM`) | the `num off` table; offsets derived from member boundaries |
+| Classic xref tables (`I_XREF`) | entries predicted from object positions; free entries from the free list |
+| XRef stream rows (`L_XREFROWS`) | rows predicted from object positions and ObjStm order |
+| Small text streams | XMP and other small text streams go to `.txt`, not `.bin` |
+
+Not built: the token-level object coder (M5 proper: `/Length` and other derived dict values,
+string escapes, gap model), content-stream operator coding beyond number lifting (M8),
+linearization (M9). `-s` above 1 is clamped to 1.
 
 ## Build
 
@@ -47,7 +52,7 @@ Tested with g++ 13.3 and clang 18 on Linux x86-64.
 | `-p N` | small-stream threshold: a stream whose stored form is under N bytes goes to `<P>.bin` instead of its own file | 1024 |
 | `-D` | disable dedup of extracted files | dedup on |
 | `-c MAP` | channel→file map, e.g. `S,N,T,X,O,F,R,B` to split every channel | `SN,TX,O,F,R,B` |
-| `-n` | skip the final in-memory verify | verify on |
+| `-n` | no verification: skip the final in-memory restore and the per-stream Flate re-encode (about 1.8× faster on Flate-heavy files) | verify on |
 | `-v` / `-q` | per-stream report / quiet | |
 
 `d` takes no options: everything it needs is in the dump header.
@@ -56,18 +61,25 @@ Tested with g++ 13.3 and clang 18 on Linux x86-64.
 
 | File | Holds |
 |---|---|
-| `<P>.meta` | header (magic, format version, channel map, original size + CRC-32, file key, zlib header default), then channels S and N: item tags, stream descriptors, lengths |
-| `<P>.txt` | channel T: raw object text, non-object syntax (header, xref, trailer), decoded ObjStm text |
-| `<P>.rec` | channel R: recon blobs (preflate diffs and other filter parameters), AES IVs. Incompressible. |
-| `<P>.bin` | channel B: raw regions, streams under the `-p` threshold, decoded XRef stream rows |
-| `<P>.cs` | all decoded content streams (pages, forms, patterns, Type 3 glyphs, appearances), concatenated |
+| `<P>.meta` | header (magic, format version, channel map, which files exist, original size + CRC-32, file key, zlib header default, transform flags), then channels S and N: item tags, stream descriptors, lengths, xref entry kinds |
+| `<P>.txt` | channel T with numbers replaced by markers: object text, non-object syntax, ObjStm members, small text streams |
+| `<P>.txn` | the numbers lifted from `.txt`, per group |
+| `<P>.rec` | channel R: recon records (preflate diffs, filter parameters, ObjStm object numbers), AES IVs |
+| `<P>.bin` | channel B: raw regions, binary streams under the `-p` threshold, XRef stream row residuals |
+| `<P>.cs` | all decoded content streams concatenated, numbers and hex strings replaced by markers |
+| `<P>.csn` | the numbers lifted from `.cs`, per (operator, operand slot) group |
+| `<P>.csh` | the hex strings lifted from `.cs`, as binary |
 | `<P>.cmap` | all decoded CMaps (`/ToUnicode`, embedded encodings), concatenated |
 | `<P>%08X.<ext>` | one file per extracted stream; ordinal in file order |
+
+Files that would be empty are not written; the header records which ones exist, so `d` never
+reads a stale file left by an earlier dump with the same prefix.
 
 Extension precedence: terminal filter (`.jpg`, `.jp2`/`.j2k`, `.jb2`, `.g4`) → BMP3 wrap →
 signature (`.jpg .png .gif .tif .jp2 .j2k .pdf .zip .ttf .otf .pfa .ps .icc .xml`) → attachment
 file name → class default (`.ttf .cff .otf .pfa .icc .xml .js .ai .jb2g .img`) → `.z` (still
-compressed), `.enc` (still encrypted) or `.bin`.
+compressed), `.enc` (still encrypted) or `.bin`. Type 1 fonts with the encryption removed are
+`.t1d` (not loadable as fonts any more; `d` re-encrypts them exactly).
 
 Raw images (all filters undone, 1/4/8 bpc gray or indexed, 8 bpc RGB or CMYK, image masks) are
 written as BMP3. Restore reads only width, height, bit count and pixel offset from the BMP, so the
@@ -85,7 +97,9 @@ palette is a display aid and can't affect the round trip.
   before writing anything. On a mismatch, which would mean a bug, it writes stored mode and says
   so. `d` checks the restored file's size and CRC-32 against the header.
 - The decoder makes no guesses. Classification, cipher choice, key recovery and filter parameters
-  are encoder-side decisions stored in the stream descriptor.
+  are encoder-side decisions stored in the stream descriptor. Where the decoder does derive
+  something (number groups, ObjStm offsets, xref predictions), it runs the same deterministic code
+  on the same bytes as the encoder, and the encoder checks the result before using it.
 
 ## Deviations from the plan
 
@@ -109,50 +123,69 @@ palette is a display aid and can't affect the round trip.
 
     tests/roundtrip.sh -b ./pdfdump files...     # c -> d -> cmp, CSV of channel sizes and timings
     tests/enc_variants.sh -b ./pdfdump files...  # M4 check, needs qpdf
+    python3 tests/xzbench.py -b ./pdfdump files...  # xz -9 of the dump vs of the input
+    tests/get_corpus.sh [dir]                    # fetch the kept files of the 005 set
 
 `enc_variants.sh` encrypts each input with qpdf at R2, R3, R4 and R6, using an empty user
 password. It then checks that the extracted payload files are byte-identical to those from a
 plain qpdf rewrite of the same input, and that every variant round-trips.
 
-### Results
+### xz results
+
+`xzbench.py` tars all dump files of one input in name order and compresses the tar with xz -9.
+It compares that with xz -9 of the input PDF. The "PDF-specific" figure is the same, leaving out
+the standard payload formats (`ttf otf cff jpg jp2 j2k jb2 jb2g g4 bmp png gif tif icc pdf zip
+img`), which go to external recompressors. Test set: the 117 files of the 005 set and the 3
+supplied PDFs (55.6 MB, orig.xz 47.5 MB).
+
+| Step | dump.xz / orig.xz | PDF-specific xz |
+|---|---|---|
+| M0–M4 extractor | 69.0% | 13.46 MB |
+| + Type 1 decryption, number lifting | 60.2% | 9.26 MB |
+| + ObjStm headers, small text → `.txt` | 60.0% | 9.16 MB |
+| + classic xref tables | 59.9% | 9.11 MB |
+| + adaptive per-group number coding | 59.4% | 8.90 MB |
+| + XRef stream rows | 59.3% | 8.83 MB |
+
+Measured and not adopted, because they don't beat xz on this corpus:
+- PNG filters on raw images: raw rows compress best on aggregate.
+- Lifting numbers without grouping, or with plain deltas: both lose to text.
+- Splitting content streams per operator as text.
+- Unescaping literal strings.
+- CMap pairs as binary: −6% of `.cmap`, about 5 KB in total.
+- Keeping Flate layers with large recon encoded: made the total worse.
+
+Speed of `c`, single thread, verify on: 1.6 MB/s aggregate on the test set. Almost all the time is
+preflate (analysis plus the verifying re-encode). Files with highly compressible images or level-9
+text streams run at about 400 KB/s. With `-n` (no verification) those reach about 750 KB/s.
+
+### Round trip and robustness
 
 The corpus is the three supplied PDFs, qpdf's `qpdf/qtest/qpdf/*.pdf` (628 files: damaged,
-linearized, object streams, encrypted, hybrid), and 60 mutated files (truncated, bit-flipped,
-junk inserted, duplicated ranges).
+linearized, object streams, encrypted, hybrid), 60 mutated files (truncated, bit-flipped, junk
+inserted, duplicated ranges), and the 117 files of the 005 set.
 
 | Check | Result |
 |---|---|
-| Byte-exact round trip (`c` → disk → `d` → `cmp`) | 3/3 supplied, 628/628 qpdf, 60/60 mutated |
-| Same, under ASan + UBSan (`halt_on_error=1`) | 691/691 (one UBSan report, `memcpy` from an empty `/ID`, fixed) |
+| Byte-exact round trip (`c` → disk → `d` → `cmp`) | 808/808 |
+| Same, under ASan + UBSan (`halt_on_error=1`) | 808/808. One UBSan report, a zero-length `memcpy` from null inside preflate's `MemStream`, avoided by calling the `InputStream` overload |
 | Encrypted variants, R2/R3/R4/R6 × (3 supplied + 15 qpdf files) | 72/72 extract files identical to the plain rewrite |
 | Decompression bomb (1.1 GiB of zeros in a 1.1 MB Flate stream) | layer kept as `.z` at the 1 GiB cap, round trip intact |
-| Extracted files open in native libraries (PIL, fontTools, XML parser) | 75 BMP, 18 JPEG, 21 TrueType, 2 CFF, 9 XML, 24 Type 1 |
 | qpdf files in stored mode | 14, all without a `%PDF-` header |
-
-Supplied files, default options:
-
-| File | Size | Streams | Flate undone | Typed share | Recon share | c / d time |
-|---|---|---|---|---|---|---|
-| Wachter (eWorks, PDF 1.5, linearized, ObjStm) | 6.4 MB | 151 | 150/150 | 99.5% | 0.04% | 3.7 s / 1.2 s |
-| NVIDIA Ampere (Adobe PDF Library 20, linearized) | 8.0 MB | 223 | 199/199, 18 DCT | 99.4% | 0.19% | 4.1 s / 1.1 s |
-| Intel (Distiller 9.4, RC4-128 R3, 915 ObjStm) | 2.3 MB | 1540 | 1537/1537, all 1538 decrypted | 73.9%¹ | 0.91% | 1.5 s / 0.5 s |
-
-¹ The rest is decoded ObjStm text, which the plan keeps in `<P>.txt` until M7.
-
-In the qpdf corpus, the Flate layers left encoded are in files that need a password (470 streams),
-deliberately corrupt data (issue-117, bad-data, broken-lzw) and the `png-filters-*` files, whose
-`/Columns` doesn't match the data. In those files the Flate layer is undone and the predictor layer
-is kept.
 
 ## Source layout
 
     src/pdfdump.cpp     CLI, encoder pipeline, info report, self-test
     src/chan.inc        channel writer/reader, channel->file map, header, varints, CRC-32
     src/pdf_lex.inc     lexer and read-only object parser
-    src/pdf_seg.inc     segmenter: items, stream extents, raw regions, trailers
+    src/pdf_seg.inc     segmenter: items, stream extents, raw regions, xref sections, trailers
     src/pdf_filt.inc    Flate (preflate wrapper), LZW, AHx, A85, RL, PNG/TIFF predictors
     src/pdf_bmp.inc     BMP3 wrap/unwrap
     src/pdf_crypt.inc   MD5, SHA-256/384/512, RC4, AES, standard security handler
     src/pdf_class.inc   ObjStm expansion, classification, signatures, image description
+    src/pdf_xref.inc    classic xref sections (I_XREF), object position tracking
+    src/pdf_t1.inc      Type 1 eexec / charstring decryption layer
+    src/pdf_objstm.inc  ObjStm header derivation, XRef stream row derivation
+    src/pdf_lift.inc    number lifting (content streams, object text), per-group coding
     src/pdf_emit.inc    item records, stream descriptors, recon dictionary, decoder
     src/preflate.inc    from ziprec, unmodified

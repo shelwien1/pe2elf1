@@ -34,6 +34,7 @@ static void objstmHeader(const std::vector<uint64_t>& nums, const std::vector<ui
   out.insert(out.end(), tail.begin(), tail.end());
 }
 
+static uint64_t gObjstmExact = 0, gObjstmInexact = 0, gObjstmNumsSeq = 0;
 static bool objstmDecodeLayer(const Bytes& in, int64_t N, int64_t First, Bytes& out, Bytes& recon) {
   if (N <= 0 || First <= 0 || (uint64_t)First > in.size() || N > First) return false;
   // parse the header strictly: digits, one separator byte, ...
@@ -81,6 +82,12 @@ static bool objstmDecodeLayer(const Bytes& in, int64_t N, int64_t First, Bytes& 
     prev = v;
   }
   recon.push_back(exact ? 1 : 0);
+  (exact ? gObjstmExact : gObjstmInexact)++;
+  {
+    bool seq = true;
+    for (size_t k = 1; k < nums.size(); k++) seq &= nums[k] == nums[k - 1] + 1;
+    gObjstmNumsSeq += seq;
+  }
   if (!exact)
     for (int64_t c : corr) putVarTo(recon, zigzag(c));
   out.assign(in.begin() + f, in.end());
