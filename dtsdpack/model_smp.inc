@@ -441,8 +441,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // channel not bound alone) and the 4 earlier channels' of the sample (since format 159 too the 2
   // nearest's either side of it, where it isn't first or last of its 8: NW_NX), refitted every
   // NW_K samples (nw_refit()), each sample weighed by 1 over its step squared and by NW_LAM a
-  // sample since; the mean distance of the indexes from 0 and from the fit's value, in steps (each
-  // sample a 64th of it, from 1, at 0.3 at least), the samples to NW_WARM, and the last two
+  // sample since (since format 170 those of the subbands under NW_BL by NW_LAML); the mean
+  // distance of the indexes from 0 and from the fit's value, in steps (each sample a 64th of it,
+  // from 1, at 0.3 at least), the samples to NW_WARM, and the last two
   // residuals' lengths, 1 + their bits. A fit's memory is zeroed as its subband's first sample is
   // coded: a bound channel's never are, its pages never touched. Since format 161 the ring the
   // last NW_NY, whose LPC the subband's predictor and PMODE go by: nw_lpc(); and the subband's
@@ -454,14 +455,17 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // by one Cholesky (nw_refit()), its own as before; the long one's value taken where the mean
   // square of its errors, in steps, has been under NW_LT of the short one's, each sample a 64th of
   // them (nw_el, nw_es)
-  static constexpr int NW_NO = 16, NW_NX = 8, NW_NS = NW_NO + NW_NX, NW_NL = 40, NW_NG = NW_NS + NW_NL, NW_K = 32;
+  static constexpr int NW_NO = 16, NW_NX = 8, NW_NS = NW_NO + NW_NX, NW_NL = 40, NW_NG = NW_NS + NW_NL, NW_K = 16;
   static constexpr int NW_BL = 4, NW_WARM = 32, NW_NY = 64;
   static_assert((NW_NY & (NW_NY - 1)) == 0 && NW_NY >= NW_NO + NW_NL && 256 % NW_NY == 0 && NW_NS % 4 == 0 && NW_NL % 4 == 0,
                 "nw_y's ring a power of 2 (nw_yp's wrap a whole number of them), R's rows in 4s");
-  static constexpr double NW_TH = 0.95, NW_LAM = 0.995, NW_RIDGE = 1e-5, NW_LT = 0.95;
-  static constexpr double NW_LS = 0.6;  // (since format 160 the residual's logistic scale, of the spread)
-  static constexpr double NW_L2 = NW_LAM * NW_LAM, NW_L4 = NW_L2 * NW_L2, NW_L8 = NW_L4 * NW_L4, NW_L16 = NW_L8 * NW_L8;
-  static constexpr double NW_LK = NW_L16 * NW_L16;  // (NW_LAM to the NW_K, 32)
+  static constexpr double NW_TH = 0.95, NW_LAM = 0.9985, NW_LAML = 0.9965, NW_RIDGE = 1e-5, NW_LT = 0.95;
+  static constexpr double NW_LS = 0.75;  // (since format 160 the residual's logistic scale, of the spread: 0.6 before format 170)
+  static_assert(NW_K == 16, "NW_LK and NW_LKL are NW_LAM and NW_LAML to the 16th");
+  static constexpr double NW_L2 = NW_LAM * NW_LAM, NW_L4 = NW_L2 * NW_L2, NW_L8 = NW_L4 * NW_L4;
+  static constexpr double NW_LK = NW_L8 * NW_L8;  // (NW_LAM to the NW_K)
+  static constexpr double NW_LL2 = NW_LAML * NW_LAML, NW_LL4 = NW_LL2 * NW_LL2, NW_LL8 = NW_LL4 * NW_LL4;
+  static constexpr double NW_LKL = NW_LL8 * NW_LL8;  // (NW_LAML's)
   template <int N> struct NwFitT {  // (N regressors: NW_NS the short fit, NW_NG the long one)
     double R[8 * (N / 4) * (N / 4 + 1)];  // the weighed sums of h h': row i's first i + 1 (from nw_ro(i), to a whole 4)
     double c[N];       // and of h y
@@ -514,7 +518,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // and values of the sample, forgetting by NWC_LAM a sample (nwc_R, the sums of h h', its lower 4
   // by 4 by rows, and nwc_c, of h by what's left: nwc_solve()); the mean squares of the errors of
   // the fit alone, with the NLMS fit's value and with both parts', each sample a 64th of them
-  // (nwc_m1, nwc_mo, nwc_m2), the least of them taken; the fit's errors of the subband's 8, in
+  // (nwc_m1, nwc_mo, nwc_m2; a 128th since format 170), the least of them taken; the fit's errors of the subband's 8, in
   // values, for the channels after it (nwc_r, 0 where there is no step))
   static constexpr int NWC_K = 32;
   static_assert((NWC_K & (NWC_K - 1)) == 0 && NWC_K % 4 == 0, "nwc_e's ring a power of 2, nw_dot()'s 4s");
@@ -602,16 +606,18 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   double nw_hs[NCH][NSUB], nw_hq[NCH][NSUB], nw_ha[NCH][NSUB], nw_hb[NCH][NSUB];
   double nw_qr[NCH][NSUB];  // (since format 160 the step the spreads are in, over the root of its scale factor; 0 none)
   U8 nw_n[NCH][NSUB], nw_r1[NCH][NSUB], nw_r2[NCH][NSUB];
-  // the fit of the sums decayed by NW_LK, NW_K samples' worth of NW_LAM: (R + d I) w = c by
+  // the fit of the sums decayed by NW_LK, NW_K samples' worth of NW_LAM (the long fit's, of the
+  // subbands under NW_BL, by NW_LKL, of NW_LAML): (R + d I) w = c by
   // Cholesky, d the mean diagonal by NW_RIDGE (w as it was where a pivot isn't positive or w
   // isn't finite: a damaged stream's); the long fit's the same, d the short one's first NW_NS's,
   // the short one's from L's first NW_NS rows (L's columns from the left: the first NW_NS rows
   // those of the short fit's own L, z's first NW_NS its z), each where its own pivots are positive
   template <int N> static void nw_refit(NwFitT<N>& f) {
     constexpr int RT = 8 * (N / 4) * (N / 4 + 1);
+    constexpr double LK = N == NW_NS ? NW_LK : NW_LKL;
     double tr = 0.0;
-    for (int t = 0; t < RT; t++) f.R[t] *= NW_LK;
-    for (int i = 0; i < N; i++) f.c[i] *= NW_LK;
+    for (int t = 0; t < RT; t++) f.R[t] *= LK;
+    for (int i = 0; i < N; i++) f.c[i] *= LK;
     for (int i = 0; i < NW_NS; i++) tr += f.R[nw_ro(i) + i];
     if (!(tr > 0.0)) return;
     const double d = tr / NW_NS * NW_RIDGE;
@@ -5590,7 +5596,30 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // either side of the sample too 0.42%; both parts taken or neither 0.62%; the NLMS fit stepped by
     // its own error 0.63%, by both's 0.65%; a warm-up of 16 or 32 samples, or the fit's errors at
     // 0.98, no smaller; the earlier channels' errors as the fit's own regressors 0.03%; the subband
-    // below's values of the 8 there 0.06% bigger
+    // below's values of the 8 there 0.06% bigger.
+    // Since format 170 the fits refitted every 16 samples (NW_K, 32 before), forgetting by 0.9985 a
+    // sample (NW_LAM, 0.995 before), those of the subbands under NW_BL by 0.9965 (NW_LAML), the
+    // cascade's mean squares a 128th a sample, the logistic's scale 0.75 of the spread (NW_LS, 0.6
+    // before): with the cascade to follow what moves fast, the fits want a longer memory than they
+    // did. 9 streams without their WAVs 10427485 bytes to 10403585 (0.23%:
+    // `Fire__VooDoo_Studio_30_sec.wav` 0.54%, `s.2.dts`'s first 3 MB 0.35%, `mid.dtsc` 0.28%,
+    // `Master Audio 5.0 96khz.dts` 0.23%, `dts_es.dts` 0.11%, `3-1.dts` 0.09%, open bitrate 0.08%;
+    // `96-24.dts` 0.10% bigger, FATE's 7-frame XCH sample 19 bytes), for 15.5% more instructions on
+    // that sample, 8.8% on `mid.dtsc`. Against it, on the 9: refitted every 32 as before 0.20%
+    // smaller, every 8 0.25% for 45% more instructions on the XCH sample (`dtswavsample16.wav` 0.17%
+    // smaller, by every 16 0.11%, by every 32 0.01%), the short fits every 8 and the long ones every
+    // 32 0.22% (12% more); between refits, every 1-8 samples, a step by the last refit's factor, w +=
+    // (L L')^-1 (c - (R + d I) w), 0.6-2.2% bigger (it overshoots where a new sample lies along what
+    // the fit has seen little of; the exact update costs what the refit does). With refits every
+    // 32: both fits forgetting by 0.997, 0.10% smaller, by 0.998 0.12% (`96-24.dts` 0.20% bigger), by
+    // 0.999 0.02%, by 0.993 0.13% bigger; at 0.997 the subbands under NW_BL's by 0.996 0.11%, by 0.998
+    // 0.07%; at 0.995 refitted every 16 0.05%, the long fit alone so 0.02%; the cascade's forgetting
+    // 0.85 or 0.92, its ridge 0.02, 0.03 or 0.08, its step 0.01, 0.015, 0.03 or 0.04, its mean
+    // squares a 256th, none 0.002% smaller; the fits' ridge 1e-6 or 1e-4, 0.01% bigger, their switch
+    // (NW_TH) 0.90 or 0.98, 0.005% and 0.007% bigger. With refits every 8: the logistic's scale 0.7,
+    // 0.002% bigger, 0.75 but in the contexts of the values the fit doesn't serve 0.6 (zsc's, as it
+    // was), 0.005%; the spread a 32nd a sample, 0.02% smaller, but FFmpeg's `f4.dts` 1.7% bigger and
+    // `e16.dts` 0.5%, a 48th at 0.7 0.01% smaller, `f4.dts` 0.4% bigger
     const bool nwp = !bound[ch], nwl = nwp && b < NW_BL;  // (nwl: the long fit's subband)
     double nwh[NW_NG] = {}, nwy = 0.0, nwd = 0.0, nwd0 = 0.0, nwg = 1.0, nwys = 0.0, nwyl = 0.0;
     double nwx[NWC_K], nwxc[4] = {}, nwco = 0.0, nwcx = 0.0;  // (the cascade's: its inputs in steps (nwx set where it's read), its two parts)
@@ -5857,8 +5886,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           for (int k = 0; k < NWC_K; k++) en += nwx[k] * nwx[k];
           const double mu = NWC_MU * (nwc_m2[ch][b] < nwc_mo[ch][b] ? e2 : eo) / en;
           for (int k = 0; k < NWC_K; k++) nwc_w[ch][b][k] += mu * nwx[k];
-          nwc_m1[ch][b] += (e1 * e1 - nwc_m1[ch][b]) / 64.0, nwc_mo[ch][b] += (eo * eo - nwc_mo[ch][b]) / 64.0;
-          nwc_m2[ch][b] += (e2 * e2 - nwc_m2[ch][b]) / 64.0;
+          nwc_m1[ch][b] += (e1 * e1 - nwc_m1[ch][b]) / 128.0, nwc_mo[ch][b] += (eo * eo - nwc_mo[ch][b]) / 128.0;
+          nwc_m2[ch][b] += (e2 * e2 - nwc_m2[ch][b]) / 128.0;
           if (ch - 1 >= r.ch0()) {
             const double t = eo;
             double* const R = nwc_R[ch][b];
