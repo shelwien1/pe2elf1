@@ -117,7 +117,10 @@ P1 to P4 together: about −620 KB, 7.3% of the PDF-specific total. All four are
 over data the lifter already walks, so `c` speed is unaffected.
 
 Outcome (section 7 has the details): P1–P5 and P7 are in, P6 and P8 were measured and left out.
-PDF-specific xz 8710 KB → 7799 KB (−10.5%), dump.xz 59.04% → 57.48% of orig.xz.
+PDF-specific xz 8710 KB → 7799 KB (−10.5%), dump.xz 59.04% → 57.48% of orig.xz. `c` speed was
+not unaffected after all: the per-group choice among three codings, the walk and the lift's own
+verify cost 4% single-threaded (2.26 → 2.16 MB/s) and 12% with 4 threads (4.33 → 3.83 MB/s);
+every file stays above 500 KB/s.
 
 ### P1. One decimal unit per number group
 
@@ -260,8 +263,9 @@ slot counted from the end): +0.0%. Not worth a format change.
 **P7.** `.iln` holds per object item, stream prefix and stream suffix var 0 when the length is
 what the decoder finds by the segmenter's rules (through the first `endobj` and the whitespace
 after it; through the first `stream` and its end of line), else zigzag(length − prediction).
-TEXT items (header, trailer) keep their length in channel N. `.meta` (channels S and N)
-73.1 → 53.5 KB, `.iln` 8.6 KB (per-file xz). The predictor keeps the position found per keyword,
+TEXT items (header, trailer) keep their length in channel N. 38,903 of the 39,008 lengths
+(99.7%) are predicted. `.meta` (channels S and N) 73.1 → 53.5 KB; `.iln` 8.6 KB of per-file xz,
+nearly all of it xz's own per-file overhead, which the solid tar doesn't pay. The predictor keeps the position found per keyword,
 so a whole dump is one forward scan of the T channel.
 
 Small aux files at the end of `.meta` (their lengths in the header): a file of its own costs a

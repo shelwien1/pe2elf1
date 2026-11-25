@@ -5425,10 +5425,16 @@ bool PreflateTreePredictor::decodeBlock(PreflateTokenBlock &block, PreflatePredi
   if( codec->decodeLiteralCountMisprediction() ) {
     predictedLTreeSize = codec->decodeValue(5)+PreflateConstants::NONLEN_CODE_COUNT;
   }
+  if( predictedLTreeSize>PreflateConstants::LITLEN_CODE_COUNT ) {  // pdfdump: corrupt diff
+    return false;
+  }
   block.nlen = predictedLTreeSize;
   uint predictedDTreeSize = buildDBitlenghs(bitLengths+predictedLTreeSize, Dcodes);
   if( codec->decodeDistanceCountMisprediction() ) {
     predictedDTreeSize = codec->decodeValue(5);
+  }
+  if( predictedDTreeSize>PreflateConstants::DIST_CODE_COUNT ) {  // pdfdump: corrupt diff
+    return false;
   }
   block.ndist = predictedDTreeSize;
   uint BLfreqs[PreflateConstants::CODETREE_CODE_COUNT];

@@ -263,10 +263,16 @@ for every `-j`):
 
 | Mode | Aggregate | Slowest files |
 |---|---|---|
-| default, 4 threads | 4.46 MB/s | every file at 677 KB/s or more |
-| `-n` (no verification), 4 threads | 6.26 MB/s | every file at 876 KB/s or more |
-| `-j 1` (single thread) | 2.27 MB/s | every file at 632 KB/s or more |
-| `-j 1 -n` | 3.39 MB/s | every file at 809 KB/s or more |
+| default, 4 threads | 3.83 MB/s | every file at 634 KB/s or more |
+| `-n` (no verification), 4 threads | 5.57 MB/s | every file at 823 KB/s or more |
+| `-j 1` (single thread) | 2.16 MB/s | every file at 631 KB/s or more, but one 0.05-s file that measured 441 KB/s in that run (median of 7 runs: 761 KB/s) |
+| `-j 1 -n` | 3.21 MB/s | every file at 904 KB/s or more |
+
+The plan2 lifter (P1–P4, P7) costs 4% in a single thread and 12% with 4 threads, where it is
+the serial part (object text is lifted next to content streams, which take longest): the build
+before it measured 2.26 MB/s and 4.33 MB/s in the same session. Content-heavy files pay the
+most: Way of Men 0.78 → 0.93 s single-threaded (median of 5), of which 0.27 s is lifting 3 MB of
+content streams.
 
 Almost all the time is preflate: the analysis plus the re-encode that verifies each Flate layer.
 The slow files have level-9 text streams or highly compressible images, where preflate costs
@@ -287,7 +293,7 @@ inserted, duplicated ranges), and the 117 files of the 005 set.
 | Encrypted variants, R2/R3/R4/R6 × (3 supplied + 15 qpdf files) | 72/72 extract files identical to the plain rewrite |
 | Decompression bomb (1.1 GiB of zeros in a 1.1 MB Flate stream) | layer kept as `.z` at the 1 GiB cap, round trip intact |
 | qpdf files in stored mode | 14, all without a `%PDF-` header |
-| `d` on corrupted dumps (one dump file bit-flipped, truncated, bytes inserted / deleted / overwritten; 13 inputs, about 3000 cases, ASan + UBSan) | every case ends in an error message or a CRC mismatch; no sanitizer report after the fixes below |
+| `d` on corrupted dumps (one dump file bit-flipped, truncated, bytes inserted / deleted / overwritten; 13 inputs, about 3000 cases, ASan + UBSan; format 7: 6 inputs, 4200 more cases) | every case ends in an error message or a CRC mismatch; no sanitizer report after the fixes below |
 
 `tests/roundtrip.sh` also fails a file whose dump was written in stored mode because the
 encoder's own verify failed, and the sanitizer build treats UBSan reports as fatal.
@@ -295,7 +301,9 @@ encoder's own verify failed, and the sanitizer build treats UBSan reports as fat
 Fuzzing `d` with corrupted dump files found, and fixed: a stack overrun when respelling a lifted
 number with an impossible digit count; in preflate's re-encoder, reads past the input for tokens
 and stored blocks longer than the remaining data, a division by zero and an out-of-range table
-index in the correction decoder, a corrected match length of 0, and blocks without end. The
+index in the correction decoder, a corrected match length of 0, blocks without end, and
+literal/length or distance tree sizes beyond the code tables (a stack overflow while predicting
+the distance tree). The
 preflate guards only fire on corrupt data. GCC 13's UBSan build miscompiles
 `(cond ? L : U)[i]`, which made that build render hex strings wrongly; those expressions use a
 local pointer now.
