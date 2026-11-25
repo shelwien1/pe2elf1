@@ -47,7 +47,9 @@ Single translation unit: `src/pdfdump.cpp` includes the `src/*.inc` modules. `sr
 (from ziprec) is the only code that isn't ours. It carries two speed-only edits, each marked
 `pdfdump:` (an 8-bytes-at-a-time match compare, and the hash-chain walk rejecting a candidate on
 bytes `bestLen-1..bestLen` before calling the compare); match lengths, and so every dump, are
-unchanged (checked byte for byte on the test set).
+unchanged (checked byte for byte on the test set). It also carries guards, marked the same way,
+that turn corrupt correction data into an error instead of an out-of-bounds read (see "Round
+trip and robustness").
 
     make                      # g++ -std=c++17 -O3 -pthread -o pdfdump src/pdfdump.cpp
     make pdfdump-asan         # ASan + UBSan build
@@ -271,6 +273,18 @@ inserted, duplicated ranges), and the 117 files of the 005 set.
 | Encrypted variants, R2/R3/R4/R6 × (3 supplied + 15 qpdf files) | 72/72 extract files identical to the plain rewrite |
 | Decompression bomb (1.1 GiB of zeros in a 1.1 MB Flate stream) | layer kept as `.z` at the 1 GiB cap, round trip intact |
 | qpdf files in stored mode | 14, all without a `%PDF-` header |
+| `d` on corrupted dumps (one dump file bit-flipped, truncated, bytes inserted / deleted / overwritten; 13 inputs, about 3000 cases, ASan + UBSan) | every case ends in an error message or a CRC mismatch; no sanitizer report after the fixes below |
+
+`tests/roundtrip.sh` also fails a file whose dump was written in stored mode because the
+encoder's own verify failed, and the sanitizer build treats UBSan reports as fatal.
+
+Fuzzing `d` with corrupted dump files found, and fixed: a stack overrun when respelling a lifted
+number with an impossible digit count; in preflate's re-encoder, reads past the input for tokens
+and stored blocks longer than the remaining data, a division by zero and an out-of-range table
+index in the correction decoder, a corrected match length of 0, and blocks without end. The
+preflate guards only fire on corrupt data. GCC 13's UBSan build miscompiles
+`(cond ? L : U)[i]`, which made that build render hex strings wrongly; those expressions use a
+local pointer now.
 
 ## Source layout
 
@@ -292,4 +306,4 @@ inserted, duplicated ranges), and the 117 files of the 005 set.
     src/pdf_cmap.inc    CMap bfchar/bfrange blocks as binary
     src/pdf_derive.inc  derived fields: placeholders, stream facts, xref section state
     src/pdf_emit.inc    item records, stream descriptors, recon dictionary, decoder
-    src/preflate.inc    from ziprec (speed-only edits marked "pdfdump:")
+    src/preflate.inc    from ziprec (speed edits and corrupt-data guards marked "pdfdump:")

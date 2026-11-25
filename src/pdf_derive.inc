@@ -280,10 +280,11 @@ static std::string decStr(uint64_t v) {
 static std::string md5Hex(const uint8_t m[16], bool lower) {
   static const char* U = "0123456789ABCDEF";
   static const char* L = "0123456789abcdef";
+  const char* hx = lower ? L : U;  // (a local: GCC 13 UBSan builds miscompile "(c ? L : U)[i]")
   std::string s;
   for (int k = 0; k < 16; k++) {
-    s += (lower ? L : U)[m[k] >> 4];
-    s += (lower ? L : U)[m[k] & 15];
+    s += hx[m[k] >> 4];
+    s += hx[m[k] & 15];
   }
   return s;
 }
@@ -372,10 +373,11 @@ static void strRender(const Bytes& c, int policy, Bytes& out) {
   static const char* U = "0123456789ABCDEF";
   static const char* L = "0123456789abcdef";
   if (policy >= 4) {
+    const char* hx = policy == 5 ? L : U;  // (a local: see md5Hex)
     out.push_back('<');
     for (uint8_t b : c) {
-      out.push_back((uint8_t)(policy == 5 ? L : U)[b >> 4]);
-      out.push_back((uint8_t)(policy == 5 ? L : U)[b & 15]);
+      out.push_back((uint8_t)hx[b >> 4]);
+      out.push_back((uint8_t)hx[b & 15]);
     }
     out.push_back('>');
     return;

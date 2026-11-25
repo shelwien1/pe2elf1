@@ -4860,6 +4860,10 @@ PreflateTokenBlock PreflateTokenPredictor::decodeBlock(PreflatePredictionDecoder
     }
     uint newLen = codec->decodeLenCorrection(predictedToken.len);
     if( newLen!=predictedToken.len ) {
+      if( newLen<3||newLen>258 ) {  // pdfdump: checked below too, but firstMatch() must not see it
+        predictionFailure = true;
+        return PreflateTokenBlock();
+      }
       uint hops = codec->decodeDistAfterLenCorrection();
       predictedToken.len = newLen;
       predictedToken.dist = state.firstMatch(predictedToken.len);
