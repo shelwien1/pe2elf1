@@ -7,7 +7,8 @@
 // a loadable font any more: it is written with the extension .t1d.
 //
 // Recon record: var start of the encrypted part, var its length, u8 flags (bit0: charstrings
-// decrypted, bit1: charstrings split into pools), u8 count + RD token names (length-prefixed);
+// decrypted, bit1: charstrings split into pools, bit2: operand pool grouped per (operator,
+// operand count)), u8 count + RD token names (length-prefixed);
 // with bit1: var lenIV, skeleton length, lead-byte pool length, operator pool length, length of
 // the part after the encrypted section.
 
@@ -115,6 +116,51 @@ static bool t1CsSplit(const uint8_t* c, size_t n, size_t lenIV, Bytes& iv, Bytes
   return true;
 }
 
+// operand pool order (plan2 P6): the operands of every command grouped by (operator, operand
+// count), groups in key order, each in charstring order (slots stay interleaved). The key of
+// every operand comes from the operator pool, which the decoder reads first. xz of the .t1d files
+// of the 120-file set: -1.09%; with the slot in the key +1.02%, by operator alone -0.96%.
+static bool t1OperandKeys(const Bytes& ops, std::vector<uint32_t>& keys) {
+  keys.clear();
+  size_t i = 0;
+  while (i < ops.size()) {
+    uint32_t op = ops[i++], op2 = 0;
+    if (op == 12) {
+      if (i >= ops.size()) return false;
+      op2 = ops[i++];
+    }
+    if (i >= ops.size()) return false;
+    uint32_t cnt = ops[i++];
+    for (uint32_t k = 0; k < cnt; k++) keys.push_back((op * 256 + op2) * 256 + cnt);
+  }
+  return true;
+}
+
+static bool t1GroupOperands(const Bytes& ops, const Bytes& seq, Bytes& out, bool group) {
+  std::vector<uint32_t> keys;
+  if (!t1OperandKeys(ops, keys)) return false;
+  RBuf r(seq);
+  std::vector<uint64_t> v(keys.size());
+  std::map<uint32_t, std::vector<uint64_t>> g;
+  out.clear();
+  if (group) {
+    for (size_t k = 0; k < keys.size(); k++) g[keys[k]].push_back(r.var());
+    for (auto& e : g)
+      for (uint64_t x : e.second) putVarTo(out, x);
+  } else {  // ungroup: seq holds the groups
+    std::map<uint32_t, size_t> cnt;
+    for (uint32_t k : keys) cnt[k]++;
+    std::map<uint32_t, size_t> at;
+    for (auto& e : cnt) {
+      auto& vec = g[e.first];
+      for (size_t k = 0; k < e.second; k++) vec.push_back(r.var());
+      at[e.first] = 0;
+    }
+    for (uint32_t k : keys) putVarTo(out, g[k][at[k]++]);
+  }
+  return r.p == seq.size();
+}
+
 static bool t1CsJoin(RBuf& iv, RBuf& ops, RBuf& nums, size_t lenIV, size_t len, Bytes& out) {
   size_t st = out.size();
   for (size_t k = 0; k < lenIV; k++) out.push_back(iv.u8());
@@ -157,6 +203,11 @@ static bool t1EncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out) {
     Bytes ivB(in.begin() + poolStart, in.begin() + poolStart + ivLen);
     Bytes opsB(in.begin() + poolStart + ivLen, in.begin() + poolStart + ivLen + opsLen);
     Bytes numB(in.begin() + poolStart + ivLen + opsLen, in.end() - tailLen);
+    if (flags & 4) {
+      Bytes seq;
+      if (!t1GroupOperands(opsB, numB, seq, false)) return false;
+      numB.swap(seq);
+    }
     RBuf ivr(ivB), opr(opsB), nr(numB);
     const uint8_t* sk = in.data() + s;
     std::vector<std::pair<size_t, size_t>> heads;
@@ -256,10 +307,16 @@ static bool t1DecodeLayer(const Bytes& in, Bytes& out, Bytes& recon, bool charst
     }
     if (split) skel.insert(skel.end(), p + pos, p + len);
   }
+  bool grouped = false;
+  if (split) {
+    Bytes g;
+    grouped = t1GroupOperands(opsP, numP, g, true);
+    if (grouped) numP.swap(g);
+  }
   recon.clear();
   putVarTo(recon, s);
   putVarTo(recon, len);
-  recon.push_back((uint8_t)((csDecrypt ? 1 : 0) | (split ? 2 : 0)));
+  recon.push_back((uint8_t)((csDecrypt ? 1 : 0) | (split ? 2 : 0) | (grouped ? 4 : 0)));
   recon.push_back((uint8_t)rd.size());
   for (auto& x : rd) putLenBytesTo(recon, (const uint8_t*)x.data(), x.size());
   if (split) {

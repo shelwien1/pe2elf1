@@ -17,6 +17,13 @@
 //   X  /XRefStm = start of the latest XRef stream object
 //   e  encrypted string, stored as plaintext   f  forward slot   G  signature blob (.p7s)
 //   B  base64 blob (.b64, .b64r)
+//   w  start of a /Widths or /W array whose widths come from the embedded font, stands for "[":
+//      letter 'a' + (kind | map << 2), letter 'a' + rule, then " <ordinal> <FirstChar> " in decimal
+//      (the own-file ordinal of the font program; text, so that the number lifter reads it as
+//      numbers and no payload byte can open a string or a comment for it)
+//   x  a width of that array, as the font predicts it (see pdf_font.inc)
+//   k  "N G R": the structure parent (/P) of this top-level object, from the /K of earlier objects
+//   K  the same for ObjStm member k: " <k> " follows in decimal
 
 static const uint8_t kDerivEsc = 4;
 
@@ -693,15 +700,358 @@ static bool fwdApply(Bytes& out, const std::vector<uint64_t>& itemStart, const s
   return true;
 }
 
+// ---- widths from embedded fonts (plan2 P8) ------------------------------------------------------
+// Font programs by own-file ordinal; kind decides the parser and the file extension.
+struct DerivFonts {
+  std::function<Bytes(uint32_t, const std::string&)> load;
+  std::map<std::pair<uint32_t, bool>, std::unique_ptr<FontMetrics>> cache;
+  const FontMetrics* get(uint32_t ord, bool cff) {
+    auto& e = cache[{ord, cff}];
+    if (!e) {
+      e.reset(new FontMetrics());
+      if (load) {
+        Bytes b = load(ord, cff ? "cff" : "ttf");
+        if (cff) parseCff(b.data(), b.size(), *e);
+        else parseTrueType(b.data(), b.size(), *e);
+      }
+    }
+    return e->ok ? e.get() : nullptr;
+  }
+};
+
+struct WidthTok {
+  int t;  // 0 number, '[' or ']'
+  size_t a, b;
+};
+
+// tokens of the array that opens at p[a]; false unless it holds only numbers, brackets and spaces
+static bool widthsTokens(const uint8_t* p, size_t n, size_t a, std::vector<WidthTok>& out) {
+  out.clear();
+  int depth = 0;
+  for (size_t i = a; i < n;) {
+    uint8_t c = p[i];
+    if (isWS(c)) { i++; continue; }
+    if (c == '[') { out.push_back({'[', i, i + 1}); depth++; i++; continue; }
+    if (c == ']') {
+      out.push_back({']', i, i + 1});
+      i++;
+      if (--depth == 0) return true;
+      continue;
+    }
+    if (!widthNumStart(c)) return false;
+    size_t j = i;
+    while (j < n && isRegular(p[j])) j++;
+    out.push_back({0, i, j});
+    i = j;
+  }
+  return false;
+}
+
+// position of the value of `key` ("/Widths") in the outermost dictionary of an object's text;
+// SIZE_MAX if absent. Strings, hex strings and comments are skipped.
+static size_t topKeyValue(const uint8_t* p, size_t n, const char* key) {
+  size_t kl = strlen(key);
+  int dd = 0, ad = 0;
+  for (size_t i = 0; i < n;) {
+    uint8_t c = p[i];
+    if (c == '(') {
+      int depth = 1;
+      for (i++; i < n && depth; i++) {
+        if (p[i] == '\\') { i++; continue; }
+        depth += p[i] == '(' ? 1 : p[i] == ')' ? -1 : 0;
+      }
+    } else if (c == '%') {
+      while (i < n && p[i] != '\r' && p[i] != '\n') i++;
+    } else if (c == '<' && i + 1 < n && p[i + 1] == '<') { dd++; i += 2; }
+    else if (c == '>' && i + 1 < n && p[i + 1] == '>') { dd--; i += 2; }
+    else if (c == '<') { while (i < n && p[i] != '>') i++; i++; }
+    else if (c == '[') { ad++; i++; }
+    else if (c == ']') { ad--; i++; }
+    else if (c == '/') {
+      size_t j = i + 1;
+      while (j < n && isRegular(p[j])) j++;
+      if (dd == 1 && ad == 0 && j - i == kl && memcmp(p + i, key, kl) == 0) {
+        while (j < n && isWS(p[j])) j++;
+        return j < n ? j : SIZE_MAX;
+      }
+      i = j;
+    } else {
+      i++;
+    }
+  }
+  return SIZE_MAX;
+}
+
+// ---- structure parents (plan2 P8) ---------------------------------------------------------------
+// child object number -> (parent number, parent generation), from every /K seen so far: a direct
+// reference or the references in a /K array. Both sides add an object's /K after its own /P is
+// done, top-level objects in item order and ObjStm members in member order.
+struct StructMap {
+  std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>> parent;
+};
+
+// text of one object value (no "N G obj" header)
+static void structAddKids(const uint8_t* p, size_t n, uint32_t num, uint32_t gen, StructMap& sm) {
+  bool any = false;
+  for (const uint8_t* q = p; (q = memfind(q, n - (q - p), "/K", 2)) != nullptr; q += 2)
+    if (q + 2 >= p + n || !isRegular(q[2])) { any = true; break; }
+  if (!any) return;
+  Lexer lx(p, n, 0);
+  Obj o;
+  if (!lx.parse(o) || o.t != Obj::DICT) return;
+  const Obj* k = o.get("K");
+  if (!k) return;
+  auto add = [&](const Obj& r) {
+    if (r.t == Obj::REF && r.i >= 0 && r.i <= 0xFFFFFFFFll) sm.parent[(uint32_t)r.i] = {num, gen};
+  };
+  if (k->t == Obj::ARR) for (auto& e : k->a) add(e);
+  else add(*k);
+}
+
+// "N G R" at p[a]; its end in e
+static bool refAt(const uint8_t* p, size_t n, size_t a, uint64_t& num, uint64_t& gen, size_t& e) {
+  size_t i = a;
+  uint64_t v[2];
+  for (int f = 0; f < 2; f++) {
+    size_t d0 = i;
+    v[f] = 0;
+    while (i < n && p[i] >= '0' && p[i] <= '9' && i - d0 < 10) v[f] = v[f] * 10 + (p[i++] - '0');
+    if (i == d0 || i >= n || p[i] != ' ') return false;
+    i++;
+  }
+  if (i >= n || p[i] != 'R' || (i + 1 < n && isRegular(p[i + 1]))) return false;
+  num = v[0];
+  gen = v[1];
+  e = i + 1;
+  return true;
+}
+
+static std::string refStr(std::pair<uint32_t, uint32_t> r) {
+  return decStr(r.first) + " " + decStr(r.second) + " R";
+}
+
+// encoder: placeholder for /P of object `num` when the map predicts it; v = value text (no
+// header), base = its offset in the text the edit applies to. member < 0: top-level object.
+static bool structChoose(const uint8_t* v, size_t n, size_t base, uint32_t num, long member, const StructMap& sm,
+                         std::vector<DerivEdit>& edits) {
+  auto f = sm.parent.find(num);
+  if (f == sm.parent.end()) return false;
+  size_t a = topKeyValue(v, n, "/P"), e;
+  uint64_t pn, pg;
+  if (a == SIZE_MAX || !refAt(v, n, a, pn, pg, e) || refStr(f->second) != std::string((const char*)v + a, e - a))
+    return false;
+  Bytes rep{kDerivEsc, (uint8_t)(member < 0 ? 'k' : 'K')};
+  if (member >= 0) {
+    std::string m = " " + decStr((uint64_t)member) + " ";
+    rep.insert(rep.end(), m.begin(), m.end());
+  }
+  edits.push_back({base + a, base + e, rep});
+  return true;
+}
+
+// ObjStm members: numbers from the L_OBJSTM recon, offsets predicted from the member text as the
+// layer does. The decoder computes the offsets as the text is restored: member k's start is
+// known once members before it are complete.
+static bool objstmReconNums(const Bytes& recon, std::vector<uint64_t>& nums, bool& exact, std::vector<int64_t>& corr) {
+  RBuf r(recon);
+  size_t N = r.len();
+  r.u8();
+  r.u8();
+  Bytes tail;
+  r.bytes(r.len(), tail);
+  nums.assign(N, 0);
+  uint64_t prev = (uint64_t)-1;
+  for (auto& v : nums) {
+    v = prev + 1 + (uint64_t)unzigzag(r.var());
+    if (v > 0xFFFFFFFFull) return false;
+    prev = v;
+  }
+  exact = r.u8() != 0;
+  corr.assign(N, 0);
+  if (!exact)
+    for (auto& c : corr) c = unzigzag(r.var());
+  return true;
+}
+
+struct ObjstmMembers {
+  std::vector<uint64_t> nums, offs;
+  std::vector<int64_t> corr;
+  bool exact = true;
+  size_t added = 0;  // members whose /K is in the map
+  bool init(const StreamDesc& sd) {
+    if (sd.layers.empty() || sd.layers.back().type != L_OBJSTM) return false;
+    return objstmReconNums(sd.layers.back().recon, nums, exact, corr) && !nums.empty();
+  }
+  // start of member k in text t (members before k complete)
+  bool start(const uint8_t* t, size_t n, size_t k, uint64_t& s) {
+    while (offs.size() <= k) {
+      uint64_t pred;
+      objstmPredict(t, n, offs.size(), offs, pred);
+      uint64_t o = pred + (uint64_t)corr[offs.size()];
+      if (o > n || (!offs.empty() && o < offs.back())) return false;
+      offs.push_back(o);
+    }
+    s = offs[k];
+    return true;
+  }
+  // /K of members [added, k) into the map; final: k == count, the last member ends at n
+  bool advance(const uint8_t* t, size_t n, size_t k, StructMap& sm) {
+    if (k > nums.size()) return false;
+    while (added < k) {
+      uint64_t a, b = n;
+      if (!start(t, n, added, a) || (added + 1 < nums.size() && !start(t, n, added + 1, b))) return false;
+      structAddKids(t + a, (size_t)(b - a), (uint32_t)nums[added], 0, sm);
+      added++;
+    }
+    return true;
+  }
+};
+
+// ObjStm streams whose members both sides see as text
+static bool objstmMembersOf(const StreamDesc& sd) {
+  return sd.cls == SC_OBJSTM && sd.storage == ST_TXT && !sd.layers.empty() && sd.layers.back().type == L_OBJSTM;
+}
+
+static size_t objBodyStart(const uint8_t* p, size_t n) {
+  Lexer lx(p, n, 0);
+  uint64_t a, g;
+  if (lx.parseUInt(a) && lx.parseUInt(g) && lx.eatKeyword("obj")) return lx.pos;
+  return SIZE_MAX;
+}
+
+// what the member and structure placeholders need on the decoder side
+struct DerivExtra {
+  DerivFonts* fonts = nullptr;
+  StructMap* sm = nullptr;
+  ObjstmMembers* members = nullptr;  // decoding ObjStm member text
+};
+
+// encoder: placeholders for the /Widths or /W array opening at p[a]; the map and rule with the
+// most exact predictions win. Returns the number of widths replaced.
+static size_t widthsChoose(const uint8_t* p, size_t n, size_t a, int kind, uint32_t ord, uint32_t first,
+                           const FontMetrics& m, std::vector<DerivEdit>& edits) {
+  std::vector<WidthTok> tk;
+  if (!widthsTokens(p, n, a, tk)) return 0;
+  auto run = [&](int map, int rule, std::vector<size_t>* hitTok) -> size_t {
+    WidthsWalk ww;
+    ww.cid = kind == WK_CID2;
+    ww.first = first;
+    size_t hits = 0;
+    std::string s;
+    for (size_t t = 0; t < tk.size() && !ww.bad; t++) {
+      const WidthTok& w = tk[t];
+      if (w.t == '[') ww.open();
+      else if (w.t == ']') ww.close();
+      else {
+        uint32_t code;
+        if (ww.widthNext(code) && widthPredict(m, kind, map, rule, code, s) && s.size() == w.b - w.a &&
+            memcmp(s.data(), p + w.a, s.size()) == 0) {
+          hits++;
+          if (hitTok) hitTok->push_back(t);
+        }
+        ww.number(p + w.a, w.b - w.a);
+      }
+    }
+    return ww.bad || !ww.done ? 0 : hits;
+  };
+  int bestMap = 0, bestRule = 0;
+  size_t best = 0;
+  for (int map = 0; map < (kind == WK_TT ? kWidthMaps : 1); map++)
+    for (int rule = 0; rule < kWidthRules; rule++) {
+      size_t h = run(map, rule, nullptr);
+      if (h > best) { best = h; bestMap = map; bestRule = rule; }
+    }
+  if (best < 3) return 0;
+  std::vector<size_t> hit;
+  run(bestMap, bestRule, &hit);
+  Bytes rep{kDerivEsc, 'w', (uint8_t)('a' + (kind | bestMap << 2)), (uint8_t)('a' + bestRule)};
+  char buf[32];
+  int l = snprintf(buf, sizeof(buf), " %u %u ", ord, first);
+  rep.insert(rep.end(), buf, buf + l);
+  edits.push_back({a, a + 1, rep});
+  for (size_t t : hit) edits.push_back({tk[t].a, tk[t].b, Bytes{kDerivEsc, 'x'}});
+  return hit.size();
+}
+
 // decoder: placeholders resolved
 static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const DeriveState& ds, uint32_t objNum,
                         Bytes& out, const DerivCrypt* dc = nullptr, std::vector<FwdPatch>* fwd = nullptr,
-                        SigBlobs* sig = nullptr, B64Blobs* b64 = nullptr) {
+                        SigBlobs* sig = nullptr, B64Blobs* b64 = nullptr, DerivExtra* ex = nullptr) {
+  DerivFonts* fonts = ex ? ex->fonts : nullptr;
   out.clear();
   for (size_t i = 0; i < n; i++) {
     if (p[i] != kDerivEsc) { out.push_back(p[i]); continue; }
     if (++i >= n) return false;
     if (p[i] == kDerivEsc) { out.push_back(kDerivEsc); continue; }
+    if (p[i] == 'k' || p[i] == 'K') {
+      if (!ex || !ex->sm) return false;
+      uint32_t child = objNum;
+      if (p[i] == 'K') {
+        if (!ex->members || i + 1 >= n || p[i + 1] != ' ') return false;
+        size_t j = i + 2, d0 = j;
+        uint64_t k = 0;
+        while (j < n && p[j] >= '0' && p[j] <= '9' && j - d0 < 10) k = k * 10 + (p[j++] - '0');
+        if (j == d0 || j >= n || p[j] != ' ' || k >= ex->members->nums.size()) return false;
+        if (!ex->members->advance(out.data(), out.size(), (size_t)k, *ex->sm)) return false;
+        child = (uint32_t)ex->members->nums[(size_t)k];
+        i = j;
+      }
+      auto f = ex->sm->parent.find(child);
+      if (f == ex->sm->parent.end()) return false;
+      std::string v = refStr(f->second);
+      out.insert(out.end(), v.begin(), v.end());
+      continue;
+    }
+    if (p[i] == 'w') {
+      if (!fonts || i + 2 >= n || p[i + 1] < 'a' || p[i + 2] < 'a') return false;
+      int km = p[i + 1] - 'a', kind = km & 3, map = km >> 2, rule = p[i + 2] - 'a';
+      if (kind >= WK_COUNT || map >= kWidthMaps || rule >= kWidthRules) return false;
+      i += 3;
+      uint64_t num[2];
+      for (int f = 0; f < 2; f++) {
+        if (i >= n || p[i++] != ' ') return false;
+        size_t d0 = i;
+        num[f] = 0;
+        while (i < n && p[i] >= '0' && p[i] <= '9' && i - d0 < 10) num[f] = num[f] * 10 + (p[i++] - '0');
+        if (i == d0) return false;
+      }
+      if (i >= n || p[i++] != ' ') return false;
+      uint64_t ord = num[0], first = num[1];
+      if (ord > 0xFFFFFFFFull || first > 0xFFFFFF) return false;
+      const FontMetrics* m = fonts->get((uint32_t)ord, kind == WK_CFF);
+      if (!m) return false;
+      WidthsWalk ww;
+      ww.cid = kind == WK_CID2;
+      ww.first = (uint32_t)first;
+      ww.open();
+      out.push_back('[');
+      std::string s;
+      while (!ww.done) {
+        if (i >= n || ww.bad) return false;
+        uint8_t c = p[i];
+        if (isWS(c)) { out.push_back(c); i++; }
+        else if (c == '[') { ww.open(); out.push_back(c); i++; }
+        else if (c == ']') { ww.close(); out.push_back(c); i++; }
+        else if (c == kDerivEsc && i + 1 < n && p[i + 1] == 'x') {
+          uint32_t code;
+          if (!ww.widthNext(code) || !widthPredict(*m, kind, map, rule, code, s)) return false;
+          out.insert(out.end(), s.begin(), s.end());
+          ww.number((const uint8_t*)s.data(), s.size());
+          i += 2;
+        } else if (widthNumStart(c)) {
+          size_t j = i;
+          while (j < n && isRegular(p[j]) && p[j] != kDerivEsc) j++;
+          ww.number(p + i, j - i);
+          out.insert(out.end(), p + i, p + j);
+          i = j;
+        } else {
+          return false;
+        }
+      }
+      if (ww.bad) return false;
+      i--;
+      continue;
+    }
     if (p[i] == 'f') {
       if (!fwd) return false;
       Bytes rest(p + i + 1, p + n);

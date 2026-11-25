@@ -48,6 +48,7 @@ namespace pdd {
 #include "pdf_bmp.inc"
 #include "pdf_tiff.inc"
 #include "pdf_icc.inc"
+#include "pdf_font.inc"
 #include "pdf_ccitt.inc"
 #include "pdf_t1.inc"
 #include "pdf_objstm.inc"
@@ -119,7 +120,7 @@ struct Stats {
   uint64_t typedBytes = 0, payloadBytes = 0, layeredPayload = 0;
   uint64_t bmpCount = 0;
   uint64_t derived = 0, stringsDecrypted = 0, sigBlobs = 0, rgbaMerged = 0, b64Blobs = 0, b64Bytes = 0, xmpThumbs = 0,
-           iccRefs = 0, itemLenPredicted = 0;
+           iccRefs = 0, itemLenPredicted = 0, widthArrays = 0, widthsDerived = 0, structParents = 0, membersDerived = 0;
 };
 
 class Encoder {
@@ -259,6 +260,10 @@ class Encoder {
   CodecCtx ctx_;
   std::deque<std::vector<std::pair<uint32_t, Obj>>> members_;
   std::unordered_map<int, int> streamOfItem_;
+  std::vector<uint32_t> ownOrd_;                     // stream -> own-file ordinal (ST_FILE)
+  std::unordered_map<uint32_t, size_t> streamByNum_;  // object number -> stream
+  std::unordered_map<uint32_t, std::unique_ptr<FontMetrics>> fontCache_;  // by own-file ordinal
+  StructMap sm_;                                      // structure parents, in item order
   std::unordered_map<uint32_t, std::vector<int>> streamsByNum_;
   std::vector<Bytes> b64Orig_;  // original zlib bytes per base64 blob (verify shortcut)
   std::unordered_map<uint64_t, std::vector<int>> cache_;
@@ -1045,10 +1050,121 @@ class Encoder {
     }
   }
 
+  // own-file ordinals in file order, and duplicates, decided before any item is written: a font
+  // dictionary can name its font program's file before the program's own item comes
+  void assignOrdinals() {
+    ownOrd_.assign(streams.size(), UINT32_MAX);
+    streamByNum_.clear();
+    std::unordered_map<uint64_t, std::vector<size_t>> seen;
+    uint32_t next = 0;
+    for (size_t i = 0; i < seg.items.size(); i++) {
+      if (seg.items[i].kind != Item::STREAM) continue;
+      size_t si = (size_t)streamOfItem_[(int)i];
+      StreamRec& s = streams[si];
+      streamByNum_[seg.items[i].num] = si;
+      if (s.desc.storage != ST_FILE) continue;
+      if (opt_.dedup) {
+        uint64_t h = hash64(s.data.data(), s.data.size()) ^ ((uint64_t)s.data.size() * 0x9E3779B97F4A7C15ull);
+        bool dup = false;
+        for (size_t k : seen[h])
+          if (streams[k].data == s.data) {
+            s.desc.storage = ST_DUP;
+            s.desc.ordinal = ownOrd_[k];
+            dup = true;
+            break;
+          }
+        if (dup) continue;
+        seen[h].push_back(si);
+      }
+      ownOrd_[si] = next++;
+    }
+  }
+
+  // /Widths of simple TrueType and Type1C fonts, /W of CIDFontType2 fonts (identity CIDToGIDMap):
+  // widths the embedded font program predicts become placeholders (plan2 P8)
+  // p: the object's value (no header); edits are made at base + offset
+  void widthsDerive(const uint8_t* p, size_t n, size_t base, std::vector<DerivEdit>& edits) {
+    if (!memfind(p, n, "/Widths", 7) && !memfind(p, n, "/CIDFontType2", 13)) return;
+    Lexer lx(p, n, 0);
+    Obj o;
+    if (!lx.parse(o) || o.t != Obj::DICT) return;
+    const Obj* sub = o.get("Subtype");
+    if (!sub || sub->t != Obj::NAME) return;
+    int kind;
+    if (sub->s == "TrueType") kind = WK_TT;
+    else if (sub->s == "Type1" || sub->s == "MMType1") kind = WK_CFF;
+    else if (sub->s == "CIDFontType2") kind = WK_CID2;
+    else return;
+    const char* key = kind == WK_CID2 ? "/W" : "/Widths";
+    const Obj* arr = o.get(key + 1);
+    if (!arr || arr->t != Obj::ARR) return;
+    uint32_t first = 0;
+    if (kind == WK_CID2) {
+      const Obj* m = idx_.resolve(o.get("CIDToGIDMap"));
+      if (m && !(m->t == Obj::NAME && m->s == "Identity")) return;
+    } else {
+      const Obj* fc = idx_.resolve(o.get("FirstChar"));
+      if (!fc || fc->t != Obj::INT || fc->i < 0 || fc->i > 0xFFFF) return;
+      first = (uint32_t)fc->i;
+    }
+    const Obj* fd = idx_.resolve(o.get("FontDescriptor"));
+    if (!fd || fd->t != Obj::DICT) return;
+    const Obj* ff = fd->get(kind == WK_CFF ? "FontFile3" : "FontFile2");
+    if (!ff || ff->t != Obj::REF) return;
+    auto sf = streamByNum_.find((uint32_t)ff->i);
+    if (sf == streamByNum_.end()) return;
+    const StreamRec& s = streams[sf->second];
+    const char* ext = kind == WK_CFF ? "cff" : "ttf";
+    if (s.remain != R_DONE || s.desc.ext != ext || (s.desc.storage != ST_FILE && s.desc.storage != ST_DUP)) return;
+    uint32_t ord = s.desc.storage == ST_DUP ? s.desc.ordinal : ownOrd_[sf->second];
+    if (ord == UINT32_MAX) return;
+    auto& fm = fontCache_[ord];
+    if (!fm) {
+      fm.reset(new FontMetrics());
+      const Bytes* b = !s.data.empty() ? &s.data : ord < dump.ownData.size() ? &dump.ownData[ord] : nullptr;
+      if (b && kind == WK_CFF) parseCff(b->data(), b->size(), *fm);
+      else if (b) parseTrueType(b->data(), b->size(), *fm);
+    }
+    if (!fm->ok || fm->cff != (kind == WK_CFF)) return;
+    size_t at = topKeyValue(p, n, key);
+    if (at == SIZE_MAX || p[at] != '[') return;
+    std::vector<DerivEdit> we;
+    size_t got = widthsChoose(p, n, at, kind, ord, first, *fm, we);
+    for (auto& e : we) edits.push_back({e.a + base, e.b + base, e.rep});
+    if (got) {
+      st.widthArrays++;
+      st.widthsDerived += got;
+    }
+  }
+
+  // ObjStm members: /P and widths placeholders inside the member text; every member's /K goes into
+  // the structure map in member order. False if nothing was replaced (the text stays as it is).
+  bool membersDerive(const StreamRec& s, Bytes& out) {
+    ObjstmMembers mem;
+    if (!mem.init(s.desc)) return false;
+    const Bytes& M = s.data;
+    std::vector<DerivEdit> ed;
+    size_t N = mem.nums.size();
+    for (size_t k = 0; k < N; k++) {
+      uint64_t a, b = M.size();
+      if (!mem.start(M.data(), M.size(), k, a) || (k + 1 < N && !mem.start(M.data(), M.size(), k + 1, b))) break;
+      const uint8_t* v = M.data() + a;
+      size_t vn = (size_t)(b - a);
+      uint32_t num = (uint32_t)mem.nums[k];
+      if (structChoose(v, vn, (size_t)a, num, (long)k, sm_, ed)) st.structParents++;
+      widthsDerive(v, vn, (size_t)a, ed);
+      structAddKids(v, vn, num, 0, sm_);
+    }
+    if (ed.empty()) return false;
+    derivEncode(M.data(), M.size(), ed, out);
+    st.membersDerived++;
+    return true;
+  }
+
   void emit() {
     ChanWriter w(dump);
     EmitState es;
-    std::unordered_map<uint64_t, std::vector<uint32_t>> dedup;
+    assignOrdinals();
     ObjPositions objPos;
     DeriveState ds;
     StreamFacts noFacts;
@@ -1093,8 +1209,18 @@ class Encoder {
           st.stringsDecrypted += edits.size() - before;
         }
       }
+      size_t body = SIZE_MAX;
+      uint32_t hn = 0, hg = 0;
+      if (kind == 1 && opt_.derive && objHeaderOf(in_.data() + a, b - a, hn, hg)) {
+        body = objBodyStart(in_.data() + a, b - a);
+        if (body != SIZE_MAX) {
+          if (structChoose(in_.data() + a + body, b - a - body, body, hn, -1, sm_, edits)) st.structParents++;
+          widthsDerive(in_.data() + a + body, b - a - body, body, edits);
+        }
+      }
       derivEncode(in_.data() + a, b - a, edits, txt);
       st.derived += edits.size();
+      if (body != SIZE_MAX) structAddKids(in_.data() + a + body, b - a - body, hn, hg, sm_);
     };
     for (size_t i = 0; i < seg.items.size(); i++) {
       const Item& it = seg.items[i];
@@ -1131,21 +1257,12 @@ class Encoder {
           writeXref(w, seg.xrefs[it.xref], objPos, opt_.derive ? &itemAt : nullptr);
           break;
         case Item::STREAM: {
-          StreamRec& s = streams[streamOfItem_[(int)i]];
+          size_t si = (size_t)streamOfItem_[(int)i];
+          StreamRec& s = streams[si];
           w.u8(CH_S, I_STREAM);
-          uint64_t h = 0;
-          if (s.desc.storage == ST_FILE && opt_.dedup) {
-            h = hash64(s.data.data(), s.data.size()) ^ ((uint64_t)s.data.size() * 0x9E3779B97F4A7C15ull);
-            auto f = dedup.find(h);
-            if (f != dedup.end())
-              for (uint32_t k : f->second)
-                if (dump.ownData[k] == s.data) {
-                  s.desc.storage = ST_DUP;
-                  s.desc.ordinal = k;
-                  break;
-                }
-          }
           accountStream(s);
+          Bytes members;
+          if (opt_.derive && objstmMembersOf(s.desc) && membersDerive(s, members)) s.desc.membersDerived = true;
           // facts for derived fields come from the stored form, exactly as the decoder sees it
           StreamFacts f;
           f.payloadKnown = true;
@@ -1167,8 +1284,8 @@ class Encoder {
           derived(it.start, it.dataStart, 2, s.desc.cls, f, num);
           Bytes prefix;
           prefix.swap(txt);
-          writeStreamDesc(w, es, s.desc, s.data);
-          if (s.desc.storage == ST_FILE && opt_.dedup) dedup[h].push_back(s.desc.ordinal);
+          writeStreamDesc(w, es, s.desc, s.desc.membersDerived ? members : s.data);
+          if (s.desc.storage == ST_FILE && s.desc.ordinal != ownOrd_[si]) fail("own file ordinal out of order");
           itemText(w, IL_PRE, prefix);
           uint32_t lr;
           if (lengthRefOf(in_.data() + it.start, it.dataStart - it.start, lr)) ds.lenRef[lr] = s.payload;
@@ -1300,6 +1417,11 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
   if (st.xmpThumbs) printf("XMP thumbnails as JPEG: %llu\n", (unsigned long long)st.xmpThumbs);
   if (st.iccRefs) printf("ICC profiles from the built-in table: %llu\n", (unsigned long long)st.iccRefs);
   if (st.itemLenPredicted) printf("item lengths predicted from the text: %llu\n", (unsigned long long)st.itemLenPredicted);
+  if (st.structParents) printf("structure parents (/P) from /K: %llu\n", (unsigned long long)st.structParents);
+  if (st.membersDerived) printf("ObjStm streams with derived member fields: %llu\n", (unsigned long long)st.membersDerived);
+  if (st.widthArrays)
+    printf("widths from the embedded fonts: %llu in %llu arrays\n", (unsigned long long)st.widthsDerived,
+           (unsigned long long)st.widthArrays);
   if (st.derived)
     printf("derived fields: %llu\n", (unsigned long long)(st.derived - st.stringsDecrypted - st.sigBlobs - st.b64Blobs));
   if (st.b64Blobs)

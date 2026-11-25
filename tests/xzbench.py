@@ -7,7 +7,10 @@ Also reports c throughput (input bytes / c wall time, verify included) and a bre
 the dump by output type (each file compressed on its own, summed per extension; only a
 guide to where the bytes are, the solid tar is the real number).
 
-  python3 -I tests/xzbench.py [-b pdfdump] [-j N] [-x "c options"] [-o out.csv] files...
+  python3 -I tests/xzbench.py [-b pdfdump] [-j N] [-x "c options"] [-r N] [-o out.csv] files...
+
+-r N runs c N times per file and takes the fastest run as its time (default 1): on a shared
+machine a single run of a file that takes tens of milliseconds can be twice as slow.
 """
 import argparse, collections, csv, io, lzma, os, subprocess, sys, tarfile, tempfile, time
 from concurrent.futures import ProcessPoolExecutor
@@ -35,12 +38,17 @@ def xz(data):
 
 
 def bench(args):
-    pdfdump, extra, path = args
+    pdfdump, extra, path, repeat = args
     with tempfile.TemporaryDirectory() as td:
         prefix = os.path.join(td, 'd')
-        t0 = time.time()
-        r = subprocess.run([pdfdump, 'c', '-q'] + extra + [path, prefix], capture_output=True)
-        ct = time.time() - t0
+        ct = None
+        for _ in range(max(1, repeat)):
+            t0 = time.time()
+            r = subprocess.run([pdfdump, 'c', '-q'] + extra + [path, prefix], capture_output=True)
+            t = time.time() - t0
+            ct = t if ct is None else min(ct, t)
+            if r.returncode:
+                break
         if r.returncode:
             return {'file': path, 'error': r.stderr.decode(errors='replace')[:200]}
         names = sorted(os.listdir(td))
@@ -65,12 +73,13 @@ def main():
     ap.add_argument('-b', default='./pdfdump')
     ap.add_argument('-j', type=int, default=os.cpu_count())
     ap.add_argument('-x', default='')
+    ap.add_argument('-r', type=int, default=1, help='runs of c per file; the fastest one counts')
     ap.add_argument('-o')
     ap.add_argument('-q', action='store_true', help='totals only')
     ap.add_argument('files', nargs='+')
     a = ap.parse_args()
     extra = a.x.split()
-    jobs = [(os.path.abspath(a.b), extra, f) for f in a.files]
+    jobs = [(os.path.abspath(a.b), extra, f, a.r) for f in a.files]
     with ProcessPoolExecutor(a.j) as ex:
         res = list(ex.map(bench, jobs))
     tot = collections.Counter()

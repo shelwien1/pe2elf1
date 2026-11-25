@@ -18,6 +18,7 @@ struct StreamDesc {
   uint8_t iv[16] = {};
   std::vector<Layer> layers;  // undo order: outermost filter first
   bool deferred = false;      // restored after the last item (forward-dependent XRef stream)
+  bool membersDerived = false;  // ObjStm: member text stored with derived-field placeholders
   uint64_t payloadLen = 0;    // deferred: payload size (space reserved when the item is written)
 };
 
@@ -104,7 +105,7 @@ static void writeStreamDesc(ChanWriter& w, EmitState& st, StreamDesc& sd, Bytes&
     st.prevCipherNum = sd.num;
   }
   if (sd.cipher == CI_AES128 || sd.cipher == CI_AES256) w.put(CH_R, sd.iv, 16);
-  w.u8(CH_S, sd.deferred ? 1 : 0);
+  w.u8(CH_S, (sd.deferred ? 1 : 0) | (sd.membersDerived ? 2 : 0));
   if (sd.deferred) w.var(CH_N, sd.payloadLen);
   w.u8(CH_S, (uint8_t)sd.layers.size());
   for (auto& l : sd.layers) {
@@ -154,8 +155,9 @@ static void readStreamDesc(ChanReader& r, ReadState& st, StreamDesc& sd, Bytes& 
   }
   if (sd.cipher == CI_AES128 || sd.cipher == CI_AES256) memcpy(sd.iv, r.get(CH_R, 16), 16);
   uint8_t flags = r.u8(CH_S);
-  if (flags > 1) fail("bad stream flags");
+  if (flags > 3) fail("bad stream flags");
   sd.deferred = flags & 1;
+  sd.membersDerived = (flags & 2) != 0;
   if (sd.deferred) sd.payloadLen = r.len(CH_N);
   size_t nl = r.u8(CH_S);
   sd.layers.resize(nl);
@@ -228,6 +230,12 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
   }
   ChanReader::OwnLoader blobLoader = loader;
   ChanReader r(*use, meta0, std::move(loader), &d.ownData);
+  DerivFonts fonts;
+  fonts.load = [&](uint32_t ord, const std::string& ext) { return r.own(ord, ext); };
+  StructMap sm;
+  DerivExtra ex;
+  ex.fonts = &fonts;
+  ex.sm = &sm;
   const Bytes& tchan = use->chan[use->hdr.map.fileOf[CH_T]];
   ItemLenPredictor ilp(tchan.data(), tchan.size());
   const Bytes& iln = d.aux[AX_ILN];
@@ -296,7 +304,11 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
         bool hdr = tag == I_OBJ && objHeaderOf(p, n, num, gen);
         if (hdr) objPos.add(num, gen, out.size() - bias);
         DerivCrypt dc{&d.hdr.fileKey, num, hdr ? gen : 0};
-        if (!derivDecode(p, n, noFacts, ds, num, txt, &dc, &local, &sig, &b64)) fail("bad derived field in item text");
+        if (!derivDecode(p, n, noFacts, ds, num, txt, &dc, &local, &sig, &b64, &ex)) fail("bad derived field in item text");
+        if (hdr) {
+          size_t b0 = objBodyStart(txt.data(), txt.size());
+          if (b0 != SIZE_MAX) structAddKids(txt.data() + b0, txt.size() - b0, num, gen, sm);
+        }
         rebase(out.size());
         out.insert(out.end(), txt.begin(), txt.end());
         break;
@@ -319,6 +331,22 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
         Bytes data;
         readStreamDesc(r, st, sd, data, ordExt);
         if (!sd.layers.empty() && sd.layers.back().type == L_RGBA) rgbaSrc[streamNo] = data;
+        if (objstmMembersOf(sd)) {
+          ObjstmMembers mem;
+          bool ok = mem.init(sd);
+          if (sd.membersDerived) {
+            if (!ok) fail("bad derived ObjStm members");
+            Bytes real;
+            ex.members = &mem;
+            bool good = derivDecode(data.data(), data.size(), noFacts, ds, 0, real, nullptr, nullptr, nullptr, nullptr, &ex);
+            ex.members = nullptr;
+            if (!good) fail("bad derived field in ObjStm members");
+            data.swap(real);
+          }
+          if (ok) mem.advance(data.data(), data.size(), mem.nums.size(), sm);
+        } else if (sd.membersDerived) {
+          fail("bad stream flags");
+        }
         size_t n = itemLen(IL_PRE);
         const uint8_t* p = r.get(CH_T, n);
         uint64_t start = out.size();

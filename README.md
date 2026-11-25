@@ -17,7 +17,7 @@ redundancy inventory of §2A, M6, M7, M9 stage 1, and the M10 ideas that measure
 
 | Transform | What it removes / reorders |
 |---|---|
-| Type 1 decryption (`L_T1`) | eexec and charstring encryption of embedded Type 1 fonts → `.t1d`; charstrings split into lead bytes, operators and operands |
+| Type 1 decryption (`L_T1`) | eexec and charstring encryption of embedded Type 1 fonts → `.t1d`; charstrings split into lead bytes, operators and operands, operands ordered by (operator, operand count) |
 | Number lifting, content streams | numbers → `.csn`, grouped by (operator, operand slot); canonical hex strings → `.csh` (binary: all string lengths, then all string bytes; −10% xz of `.csh` against interleaving them); literal strings → `.css` (as written, escapes kept) |
 | Content-stream predictions | path points (`m l c v y re h`) against the current point; `Td`/`TD` against the last advance written after the same text in the same font (hits and misses in separate groups); stored as residuals |
 | Number lifting, object text | numbers of `.txt` → `.txn`, grouped by (key, in-array, terminator) |
@@ -31,6 +31,9 @@ redundancy inventory of §2A, M6, M7, M9 stage 1, and the M10 ideas that measure
 | Inline images with filters | `BI … ID <data> EI` whose filters (Flate, LZW, A85, AHx, RL, predictors) can be undone exactly → decoded data and recon in `.csi` |
 | TIFF container (`L_TIFW`) | streams matching a TIFF subformat become the single strip of a baseline TIFF (`.tif`): CCITT fax data (compression 4 = G4, 3 = G3 with EOLs, 2 = 1D byte-aligned), image data left Flate/LZW/RunLength-encoded (8, 5, 32773, Predictor 1 or 2), and raw samples BMP can't hold (2 or 16 bpc, 2-bit palette, data longer than the image). Nothing is re-coded; `d` takes the strip back out |
 | Derived fields | stream `/Length` (direct and indirect object), `/DL`, `/Length1-3`, ObjStm `/N /First`, image `/Width /Height` and `/DecodeParms /Columns /Rows` (BMP / TIFF header, JPEG SOF), EmbeddedFile `/Params /Size /CheckSum`, `startxref`, trailer `/Prev /Size /XRefStm`, XRef stream `/Prev`: replaced by placeholders the decoder fills in |
+| Widths from the font programs | `/Widths` of simple TrueType and Type1C fonts, `/W` of CIDFontType2 fonts (identity `CIDToGIDMap`): every width the embedded font program predicts (glyph advance · 1000 / unitsPerEm, map and rounding chosen per array) becomes a placeholder; the decoder reads the font's own file. 52,949 widths in 411 arrays of the 120 test files |
+| Structure parents | `/P` of a structure element, when an earlier object's `/K` lists the element: 16,198 in the 120 test files |
+| Derived fields in ObjStm members | the placeholders above also inside object streams (member text stored with placeholders, a stream flag says so); 78% of the structure elements and most font dictionaries of modern files are members |
 | Signature blobs | a hex `/Contents` string holding one DER SEQUENCE and then only zero bytes (the space a signature dictionary reserves) → the DER element to `.p7s` (CMS / PKCS#7, elements concatenated), case and padding length in the placeholder |
 | RGB + soft mask (`-a`, `L_RGBA` / `L_ALPHA`) | an RGB image and its 8-bit `/SMask` of the same size as one BGRA BMP on the image; the mask's stream keeps no data and is restored, deferred, from the alpha bytes |
 | Base64 blobs in object text | a canonical base64 run of 1024+ characters (JavaScript data, `data:` URIs) that decodes to a zlib stream, or sits in quotes → decoded bytes (zlib streams inflated through preflate, recon in `.b64r`) to a file of their own from 64 KB up (`<P>b%07X.<ext>`, extension by signature: `elf`, `jpg`, ...), smaller ones to `.b64`. linux.pdf (Linux in a PDF: a RISC-V kernel and ELF files as base64 zlib in the `/JS` string): dump.xz 3.89 → 3.21 MB (−17.5%) |
@@ -204,9 +207,12 @@ supplied PDFs (55.6 MB, orig.xz 47.5 MB).
 | + derived fields (`/Length`, `startxref`, `/Prev`, ...) | 59.1% | 8.75 MB |
 | + encrypted strings, inline image filters, linearization forward slots | 59.1% | 8.75 MB |
 | + TIFF container, `.csh` lengths apart from bytes, signature blobs | 59.0% | 8.71 MB |
+| + XMP thumbnails → `.jpg` (counted as payload from here on; dump.xz −13.6 KB) | 59.0% | 8.46 MB |
 | + plan2 P1–P4: decimal units, path and `Td` residuals, literal strings → `.css` | 57.7% | 7.82 MB |
 | + plan2 P5: ICC table | 57.5% | 7.82 MB |
 | + plan2 P7: item lengths; small aux files in `.meta` | 57.5% | 7.80 MB |
+| + plan2 P8: widths from font programs, structure parents, derived fields in ObjStm members | 57.4% | 7.75 MB |
+| + plan2 P6: Type 1 operands by (operator, operand count) | 57.35% | 7.74 MB |
 
 Integer predictions of M10, measured by switching the delta mode of the per-group number coding
 off (README test set): content-stream operands against the previous use of the same operator and
@@ -248,11 +254,10 @@ Measured and not adopted, because they don't beat xz on this corpus (upper bound
   bytes alone: 3.69 → 3.62 MB of xz; inflated: 3.07 MB). On the 21 XMP streams with thumbnails it
   only cuts out line fragments (`&#xA;` is not whitespace to it): xz +1.2 KB. No other base64 is
   in the 808-file set. It may suit attachments (`.eml`) as a separate stage after `pdfdump`.
-- Type 1 charstring operands grouped per (operator, slot) (plan2 P6): −0.4% of the operand pool
-  at best.
-- `/Widths`, `/W` from the font programs and structure `/P` from the parents' `/K` (plan2 P8):
-  about −23 KB (0.3%) would be left; Type 1 widths written by TeX don't match the subset fonts,
-  and the rest needs derived fields inside ObjStm members. Numbers in plan2 §7.
+- Type 1 charstring operands grouped with the slot in the key (plan2 P6 as prototyped): `.t1d`
+  +1.02%; by (operator, operand count), adopted, −1.09%.
+- Widths of Type 1 (`/FontFile`) fonts from their charstrings (plan2 P8): 15% exact; TeX writes
+  widths for the whole code range from TFM metrics, with a decimal.
 - Signature blobs to `.p7s` (M10): adopted, though the test sets have no signed files. On a
   synthetic file with two RSA-2048 signatures (8 KB reserved each), the dump goes from 3084 to
   2952 bytes of xz: certificates and signatures are mostly random bytes, so the gain is the hex
@@ -319,6 +324,7 @@ local pointer now.
     src/pdf_bmp.inc     BMP3 wrap/unwrap
     src/pdf_tiff.inc    TIFF container for streams matching a TIFF subformat
     src/pdf_icc.inc     built-in ICC profile table (L_ICCREF)
+    src/pdf_font.inc    TrueType / CFF glyph advances and the width prediction (derived /Widths, /W)
     src/pdf_xmp.inc     XMP thumbnail (base64 JPEG) as the stream's stored form
     src/pdf_ccitt.inc   CCITT G3/G4 decoder and re-encoder (opt-in layer)
     src/pdf_crypt.inc   MD5, SHA-256/384/512, RC4, AES, standard security handler
@@ -329,6 +335,7 @@ local pointer now.
     src/pdf_lift.inc    number lifting (content streams, object text), per-group coding,
                         path / Td predictions, literal strings
     src/pdf_cmap.inc    CMap bfchar/bfrange blocks as binary
-    src/pdf_derive.inc  derived fields: placeholders, stream facts, xref section state
+    src/pdf_derive.inc  derived fields: placeholders, stream facts, xref section state, widths,
+                        structure parents, ObjStm member offsets
     src/pdf_emit.inc    item records, stream descriptors, recon dictionary, decoder
     src/preflate.inc    from ziprec (speed edits and corrupt-data guards marked "pdfdump:")

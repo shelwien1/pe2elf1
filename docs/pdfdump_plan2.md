@@ -116,11 +116,9 @@ files hold 47%.
 P1 to P4 together: about −620 KB, 7.3% of the PDF-specific total. All four are linear passes
 over data the lifter already walks, so `c` speed is unaffected.
 
-Outcome (section 7 has the details): P1–P5 and P7 are in, P6 and P8 were measured and left out.
-PDF-specific xz 8710 KB → 7799 KB (−10.5%), dump.xz 59.04% → 57.48% of orig.xz. `c` speed was
-not unaffected after all: the per-group choice among three codings, the walk and the lift's own
-verify cost 4% single-threaded (2.26 → 2.16 MB/s) and 12% with 4 threads (4.33 → 3.83 MB/s);
-every file stays above 500 KB/s.
+Outcome (section 7 has the details): all eight items are in. PDF-specific xz 8458 KB → 7737 KB
+(−8.5%), dump.xz 59.01% → 57.35% of orig.xz. `c` speed was not unaffected after all: single
+thread, best of 3 runs per file, 2.51 → 2.37 MB/s (−5.5%), every file at 642 KB/s or more.
 
 ### P1. One decimal unit per number group
 
@@ -232,17 +230,21 @@ compresses each; the per-operator and per-key tables come from the same build.
 
 ## 7. Results of this round
 
-Same 120 files, `tests/xzbench.py`, totals over all files.
+Same 120 files, `tests/xzbench.py`, totals over all files. "Before" is the build this plan was
+measured with (section 1: 8.46 MB).
 
 | Step | dump.xz | PDF-specific xz |
 |---|---|---|
-| before this round | 28,038,864 (59.04%) | 8,709,928 |
-| P1–P4 (format 6) | 27,388,036 (57.67%) | 7,824,988 (−884.9 KB) |
+| before this round | 28,025,264 (59.01%) | 8,458,420 |
+| P1–P4 (format 6) | 27,388,036 (57.67%) | 7,824,988 (−633.4 KB) |
 | + P5 | 27,326,256 (57.54%) | 7,824,780 |
 | + P7 (format 7) | 27,310,208 (57.51%) | 7,809,168 (−15.6 KB) |
 | + aux files up to 64 KB at the end of `.meta` | 27,299,216 (57.48%) | 7,799,064 (−10.1 KB) |
+| + P8 widths of top-level font dictionaries | 27,267,632 (57.42%) | 7,767,744 (−31.3 KB) |
+| + P8 structure parents, derived fields inside ObjStm members | 27,253,688 (57.39%) | 7,753,872 (−13.9 KB) |
+| + P6 (format 8) | 27,236,112 (57.35%) | 7,736,692 (−17.2 KB) |
 
-**P1–P4.** One lifter pass, measured together: −885 KB against the −620 KB estimated. Per group
+**P1–P4.** One lifter pass, measured together: −633 KB against the −620 KB estimated. Per group
 the encoder takes the cheapest of the plain form, the unit form (P1) and the residual form (P2,
 P3: path points against the current point, `Td`/`TD` against the table, residuals in units of
 10^-k), by order-1 entropy estimate. `Td`/`TD` table hits and misses go to separate groups
@@ -256,9 +258,12 @@ the one many producers embed unchanged): dump.xz −61.8 KB, all payload. The 20
 2 files is Apple's Generic RGB, left out: a vendor profile under Apple's copyright, and 2 KB of xz
 in the whole set.
 
-**P6, not adopted.** Type 1 operand pool, one stream for all operators: 909,892 bytes of xz.
-Grouped by (operator, slot): +0.0%. By (operator, operand count, slot): −0.4%. By (operator,
-slot counted from the end): +0.0%. Not worth a format change.
+**P6.** The operand pool of each Type 1 font is ordered by (operator, operand count), groups in
+key order, each in charstring order with the slots interleaved; the decoder reads the operator
+pool first and puts the operands back. xz of the 378 `.t1d` files: 1,973,628 → 1,952,080
+(−1.09%). The prototype's keys lose in the real format, where each font is its own file and
+the skeleton and operator pool sit next to the operands: with the slot in the key +1.02%
+(slot counted from the end +1.02%), by operator alone −0.96%.
 
 **P7.** `.iln` holds per object item, stream prefix and stream suffix var 0 when the length is
 what the decoder finds by the segmenter's rules (through the first `endobj` and the whitespace
@@ -272,23 +277,35 @@ Small aux files at the end of `.meta` (their lengths in the header): a file of i
 tar header. Threshold, PDF-specific xz: none 7810.5 KB, 4 KB 7803.8 KB, 16 KB 7801.1 KB, 64 KB
 7799.1 KB, every aux file 7803.6 KB (the large ones lose their neighbours in the tar). 64 KB.
 
-**P8, not adopted.** Measured with pikepdf and fontTools on the 120 files.
+**P8.** Implemented for the font programs and structure trees the dump can reach:
+
+- `/Widths` of simple TrueType fonts (`/FontFile2`), simple Type1C fonts (`/FontFile3`, built-in
+  CFF encoding), `/W` of CIDFontType2 fonts with an identity `CIDToGIDMap`. A placeholder in place
+  of the array's `[` names the kind, the code-to-glyph map (TrueType: (3,0) at 0xF000 + code,
+  (1,0), (3,1), glyph id = code), the rounding rule (round, floor, ceil of advance · 1000 /
+  unitsPerEm, or rounded to 1–3 decimals) and the font program's own-file ordinal; every width
+  the font predicts exactly becomes a 2-byte placeholder, the others stay numbers. The encoder
+  picks the map and rule with the most hits per array. Own-file ordinals are assigned (and
+  duplicates found) before the first item is written, since a font dictionary often comes before
+  its font program. 52,949 widths in 411 arrays.
+- `/P` of structure elements: both sides keep a child → parent map from every `/K` seen so far
+  (top-level objects in item order, ObjStm members in member order) and replace a `/P` the map
+  predicts. 16,198 of the 18,991 parents that come before their children.
+- Derived fields inside ObjStm members (needed by both: 78% of the structure elements and most
+  font dictionaries of modern files are members). The member text is stored with placeholders
+  (stream flag); a `/P` placeholder carries its member index, and the decoder finds the member
+  boundaries in the restored text with the ObjStm layer's own offset prediction.
+- Not covered: Type 1 fonts (`/FontFile`; TeX writes widths for the whole code range from TFM
+  metrics, 15% match), `CIDToGIDMap` streams (26 fonts), CIDFontType0 (605 widths), parents that
+  come after their children (10,066).
+
+Measured before the implementation, with pikepdf and fontTools on the 120 files:
 
 | Value | Entries | Predicted exactly | Note |
 |---|---|---|---|
 | `/Widths`, TrueType, (1,0) cmap | 20,729 | 82% round(advance · 1000 / unitsPerEm), 84% with floor/ceil/fraction | |
 | `/Widths`, TrueType, (3,0) / (3,1) cmap | 435 / 1,079 | 100% / 96% | |
-| `/Widths`, Type1C | 459 | 65% | 35% codes without a glyph in the subset |
-| `/Widths`, Type 1 | 32,495 | 15% | 62% codes without a glyph in the subset: TeX writes widths for the whole code range from TFM metrics, with a decimal (277.8 where the charstring says 277) |
-| `/W`, CIDFontType2 | 63,673 | 62% | |
+| `/Widths`, Type1C | 26,371 | 61% with the built-in encoding (68% with `/Differences`) | 38% are codes without a glyph and width 0 |
+| `/Widths`, Type 1 | 32,495 | 15% | 62% codes without a glyph in the subset |
+| `/W`, CIDFontType2 | 63,673 | 62%: 95% of the array form, 30% of the range form | |
 | `/P` of structure elements | 29,060 | 65% parent before child with the child in its `/K` | 78% of the elements are ObjStm members |
-
-`/Widths` of Type 1 fonts are 410 KB of the 820 KB raw `/Widths` and `/W` text, and they are the
-part fonts don't predict. What would be left: about 13 KB for TrueType `/Widths` and `/W`, about
-10 KB for `/P` (65% of 15.4 KB), 0.3% of the PDF-specific total. Both need derived fields inside
-ObjStm members, which the dump doesn't have: today derivation only runs on top-level item text,
-and most `/W` arrays and structure elements of modern files are ObjStm members. `/Widths` also
-needs TrueType, CFF and Type 1 parsers in the decoder, and access to the font's own file from the
-font dictionary (by ordinal; the file order doesn't put the font program first). `/P` needs
-state from earlier objects in a pass that today runs streams in parallel. Left for a round that
-adds derivation to ObjStm members.
