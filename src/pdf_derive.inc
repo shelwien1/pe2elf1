@@ -320,7 +320,9 @@ static bool derivValue(uint8_t code, const StreamFacts& f, const DeriveState& ds
   return false;
 }
 
-// which facts the placeholders of a text need: bit0 decoded data, bit1 md5
+// which facts the placeholders of a text need: bit0 decoded data, bit1 md5. Every 0x04 is looked
+// at without parsing the placeholders (a payload may hold or end in 0x04), so the answer can only
+// ask for too much, never too little.
 static int derivNeeds(const uint8_t* p, size_t n) {
   int need = 0;
   for (size_t i = 0; i + 1 < n; i++)
@@ -328,7 +330,6 @@ static int derivNeeds(const uint8_t* p, size_t n) {
       uint8_t c = p[i + 1];
       if (c == 'D' || c == '3' || c == 'F') need |= 1;
       if (c == 'C' || c == 'c') need |= 3;
-      i++;
     }
   return need;
 }
@@ -726,6 +727,9 @@ static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const 
       if (rr.u8()) {
         Bytes ext;
         rr.bytes(rr.len(), ext);
+        if (ext.empty() || ext.size() > 8) return false;
+        for (uint8_t c : ext)
+          if (!isalnum(c)) return false;  // part of a file name
         if (!b64->file) return false;
         v = b64->file(b64->nextFile++, std::string(ext.begin(), ext.end()));
         if (v.size() != dl) return false;

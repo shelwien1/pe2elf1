@@ -152,8 +152,11 @@ static bool xrefRowsDecodeLayer(const CodecCtx& ctx, const Bytes& in, const std:
   if (!xrefRowsGeometry(W)) return false;
   size_t rl = (size_t)(W[0] + W[1] + W[2]);
   uint64_t rows = 0;
-  for (auto& r : index) rows += r.second;
-  if (rows == 0 || rows > in.size() / rl) return false;
+  for (auto& r : index) {
+    if (r.second > in.size() / rl - rows) return false;  // no overflow: rows <= in.size() / rl here
+    rows += r.second;
+  }
+  if (rows == 0) return false;
   out.clear();
   size_t p = 0;
   int64_t lastC = -1, lastI = -1;

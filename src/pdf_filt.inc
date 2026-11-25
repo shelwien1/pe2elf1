@@ -360,6 +360,7 @@ static bool pngEncode(const Bytes& recon, const Bytes& in, Bytes& out) {
   if (!pngGeometry(colors, bpc, columns, bpp, rowlen)) fail("bad PNG recon");
   if (in.size() % rowlen) return false;
   size_t nrows = in.size() / rowlen;
+  if (nrows == 0) rowlen = 0;  // nothing to filter: no row buffers for a (possibly huge) row length
   uint8_t mode = r.u8();
   Bytes tags;
   if (mode == 0) tags.assign(nrows, r.u8());
@@ -999,7 +1000,7 @@ static bool layerDecode(const CodecCtx& ctx, uint8_t type, const FilterParams& f
     if (type == L_FLATE) return true;
     Bytes re;
     return layerEncode(ctx, type, recon, out, re) && re == in;
-  } catch (const Error&) {
+  } catch (const std::exception&) {  // a layer that cannot be undone stays encoded
     return false;
   }
 }

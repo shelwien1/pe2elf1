@@ -150,7 +150,7 @@ class Encoder {
           analyze();
           emit();
           applyLifts();
-        } catch (const Error& e) {
+        } catch (const std::exception& e) {  // also bad_alloc and whatever a worker thread threw
           modelled = false;
           storedReason = std::string("encoder error: ") + e.what();
         }
@@ -181,8 +181,9 @@ class Encoder {
         };
         Bytes re = decodeDump(dump, 0, nullptr, &fast, &b64Orig_);
         if (re != in_) why = "restored file differs from input";
-      } catch (const Error& e) {
+      } catch (const std::exception& e) {
         why = e.what();
+        if (why.empty()) why = "exception";
       }
       tVerify = secondsSince(t1);
       if (!why.empty()) {
@@ -832,6 +833,9 @@ class Encoder {
     // XMP packets with a base64 JPEG thumbnail: the JPEG becomes the stored form (.jpg)
     for (auto& s : streams) {
       if (s.remain != R_DONE || s.bmp || s.tif || s.t1 || s.data.size() < 256) continue;
+      // not for streams that go to a class file or get a structural layer below
+      uint8_t c = s.desc.cls;
+      if (c == SC_CONTENT || c == SC_CMAP || c == SC_OBJSTM || c == SC_XREF) continue;
       static const char kTag[] = "GImg:image>";
       if (std::search(s.data.begin(), s.data.end(), kTag, kTag + sizeof(kTag) - 1) == s.data.end()) continue;
       Bytes jpeg, recon, back;

@@ -1542,7 +1542,12 @@ uint decodeBinary(const udivider_t<32> &scale, const uint bounds[]) {
 }
 
 uint decodeBits(const uint32_t bits) {
-  uint32_t step = ((_high-_low)+1)>>bits;
+  // pdfdump: corrupt correction data can ask for 32 bits or more bits than the range holds;
+  // that was an undefined shift and a division by zero. Valid data never gets here.
+  uint32_t step = bits<32 ? ((_high-_low)+1)>>bits : 0;
+  if( step==0 ) {
+    throw std::runtime_error("corrupt preflate correction data");
+  }
   uint result = (_value-_low)/step;
   _low += step*result;
   _high = _low+step-1;
@@ -3466,6 +3471,10 @@ bool PreflateReencoderTask::decodeAndRepredict() {
       return false;
     }
     tokenData.push_back(std::move(block));
+    // pdfdump: corrupt correction data can describe empty blocks without end
+    if( tokenData.size()>uncompressedData.size()+(1u<<20) ) {
+      throw std::runtime_error("corrupt preflate correction data");
+    }
     if( !lastMetaBlock ) {
       eof = tokenPredictor.inputEOF();
     } else {
@@ -3806,6 +3815,9 @@ template <uint N> void PreflateSubModel<N>::read(ArithmeticDecoder &codec, const
   bounds[N] = 1<<16;
   for( uint i = zeros; i<N; ++i ) {
     ids[i] = decodeId(codec, N);
+    if( ids[i]>=N ) {  // pdfdump: corrupt model data
+      throw std::runtime_error("corrupt preflate correction data");
+    }
     rids[ids[i]] = i;
   }
   build_scale_down();
@@ -4470,6 +4482,11 @@ bool PreflateTokenPredictor::predictEOB() {
 }
 
 void PreflateTokenPredictor::commitToken(const PreflateToken &t) {
+  // pdfdump: corrupt correction data (or changed unpacked data) can ask for more input than
+  // there is; the hash update would then read past the buffer. Valid data never gets here.
+  if( t.len>state.availableInputSize() ) {
+    throw std::runtime_error("corrupt preflate correction data");
+  }
   if( fast&&t.len>state.lazyMatchLength() ) {
     hash.skipHash(t.len);
   } else {
@@ -4790,6 +4807,9 @@ PreflateTokenBlock PreflateTokenPredictor::decodeBlock(PreflatePredictionDecoder
       } else {
         block.paddingBits = 0;
       }
+    }
+    if( block.uncompressedLen>state.availableInputSize() ) {  // pdfdump: see commitToken
+      throw std::runtime_error("corrupt preflate correction data");
     }
     hash.updateHash(block.uncompressedLen);
     seq.updateSeq(block.uncompressedLen);
@@ -6081,7 +6101,9 @@ MemStream::MemStream(const std::vector<uint8_t> &content) : _data(content), _pos
 }
 
 MemStream::MemStream(const std::vector<uint8_t> &content, const size_t off, const size_t sz) : _data(std::max(std::min(content.size(), off+sz), off)-off), _pos(0) {
-  memcpy(_data.data(), content.data()+off, _data.size());
+  if( !_data.empty() ) {  // pdfdump: no memcpy on null pointers of empty vectors
+    memcpy(_data.data(), content.data()+off, _data.size());
+  }
 }
 
 bool MemStream::eof() const {
@@ -6090,7 +6112,9 @@ bool MemStream::eof() const {
 
 size_t MemStream::read(byte* buffer, const size_t size) {
   size_t toCopy = std::min(size, _data.size()-_pos);
-  memcpy(buffer, _data.data()+_pos, toCopy);
+  if( toCopy ) {  // pdfdump: see above
+    memcpy(buffer, _data.data()+_pos, toCopy);
+  }
   _pos += toCopy;
   return toCopy;
 }
@@ -6100,7 +6124,9 @@ size_t MemStream::write(const byte* buffer, const size_t size) {
   if( size>remaining ) {
     _data.resize(_pos+size);
   }
-  memcpy(_data.data()+_pos, buffer, size);
+  if( size ) {  // pdfdump: see above
+    memcpy(_data.data()+_pos, buffer, size);
+  }
   _pos += size;
   return size;
 }

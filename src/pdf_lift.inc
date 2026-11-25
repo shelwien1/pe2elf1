@@ -66,8 +66,9 @@ static bool liftParseNum(const uint8_t* p, size_t n, LiftNum& v) {
   return true;
 }
 
-static void liftSpellNum(const LiftNum& v, Bytes& out) {
-  uint64_t a = v.m < 0 ? (uint64_t)(-v.m) : (uint64_t)v.m;
+// false for a value the lifter never produces (corrupt numbers file): more than 18 fraction digits
+static bool liftSpellNum(const LiftNum& v, Bytes& out) {
+  uint64_t a = v.m < 0 ? 0 - (uint64_t)v.m : (uint64_t)v.m;
   size_t scale = 0;
   bool omitInt = false, trail = false;
   if (v.code >= 1 && v.code <= 6) scale = v.code;
@@ -76,6 +77,7 @@ static void liftSpellNum(const LiftNum& v, Bytes& out) {
     omitInt = v.ext & 1;
     trail = (v.ext & 2) != 0;
   }
+  if (scale > 18) return false;
   char digits[24];
   int nd = 0;
   do { digits[nd++] = (char)('0' + a % 10); a /= 10; } while (a);
@@ -88,6 +90,7 @@ static void liftSpellNum(const LiftNum& v, Bytes& out) {
     if (v.code != 0) out.push_back('.');
     for (int k = (int)scale - 1; k >= 0; k--) out.push_back((uint8_t)digits[k]);
   }
+  return true;
 }
 
 // ---- grouping lexer (runs on the skeleton, identical on both sides) ---------------------------
@@ -571,7 +574,7 @@ static bool liftInverse(LiftMode mode, const Bytes& skel, const Bytes& nums, con
     } else if (c == 1) {
       if (mk >= g.ofMarker.size()) return false;
       uint32_t id = g.ofMarker[mk++];
-      liftSpellNum(per[id][next[id]++], out);
+      if (next[id] >= per[id].size() || !liftSpellNum(per[id][next[id]++], out)) return false;
     } else if (c == 4) {
       if (!ctx || !liftInlineRestore(*ctx, ir, out)) return false;
     } else if (c == 2 || c == 3) {

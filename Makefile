@@ -7,7 +7,7 @@ pdfdump: $(SRC)
 	$(CXX) $(CXXFLAGS) -pthread -o $@ src/pdfdump.cpp
 
 pdfdump-asan: $(SRC)
-	$(CXX) -std=c++17 -O1 -g -pthread -fsanitize=address,undefined -fno-omit-frame-pointer -o $@ src/pdfdump.cpp
+	$(CXX) -std=c++17 -O1 -g -pthread -fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -o $@ src/pdfdump.cpp
 
 # make test CORPUS="dir/*.pdf"
 test: pdfdump
