@@ -1,7 +1,7 @@
 # pdfdump
 
 Lossless PDF dump/restore. `c` splits a PDF into typed payload files plus a few channel
-files; `d` rebuilds the original byte-for-byte. Design and roadmap: [docs/pdfdump_plan.md](docs/pdfdump_plan.md).
+files; `d` rebuilds the original byte-for-byte. Design and roadmap: [docs/pdfdump_plan.md](docs/pdfdump_plan.md); measured next steps: [docs/pdfdump_plan2.md](docs/pdfdump_plan2.md).
 
     pdfdump c [options] input.pdf outprefix      dump
     pdfdump d inprefix restored.pdf              restore, byte-exact
