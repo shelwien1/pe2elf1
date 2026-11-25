@@ -396,6 +396,7 @@ static void liftForward(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums
   skel.clear();
   nums.clear();
   hex.clear();
+  Bytes hexLen;  // string lengths, kept apart from the string bytes (xz: about -10% on .csh)
   skel.reserve(n);
   std::vector<LiftNum> vals;
   size_t biPos = SIZE_MAX;
@@ -442,7 +443,7 @@ static void liftForward(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums
       size_t nd = j - i - 1;
       if (mode == LIFT_CS && ok && nd % 2 == 0 && !(upper && lower)) {
         skel.push_back(lower ? 3 : 2);
-        putVarTo(hex, nd / 2);
+        putVarTo(hexLen, nd / 2);
         for (size_t k = i + 1; k < j; k += 2) hex.push_back((uint8_t)(hexVal(p[k]) * 16 + hexVal(p[k + 1])));
         i = j + 1;
         continue;
@@ -489,6 +490,13 @@ static void liftForward(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums
       continue;
     }
     i = j;
+  }
+  if (!hexLen.empty()) {
+    Bytes h;
+    putVarTo(h, hexLen.size());
+    h.insert(h.end(), hexLen.begin(), hexLen.end());
+    h.insert(h.end(), hex.begin(), hex.end());
+    hex.swap(h);
   }
   LiftGroups g;
   liftGroup(mode, skel.data(), skel.size(), g);
@@ -541,7 +549,15 @@ static bool liftInverse(LiftMode mode, const Bytes& skel, const Bytes& nums, con
   }
   if (nr.p != nums.size()) return false;
   std::vector<size_t> next(g.count, 0);
-  RBuf hr(hex);
+  // .csh: var size of the length section, string lengths (varints), string bytes
+  Bytes hexLen, hexData;
+  if (!hex.empty()) {
+    RBuf hh(hex);
+    size_t ln = hh.len();
+    hexLen.assign(hex.begin() + hh.p, hex.begin() + hh.p + ln);
+    hexData.assign(hex.begin() + hh.p + ln, hex.end());
+  }
+  RBuf lr(hexLen), hr(hexData);
   out.clear();
   out.reserve(skel.size() * 2);
   size_t mk = 0;
@@ -559,7 +575,8 @@ static bool liftInverse(LiftMode mode, const Bytes& skel, const Bytes& nums, con
     } else if (c == 4) {
       if (!ctx || !liftInlineRestore(*ctx, ir, out)) return false;
     } else if (c == 2 || c == 3) {
-      size_t len = hr.len();
+      uint64_t len = lr.var();
+      if (len > hexData.size() - hr.p) return false;
       const char* hx = c == 3 ? L : U;
       out.push_back('<');
       for (size_t k = 0; k < len; k++) {
@@ -572,7 +589,7 @@ static bool liftInverse(LiftMode mode, const Bytes& skel, const Bytes& nums, con
       out.push_back(c);
     }
   }
-  return mk == g.ofMarker.size() && hr.p == hex.size() && ir.p == ir.b.size();
+  return mk == g.ofMarker.size() && lr.p == hexLen.size() && hr.p == hexData.size() && ir.p == ir.b.size();
 }
 
 // forward + verify; false if the transform does not reproduce the input

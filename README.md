@@ -18,7 +18,7 @@ redundancy inventory of §2A, M6, M7, M9 stage 1, and the M10 ideas that measure
 | Transform | What it removes / reorders |
 |---|---|
 | Type 1 decryption (`L_T1`) | eexec and charstring encryption of embedded Type 1 fonts → `.t1d`; charstrings split into lead bytes, operators and operands |
-| Number lifting, content streams | numbers → `.csn`, grouped by (operator, operand slot); canonical hex strings → `.csh` (binary) |
+| Number lifting, content streams | numbers → `.csn`, grouped by (operator, operand slot); canonical hex strings → `.csh` (binary: all string lengths, then all string bytes; −10% xz of `.csh` against interleaving them) |
 | Number lifting, object text | numbers of `.txt` → `.txn`, grouped by (key, in-array, terminator) |
 | Adaptive number coding | per group: varint or fixed width, raw or delta (order-1 entropy estimate) |
 | ObjStm headers (`L_OBJSTM`) | the `num off` table; offsets derived from member boundaries |
@@ -30,12 +30,18 @@ redundancy inventory of §2A, M6, M7, M9 stage 1, and the M10 ideas that measure
 | Inline images with filters | `BI … ID <data> EI` whose filters (Flate, LZW, A85, AHx, RL, predictors) can be undone exactly → decoded data and recon in `.csi` |
 | TIFF container (`L_TIFW`) | streams matching a TIFF subformat become the single strip of a baseline TIFF (`.tif`): CCITT fax data (compression 4 = G4, 3 = G3 with EOLs, 2 = 1D byte-aligned), image data left Flate/LZW/RunLength-encoded (8, 5, 32773, Predictor 1 or 2), and raw samples BMP can't hold (2 or 16 bpc, 2-bit palette, data longer than the image). Nothing is re-coded; `d` takes the strip back out |
 | Derived fields | stream `/Length` (direct and indirect object), `/DL`, `/Length1-3`, ObjStm `/N /First`, image `/Width /Height` and `/DecodeParms /Columns /Rows` (BMP / TIFF header, JPEG SOF), EmbeddedFile `/Params /Size /CheckSum`, `startxref`, trailer `/Prev /Size /XRefStm`, XRef stream `/Prev`: replaced by placeholders the decoder fills in |
+| Signature blobs | a hex `/Contents` string holding one DER SEQUENCE and then only zero bytes (the space a signature dictionary reserves) → the DER element to `.p7s` (CMS / PKCS#7, elements concatenated), case and padding length in the placeholder |
 | Small text streams | XMP and other small text streams go to `.txt`, not `.bin` |
 
-Plan items measured and not adopted are listed under "xz results" below. Not built, because
-they can't be evaluated here or are out of reach:
-- Hint table regeneration (M9 stage 2): only reproduces tables written by qpdf's algorithm.
-- ToUnicode remap (M10): needs per-stream font resource resolution across streams.
+Plan items measured and not adopted are listed under "xz results" below. Not built, with the
+measured upper bound of what they could gain:
+- Hint table regeneration (M9 stage 2): the 78 hint streams of the 808-file regression set hold
+  43 KB of Flate data (82 KB decoded) in all, so at most a few tens of KB of xz, and only for
+  tables written by qpdf's algorithm (other producers' tables don't follow the same rules).
+- ToUnicode remap (M10): on the 8 files with the most hex text, xz of `.csh` is already within
+  0–16% of xz of the document's entire Unicode text from `pdftotext` (82.7 vs 82.0 KB, 51.0 vs
+  51.1 KB on the two largest), so remapping glyph codes to Unicode could gain a few KB per file
+  at most, against per-stream font resource resolution.
 - RGB + SMask merged into a 32 bpp BMP (M10): only pays with an RGBA codec downstream.
 
 `-s` selects how much of this is applied (see Options).
@@ -80,10 +86,11 @@ Tested with g++ 13.3 and clang 18 on Linux x86-64.
 | `<P>.bin` | channel B: raw regions, binary streams under the `-p` threshold, XRef stream row residuals |
 | `<P>.cs` | all decoded content streams concatenated, numbers and hex strings replaced by markers |
 | `<P>.csn` | the numbers lifted from `.cs`, per (operator, operand slot) group |
-| `<P>.csh` | the hex strings lifted from `.cs`, as binary |
+| `<P>.csh` | the hex strings lifted from `.cs`, as binary: varint size of the length section, the string lengths (varints), the string bytes |
 | `<P>.csi` | inline image data of `.cs` with its filters undone (decoded data + recon) |
 | `<P>.cmap` | all decoded CMaps (`/ToUnicode`, embedded encodings), concatenated, `bfchar`/`bfrange` bodies replaced by markers |
 | `<P>.cmb` | those bodies as binary |
+| `<P>.p7s` | signature blobs (DER CMS / PKCS#7), concatenated in file order |
 | `<P>%08X.<ext>` | one file per extracted stream; ordinal in file order |
 
 Files that would be empty are not written; the header records which ones exist, so `d` never
@@ -147,6 +154,7 @@ against poppler's `pdfimages` on the test files). Fax data that matches no subfo
     tests/enc_variants.sh -b ./pdfdump files...  # M4 check, needs qpdf
     python3 tests/xzbench.py -b ./pdfdump files...  # xz -9 of the dump vs of the input
     tests/get_corpus.sh [dir]                    # fetch the kept files of the 005 set
+    python3 tests/mksigned.py out.pdf workdir    # signed test PDF for the .p7s path, needs openssl
 
 `enc_variants.sh` encrypts each input with qpdf at R2, R3, R4 and R6, using an empty user
 password. It then checks that the extracted payload files are byte-identical to those from a
@@ -172,6 +180,7 @@ supplied PDFs (55.6 MB, orig.xz 47.5 MB).
 | + CMap `bfchar`/`bfrange` blocks as binary | 59.2% | 8.77 MB |
 | + derived fields (`/Length`, `startxref`, `/Prev`, ...) | 59.1% | 8.75 MB |
 | + encrypted strings, inline image filters, linearization forward slots | 59.1% | 8.75 MB |
+| + TIFF container, `.csh` lengths apart from bytes, signature blobs | 59.0% | 8.71 MB |
 
 Measured and not adopted, because they don't beat xz on this corpus (upper bounds where noted):
 - PNG filters on raw images: raw rows compress best on aggregate.
@@ -188,7 +197,10 @@ Measured and not adopted, because they don't beat xz on this corpus (upper bound
 - CCITT G4 / G3 to 1 bpp BMP (M10): implemented, but opt-in (`-g`). xz of the bitmaps is 24%
   larger than the fax data; on the 8 test files with CCITT images, dump.xz goes from 60.8% to
   62.1% of orig.xz. It may pay with a dedicated bilevel recompressor.
-- Signature blobs to `.p7s` (M10): no signed files in the test set.
+- Signature blobs to `.p7s` (M10): adopted, though the test sets have no signed files. On a
+  synthetic file with two RSA-2048 signatures (8 KB reserved each), the dump goes from 3084 to
+  2952 bytes of xz: certificates and signatures are mostly random bytes, so the gain is the hex
+  overhead only. The blobs are standard CMS files for any downstream tool.
 
 Speed of `c`, single thread, 120 files run one after another:
 

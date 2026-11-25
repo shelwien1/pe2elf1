@@ -110,7 +110,7 @@ struct Stats {
   uint64_t reconBlobs = 0, reconRefs = 0;
   uint64_t typedBytes = 0, payloadBytes = 0, layeredPayload = 0;
   uint64_t bmpCount = 0;
-  uint64_t derived = 0, stringsDecrypted = 0;
+  uint64_t derived = 0, stringsDecrypted = 0, sigBlobs = 0;
 };
 
 class Encoder {
@@ -866,6 +866,12 @@ class Encoder {
         derivChoose(in_.data() + a, b - a, kind, cls, f, ds, num, edits);
         fwdChoose(in_.data() + a, b - a, kind, fa, edits);
       }
+      // signature blobs: DER to .p7s
+      if ((kind == 1 || kind == 2) && opt_.derive) {
+        size_t before = edits.size();
+        sigStrings(in_.data() + a, b - a, edits, dump.aux[AX_P7S]);
+        st.sigBlobs += edits.size() - before;
+      }
       // strings of top-level objects of an encrypted file: stored decrypted
       if ((kind == 1 || kind == 2) && opt_.derive && !sec.key.empty() && num != sec.encNum && cls != SC_XREF) {
         uint32_t n2, g2;
@@ -1080,7 +1086,10 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
     printf("\n");
   }
   if (st.bmpCount) printf("bmp3 images: %llu\n", (unsigned long long)st.bmpCount);
-  if (st.derived) printf("derived fields: %llu\n", (unsigned long long)(st.derived - st.stringsDecrypted));
+  if (st.derived) printf("derived fields: %llu\n", (unsigned long long)(st.derived - st.stringsDecrypted - st.sigBlobs));
+  if (st.sigBlobs)
+    printf("signature blobs: %llu (%llu bytes of DER in .p7s)\n", (unsigned long long)st.sigBlobs,
+           (unsigned long long)E.dump.aux[AX_P7S].size());
   if (st.stringsDecrypted) printf("strings stored decrypted: %llu\n", (unsigned long long)st.stringsDecrypted);
   printf("dump:");
   uint64_t total = 0;

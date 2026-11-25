@@ -15,6 +15,7 @@
 //   P  /Prev = start of the xref section before the current one
 //   Z  trailer /Size = end of the latest classic xref section (max start + count)
 //   X  /XRefStm = start of the latest XRef stream object
+//   e  encrypted string, stored as plaintext   f  forward slot   G  signature blob (.p7s)
 
 static const uint8_t kDerivEsc = 4;
 
@@ -425,7 +426,11 @@ static void stringTokens(const uint8_t* p, size_t n, std::vector<std::pair<size_
 static void cryptStrings(const uint8_t* p, size_t n, uint8_t cipher, const DerivCrypt& dc, std::vector<DerivEdit>& edits) {
   std::vector<std::pair<size_t, size_t>> toks;
   stringTokens(p, n, toks);
+  size_t taken = edits.size();
   for (auto& t : toks) {
+    bool overlap = false;
+    for (size_t k = 0; k < taken; k++) overlap |= edits[k].a < t.second && t.first < edits[k].b;
+    if (overlap) continue;
     Lexer lx(p, t.second, t.first);
     Obj o;
     if (!lx.parse(o) || o.t != Obj::STR || lx.pos != t.second) continue;
@@ -449,6 +454,68 @@ static void cryptStrings(const uint8_t* p, size_t n, uint8_t cipher, const Deriv
     putLenBytesTo(e.rep, pt.data(), pt.size());
     if (cipher == CI_AES128 || cipher == CI_AES256) e.rep.insert(e.rep.end(), iv, iv + 16);
     edits.push_back(std::move(e));
+  }
+}
+
+// ---- signature blobs (plan M10) -----------------------------------------------------------------
+// A hex /Contents string holding one DER SEQUENCE followed only by zero bytes (the space reserved
+// in a signature dictionary): placeholder 0x04 'G' u8 case (0 upper, 1 lower case hex digits),
+// var count of zero bytes after the DER element. The DER element itself goes to the .p7s aux file
+// (elements concatenated in file order; each one is self-delimiting).
+
+// size of the DER SEQUENCE at b, 0 if there is none that fits in n bytes
+static size_t derLength(const uint8_t* b, size_t n) {
+  if (n < 2 || b[0] != 0x30) return 0;
+  size_t hl = 2, len = b[1];
+  if (len & 0x80) {
+    size_t k = len & 0x7F;
+    if (k == 0 || k > 4 || n < 2 + k) return 0;
+    len = 0;
+    for (size_t i = 0; i < k; i++) len = len << 8 | b[2 + i];
+    hl += k;
+  }
+  if (len > n - hl) return 0;
+  return hl + len;
+}
+
+struct SigBlobs {
+  const Bytes* data = nullptr;
+  size_t pos = 0;
+};
+
+// encoder: placeholders for the signature blobs of one object; DER elements appended to p7s
+static void sigStrings(const uint8_t* p, size_t n, std::vector<DerivEdit>& edits, Bytes& p7s) {
+  std::vector<std::pair<size_t, size_t>> toks;
+  stringTokens(p, n, toks);
+  for (auto& t : toks) {
+    if (p[t.first] != '<' || t.second - t.first < 2 + 64) continue;
+    size_t k = t.first;
+    while (k > 0 && isWS(p[k - 1])) k--;
+    if (k < 9 || memcmp(p + k - 9, "/Contents", 9) != 0) continue;
+    size_t a = t.first + 1, b = t.second - 1;
+    if ((b - a) % 2) continue;
+    bool upper = false, lower = false, ok = true;
+    Bytes v;
+    v.reserve((b - a) / 2);
+    for (size_t i = a; i < b && ok; i += 2) {
+      int h = hexVal(p[i]), l = hexVal(p[i + 1]);
+      if (h < 0 || l < 0) ok = false;
+      for (size_t j = i; j < i + 2; j++) {
+        lower |= p[j] >= 'a' && p[j] <= 'f';
+        upper |= p[j] >= 'A' && p[j] <= 'F';
+      }
+      v.push_back((uint8_t)(h * 16 + l));
+    }
+    if (!ok || (upper && lower)) continue;
+    size_t der = derLength(v.data(), v.size());
+    if (!der) continue;
+    size_t z = der;
+    while (z < v.size() && v[z] == 0) z++;
+    if (z != v.size()) continue;
+    DerivEdit e{t.first, t.second, {kDerivEsc, 'G', (uint8_t)(lower ? 1 : 0)}};
+    putVarTo(e.rep, v.size() - der);
+    edits.push_back(std::move(e));
+    p7s.insert(p7s.end(), v.begin(), v.begin() + der);
   }
 }
 
@@ -493,7 +560,8 @@ static bool fwdApply(Bytes& out, const std::vector<uint64_t>& itemStart, const s
 
 // decoder: placeholders resolved
 static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const DeriveState& ds, uint32_t objNum,
-                        Bytes& out, const DerivCrypt* dc = nullptr, std::vector<FwdPatch>* fwd = nullptr) {
+                        Bytes& out, const DerivCrypt* dc = nullptr, std::vector<FwdPatch>* fwd = nullptr,
+                        SigBlobs* sig = nullptr) {
   out.clear();
   for (size_t i = 0; i < n; i++) {
     if (p[i] != kDerivEsc) { out.push_back(p[i]); continue; }
@@ -512,6 +580,23 @@ static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const 
       fp.pos = out.size();  // relative to this text; the caller rebases
       out.insert(out.end(), fp.width, '0');
       fwd->push_back(fp);
+      i += r.p;
+      continue;
+    }
+    if (p[i] == 'G') {
+      if (!sig || !sig->data || i + 1 >= n) return false;
+      int lowerCase = p[++i];
+      if (lowerCase > 1) return false;
+      Bytes rest(p + i + 1, p + std::min(n, i + 12));
+      RBuf r(rest);
+      uint64_t pad = r.var();
+      const Bytes& s = *sig->data;
+      size_t der = derLength(s.data() + sig->pos, s.size() - sig->pos);
+      if (!der || pad > ((uint64_t)1 << 30)) return false;
+      Bytes v(s.begin() + sig->pos, s.begin() + sig->pos + der);
+      sig->pos += der;
+      v.insert(v.end(), (size_t)pad, 0);
+      strRender(v, 4 + lowerCase, out);
       i += r.p;
       continue;
     }
