@@ -508,6 +508,48 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   NwFit nw_f[NCH][NSUB];
   NwFitL nw_fl[NCH][NW_BL];  // (the subbands under NW_BL's, their nw_f's unused)
   double nw_el[NCH][NW_BL], nw_es[NCH][NW_BL];
+  // (since format 169 the fit's errors, in steps, cascaded (code_q()): an NLMS fit of its last
+  // NWC_K (nwc_e, a ring of them in values, from nwc_p; its weights nwc_w, each step NWC_MU of their
+  // power), and of what that leaves a least squares fit by the 2 nearest earlier channels' errors
+  // and values of the sample, forgetting by NWC_LAM a sample (nwc_R, the sums of h h', its lower 4
+  // by 4 by rows, and nwc_c, of h by what's left: nwc_solve()); the mean squares of the errors of
+  // the fit alone, with the NLMS fit's value and with both parts', each sample a 64th of them
+  // (nwc_m1, nwc_mo, nwc_m2), the least of them taken; the fit's errors of the subband's 8, in
+  // values, for the channels after it (nwc_r, 0 where there is no step))
+  static constexpr int NWC_K = 32;
+  static_assert((NWC_K & (NWC_K - 1)) == 0 && NWC_K % 4 == 0, "nwc_e's ring a power of 2, nw_dot()'s 4s");
+  static constexpr double NWC_MU = 0.02, NWC_LAM = 0.88, NWC_RIDGE = 0.04;
+  double nwc_w[NCH][NSUB][NWC_K], nwc_e[NCH][NSUB][NWC_K], nwc_m1[NCH][NSUB], nwc_mo[NCH][NSUB], nwc_m2[NCH][NSUB];
+  double nwc_r[NCH][NSUB][8], nwc_R[NCH][NSUB][10], nwc_c[NCH][NSUB][4];
+  U8 nwc_p[NCH][NSUB];
+  // (R + d I) a = c by L D L' (R's lower 4 by 4 by rows, d its mean diagonal by NWC_RIDGE): a h, 0
+  // where a pivot isn't positive (a damaged stream's)
+  static double nwc_solve(const double* R, const double* c, const double* h) {
+    const double d = (R[0] + R[2] + R[5] + R[9]) / 4.0 * NWC_RIDGE + 1e-9;
+    double L[10], iD[4], z[4], a[4];
+    for (int i = 0, ri = 0; i < 4; ri += ++i) {
+      for (int k = 0, rk = 0; k < i; rk += ++k) {
+        double t = R[ri + k];
+        for (int m = 0; m < k; m++) t -= L[ri + m] * L[rk + m] / iD[m];
+        L[ri + k] = t * iD[k];
+      }
+      double t = R[ri + i] + d;
+      for (int m = 0; m < i; m++) t -= L[ri + m] * L[ri + m] / iD[m];
+      if (!(t > 0.0)) return 0.0;
+      iD[i] = 1.0 / t;
+    }
+    for (int i = 0, ri = 0; i < 4; ri += ++i) {
+      double t = c[i];
+      for (int m = 0; m < i; m++) t -= L[ri + m] * z[m];
+      z[i] = t;
+    }
+    for (int i = 3; i >= 0; i--) {
+      double t = z[i] * iD[i];
+      for (int m = i + 1; m < 4; m++) t -= L[m * (m + 1) / 2 + i] * a[m];
+      a[i] = t;
+    }
+    return a[0] * h[0] + a[1] * h[1] + a[2] * h[2] + a[3] * h[3];
+  }
   S32 nw_y[NCH][NSUB][NW_NY];
   U8 nw_yp[NCH][NSUB];
   struct NwLc {  // (nw_lpc()'s, while ok)
@@ -5530,15 +5572,37 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // nearer at all, its errors a 32nd a sample, 0.26% (a 16th 0.25%, a 64th 0.27%), at 0.97 of
     // the short one's 0.28%, at 0.90 and a 64th 0.28%, the two mixed by their errors (inverse)
     // 0.25%; with 40 more under 8, the long one refitted every 64 samples 0.37%, both forgetting by
-    // 0.996 the same, 0.997 0.36%
+    // 0.996 the same, 0.997 0.36%.
+    // Since format 169 the fit's errors cascaded: an NLMS fit of its last 32 (NWC_K), in steps, each
+    // step 0.02 of their power (NWC_MU), and of what that leaves a least squares fit by the 2 nearest
+    // earlier channels' errors and values of the sample, forgetting by 0.88 a sample, its ridge 0.04
+    // of its mean diagonal (nwc_solve()); the fit's value alone, with the NLMS fit's or with both,
+    // whichever's errors have the least mean square, each sample a 64th of it; the NLMS fit stepped
+    // by the error with both where that has been the less, else by its own: 9 streams without their
+    // WAVs 10497257 bytes to 10427485 (0.66%: `Fire__VooDoo_Studio_30_sec.wav` 2.17%, `mid.dtsc`
+    // 0.58%, `96-24.dts` 0.41%, `dts_es.dts` 0.10%, `s.2.dts`'s first 3 MB 0.06%, the rest
+    // 0.02-0.04%; FATE's 7-frame XCH sample 37 bytes bigger, 1.4%). Against it: the NLMS fit alone,
+    // 0.15% (16 or 64 taps at their best steps 0.13%; with 4 or 8 of the fit's own regressors too
+    // 0.10% and 0.09%, those alone 0.003% bigger; by the error's sign 0.11%); the 4 earlier channels'
+    // errors in it at their own step, 0.1, 0.34%; by least squares forgetting by 0.9 0.55%, by 0.95
+    // 0.52%, by 0.98 0.40%, by 0.8 0.50%; their values too, 8 by 8, 0.59% (the 4's or the 8's by
+    // their errors 0.60%, each input's ridge of its own diagonal 0.57%); the 2 nearest's errors
+    // either side of the sample too 0.42%; both parts taken or neither 0.62%; the NLMS fit stepped by
+    // its own error 0.63%, by both's 0.65%; a warm-up of 16 or 32 samples, or the fit's errors at
+    // 0.98, no smaller; the earlier channels' errors as the fit's own regressors 0.03%; the subband
+    // below's values of the 8 there 0.06% bigger
     const bool nwp = !bound[ch], nwl = nwp && b < NW_BL;  // (nwl: the long fit's subband)
     double nwh[NW_NG] = {}, nwy = 0.0, nwd = 0.0, nwd0 = 0.0, nwg = 1.0, nwys = 0.0, nwyl = 0.0;
+    double nwx[NWC_K], nwxc[4] = {}, nwco = 0.0, nwcx = 0.0;  // (the cascade's: its inputs in steps (nwx set where it's read), its two parts)
     S64 nwq = 0;
     bool nwr = false;
     if (nwp) {
       if (!nw_n[ch][b]) {  // (the subband's first)
         if (nwl) memset(&nw_fl[ch][b], 0, sizeof(NwFitL));
         else memset(&nw_f[ch][b], 0, sizeof(NwFit));
+        memset(nwc_w[ch][b], 0, sizeof(nwc_w[ch][b])), memset(nwc_e[ch][b], 0, sizeof(nwc_e[ch][b]));
+        memset(nwc_R[ch][b], 0, sizeof(nwc_R[ch][b])), memset(nwc_c[ch][b], 0, sizeof(nwc_c[ch][b]));
+        nwc_m1[ch][b] = nwc_mo[ch][b] = nwc_m2[ch][b] = 0.0, nwc_p[ch][b] = 0;
       }
       for (int k = 0; k < NW_NO; k++) nwh[k] = nw_y[ch][b][(nw_yp[ch][b] + NW_NY - 1 - k) & (NW_NY - 1)];
       if (nwl)
@@ -5561,6 +5625,21 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       } else
         nwy = nw_dot(nw_f[ch][b].w, nwh, NW_NS);
       nwd = (nwy - (double)pred) / ((double)ss / 4194304.0);  // (the fit's index, in steps: in lo..hi,
+      if (ss > 0) {  // (the cascade's, in steps: its parts where their errors have been the least)
+        const double sc = 4194304.0 / (double)ss;
+        for (int k = 0; k < NWC_K; k++) nwx[k] = nwc_e[ch][b][(nwc_p[ch][b] + NWC_K - 1 - k) & (NWC_K - 1)] * sc;
+        nwco = nw_dot(nwc_w[ch][b], nwx, NWC_K);
+        bool any = false;
+        for (int k = 0; k < 2; k++) {
+          const int c = ch - 1 - k;
+          if (c >= r.ch0() && b < r.nvqsub[c] && s.abits[c][b] && !bound[c])
+            nwxc[k] = nwc_r[c][b][j & 7] * sc, nwxc[2 + k] = tw_y[c][b][j & 7] * sc, any = true;
+        }
+        if (any) nwcx = nwc_solve(nwc_R[ch][b], nwc_c[ch][b], nwxc);
+        const double m1 = nwc_m1[ch][b], mo = nwc_mo[ch][b], m2 = nwc_m2[ch][b];
+        if (m2 < m1 && m2 < mo) nwd += nwco + nwcx;
+        else if (mo < m1) nwd += nwco;
+      }
       nwd = nwd > (double)lo ? nwd : (double)lo;                // lo where a damaged stream's fit isn't
       nwd = nwd < (double)hi ? nwd : (double)hi;                // a number)
       // (since format 162 the fit's value shrunk toward 0 by the subband's least squares gain of the
@@ -5699,7 +5778,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const S64 lv = !dw ? bind.up == 1 ? plev[ch][b][j] : tlev[ch][j] : 0;
     const S128 hu = !dw ? (S128)lv << 22 : (S128)(wav->bps == 2 ? 256 : 1) << (38 + DW_HC);
     // (since format 162 the RMS rule's budget, ABITS 2 or more: the index's weight by how likely
-    // the m after it in its part then put the part's energy in its cell, nw_bud())
+    // the m after it in its part then put the part's energy in its cell, nw_bud(); at ABITS 1 too, 9
+    // streams without their WAVs 0.03% bigger, every one bigger: there a part's energy lies in its
+    // cell 81-89% of the time, at 9 or more 96-98%)
     NwBud bud;
     bool bon = false;
     // (since format 164, by the louder 8's rule, each index of ABITS 2 or more by how likely the rest
@@ -5769,7 +5850,28 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           nw_add(f, hs, ys);
           if (++f.n == NW_K) f.n = 0, nw_refit(f);
         }
-      }
+        {  // (the cascade's: the NLMS fit's step by the error with the other part's value too where
+           // that has been the better, the mean squares, the least squares fit's sums, the rings)
+          const double e1 = ys - nwy * sc, eo = e1 - nwco, e2 = eo - nwcx;
+          double en = 1.0;
+          for (int k = 0; k < NWC_K; k++) en += nwx[k] * nwx[k];
+          const double mu = NWC_MU * (nwc_m2[ch][b] < nwc_mo[ch][b] ? e2 : eo) / en;
+          for (int k = 0; k < NWC_K; k++) nwc_w[ch][b][k] += mu * nwx[k];
+          nwc_m1[ch][b] += (e1 * e1 - nwc_m1[ch][b]) / 64.0, nwc_mo[ch][b] += (eo * eo - nwc_mo[ch][b]) / 64.0;
+          nwc_m2[ch][b] += (e2 * e2 - nwc_m2[ch][b]) / 64.0;
+          if (ch - 1 >= r.ch0()) {
+            const double t = eo;
+            double* const R = nwc_R[ch][b];
+            double* const c = nwc_c[ch][b];
+            for (int i = 0, ri = 0; i < 4; ri += ++i) {
+              for (int k = 0; k <= i; k++) R[ri + k] = NWC_LAM * R[ri + k] + nwxc[i] * nwxc[k];
+              c[i] = NWC_LAM * c[i] + nwxc[i] * t;
+            }
+          }
+          nwc_e[ch][b][nwc_p[ch][b]++ & (NWC_K - 1)] = nwc_r[ch][b][j & 7] = e1 / sc;
+        }
+      } else
+        nwc_r[ch][b][j & 7] = 0.0;
       nw_pe[ch][b] += (double)v * (double)v;
       if (ss > 0 && kpe > kpb) {  // (the louder 8's: the 8-block's energy; at its end, whether it reached the cell)
         nw_be[ch][b] += (double)v * (double)v;

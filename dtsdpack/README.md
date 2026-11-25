@@ -9,7 +9,7 @@ to code is where the encoder chose otherwise. Decompression, with the same WAV, 
 stream byte for byte.
 
 The core of `s.2.dts` (4 minutes 25 seconds of 5.1 at 1509 kbps; 50008260 bytes) compresses to
-76383 bytes (0.15%); without its audio, dtsdpack's model gets 63.26% and `xz -9e` 88.21%.
+76383 bytes (0.15%); without its audio, dtsdpack's model gets 63.11% and `xz -9e` 88.21%.
 
 The core substream's extensions are coded too: XCH (6.1's back centre) and XXCH (7.1's other
 channels) as more channels, X96 (DTS 96/24's 24-48 kHz band and the core's residuals) as subbands
@@ -104,7 +104,7 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 63.26% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 63.11% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3485 (0.27%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 4624 (0.43%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2589 (0.11%) | | |
@@ -894,6 +894,36 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   on this host, `mid.dtsc` without its WAV 518 KB/s to 456 compressing, 513 to 445 decompressing,
   the XCH sample 493 to 422 and 496 to 406, and with its WAV 335 to 336 and 377 to 368 (the same
   instructions, 0.3% more). With the WAV, every run of the check lists as by the retune alone.
+  Since format 169 that fit's errors are cascaded: an NLMS fit of its last 32 errors, in steps
+  (each step 0.02 of their power), and of what that leaves a least squares fit by the 2 nearest
+  earlier channels' errors and values of the sample, solved at every sample (by L D L', its ridge
+  0.04 of its mean diagonal), forgetting by 0.88 a sample; the fit's value alone, with the NLMS
+  fit's, or with both, whichever's errors have the least mean square (each sample a 64th of it),
+  and the NLMS fit stepped by the error with both where that has been the less, else by its own.
+  What an earlier channel's error says of this one's moves faster than the fit's 200 or so samples
+  of memory follow: the 4 earlier channels' errors as the fit's own regressors make the 9 streams
+  below 0.03% smaller, in the NLMS fit at their own step (0.1) 0.34%, by a least squares fit
+  forgetting by 0.9 0.55%. Without their WAVs, `s.2.dts`'s whole core 31634791 bytes to 31560029
+  (63.26% of it to 63.11%), the 55 streams of the check lists 125339291 to 124808444 (0.42%:
+  `Fire__VooDoo_Studio_30_sec.wav` and its two packings 2.17%, `z192/z.dtsc` 1.9%,
+  `dtswavsample16.wav` 0.61%, `mid.dtsc` 0.58%, FFmpeg's `f2.dts` 0.54%, `lfe/l0.dtsc` 0.53%,
+  `96-24.dts` 0.41%, the rest up to 0.37%; 21 bigger: FATE's 7- and 14-frame samples, noise, by
+  37-131 bytes, 0.9-2.5%, FFmpeg's `f4.dts` and its packing by 1117 bytes, 0.14%, its 16-bit
+  `e16.dts` by 828, 0.07%, `f1c.dts`'s packing by 80, `f3.dts` by 68, `sur/s.dts` by 116). On 9 of
+  the streams (10497257 bytes to 10427485, 0.66%): the NLMS fit alone 0.15% (16 or 64 taps 0.13%;
+  with 4 or 8 of the fit's own regressors too 0.10% and 0.09%, those alone nothing); the 4 earlier
+  channels' errors by least squares forgetting by 0.95 0.52%, by 0.98 0.40%, by 0.8 0.50%; their
+  values too, 8 by 8, 0.59% (the 4's or the 8's by their errors 0.60%); the 2 nearest's errors
+  either side of the sample too 0.42%; both parts taken or neither 0.62%; the NLMS fit stepped by
+  its own error 0.63%, by both's 0.65%; a warm-up of 16 or 32 samples, or the fit's errors at
+  0.98, no smaller; the subband below's values of the 8 as the fit's regressors 0.06% bigger; the
+  RMS rule's budget at ABITS 1 too 0.03% bigger (there a part's energy lies in its cell 81-89% of
+  the time, at 9 and more 96-98%). For 3.9% more instructions without the WAV (`mid.dtsc`'s,
+  compressing; FATE's 7-frame XCH sample 6.9%): the medians of 15 runs interleaved with format
+  168's build on this host, `mid.dtsc` without its WAV 497 KB/s to 479 compressing, 488 to 469
+  decompressing, the XCH sample 460 to 427 and 461 to 430, and with its WAV 348 both and 392 to
+  393 (0.06% more instructions). With the WAV, every run of the check lists the size format 168's
+  build makes, 1455804 bytes in all.
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first
@@ -2344,7 +2374,7 @@ files at that level.
 
 ### The format
 
-"dtsdpack", the format's version (168), the level (9, or 8: above) and above it the stream's packing
+"dtsdpack", the format's version (169), the level (9, or 8: above) and above it the stream's packing
 (since format 145: 0 the core's own, 1 little-endian, 2 and 3 14 bits a word big- and
 little-endian); what the WAV was (whether it was one, and since format 155 whether a heights WAV was
 added into it, its channels and bytes a sample, its size and the CRC-32 of its first 64 KB; then the
