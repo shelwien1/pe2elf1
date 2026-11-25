@@ -45,6 +45,7 @@ namespace pdd {
 #include "pdf_objstm.inc"
 #include "pdf_class.inc"
 #include "pdf_lift.inc"
+#include "pdf_cmap.inc"
 #include "pdf_emit.inc"
 
 static const int kSyntaxLevelMax = 1;  // 1 = items + raw object text (M1..M4)
@@ -268,6 +269,11 @@ class Encoder {
       dump.aux[AX_CSN].swap(nu);
       dump.aux[AX_CSH].swap(hx);
       dump.hdr.flags |= kFlagLiftCS;
+    }
+    if (!dump.classFile[CF_CMAP].empty() && cmapApply(dump.classFile[CF_CMAP], sk, nu)) {
+      dump.classFile[CF_CMAP].swap(sk);
+      dump.aux[AX_CMB].swap(nu);
+      dump.hdr.flags |= kFlagCmap;
     }
   }
 

@@ -24,6 +24,7 @@ M5–M8 and the M10 list:
 | ObjStm headers (`L_OBJSTM`) | the `num off` table; offsets derived from member boundaries |
 | Classic xref tables (`I_XREF`) | entries predicted from object positions; free entries from the free list |
 | XRef stream rows (`L_XREFROWS`) | rows predicted from object positions and ObjStm order |
+| CMap blocks | uniform `bfchar`/`bfrange` bodies → `.cmb` (binary, delta-coded codes and destinations) |
 | Small text streams | XMP and other small text streams go to `.txt`, not `.bin` |
 
 Not built: the token-level object coder (M5 proper: `/Length` and other derived dict values,
@@ -69,7 +70,8 @@ Tested with g++ 13.3 and clang 18 on Linux x86-64.
 | `<P>.cs` | all decoded content streams concatenated, numbers and hex strings replaced by markers |
 | `<P>.csn` | the numbers lifted from `.cs`, per (operator, operand slot) group |
 | `<P>.csh` | the hex strings lifted from `.cs`, as binary |
-| `<P>.cmap` | all decoded CMaps (`/ToUnicode`, embedded encodings), concatenated |
+| `<P>.cmap` | all decoded CMaps (`/ToUnicode`, embedded encodings), concatenated, `bfchar`/`bfrange` bodies replaced by markers |
+| `<P>.cmb` | those bodies as binary |
 | `<P>%08X.<ext>` | one file per extracted stream; ordinal in file order |
 
 Files that would be empty are not written; the header records which ones exist, so `d` never
@@ -147,13 +149,13 @@ supplied PDFs (55.6 MB, orig.xz 47.5 MB).
 | + adaptive per-group number coding | 59.4% | 8.90 MB |
 | + XRef stream rows | 59.3% | 8.83 MB |
 | + Type 1 charstrings split into operator / operand pools | 59.2% | 8.78 MB |
+| + CMap `bfchar`/`bfrange` blocks as binary | 59.2% | 8.77 MB |
 
 Measured and not adopted, because they don't beat xz on this corpus:
 - PNG filters on raw images: raw rows compress best on aggregate.
 - Lifting numbers without grouping, or with plain deltas: both lose to text.
 - Splitting content streams per operator as text.
 - Unescaping literal strings.
-- CMap pairs as binary: −6% of `.cmap`, about 5 KB in total.
 - Keeping Flate layers with large recon encoded: made the total worse.
 
 Speed of `c`, single thread, verify on: 1.6 MB/s aggregate on the test set. Almost all the time is
@@ -188,5 +190,6 @@ inserted, duplicated ranges), and the 117 files of the 005 set.
     src/pdf_t1.inc      Type 1 eexec / charstring decryption layer
     src/pdf_objstm.inc  ObjStm header derivation, XRef stream row derivation
     src/pdf_lift.inc    number lifting (content streams, object text), per-group coding
+    src/pdf_cmap.inc    CMap bfchar/bfrange blocks as binary
     src/pdf_emit.inc    item records, stream descriptors, recon dictionary, decoder
     src/preflate.inc    from ziprec, unmodified

@@ -196,7 +196,7 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
   // undo whole-file transforms first
   DumpFiles tmp;
   const DumpFiles* use = &d;
-  if (d.hdr.flags & (kFlagLiftT | kFlagLiftCS)) {
+  if (d.hdr.flags & (kFlagLiftT | kFlagLiftCS | kFlagCmap)) {
     tmp.hdr = d.hdr;
     tmp.chan = d.chan;
     for (int c = 0; c < CF_COUNT; c++) tmp.classFile[c] = d.classFile[c];
@@ -208,6 +208,8 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
     if (d.hdr.flags & kFlagLiftCS)
       if (!liftInverse(LIFT_CS, d.classFile[CF_CS], d.aux[AX_CSN], d.aux[AX_CSH], tmp.classFile[CF_CS]))
         fail("content number lift: bad data");
+    if (d.hdr.flags & kFlagCmap)
+      if (!cmapInverse(d.classFile[CF_CMAP], d.aux[AX_CMB], tmp.classFile[CF_CMAP])) fail("cmap transform: bad data");
     use = &tmp;
   }
   ChanReader r(*use, meta0, std::move(loader), &d.ownData);
