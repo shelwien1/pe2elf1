@@ -17,6 +17,8 @@ struct StreamDesc {
   uint32_t num = 0, gen = 0;
   uint8_t iv[16] = {};
   std::vector<Layer> layers;  // undo order: outermost filter first
+  bool deferred = false;      // restored after the last item (forward-dependent XRef stream)
+  uint64_t payloadLen = 0;    // deferred: payload size (space reserved when the item is written)
 };
 
 #include "pdf_derive.inc"
@@ -102,6 +104,8 @@ static void writeStreamDesc(ChanWriter& w, EmitState& st, StreamDesc& sd, Bytes&
     st.prevCipherNum = sd.num;
   }
   if (sd.cipher == CI_AES128 || sd.cipher == CI_AES256) w.put(CH_R, sd.iv, 16);
+  w.u8(CH_S, sd.deferred ? 1 : 0);
+  if (sd.deferred) w.var(CH_N, sd.payloadLen);
   w.u8(CH_S, (uint8_t)sd.layers.size());
   for (auto& l : sd.layers) {
     w.u8(CH_S, l.type);
@@ -149,6 +153,10 @@ static void readStreamDesc(ChanReader& r, ReadState& st, StreamDesc& sd, Bytes& 
     st.prevCipherNum = sd.num;
   }
   if (sd.cipher == CI_AES128 || sd.cipher == CI_AES256) memcpy(sd.iv, r.get(CH_R, 16), 16);
+  uint8_t flags = r.u8(CH_S);
+  if (flags > 1) fail("bad stream flags");
+  sd.deferred = flags & 1;
+  if (sd.deferred) sd.payloadLen = r.len(CH_N);
   size_t nl = r.u8(CH_S);
   sd.layers.resize(nl);
   for (auto& l : sd.layers) {
@@ -227,11 +235,23 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
   DeriveState ds;
   StreamFacts noFacts;
   Bytes txt;
+  std::vector<uint64_t> itemStart;
+  std::vector<FwdPatch> fwd, local;
+  struct Deferred { uint64_t pos; StreamDesc sd; Bytes data; size_t streamNo; };
+  std::vector<Deferred> deferred;
+  auto rebase = [&](uint64_t base) {
+    for (auto& f : local) {
+      f.pos += base;
+      fwd.push_back(f);
+    }
+    local.clear();
+  };
   size_t streamNo = 0;
   out.reserve((size_t)std::min<uint64_t>(d.hdr.origSize, (uint64_t)1 << 32));
   for (;;) {
     uint8_t tag = r.u8(CH_S);
     if (tag == I_END) break;
+    itemStart.push_back(out.size());
     switch (tag) {
       case I_TEXT:
       case I_OBJ: {
@@ -241,14 +261,18 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
         bool hdr = tag == I_OBJ && objHeaderOf(p, n, num, gen);
         if (hdr) objPos.add(num, gen, out.size());
         DerivCrypt dc{&d.hdr.fileKey, num, hdr ? gen : 0};
-        if (!derivDecode(p, n, noFacts, ds, num, txt, &dc)) fail("bad derived field in item text");
+        if (!derivDecode(p, n, noFacts, ds, num, txt, &dc, &local)) fail("bad derived field in item text");
+        rebase(out.size());
         out.insert(out.end(), txt.begin(), txt.end());
         break;
       }
-      case I_XREF:
+      case I_XREF: {
         ds.xrefPos.push_back(out.size());
-        readXref(r, objPos, out, &ds.lastXrefEnd);
+        std::vector<std::pair<uint64_t, int64_t>> xf;
+        readXref(r, objPos, out, &ds.lastXrefEnd, &xf);
+        for (auto& x : xf) fwd.push_back({x.first, 10, 2, (uint64_t)x.second + 1, 0});
         break;
+      }
       case I_RAW: {
         size_t n = r.len(CH_N);
         const uint8_t* p = r.get(CH_B, n);
@@ -268,15 +292,20 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
         StreamFacts f;
         streamFacts(ctx, sd, data, (need & 1) != 0, (need & 2) != 0, f);
         Bytes payload;
-        if (!(fast && (*fast)(streamNo, sd, data, payload))) {
+        bool defer = sd.deferred;
+        if (defer) {
+          payload.assign((size_t)sd.payloadLen, 0);
+        } else if (!(fast && (*fast)(streamNo, sd, data, payload))) {
           payload.swap(data);
           restorePayload(ctx, d.hdr.fileKey, sd, payload);
         }
         f.payloadKnown = true;
         f.payloadLen = payload.size();
         DerivCrypt dc{&d.hdr.fileKey, num, gen};
-        if (!derivDecode(p, n, f, ds, num, txt, &dc)) fail("bad derived field in stream dictionary");
+        if (!derivDecode(p, n, f, ds, num, txt, &dc, &local)) fail("bad derived field in stream dictionary");
+        rebase(out.size());
         out.insert(out.end(), txt.begin(), txt.end());
+        if (defer) deferred.push_back({out.size(), sd, std::move(data), streamNo});
         out.insert(out.end(), payload.begin(), payload.end());
         uint32_t lr;
         if (lengthRefOf(txt.data(), txt.size(), lr)) ds.lenRef[lr] = payload.size();
@@ -287,7 +316,8 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
         streamNo++;
         n = r.len(CH_N);
         p = r.get(CH_T, n);
-        if (!derivDecode(p, n, noFacts, ds, 0, txt)) fail("bad derived field in item text");
+        if (!derivDecode(p, n, noFacts, ds, 0, txt, nullptr, &local)) fail("bad derived field in item text");
+        rebase(out.size());
         out.insert(out.end(), txt.begin(), txt.end());
         break;
       }
@@ -295,5 +325,16 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
     }
   }
   if (!r.allConsumed()) fail("dump has unconsumed data");
+  // forward-dependent streams: every object position is known now
+  for (auto& df : deferred) {
+    Bytes payload;
+    if (!(fast && (*fast)(df.streamNo, df.sd, df.data, payload))) {
+      payload.swap(df.data);
+      restorePayload(ctx, d.hdr.fileKey, df.sd, payload);
+    }
+    if (payload.size() != df.sd.payloadLen || df.pos + payload.size() > out.size()) fail("deferred stream size mismatch");
+    memcpy(out.data() + df.pos, payload.data(), payload.size());
+  }
+  if (!fwdApply(out, itemStart, fwd)) fail("bad forward slot");
   return out;
 }

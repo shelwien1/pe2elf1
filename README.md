@@ -25,14 +25,15 @@ M5–M8 and the M10 list:
 | Classic xref tables (`I_XREF`) | entries predicted from object positions; free entries from the free list |
 | XRef stream rows (`L_XREFROWS`) | rows predicted from object positions and ObjStm order |
 | CMap blocks | uniform `bfchar`/`bfrange` bodies → `.cmb` (binary, delta-coded codes and destinations) |
+| Linearization (M9 stage 1) | forward slots: linearization dict `/L /E /T /H`, first-page xref entries, forward `/Prev` `startxref` `/XRefStm`; the decoder patches them once all positions are known. First-page XRef streams are restored after the last item when that predicts better |
 | Encrypted strings | strings of top-level objects of encrypted files stored as plaintext (spelling policy, cipher and AES IV kept in the placeholder; `d` re-encrypts) |
 | Inline images with filters | `BI … ID <data> EI` whose filters (Flate, LZW, A85, AHx, RL, predictors) can be undone exactly → decoded data and recon in `.csi` |
 | Derived fields | stream `/Length` (direct and indirect object), `/DL`, `/Length1-3`, ObjStm `/N /First`, image `/Width /Height` (BMP header, JPEG SOF), EmbeddedFile `/Params /Size /CheckSum`, `startxref`, trailer `/Prev /Size /XRefStm`, XRef stream `/Prev`: replaced by placeholders the decoder fills in |
 | Small text streams | XMP and other small text streams go to `.txt`, not `.bin` |
 
-Not built: the token-level object coder (M5 proper: `/Length` and other derived dict values,
-string escapes, gap model), content-stream operator coding beyond number lifting (M8),
-linearization (M9). `-s` above 1 is clamped to 1.
+Not built: the token-level object coder of M5 (name table, gap model; numbers, derived values and
+encrypted strings are handled by the transforms above), content-stream operator coding beyond
+number lifting (M8), hint table regeneration (M9 stage 2). `-s` above 1 is clamped to 1.
 
 ## Build
 
@@ -156,6 +157,7 @@ supplied PDFs (55.6 MB, orig.xz 47.5 MB).
 | + Type 1 charstrings split into operator / operand pools | 59.2% | 8.78 MB |
 | + CMap `bfchar`/`bfrange` blocks as binary | 59.2% | 8.77 MB |
 | + derived fields (`/Length`, `startxref`, `/Prev`, ...) | 59.1% | 8.75 MB |
+| + encrypted strings, inline image filters, linearization forward slots | 59.1% | 8.75 MB |
 
 Measured and not adopted, because they don't beat xz on this corpus:
 - PNG filters on raw images: raw rows compress best on aggregate.

@@ -123,7 +123,10 @@ static std::vector<uint64_t> xrefNextFree(const std::vector<std::pair<uint64_t, 
 
 // entry kinds: 0 in use as predicted; 1 in use + zigzag(offset - predicted) + gen;
 // 2 free, offset = next free object, gen 65535; 3 free + offset + gen; 4 free, offset 0, gen 65535
-static void writeXref(ChanWriter& w, const XrefSection& x, const ObjPositions& op) {
+// kind 5: in use, pointing forward at item `target` (delta-coded against the previous one), gen
+static void writeXref(ChanWriter& w, const XrefSection& x, const ObjPositions& op,
+                      const std::function<int64_t(uint64_t)>* itemAt = nullptr) {
+  int64_t prevTarget = -1;
   w.lenBytes(CH_N, CH_T, x.eol1);
   w.u8(CH_S, x.sep);
   w.u8(CH_S, x.eole[0]);
@@ -148,6 +151,12 @@ static void writeXref(ChanWriter& w, const XrefSection& x, const ObjPositions& o
       bool known = op.get(num, poff, pgen);
       if (e.type == 'n' && known && e.off == poff && e.gen == pgen) {
         w.var(CH_N, 0);
+      } else if (e.type == 'n' && !known && itemAt && (*itemAt)(e.off) >= 0) {
+        int64_t t = (*itemAt)(e.off);
+        w.var(CH_N, 5);
+        w.svar(CH_N, t - prevTarget - 1);
+        w.var(CH_N, e.gen);
+        prevTarget = t;
       } else if (e.type == 'n') {
         w.var(CH_N, 1);
         w.svar(CH_N, (int64_t)(e.off - poff));
@@ -170,7 +179,10 @@ static int64_t xrefEnd(const std::vector<std::pair<uint64_t, uint64_t>>& subs) {
   return e;
 }
 
-static void readXref(ChanReader& r, const ObjPositions& op, Bytes& out, int64_t* endOut = nullptr) {
+static void readXref(ChanReader& r, const ObjPositions& op, Bytes& out, int64_t* endOut = nullptr,
+                     std::vector<std::pair<uint64_t, int64_t>>* fwd = nullptr) {
+  int64_t prevTarget = -1;
+  std::vector<int64_t> targets;
   out.insert(out.end(), {'x', 'r', 'e', 'f'});
   Bytes t;
   r.lenBytes(CH_N, CH_T, t);
@@ -203,6 +215,14 @@ static void readXref(ChanReader& r, const ObjPositions& op, Bytes& out, int64_t*
       else if (kind == 2) { e.type = 'f'; e.gen = 65535; }
       else if (kind == 3) { e.type = 'f'; e.off = r.var(CH_N); e.gen = (uint32_t)r.var(CH_N); }
       else if (kind == 4) { e.type = 'f'; e.gen = 65535; }
+      else if (kind == 5) {
+        if (!fwd) fail("forward xref entry without patch list");
+        int64_t t = prevTarget + 1 + r.svar(CH_N);
+        prevTarget = t;
+        e.gen = (uint32_t)r.var(CH_N);
+        targets.resize(ents.size() + 1, -1);
+        targets[ents.size()] = t;
+      }
       else fail("bad xref entry kind");
       ents.push_back(e);
       types.push_back(e.type);
@@ -220,6 +240,7 @@ static void readXref(ChanReader& r, const ObjPositions& op, Bytes& out, int64_t*
     for (uint64_t k = 0; k < subs[s].second; k++, ei++) {
       XrefEntry& e = ents[ei];
       if (kinds[ei] == 2) e.off = nextFree[ei];
+      if (kinds[ei] == 5) fwd->push_back({out.size(), targets[ei]});
       if (e.off > 9999999999ull || e.gen > 99999) fail("bad xref entry");
       l = snprintf(buf, sizeof(buf), "%010llu %05u %c", (unsigned long long)e.off, e.gen, e.type);
       out.insert(out.end(), buf, buf + l);

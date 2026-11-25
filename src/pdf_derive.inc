@@ -127,6 +127,7 @@ static void derivWalk(const uint8_t* p, size_t n, std::vector<DerivTok>& out) {
     if (!st.empty() && st.back().dict) st.back().expectKey = true;
   };
   auto curPath = [&]() -> std::string {
+    if (!st.empty() && !st.back().dict) return st.back().path;  // "/Key[]" for elements of a keyed array
     if (st.empty() || !st.back().dict || st.back().expectKey) return "";
     return st.back().path + st.back().key;
   };
@@ -177,7 +178,8 @@ static void derivWalk(const uint8_t* p, size_t n, std::vector<DerivTok>& out) {
       continue;
     }
     if (c == '[') {
-      st.push_back({false, "", "", false});
+      std::string path = curPath();
+      st.push_back({false, path.empty() ? std::string() : path + "[]", "", false});
       i++;
       continue;
     }
@@ -447,14 +449,67 @@ static void cryptStrings(const uint8_t* p, size_t n, uint8_t cipher, const Deriv
   }
 }
 
+// ---- forward slots (plan 3.6, M9) ---------------------------------------------------------------
+// Positions that point at later parts of the file (linearization dictionary, first-page trailer and
+// xref): placeholder 0x04 'f' u8 width, u8 mode, var target, zigzag delta. The decoder writes
+// `width` zeros and patches them once every item position is known. mode bit0: 0 = start of the
+// target item + delta, 1 = length of the target item + delta; bit1: zero-padded. target 0 = end of
+// file, k + 1 = item k.
+struct FwdPatch {
+  uint64_t pos;
+  uint8_t width, mode;
+  uint64_t target;
+  int64_t delta;
+};
+
+static bool fwdApply(Bytes& out, const std::vector<uint64_t>& itemStart, const std::vector<FwdPatch>& patches) {
+  for (auto& p : patches) {
+    uint64_t v;
+    if (p.target == 0) v = out.size();
+    else {
+      uint64_t k = p.target - 1;
+      if (k >= itemStart.size()) return false;
+      if (p.mode & 1) {
+        uint64_t e = k + 1 < itemStart.size() ? itemStart[k + 1] : out.size();
+        v = e - itemStart[k];
+      } else {
+        v = itemStart[k];
+      }
+    }
+    v += (uint64_t)p.delta;
+    char buf[32];
+    int l = (p.mode & 2) ? snprintf(buf, sizeof(buf), "%0*llu", p.width, (unsigned long long)v)
+                         : snprintf(buf, sizeof(buf), "%llu", (unsigned long long)v);
+    if (l != p.width || p.pos + l > out.size()) return false;
+    memcpy(out.data() + p.pos, buf, l);
+  }
+  return true;
+}
+
 // decoder: placeholders resolved
 static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const DeriveState& ds, uint32_t objNum,
-                        Bytes& out, const DerivCrypt* dc = nullptr) {
+                        Bytes& out, const DerivCrypt* dc = nullptr, std::vector<FwdPatch>* fwd = nullptr) {
   out.clear();
   for (size_t i = 0; i < n; i++) {
     if (p[i] != kDerivEsc) { out.push_back(p[i]); continue; }
     if (++i >= n) return false;
     if (p[i] == kDerivEsc) { out.push_back(kDerivEsc); continue; }
+    if (p[i] == 'f') {
+      if (!fwd) return false;
+      Bytes rest(p + i + 1, p + n);
+      RBuf r(rest);
+      FwdPatch fp;
+      fp.width = r.u8();
+      fp.mode = r.u8();
+      fp.target = r.var();
+      fp.delta = unzigzag(r.var());
+      if (fp.width == 0 || fp.width > 20) return false;
+      fp.pos = out.size();  // relative to this text; the caller rebases
+      out.insert(out.end(), fp.width, '0');
+      fwd->push_back(fp);
+      i += r.p;
+      continue;
+    }
     if (p[i] == 'e') {
       if (!dc || !dc->fileKey || dc->fileKey->empty() || i + 1 >= n) return false;
       uint8_t info = p[++i];
@@ -482,6 +537,76 @@ static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const 
     out.insert(out.end(), v.begin(), v.end());
   }
   return true;
+}
+
+// encoder: anchors for forward slots (item starts in file order, file size)
+struct FwdAnchors {
+  std::vector<uint64_t> starts;  // item starts, ascending
+  uint64_t fileSize = 0;
+  // placeholder for position value v of a token with `width` digits; false if no anchor
+  bool position(uint64_t v, size_t width, bool zeroPad, Bytes& rep) const {
+    uint64_t target;
+    int64_t delta;
+    if (v == fileSize) { target = 0; delta = 0; }
+    else {
+      auto it = std::upper_bound(starts.begin(), starts.end(), v);
+      if (it == starts.begin()) return false;
+      size_t k = (size_t)(it - starts.begin()) - 1;
+      target = k + 1;
+      delta = (int64_t)(v - starts[k]);
+      if (delta > 64) return false;
+    }
+    rep = {kDerivEsc, 'f', (uint8_t)width, (uint8_t)(zeroPad ? 2 : 0)};
+    putVarTo(rep, target);
+    putVarTo(rep, zigzag(delta));
+    return true;
+  }
+  bool length(uint64_t itemPos, uint64_t v, size_t width, Bytes& rep) const {
+    auto it = std::lower_bound(starts.begin(), starts.end(), itemPos);
+    if (it == starts.end() || *it != itemPos) return false;
+    size_t k = (size_t)(it - starts.begin());
+    uint64_t e = k + 1 < starts.size() ? starts[k + 1] : fileSize;
+    int64_t delta = (int64_t)(v - (e - itemPos));
+    if (delta < -64 || delta > 64) return false;
+    rep = {kDerivEsc, 'f', (uint8_t)width, 1};
+    putVarTo(rep, k + 1);
+    putVarTo(rep, zigzag(delta));
+    return true;
+  }
+};
+
+// encoder: forward slots for the linearization dictionary and forward-pointing trailer values
+static void fwdChoose(const uint8_t* p, size_t n, int kind, const FwdAnchors& fa, std::vector<DerivEdit>& edits) {
+  std::vector<DerivTok> toks;
+  derivWalk(p, n, toks);
+  bool lin = memfind(p, n, "/Linearized", 11) != nullptr;
+  auto taken = [&](const DerivTok& t) {
+    for (auto& e : edits)
+      if (e.a == t.a) return true;
+    return false;
+  };
+  uint64_t hintPos = UINT64_MAX;
+  for (auto& t : toks) {
+    if (t.kind != DerivTok::INT || taken(t) || t.b - t.a > 20) continue;
+    bool want = false;
+    if (lin && kind == 1 && (t.path == "/L" || t.path == "/E" || t.path == "/T")) want = true;
+    if ((kind == 0 || kind == 2) && (t.path == "/Prev" || t.path == "startxref" || t.path == "/XRefStm")) want = true;
+    if (lin && kind == 1 && t.path == "/H[]") {
+      if (hintPos == UINT64_MAX) { hintPos = t.v; want = true; }
+      else {
+        Bytes rep;
+        if (fa.length(hintPos, t.v, t.b - t.a, rep)) edits.push_back({t.a, t.b, rep});
+        hintPos = UINT64_MAX - 1;
+        continue;
+      }
+    }
+    if (!want || t.v == 0) continue;
+    Bytes rep;
+    if (fa.position(t.v, t.b - t.a, false, rep)) {
+      // the spelling must be the plain decimal of the value
+      if (decStr(t.v).size() == t.b - t.a) edits.push_back({t.a, t.b, rep});
+    }
+  }
 }
 
 // encoder: choose placeholders for one item text. kind: 0 text item, 1 object item, 2 stream prefix

@@ -25,7 +25,7 @@ static const char* const kChanSuffix[CH_COUNT] = {"meta", "num", "txt", "str", "
 static const char* const kDefaultChanMap = "SN,TX,O,F,R,B";
 
 static const uint8_t kMagic[8] = {'P', 'D', 'F', 'D', 'U', 'M', 'P', 0x1A};
-static const uint32_t kFormatVersion = 3;
+static const uint32_t kFormatVersion = 4;
 
 // Class files: all streams of a class concatenated, regardless of size.
 enum ClassFile { CF_CS, CF_CMAP, CF_COUNT };

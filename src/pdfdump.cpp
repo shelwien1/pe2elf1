@@ -634,18 +634,47 @@ class Encoder {
         ok = false;
       }
       if (!ok) continue;
-      ObjPositions snap;
-      for (int i = 0; i <= s.item; i++) {
+      // positions known when the stream is written, and all positions (deferred restore)
+      ObjPositions snap, all;
+      for (int i = 0; i < (int)seg.items.size(); i++) {
         const Item& it = seg.items[i];
         if (it.kind != Item::OBJ && it.kind != Item::STREAM) continue;
         uint32_t num, gen;
         size_t hl = (it.kind == Item::STREAM ? it.dataStart : it.end) - it.start;
-        if (objHeaderOf(in_.data() + it.start, hl, num, gen)) snap.add(num, gen, it.start);
+        if (!objHeaderOf(in_.data() + it.start, hl, num, gen)) continue;
+        if (i <= s.item) snap.add(num, gen, it.start);
+        all.add(num, gen, it.start);
       }
+      Bytes out, recon, out2, recon2;
       ctx_.objPos = &snap;
-      Bytes out, recon;
       bool done = layerDecode(ctx_, L_XREFROWS, fp, s.data, out, recon);
+      ctx_.objPos = &all;
+      bool done2 = opt_.derive && layerDecode(ctx_, L_XREFROWS, fp, s.data, out2, recon2);
       ctx_.objPos = nullptr;
+      auto nonzero = [](const Bytes& b) {
+        size_t z = 0;
+        for (uint8_t c : b) z += c != 0;
+        return z;
+      };
+      if (done2 && (!done || nonzero(out2) + 8 < nonzero(out))) {
+        // the descriptor must carry the payload size; /DL-style facts would differ, so only
+        // when nothing in the prefix needs the decoded data
+        std::vector<DerivTok> toks;
+        const Item& it = seg.items[s.item];
+        derivWalk(in_.data() + it.start, it.dataStart - it.start, toks);
+        bool needDecoded = false;
+        for (auto& t : toks)
+          if (t.path == "/DL" || t.path == "/Length1" || t.path == "/Length3" || t.path == "/First" ||
+              t.path == "/Params/Size" || t.path == "/Params/CheckSum")
+            needDecoded = true;
+        if (!needDecoded) {
+          s.desc.deferred = true;
+          s.desc.payloadLen = s.payload;
+          done = true;
+          out.swap(out2);
+          recon.swap(recon2);
+        }
+      }
       if (!done) continue;
       s.desc.layers.push_back({L_XREFROWS, std::move(recon)});
       s.data.swap(out);
@@ -697,10 +726,20 @@ class Encoder {
     Bytes txt;
     std::vector<DerivEdit> edits;
     ctx_.objPos = &objPos;
+    FwdAnchors fa;
+    for (auto& it : seg.items) fa.starts.push_back(it.start);
+    fa.fileSize = in_.size();
+    std::function<int64_t(uint64_t)> itemAt = [&](uint64_t off) -> int64_t {
+      auto f = std::lower_bound(fa.starts.begin(), fa.starts.end(), off);
+      return f != fa.starts.end() && *f == off ? (int64_t)(f - fa.starts.begin()) : -1;
+    };
     // item text with derived fields replaced (kind: 0 text, 1 object, 2 stream prefix, 3 plain)
     auto derived = [&](size_t a, size_t b, int kind, uint8_t cls, const StreamFacts& f, uint32_t num) {
       edits.clear();
-      if (kind < 3 && opt_.derive) derivChoose(in_.data() + a, b - a, kind, cls, f, ds, num, edits);
+      if (kind < 3 && opt_.derive) {
+        derivChoose(in_.data() + a, b - a, kind, cls, f, ds, num, edits);
+        fwdChoose(in_.data() + a, b - a, kind, fa, edits);
+      }
       // strings of top-level objects of an encrypted file: stored decrypted
       if ((kind == 1 || kind == 2) && opt_.derive && !sec.key.empty() && num != sec.encNum && cls != SC_XREF) {
         uint32_t n2, g2;
@@ -747,7 +786,7 @@ class Encoder {
           w.u8(CH_S, I_XREF);
           ds.xrefPos.push_back(it.start);
           ds.lastXrefEnd = xrefEnd(seg.xrefs[it.xref].subs);
-          writeXref(w, seg.xrefs[it.xref], objPos);
+          writeXref(w, seg.xrefs[it.xref], objPos, opt_.derive ? &itemAt : nullptr);
           break;
         case Item::STREAM: {
           StreamRec& s = streams[streamOfItem_[(int)i]];
