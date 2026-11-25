@@ -154,7 +154,7 @@ class Encoder {
           emit();
           itemLengths();
           auto tl = std::chrono::steady_clock::now();
-          applyLifts();
+          applyLifts(opt_.noVerify);
           tLift = secondsSince(tl);
         } catch (const std::exception& e) {  // also bad_alloc and whatever a worker thread threw
           modelled = false;
@@ -169,27 +169,16 @@ class Encoder {
     tEncode = secondsSince(t0);
     if (modelled && !opt_.noVerify) {
       auto t1 = std::chrono::steady_clock::now();
-      std::string why;
-      try {
-        FastRestore fast = [&](size_t k, const StreamDesc& sd, const Bytes& stored, Bytes& payload) {
-          if (k >= streams.size()) return false;
-          const StreamRec& s = streams[k];
-          const StreamDesc& e = s.desc;
-          if (sd.cipher != e.cipher || sd.num != e.num || sd.gen != e.gen || memcmp(sd.iv, e.iv, 16) != 0 ||
-              sd.layers.size() != e.layers.size() || stored.size() != s.storedSize ||
-              hash64(stored.data(), stored.size()) != s.storedHash)
-            return false;
-          for (size_t i = 0; i < sd.layers.size(); i++)
-            if (sd.layers[i].type != e.layers[i].type || sd.layers[i].recon != e.layers[i].recon) return false;
-          const Item& it = seg.items[s.item];
-          payload.assign(in_.begin() + it.dataStart, in_.begin() + it.dataEnd);
-          return true;
-        };
-        Bytes re = decodeDump(dump, 0, nullptr, &fast, &b64Orig_);
-        if (re != in_) why = "restored file differs from input";
-      } catch (const std::exception& e) {
-        why = e.what();
-        if (why.empty()) why = "exception";
+      std::string why = verifyDump();
+      if (!why.empty() && liftsUnchecked_) {
+        // a lift that its own check would have refused: redo the lifts with the checks
+        try {
+          undoLifts();
+          applyLifts(true);
+          why = verifyDump();
+        } catch (const std::exception& e) {
+          why = e.what();
+        }
       }
       tVerify = secondsSince(t1);
       if (!why.empty()) {
@@ -264,6 +253,8 @@ class Encoder {
   std::unordered_map<uint32_t, size_t> streamByNum_;  // object number -> stream
   std::unordered_map<uint32_t, std::unique_ptr<FontMetrics>> fontCache_;  // by own-file ordinal
   StructMap sm_;                                      // structure parents, in item order
+  Bytes preT_, preCS_, preCmap_;                      // texts before unchecked lifts
+  bool liftsUnchecked_ = false;
   std::unordered_map<uint32_t, std::vector<int>> streamsByNum_;
   std::vector<Bytes> b64Orig_;  // original zlib bytes per base64 blob (verify shortcut)
   std::unordered_map<uint64_t, std::vector<int>> cache_;
@@ -307,20 +298,73 @@ class Encoder {
     itemTexts_.clear();
   }
 
+  // the in-memory restore of the whole dump; "" if it reproduces the input
+  std::string verifyDump() {
+    std::string why;
+    try {
+      FastRestore fast = [&](size_t k, const StreamDesc& sd, const Bytes& stored, Bytes& payload) {
+        if (k >= streams.size()) return false;
+        const StreamRec& s = streams[k];
+        const StreamDesc& e = s.desc;
+        if (sd.cipher != e.cipher || sd.num != e.num || sd.gen != e.gen || memcmp(sd.iv, e.iv, 16) != 0 ||
+            sd.layers.size() != e.layers.size() || stored.size() != s.storedSize ||
+            hash64(stored.data(), stored.size()) != s.storedHash)
+          return false;
+        for (size_t i = 0; i < sd.layers.size(); i++)
+          if (sd.layers[i].type != e.layers[i].type || sd.layers[i].recon != e.layers[i].recon) return false;
+        const Item& it = seg.items[s.item];
+        payload.assign(in_.begin() + it.dataStart, in_.begin() + it.dataEnd);
+        return true;
+      };
+      Bytes re = decodeDump(dump, 0, nullptr, &fast, &b64Orig_);
+      if (re != in_) why = "restored file differs from input";
+    } catch (const std::exception& e) {
+      why = e.what();
+      if (why.empty()) why = "exception";
+    }
+    return why;
+  }
+
+  // back to the text before applyLifts(false)
+  void undoLifts() {
+    int ft = dump.hdr.map.fileOf[CH_T];
+    if (dump.hdr.flags & kFlagLiftT) {
+      dump.chan[ft].swap(preT_);
+      dump.aux[AX_TXN].clear();
+    }
+    if (dump.hdr.flags & kFlagLiftCS) {
+      dump.classFile[CF_CS].swap(preCS_);
+      for (int a : {AX_CSN, AX_CSH, AX_CSS, AX_CSI}) dump.aux[a].clear();
+    }
+    if (dump.hdr.flags & kFlagCmap) {
+      dump.classFile[CF_CMAP].swap(preCmap_);
+      dump.aux[AX_CMB].clear();
+    }
+    dump.hdr.flags &= ~(kFlagLiftT | kFlagLiftCS | kFlagCmap);
+    preT_.clear();
+    preCS_.clear();
+    preCmap_.clear();
+    liftsUnchecked_ = false;
+  }
+
   // The three transforms are independent: with more than one thread, object text is lifted
   // next to content streams and CMaps (it is a serial step after the parallel stream decoding).
-  void applyLifts() {
+  // check = false: the number lifts skip their own inverse (the final verify covers them) and
+  // the original texts are kept for undoLifts.
+  void applyLifts(bool check) {
     if (opt_.syntaxLevel < 2) return;
     int ft = dump.hdr.map.fileOf[CH_T];
     Bytes oSk, oNu, oHx, oSs, cSk, cNu, cHx, cSs, cInl, mSk, mNu;
     bool objOk = false, csOk = false, cmOk = false;
     auto runObj = [&] {
-      objOk = ft != 0 && !dump.chan[ft].empty() && liftApply(LIFT_OBJ, dump.chan[ft], oSk, oNu, oHx, oSs) &&
-              oHx.empty() && oSs.empty();
+      objOk = ft != 0 && !dump.chan[ft].empty() &&
+              liftApply(LIFT_OBJ, dump.chan[ft], oSk, oNu, oHx, oSs, nullptr, nullptr, check) && oHx.empty() &&
+              oSs.empty();
     };
     auto runCs = [&] {
       if (opt_.syntaxLevel < 3) return;
-      csOk = !dump.classFile[CF_CS].empty() && liftApply(LIFT_CS, dump.classFile[CF_CS], cSk, cNu, cHx, cSs, &ctx_, &cInl);
+      csOk = !dump.classFile[CF_CS].empty() &&
+             liftApply(LIFT_CS, dump.classFile[CF_CS], cSk, cNu, cHx, cSs, &ctx_, &cInl, check);
       cmOk = !dump.classFile[CF_CMAP].empty() && cmapApply(dump.classFile[CF_CMAP], mSk, mNu);
     };
     unsigned nt = opt_.threads ? opt_.threads : std::max(1u, std::thread::hardware_concurrency());
@@ -337,13 +381,16 @@ class Encoder {
       runObj();
       runCs();
     }
+    liftsUnchecked_ = !check;
     if (objOk) {
       dump.chan[ft].swap(oSk);
+      if (!check) preT_.swap(oSk);
       dump.aux[AX_TXN].swap(oNu);
       dump.hdr.flags |= kFlagLiftT;
     }
     if (csOk) {
       dump.classFile[CF_CS].swap(cSk);
+      if (!check) preCS_.swap(cSk);
       dump.aux[AX_CSN].swap(cNu);
       dump.aux[AX_CSH].swap(cHx);
       dump.aux[AX_CSS].swap(cSs);
@@ -352,6 +399,7 @@ class Encoder {
     }
     if (cmOk) {
       dump.classFile[CF_CMAP].swap(mSk);
+      if (!check) preCmap_.swap(mSk);
       dump.aux[AX_CMB].swap(mNu);
       dump.hdr.flags |= kFlagCmap;
     }

@@ -1063,10 +1063,13 @@ static bool liftInverse(LiftMode mode, const Bytes& skel, const Bytes& nums, con
 }
 
 // forward + verify; false if the transform does not reproduce the input
+// check: run the inverse and compare (the encoder skips it when its final verify will run and
+// redoes the lifts with the check if that verify fails)
 static bool liftApply(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums, Bytes& hex, Bytes& str,
-                      const CodecCtx* ctx = nullptr, Bytes* inl = nullptr) {
+                      const CodecCtx* ctx = nullptr, Bytes* inl = nullptr, bool check = true) {
   try {
     liftForward(mode, in, skel, nums, hex, str, ctx, inl);
+    if (!check) return true;
     Bytes back;
     return liftInverse(mode, skel, nums, hex, str, back, ctx, inl) && back == in;
   } catch (const std::exception&) {

@@ -118,7 +118,9 @@ over data the lifter already walks, so `c` speed is unaffected.
 
 Outcome (section 7 has the details): all eight items are in. PDF-specific xz 8458 KB → 7737 KB
 (−8.5%), dump.xz 59.01% → 57.35% of orig.xz. `c` speed was not unaffected after all: single
-thread, best of 3 runs per file, 2.51 → 2.37 MB/s (−5.5%), every file at 642 KB/s or more.
+thread, best of 3 runs per file, 2.51 → 2.42 MB/s (−3.5%), every file at 661 KB/s or more; with
+4 threads 4.72 → 4.46 MB/s. The per-group choice among three codings and the walk cost the most;
+the lifts' own inverse check is skipped when the final verify runs.
 
 ### P1. One decimal unit per number group
 

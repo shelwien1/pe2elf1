@@ -263,21 +263,21 @@ Measured and not adopted, because they don't beat xz on this corpus (upper bound
   2952 bytes of xz: certificates and signatures are mostly random bytes, so the gain is the hex
   overhead only. The blobs are standard CMS files for any downstream tool.
 
-Speed of `c`, 120 files run one after another on a 4-CPU machine (the dump is byte-identical
-for every `-j`):
+Speed of `c`, 120 files run one after another on a 4-CPU machine, each file's time the fastest
+of 3 runs (`xzbench.py -r 3`; single runs of the small files vary by up to 2x on this machine).
+The dump is byte-identical for every `-j` and with or without `-n`.
 
-| Mode | Aggregate | Slowest files |
-|---|---|---|
-| default, 4 threads | 3.83 MB/s | every file at 634 KB/s or more |
-| `-n` (no verification), 4 threads | 5.57 MB/s | every file at 823 KB/s or more |
-| `-j 1` (single thread) | 2.16 MB/s | every file at 631 KB/s or more, but one 0.05-s file that measured 441 KB/s in that run (median of 7 runs: 761 KB/s) |
-| `-j 1 -n` | 3.21 MB/s | every file at 904 KB/s or more |
+| Mode | Aggregate | Slowest files | Build before plan2 |
+|---|---|---|---|
+| default, 4 threads | 4.46 MB/s | every file at 671 KB/s or more | 4.72 MB/s, 673 KB/s |
+| `-n` (no verification), 4 threads | 5.92 MB/s | every file at 871 KB/s or more | 6.46 MB/s, 783 KB/s |
+| `-j 1` (single thread) | 2.42 MB/s | every file at 661 KB/s or more | 2.51 MB/s, 679 KB/s |
+| `-j 1 -n` | 3.23 MB/s | every file at 874 KB/s or more | 3.52 MB/s, 776 KB/s |
 
-The plan2 lifter (P1–P4, P7) costs 4% in a single thread and 12% with 4 threads, where it is
-the serial part (object text is lifted next to content streams, which take longest): the build
-before it measured 2.26 MB/s and 4.33 MB/s in the same session. Content-heavy files pay the
-most: Way of Men 0.78 → 0.93 s single-threaded (median of 5), of which 0.27 s is lifting 3 MB of
-content streams.
+Plan2's number lifting is most of the difference: on intel.pdf it takes 0.19 s of 1.05 s. With
+verification on, the lifts skip their own inverse check (the final verify restores everything
+anyway); if that verify fails, the encoder redoes the lifts with their checks before it would
+fall back to stored mode. With `-n` the checks stay, hence the larger cost there (8%).
 
 Almost all the time is preflate: the analysis plus the re-encode that verifies each Flate layer.
 The slow files have level-9 text streams or highly compressible images, where preflate costs
