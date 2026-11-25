@@ -260,3 +260,51 @@ class Segmenter {
     return true;
   }
 };
+
+// Item lengths (format 7). The decoder finds where an object item, a stream prefix or a stream
+// suffix ends in the T channel by the segmenter's rules above, so .iln holds per item only
+// var 0 (as predicted) or zigzag(length - prediction).
+//   IL_OBJ, IL_SUF: through the first "endobj" and the whitespace after it
+//   IL_PRE: through the first "stream" and its end of line (spaces or tabs before it allowed)
+// Searches move forward only and the end found for a keyword is kept, so predicting every item
+// of a dump is linear in the T channel size, whatever the lengths are.
+enum { IL_OBJ, IL_PRE, IL_SUF };
+class ItemLenPredictor {
+ public:
+  ItemLenPredictor(const uint8_t* d, size_t n) : d_(d), n_(n) {}
+  size_t predict(size_t pos, int kind) {
+    if (pos >= n_) return 0;
+    Kw& c = kind == IL_PRE ? pre_ : obj_;
+    if (!c.valid || pos < c.from || c.hit < pos) {
+      const char* kw = kind == IL_PRE ? "stream" : "endobj";
+      const uint8_t* f = memfind(d_ + pos, n_ - pos, kw, 6);
+      c.valid = true;
+      c.from = pos;
+      c.hit = f ? (size_t)(f - d_) : n_;
+      c.end = c.hit;
+      if (f) {
+        size_t p = c.hit + 6;
+        if (kind == IL_PRE) {
+          size_t q = p;
+          while (q < n_ && (d_[q] == ' ' || d_[q] == '\t')) q++;
+          if (q < n_ && (d_[q] == '\r' || d_[q] == '\n')) p = q;
+          if (p + 1 < n_ && d_[p] == '\r' && d_[p + 1] == '\n') p += 2;
+          else if (p < n_ && (d_[p] == '\n' || d_[p] == '\r')) p += 1;
+        } else {
+          while (p < n_ && isWS(d_[p])) p++;
+        }
+        c.end = p;
+      }
+    }
+    return c.hit == n_ ? 0 : c.end - pos;
+  }
+
+ private:
+  struct Kw {
+    bool valid = false;
+    size_t from = 0, hit = 0, end = 0;
+  };
+  const uint8_t* d_;
+  size_t n_;
+  Kw obj_, pre_;
+};

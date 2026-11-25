@@ -116,6 +116,9 @@ files hold 47%.
 P1 to P4 together: about −620 KB, 7.3% of the PDF-specific total. All four are linear passes
 over data the lifter already walks, so `c` speed is unaffected.
 
+Outcome (section 7 has the details): P1–P5 and P7 are in, P6 and P8 were measured and left out.
+PDF-specific xz 8710 KB → 7799 KB (−10.5%), dump.xz 59.04% → 57.48% of orig.xz.
+
 ### P1. One decimal unit per number group
 
 Now every lifted number is `zigzag(mantissa) * 8 + code`, code = number of fraction digits. In a
@@ -223,3 +226,65 @@ mode would save that and nothing else.
 
 P1's figure comes from a build of the lifter that writes both codings of every group and
 compresses each; the per-operator and per-key tables come from the same build.
+
+## 7. Results of this round
+
+Same 120 files, `tests/xzbench.py`, totals over all files.
+
+| Step | dump.xz | PDF-specific xz |
+|---|---|---|
+| before this round | 28,038,864 (59.04%) | 8,709,928 |
+| P1–P4 (format 6) | 27,388,036 (57.67%) | 7,824,988 (−884.9 KB) |
+| + P5 | 27,326,256 (57.54%) | 7,824,780 |
+| + P7 (format 7) | 27,310,208 (57.51%) | 7,809,168 (−15.6 KB) |
+| + aux files up to 64 KB at the end of `.meta` | 27,299,216 (57.48%) | 7,799,064 (−10.1 KB) |
+
+**P1–P4.** One lifter pass, measured together: −885 KB against the −620 KB estimated. Per group
+the encoder takes the cheapest of the plain form, the unit form (P1) and the residual form (P2,
+P3: path points against the current point, `Td`/`TD` against the table, residuals in units of
+10^-k), by order-1 entropy estimate. `Td`/`TD` table hits and misses go to separate groups
+(keys with an `h` suffix): with one group for both the prototype gave −28.4% of the `Td`
+numbers, with two −34.3%; the font size is left out of the key (−33.1%, same grouping on both
+sides without decoding the size first). Way of Men `.csn` 148.5 → 40.8 KB, NTT 166 → 92 KB,
+intel `.cs` + `.css` 264 → 223 KB.
+
+**P5.** Built-in table with the 3144-byte sRGB IEC61966-2.1 profile (Hewlett-Packard 1998,
+the one many producers embed unchanged): dump.xz −61.8 KB, all payload. The 2008-byte profile of
+2 files is Apple's Generic RGB, left out: a vendor profile under Apple's copyright, and 2 KB of xz
+in the whole set.
+
+**P6, not adopted.** Type 1 operand pool, one stream for all operators: 909,892 bytes of xz.
+Grouped by (operator, slot): +0.0%. By (operator, operand count, slot): −0.4%. By (operator,
+slot counted from the end): +0.0%. Not worth a format change.
+
+**P7.** `.iln` holds per object item, stream prefix and stream suffix var 0 when the length is
+what the decoder finds by the segmenter's rules (through the first `endobj` and the whitespace
+after it; through the first `stream` and its end of line), else zigzag(length − prediction).
+TEXT items (header, trailer) keep their length in channel N. `.meta` (channels S and N)
+73.1 → 53.5 KB, `.iln` 8.6 KB (per-file xz). The predictor keeps the position found per keyword,
+so a whole dump is one forward scan of the T channel.
+
+Small aux files at the end of `.meta` (their lengths in the header): a file of its own costs a
+tar header. Threshold, PDF-specific xz: none 7810.5 KB, 4 KB 7803.8 KB, 16 KB 7801.1 KB, 64 KB
+7799.1 KB, every aux file 7803.6 KB (the large ones lose their neighbours in the tar). 64 KB.
+
+**P8, not adopted.** Measured with pikepdf and fontTools on the 120 files.
+
+| Value | Entries | Predicted exactly | Note |
+|---|---|---|---|
+| `/Widths`, TrueType, (1,0) cmap | 20,729 | 82% round(advance · 1000 / unitsPerEm), 84% with floor/ceil/fraction | |
+| `/Widths`, TrueType, (3,0) / (3,1) cmap | 435 / 1,079 | 100% / 96% | |
+| `/Widths`, Type1C | 459 | 65% | 35% codes without a glyph in the subset |
+| `/Widths`, Type 1 | 32,495 | 15% | 62% codes without a glyph in the subset: TeX writes widths for the whole code range from TFM metrics, with a decimal (277.8 where the charstring says 277) |
+| `/W`, CIDFontType2 | 63,673 | 62% | |
+| `/P` of structure elements | 29,060 | 65% parent before child with the child in its `/K` | 78% of the elements are ObjStm members |
+
+`/Widths` of Type 1 fonts are 410 KB of the 820 KB raw `/Widths` and `/W` text, and they are the
+part fonts don't predict. What would be left: about 13 KB for TrueType `/Widths` and `/W`, about
+10 KB for `/P` (65% of 15.4 KB), 0.3% of the PDF-specific total. Both need derived fields inside
+ObjStm members, which the dump doesn't have: today derivation only runs on top-level item text,
+and most `/W` arrays and structure elements of modern files are ObjStm members. `/Widths` also
+needs TrueType, CFF and Type 1 parsers in the decoder, and access to the font's own file from the
+font dictionary (by ordinal; the file order doesn't put the font program first). `/P` needs
+state from earlier objects in a pass that today runs streams in parallel. Left for a round that
+adds derivation to ObjStm members.

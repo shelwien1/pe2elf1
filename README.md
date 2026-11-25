@@ -18,9 +18,10 @@ redundancy inventory of §2A, M6, M7, M9 stage 1, and the M10 ideas that measure
 | Transform | What it removes / reorders |
 |---|---|
 | Type 1 decryption (`L_T1`) | eexec and charstring encryption of embedded Type 1 fonts → `.t1d`; charstrings split into lead bytes, operators and operands |
-| Number lifting, content streams | numbers → `.csn`, grouped by (operator, operand slot); canonical hex strings → `.csh` (binary: all string lengths, then all string bytes; −10% xz of `.csh` against interleaving them) |
+| Number lifting, content streams | numbers → `.csn`, grouped by (operator, operand slot); canonical hex strings → `.csh` (binary: all string lengths, then all string bytes; −10% xz of `.csh` against interleaving them); literal strings → `.css` (as written, escapes kept) |
+| Content-stream predictions | path points (`m l c v y re h`) against the current point; `Td`/`TD` against the last advance written after the same text in the same font (hits and misses in separate groups); stored as residuals |
 | Number lifting, object text | numbers of `.txt` → `.txn`, grouped by (key, in-array, terminator) |
-| Adaptive number coding | per group: varint or fixed width, raw or delta (order-1 entropy estimate) |
+| Adaptive number coding | per group: varint or fixed width, raw or delta; plain spelling codes, or integers in one decimal unit with the spelling recomputed (fixed decimals, trimmed zeros, no leading zero), or residuals of the predictions above in units of 10^-k; chosen by order-1 entropy estimate |
 | ObjStm headers (`L_OBJSTM`) | the `num off` table; offsets derived from member boundaries |
 | Classic xref tables (`I_XREF`) | entries predicted from object positions; free entries from the free list |
 | XRef stream rows (`L_XREFROWS`) | rows predicted from object positions and ObjStm order |
@@ -35,6 +36,8 @@ redundancy inventory of §2A, M6, M7, M9 stage 1, and the M10 ideas that measure
 | Base64 blobs in object text | a canonical base64 run of 1024+ characters (JavaScript data, `data:` URIs) that decodes to a zlib stream, or sits in quotes → decoded bytes (zlib streams inflated through preflate, recon in `.b64r`) to a file of their own from 64 KB up (`<P>b%07X.<ext>`, extension by signature: `elf`, `jpg`, ...), smaller ones to `.b64`. linux.pdf (Linux in a PDF: a RISC-V kernel and ELF files as base64 zlib in the `/JS` string): dump.xz 3.89 → 3.21 MB (−17.5%) |
 | XMP thumbnails (`L_XMPJPG`) | the base64 JPEG of an XMP packet's `<xmpGImg:image>` (76-character lines joined by `&#xA;`) becomes the stream's stored form, a `.jpg`; the recon keeps the XMP text around it and the wrapping. 21 thumbnails in 7 files of the 808-file set; dump.xz −0.5 to −3.6 KB per file, before any JPEG recompressor |
 | Small text streams | XMP and other small text streams go to `.txt`, not `.bin` |
+| Well-known ICC profiles (`L_ICCREF`) | a stream whose decoded bytes are a profile of the built-in table (sRGB IEC61966-2.1, HP 1998: 27 of the 120 test files) keeps a one-byte index |
+| Item lengths | the length of object items and stream dictionaries / suffixes is found by the decoder (first `endobj` + whitespace, first `stream` + end of line); `.iln` holds 0 or the difference |
 
 Plan items measured and not adopted are listed under "xz results" below, with the exact
 measurement behind each.
@@ -84,7 +87,7 @@ ThreadSanitizer (`-fsanitize=thread`). MinGW needs the posix thread model (`-pos
 
 | File | Holds |
 |---|---|
-| `<P>.meta` | header (magic, format version, channel map, which files exist, original size + CRC-32, file key, zlib header default, transform flags), then channels S and N: item tags, stream descriptors, lengths, xref entry kinds |
+| `<P>.meta` | header (magic, format version, channel map, which files exist, original size + CRC-32, file key, zlib header default, transform flags, lengths of the aux files kept here), then channels S and N: item tags, stream descriptors, lengths, xref entry kinds; then every aux file below of 64 KB or less (a file of its own costs a tar header: −11.5 KB of xz on the 120-file set) |
 | `<P>.txt` | channel T with numbers replaced by markers: object text, non-object syntax, ObjStm members, small text streams |
 | `<P>.txn` | the numbers lifted from `.txt`, per group |
 | `<P>.rec` | channel R: recon records (preflate diffs, filter parameters, ObjStm object numbers), AES IVs |
@@ -92,17 +95,20 @@ ThreadSanitizer (`-fsanitize=thread`). MinGW needs the posix thread model (`-pos
 | `<P>.cs` | all decoded content streams concatenated, numbers and hex strings replaced by markers |
 | `<P>.csn` | the numbers lifted from `.cs`, per (operator, operand slot) group |
 | `<P>.csh` | the hex strings lifted from `.cs`, as binary: varint size of the length section, the string lengths (varints), the string bytes |
+| `<P>.css` | the literal strings lifted from `.cs`, same layout, bytes as written between the parentheses |
 | `<P>.csi` | inline image data of `.cs` with its filters undone (decoded data + recon) |
 | `<P>.cmap` | all decoded CMaps (`/ToUnicode`, embedded encodings), concatenated, `bfchar`/`bfrange` bodies replaced by markers |
 | `<P>.cmb` | those bodies as binary |
 | `<P>.p7s` | signature blobs (DER CMS / PKCS#7), concatenated in file order |
 | `<P>.b64` | base64 blobs of object text under 64 KB, decoded (and inflated where they were zlib streams), concatenated |
 | `<P>.b64r` | per blob: data length, own file or not (+ extension), Flate recon |
+| `<P>.iln` | per object item, stream dictionary and stream suffix: var 0 if the length is the predicted one, else zigzag(length − prediction) |
 | `<P>b%07X.<ext>` | base64 blobs of 64 KB and more, one file each, numbered in file order |
 | `<P>%08X.<ext>` | one file per extracted stream; ordinal in file order |
 
 Files that would be empty are not written; the header records which ones exist, so `d` never
-reads a stale file left by an earlier dump with the same prefix.
+reads a stale file left by an earlier dump with the same prefix. Aux files (`.txn` to `.iln`) of
+64 KB or less are not written either: they are at the end of `.meta`.
 
 Extension precedence: TIFF container (`.tif`) → terminal filter (`.jpg`, `.jp2`/`.j2k`, `.jb2`, `.g4`) → BMP3 wrap →
 signature (`.jpg .png .gif .tif .jp2 .j2k .pdf .zip .ttf .otf .pfa .ps .icc .xml`) → attachment
@@ -198,6 +204,9 @@ supplied PDFs (55.6 MB, orig.xz 47.5 MB).
 | + derived fields (`/Length`, `startxref`, `/Prev`, ...) | 59.1% | 8.75 MB |
 | + encrypted strings, inline image filters, linearization forward slots | 59.1% | 8.75 MB |
 | + TIFF container, `.csh` lengths apart from bytes, signature blobs | 59.0% | 8.71 MB |
+| + plan2 P1–P4: decimal units, path and `Td` residuals, literal strings → `.css` | 57.7% | 7.82 MB |
+| + plan2 P5: ICC table | 57.5% | 7.82 MB |
+| + plan2 P7: item lengths; small aux files in `.meta` | 57.5% | 7.80 MB |
 
 Integer predictions of M10, measured by switching the delta mode of the per-group number coding
 off (README test set): content-stream operands against the previous use of the same operator and
@@ -239,6 +248,11 @@ Measured and not adopted, because they don't beat xz on this corpus (upper bound
   bytes alone: 3.69 → 3.62 MB of xz; inflated: 3.07 MB). On the 21 XMP streams with thumbnails it
   only cuts out line fragments (`&#xA;` is not whitespace to it): xz +1.2 KB. No other base64 is
   in the 808-file set. It may suit attachments (`.eml`) as a separate stage after `pdfdump`.
+- Type 1 charstring operands grouped per (operator, slot) (plan2 P6): −0.4% of the operand pool
+  at best.
+- `/Widths`, `/W` from the font programs and structure `/P` from the parents' `/K` (plan2 P8):
+  about −23 KB (0.3%) would be left; Type 1 widths written by TeX don't match the subset fonts,
+  and the rest needs derived fields inside ObjStm members. Numbers in plan2 §7.
 - Signature blobs to `.p7s` (M10): adopted, though the test sets have no signed files. On a
   synthetic file with two RSA-2048 signatures (8 KB reserved each), the dump goes from 3084 to
   2952 bytes of xz: certificates and signatures are mostly random bytes, so the gain is the hex
@@ -291,10 +305,12 @@ local pointer now.
     src/pdfdump.cpp     CLI, encoder pipeline, info report, self-test
     src/chan.inc        channel writer/reader, channel->file map, header, varints, CRC-32
     src/pdf_lex.inc     lexer and read-only object parser
-    src/pdf_seg.inc     segmenter: items, stream extents, raw regions, xref sections, trailers
+    src/pdf_seg.inc     segmenter: items, stream extents, raw regions, xref sections, trailers;
+                        item length predictor
     src/pdf_filt.inc    Flate (preflate wrapper), LZW, AHx, A85, RL, PNG/TIFF predictors
     src/pdf_bmp.inc     BMP3 wrap/unwrap
     src/pdf_tiff.inc    TIFF container for streams matching a TIFF subformat
+    src/pdf_icc.inc     built-in ICC profile table (L_ICCREF)
     src/pdf_xmp.inc     XMP thumbnail (base64 JPEG) as the stream's stored form
     src/pdf_ccitt.inc   CCITT G3/G4 decoder and re-encoder (opt-in layer)
     src/pdf_crypt.inc   MD5, SHA-256/384/512, RC4, AES, standard security handler
@@ -302,7 +318,8 @@ local pointer now.
     src/pdf_xref.inc    classic xref sections (I_XREF), object position tracking
     src/pdf_t1.inc      Type 1 eexec / charstring decryption layer
     src/pdf_objstm.inc  ObjStm header derivation, XRef stream row derivation
-    src/pdf_lift.inc    number lifting (content streams, object text), per-group coding
+    src/pdf_lift.inc    number lifting (content streams, object text), per-group coding,
+                        path / Td predictions, literal strings
     src/pdf_cmap.inc    CMap bfchar/bfrange blocks as binary
     src/pdf_derive.inc  derived fields: placeholders, stream facts, xref section state
     src/pdf_emit.inc    item records, stream descriptors, recon dictionary, decoder

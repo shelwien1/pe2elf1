@@ -25,7 +25,7 @@ static const char* const kChanSuffix[CH_COUNT] = {"meta", "num", "txt", "str", "
 static const char* const kDefaultChanMap = "SN,TX,O,F,R,B";
 
 static const uint8_t kMagic[8] = {'P', 'D', 'F', 'D', 'U', 'M', 'P', 0x1A};
-static const uint32_t kFormatVersion = 6;
+static const uint32_t kFormatVersion = 7;
 
 // Class files: all streams of a class concatenated, regardless of size.
 enum ClassFile { CF_CS, CF_CMAP, CF_COUNT };
@@ -33,8 +33,11 @@ static const char* const kClassFileSuffix[CF_COUNT] = {"cs", "cmap"};
 
 // Aux files: outputs of whole-file transforms (number lifting, pdf_lift.inc), signature blobs,
 // base64 blobs of object text (data, recon).
-enum AuxFile { AX_TXN, AX_CSN, AX_CSH, AX_CMB, AX_CSI, AX_P7S, AX_B64, AX_B64R, AX_CSS, AX_COUNT };
-static const char* const kAuxSuffix[AX_COUNT] = {"txn", "csn", "csh", "cmb", "csi", "p7s", "b64", "b64r", "css"};
+enum AuxFile { AX_TXN, AX_CSN, AX_CSH, AX_CMB, AX_CSI, AX_P7S, AX_B64, AX_B64R, AX_CSS, AX_ILN, AX_COUNT };
+static const char* const kAuxSuffix[AX_COUNT] = {"txn", "csn", "csh", "cmb", "csi", "p7s", "b64", "b64r", "css", "iln"};
+// aux files up to this size are kept at the end of the meta file (xz of the 120-file set: 0 KB
+// 7810.5 KB, 4 KB 7803.8 KB, 16 KB 7801.1 KB, 64 KB 7799.1 KB, all 7803.6 KB)
+static const size_t kAuxInlineMax = 65536;
 
 // header flags
 static const uint64_t kFlagStored = 1, kFlagLiftT = 2, kFlagLiftCS = 4, kFlagCmap = 8;
@@ -104,6 +107,8 @@ struct DumpHeader {
   uint8_t syntaxLevel = 1, filterLevel = 1;
   uint64_t offsetBias = 0;  // file offsets in xref data are counted from here (junk before %PDF-)
   uint64_t present = 0;  // which files exist: bit f = channel file f, 8 + c = class file, 16 + a = aux
+  uint64_t inlineAux = 0;  // aux files kept at the end of the meta file instead (bit a), with their lengths
+  uint64_t inlineLen[AX_COUNT] = {};
   ChanMap map;
 };
 static const int kPresentClass = 8, kPresentAux = 16;
@@ -137,6 +142,9 @@ static void serializeHeader(const DumpHeader& h, Bytes& out) {
   b.push_back(h.filterLevel);
   putVarTo(b, h.present);
   putVarTo(b, h.offsetBias);
+  putVarTo(b, h.inlineAux);
+  for (int a = 0; a < AX_COUNT; a++)
+    if (h.inlineAux >> a & 1) putVarTo(b, h.inlineLen[a]);
   out.insert(out.end(), kMagic, kMagic + 8);
   putVarTo(out, b.size());
   out.insert(out.end(), b.begin(), b.end());
@@ -199,6 +207,10 @@ static size_t parseHeader(const Bytes& meta, DumpHeader& h) {
   h.filterLevel = meta[p++];
   h.present = var();
   h.offsetBias = var();
+  h.inlineAux = var();
+  if (h.inlineAux >> AX_COUNT) fail("bad inline file set");
+  for (int a = 0; a < AX_COUNT; a++)
+    if (h.inlineAux >> a & 1) h.inlineLen[a] = var();
   if (p > end) fail("dump header overrun");
   return end;
 }
@@ -265,6 +277,7 @@ class ChanReader {
     }
   }
   int64_t svar(int ch) { return unzigzag(var(ch)); }
+  size_t pos(int ch) const { return pos_[d_.hdr.map.fileOf[ch]]; }
   size_t len(int ch, size_t limit = (size_t)1 << 40) {
     uint64_t v = var(ch);
     if (v > limit) fail("implausible length in channel %c", kChanLetters[ch]);

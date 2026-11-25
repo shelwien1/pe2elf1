@@ -228,6 +228,23 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
   }
   ChanReader::OwnLoader blobLoader = loader;
   ChanReader r(*use, meta0, std::move(loader), &d.ownData);
+  const Bytes& tchan = use->chan[use->hdr.map.fileOf[CH_T]];
+  ItemLenPredictor ilp(tchan.data(), tchan.size());
+  const Bytes& iln = d.aux[AX_ILN];
+  size_t ilnPos = 0;
+  auto itemLen = [&](int kind) -> size_t {
+    uint64_t v = 0;
+    for (int sh = 0;; sh += 7) {
+      if (ilnPos >= iln.size() || sh > 63) fail("dump truncated: item lengths");
+      uint8_t c = iln[ilnPos++];
+      v |= (uint64_t)(c & 0x7F) << sh;
+      if (!(c & 0x80)) break;
+    }
+    if (v > ((uint64_t)1 << 42)) fail("implausible item length");
+    int64_t n = (int64_t)ilp.predict(r.pos(CH_T), kind) + (v ? unzigzag(v) : 0);
+    if (n < 0) fail("bad item length");
+    return (size_t)n;
+  };
   ReadState st;
   std::vector<std::string> ordExt;
   Bytes out;
@@ -273,7 +290,7 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
     switch (tag) {
       case I_TEXT:
       case I_OBJ: {
-        size_t n = r.len(CH_N);
+        size_t n = tag == I_OBJ ? itemLen(IL_OBJ) : r.len(CH_N);
         const uint8_t* p = r.get(CH_T, n);
         uint32_t num = 0, gen;
         bool hdr = tag == I_OBJ && objHeaderOf(p, n, num, gen);
@@ -302,7 +319,7 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
         Bytes data;
         readStreamDesc(r, st, sd, data, ordExt);
         if (!sd.layers.empty() && sd.layers.back().type == L_RGBA) rgbaSrc[streamNo] = data;
-        size_t n = r.len(CH_N);
+        size_t n = itemLen(IL_PRE);
         const uint8_t* p = r.get(CH_T, n);
         uint64_t start = out.size();
         uint32_t num = 0, gen = 0;
@@ -333,7 +350,7 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
           ds.lastXRefStm = (int64_t)(start - bias);
         }
         streamNo++;
-        n = r.len(CH_N);
+        n = itemLen(IL_SUF);
         p = r.get(CH_T, n);
         if (!derivDecode(p, n, noFacts, ds, 0, txt, nullptr, &local)) fail("bad derived field in item text");
         rebase(out.size());
@@ -343,7 +360,7 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
       default: fail("bad item tag %d", tag);
     }
   }
-  if (!r.allConsumed() || sig.pos != sig.data->size() || b64.dpos != b64.data->size() || b64.rpos != b64.rec->size() ||
+  if (!r.allConsumed() || ilnPos != iln.size() || sig.pos != sig.data->size() || b64.dpos != b64.data->size() || b64.rpos != b64.rec->size() ||
       (!d.blobData.empty() && b64.nextFile != d.blobData.size()))
     fail("dump has unconsumed data");
   // forward-dependent streams: every object position is known now

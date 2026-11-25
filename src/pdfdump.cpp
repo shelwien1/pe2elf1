@@ -119,7 +119,7 @@ struct Stats {
   uint64_t typedBytes = 0, payloadBytes = 0, layeredPayload = 0;
   uint64_t bmpCount = 0;
   uint64_t derived = 0, stringsDecrypted = 0, sigBlobs = 0, rgbaMerged = 0, b64Blobs = 0, b64Bytes = 0, xmpThumbs = 0,
-           iccRefs = 0;
+           iccRefs = 0, itemLenPredicted = 0;
 };
 
 class Encoder {
@@ -133,7 +133,7 @@ class Encoder {
   std::vector<StreamRec> streams;
   bool stored = false;
   std::string storedReason;
-  double tEncode = 0, tVerify = 0;
+  double tEncode = 0, tVerify = 0, tLift = 0;
 
   void run() {
     auto t0 = std::chrono::steady_clock::now();
@@ -151,7 +151,10 @@ class Encoder {
         try {
           analyze();
           emit();
+          itemLengths();
+          auto tl = std::chrono::steady_clock::now();
           applyLifts();
+          tLift = secondsSince(tl);
         } catch (const std::exception& e) {  // also bad_alloc and whatever a worker thread threw
           modelled = false;
           storedReason = std::string("encoder error: ") + e.what();
@@ -204,11 +207,23 @@ class Encoder {
       if (!dump.chan[f].empty()) dump.hdr.present |= (uint64_t)1 << f;
     for (int c = 0; c < CF_COUNT; c++)
       if (!dump.classFile[c].empty()) dump.hdr.present |= (uint64_t)1 << (kPresentClass + c);
-    for (int a = 0; a < AX_COUNT; a++)
-      if (!dump.aux[a].empty()) dump.hdr.present |= (uint64_t)1 << (kPresentAux + a);
+    // small aux files ride at the end of the meta file: a file of its own costs a tar header
+    dump.hdr.inlineAux = 0;
+    for (int a = 0; a < AX_COUNT; a++) {
+      dump.hdr.inlineLen[a] = 0;
+      if (dump.aux[a].empty()) continue;
+      if (dump.aux[a].size() <= kAuxInlineMax) {
+        dump.hdr.inlineAux |= (uint64_t)1 << a;
+        dump.hdr.inlineLen[a] = dump.aux[a].size();
+      } else {
+        dump.hdr.present |= (uint64_t)1 << (kPresentAux + a);
+      }
+    }
     Bytes meta;
     serializeHeader(dump.hdr, meta);
     meta.insert(meta.end(), dump.chan[0].begin(), dump.chan[0].end());
+    for (int a = 0; a < AX_COUNT; a++)
+      if (dump.hdr.inlineAux >> a & 1) meta.insert(meta.end(), dump.aux[a].begin(), dump.aux[a].end());
     writeFile(prefix + "." + dump.hdr.map.suffix[0], meta.data(), meta.size());
     for (size_t f = 1; f < dump.chan.size(); f++)
       if (!dump.chan[f].empty()) writeFile(prefix + "." + dump.hdr.map.suffix[f], dump.chan[f].data(), dump.chan[f].size());
@@ -216,7 +231,8 @@ class Encoder {
       if (!dump.classFile[c].empty())
         writeFile(prefix + "." + kClassFileSuffix[c], dump.classFile[c].data(), dump.classFile[c].size());
     for (int a = 0; a < AX_COUNT; a++)
-      if (!dump.aux[a].empty()) writeFile(prefix + "." + kAuxSuffix[a], dump.aux[a].data(), dump.aux[a].size());
+      if (dump.hdr.present >> (kPresentAux + a) & 1)
+        writeFile(prefix + "." + kAuxSuffix[a], dump.aux[a].data(), dump.aux[a].size());
     for (size_t i = 0; i < dump.ownData.size(); i++) {
       const Bytes& b = dump.ownData[i];
       writeFile(ownFileName(prefix, (uint32_t)i, dump.ownExt[i]), b.data(), b.size());
@@ -264,29 +280,74 @@ class Encoder {
     return std::chrono::duration<double>(std::chrono::steady_clock::now() - t).count();
   }
 
+  // object and stream item texts: bytes to T, length to .iln after the whole T channel is known
+  struct ItemText {
+    size_t pos, len;
+    int kind;
+  };
+  std::vector<ItemText> itemTexts_;
+  void itemText(ChanWriter& w, int kind, const Bytes& t) {
+    itemTexts_.push_back({dump.chan[dump.hdr.map.fileOf[CH_T]].size(), t.size(), kind});
+    w.put(CH_T, t);
+  }
+  void itemLengths() {
+    const Bytes& t = dump.chan[dump.hdr.map.fileOf[CH_T]];
+    ItemLenPredictor pr(t.data(), t.size());
+    Bytes& o = dump.aux[AX_ILN];
+    for (auto& i : itemTexts_) {
+      size_t p = pr.predict(i.pos, i.kind);
+      putVarTo(o, p == i.len ? 0 : zigzag((int64_t)i.len - (int64_t)p));
+      st.itemLenPredicted += p == i.len;
+    }
+    itemTexts_.clear();
+  }
+
+  // The three transforms are independent: with more than one thread, object text is lifted
+  // next to content streams and CMaps (it is a serial step after the parallel stream decoding).
   void applyLifts() {
-    Bytes sk, nu, hx, ss;
-    int ft = dump.hdr.map.fileOf[CH_T];
     if (opt_.syntaxLevel < 2) return;
-    if (ft != 0 && !dump.chan[ft].empty() && liftApply(LIFT_OBJ, dump.chan[ft], sk, nu, hx, ss) && hx.empty() &&
-        ss.empty()) {
-      dump.chan[ft].swap(sk);
-      dump.aux[AX_TXN].swap(nu);
+    int ft = dump.hdr.map.fileOf[CH_T];
+    Bytes oSk, oNu, oHx, oSs, cSk, cNu, cHx, cSs, cInl, mSk, mNu;
+    bool objOk = false, csOk = false, cmOk = false;
+    auto runObj = [&] {
+      objOk = ft != 0 && !dump.chan[ft].empty() && liftApply(LIFT_OBJ, dump.chan[ft], oSk, oNu, oHx, oSs) &&
+              oHx.empty() && oSs.empty();
+    };
+    auto runCs = [&] {
+      if (opt_.syntaxLevel < 3) return;
+      csOk = !dump.classFile[CF_CS].empty() && liftApply(LIFT_CS, dump.classFile[CF_CS], cSk, cNu, cHx, cSs, &ctx_, &cInl);
+      cmOk = !dump.classFile[CF_CMAP].empty() && cmapApply(dump.classFile[CF_CMAP], mSk, mNu);
+    };
+    unsigned nt = opt_.threads ? opt_.threads : std::max(1u, std::thread::hardware_concurrency());
+    if (nt > 1) {
+      std::exception_ptr e1, e2;
+      std::thread th([&] {
+        try { runObj(); } catch (...) { e1 = std::current_exception(); }
+      });
+      try { runCs(); } catch (...) { e2 = std::current_exception(); }
+      th.join();
+      if (e1) std::rethrow_exception(e1);
+      if (e2) std::rethrow_exception(e2);
+    } else {
+      runObj();
+      runCs();
+    }
+    if (objOk) {
+      dump.chan[ft].swap(oSk);
+      dump.aux[AX_TXN].swap(oNu);
       dump.hdr.flags |= kFlagLiftT;
     }
-    if (opt_.syntaxLevel < 3) return;
-    Bytes inl;
-    if (!dump.classFile[CF_CS].empty() && liftApply(LIFT_CS, dump.classFile[CF_CS], sk, nu, hx, ss, &ctx_, &inl)) {
-      dump.classFile[CF_CS].swap(sk);
-      dump.aux[AX_CSN].swap(nu);
-      dump.aux[AX_CSH].swap(hx);
-      dump.aux[AX_CSS].swap(ss);
-      dump.aux[AX_CSI].swap(inl);
+    if (csOk) {
+      dump.classFile[CF_CS].swap(cSk);
+      dump.aux[AX_CSN].swap(cNu);
+      dump.aux[AX_CSH].swap(cHx);
+      dump.aux[AX_CSS].swap(cSs);
+      dump.aux[AX_CSI].swap(cInl);
       dump.hdr.flags |= kFlagLiftCS;
     }
-    if (!dump.classFile[CF_CMAP].empty() && cmapApply(dump.classFile[CF_CMAP], sk, nu)) {
-      dump.classFile[CF_CMAP].swap(sk);
-      dump.aux[AX_CMB].swap(nu);
+    if (cmOk) {
+      dump.classFile[CF_CMAP].swap(mSk);
+      dump.aux[AX_CMB].swap(mNu);
       dump.hdr.flags |= kFlagCmap;
     }
   }
@@ -1060,7 +1121,7 @@ class Encoder {
           uint32_t num = 0, gen;
           objHeaderOf(in_.data() + it.start, len, num, gen);
           derived(it.start, it.end, 1, 0, noFacts, num);
-          w.lenBytes(CH_N, CH_T, txt);
+          itemText(w, IL_OBJ, txt);
           break;
         }
         case Item::XREF:
@@ -1108,7 +1169,7 @@ class Encoder {
           prefix.swap(txt);
           writeStreamDesc(w, es, s.desc, s.data);
           if (s.desc.storage == ST_FILE && opt_.dedup) dedup[h].push_back(s.desc.ordinal);
-          w.lenBytes(CH_N, CH_T, prefix);
+          itemText(w, IL_PRE, prefix);
           uint32_t lr;
           if (lengthRefOf(in_.data() + it.start, it.dataStart - it.start, lr)) ds.lenRef[lr] = s.payload;
           if (s.desc.cls == SC_XREF) {
@@ -1116,7 +1177,7 @@ class Encoder {
             ds.lastXRefStm = (int64_t)(it.start - bias_);
           }
           derived(it.dataEnd, it.end, 3, 0, noFacts, 0);
-          w.lenBytes(CH_N, CH_T, txt);
+          itemText(w, IL_SUF, txt);
           break;
         }
       }
@@ -1238,6 +1299,7 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
   if (st.rgbaMerged) printf("RGB + soft mask merged (-a): %llu\n", (unsigned long long)st.rgbaMerged);
   if (st.xmpThumbs) printf("XMP thumbnails as JPEG: %llu\n", (unsigned long long)st.xmpThumbs);
   if (st.iccRefs) printf("ICC profiles from the built-in table: %llu\n", (unsigned long long)st.iccRefs);
+  if (st.itemLenPredicted) printf("item lengths predicted from the text: %llu\n", (unsigned long long)st.itemLenPredicted);
   if (st.derived)
     printf("derived fields: %llu\n", (unsigned long long)(st.derived - st.stringsDecrypted - st.sigBlobs - st.b64Blobs));
   if (st.b64Blobs)
@@ -1282,9 +1344,9 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
   if (gObjstmExact + gObjstmInexact)
     printf("objstm headers: %llu offsets exact, %llu with corrections, %llu with sequential numbers\n",
            (unsigned long long)gObjstmExact, (unsigned long long)gObjstmInexact, (unsigned long long)gObjstmNumsSeq);
-  printf("time: encode %.2fs (preflate: %llu streams, %s unpacked, analyze %.2fs, re-encode %.2fs), verify %.2fs\n",
+  printf("time: encode %.2fs (preflate: %llu streams, %s unpacked, analyze %.2fs, re-encode %.2fs; number lifting %.2fs), verify %.2fs\n",
          E.tEncode, (unsigned long long)gFlateProf.streams, human(gFlateProf.unpacked).c_str(), gFlateProf.dec,
-         gFlateProf.enc, E.tVerify);
+         gFlateProf.enc, E.tLift, E.tVerify);
   if (opt.verbose) {
     printf("streams:\n  %-6s %-9s %-12s %-28s %-9s %9s %9s %7s %-6s %s\n", "item", "obj", "class", "filters", "state",
            "payload", "stored", "recon", "store", "ext/layers");
@@ -1526,6 +1588,20 @@ static int realMain(int argc, char** argv) {
   Bytes meta;
   if (!readFile(prefix + ".meta", meta)) fail("cannot read %s.meta", prefix.c_str());
   size_t meta0 = parseHeader(meta, d.hdr);
+  {
+    uint64_t tot = 0;
+    for (int a = 0; a < AX_COUNT; a++) {
+      if (d.hdr.inlineLen[a] > meta.size()) fail("inline file overrun");
+      tot += d.hdr.inlineLen[a];
+    }
+    if (tot > meta.size() - meta0) fail("inline file overrun");
+    size_t q = meta.size() - (size_t)tot;
+    for (int a = 0; a < AX_COUNT; a++) {
+      d.aux[a].assign(meta.begin() + q, meta.begin() + q + (size_t)d.hdr.inlineLen[a]);
+      q += (size_t)d.hdr.inlineLen[a];
+    }
+    meta.resize(meta.size() - (size_t)tot);
+  }
   d.chan.resize(d.hdr.map.suffix.size());
   d.chan[0].swap(meta);
   auto need = [&](const std::string& name, int bit, Bytes& out) {
