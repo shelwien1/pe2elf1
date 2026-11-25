@@ -240,7 +240,8 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
         uint32_t num = 0, gen;
         bool hdr = tag == I_OBJ && objHeaderOf(p, n, num, gen);
         if (hdr) objPos.add(num, gen, out.size());
-        if (!derivDecode(p, n, noFacts, ds, num, txt)) fail("bad derived field in item text");
+        DerivCrypt dc{&d.hdr.fileKey, num, hdr ? gen : 0};
+        if (!derivDecode(p, n, noFacts, ds, num, txt, &dc)) fail("bad derived field in item text");
         out.insert(out.end(), txt.begin(), txt.end());
         break;
       }
@@ -261,7 +262,7 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
         size_t n = r.len(CH_N);
         const uint8_t* p = r.get(CH_T, n);
         uint64_t start = out.size();
-        uint32_t num, gen;
+        uint32_t num = 0, gen = 0;
         if (objHeaderOf(p, n, num, gen)) objPos.add(num, gen, start);
         int need = derivNeeds(p, n);
         StreamFacts f;
@@ -273,7 +274,8 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
         }
         f.payloadKnown = true;
         f.payloadLen = payload.size();
-        if (!derivDecode(p, n, f, ds, num, txt)) fail("bad derived field in stream dictionary");
+        DerivCrypt dc{&d.hdr.fileKey, num, gen};
+        if (!derivDecode(p, n, f, ds, num, txt, &dc)) fail("bad derived field in stream dictionary");
         out.insert(out.end(), txt.begin(), txt.end());
         out.insert(out.end(), payload.begin(), payload.end());
         uint32_t lr;

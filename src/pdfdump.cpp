@@ -100,7 +100,7 @@ struct Stats {
   uint64_t reconBlobs = 0, reconRefs = 0;
   uint64_t typedBytes = 0, payloadBytes = 0, layeredPayload = 0;
   uint64_t bmpCount = 0;
-  uint64_t derived = 0;
+  uint64_t derived = 0, stringsDecrypted = 0;
 };
 
 class Encoder {
@@ -695,12 +695,23 @@ class Encoder {
     DeriveState ds;
     StreamFacts noFacts;
     Bytes txt;
-    std::vector<std::pair<std::pair<size_t, size_t>, uint8_t>> edits;
+    std::vector<DerivEdit> edits;
     ctx_.objPos = &objPos;
     // item text with derived fields replaced (kind: 0 text, 1 object, 2 stream prefix, 3 plain)
     auto derived = [&](size_t a, size_t b, int kind, uint8_t cls, const StreamFacts& f, uint32_t num) {
       edits.clear();
       if (kind < 3 && opt_.derive) derivChoose(in_.data() + a, b - a, kind, cls, f, ds, num, edits);
+      // strings of top-level objects of an encrypted file: stored decrypted
+      if ((kind == 1 || kind == 2) && opt_.derive && !sec.key.empty() && num != sec.encNum && cls != SC_XREF) {
+        uint32_t n2, g2;
+        if (objHeaderOf(in_.data() + a, b - a, n2, g2)) {
+          DerivCrypt dc{&sec.key, n2, g2};
+          uint8_t ci = sec.V >= 4 ? sec.filterCipher(sec.strF) : CI_RC4;
+          size_t before = edits.size();
+          if (ci != CI_NONE) cryptStrings(in_.data() + a, b - a, ci, dc, edits);
+          st.stringsDecrypted += edits.size() - before;
+        }
+      }
       derivEncode(in_.data() + a, b - a, edits, txt);
       st.derived += edits.size();
     };
@@ -904,7 +915,8 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
     printf("\n");
   }
   if (st.bmpCount) printf("bmp3 images: %llu\n", (unsigned long long)st.bmpCount);
-  if (st.derived) printf("derived fields: %llu\n", (unsigned long long)st.derived);
+  if (st.derived) printf("derived fields: %llu\n", (unsigned long long)(st.derived - st.stringsDecrypted));
+  if (st.stringsDecrypted) printf("strings stored decrypted: %llu\n", (unsigned long long)st.stringsDecrypted);
   printf("dump:");
   uint64_t total = 0;
   for (size_t f = 0; f < E.dump.chan.size(); f++) {

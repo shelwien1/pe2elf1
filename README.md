@@ -25,6 +25,7 @@ M5–M8 and the M10 list:
 | Classic xref tables (`I_XREF`) | entries predicted from object positions; free entries from the free list |
 | XRef stream rows (`L_XREFROWS`) | rows predicted from object positions and ObjStm order |
 | CMap blocks | uniform `bfchar`/`bfrange` bodies → `.cmb` (binary, delta-coded codes and destinations) |
+| Encrypted strings | strings of top-level objects of encrypted files stored as plaintext (spelling policy, cipher and AES IV kept in the placeholder; `d` re-encrypts) |
 | Inline images with filters | `BI … ID <data> EI` whose filters (Flate, LZW, A85, AHx, RL, predictors) can be undone exactly → decoded data and recon in `.csi` |
 | Derived fields | stream `/Length` (direct and indirect object), `/DL`, `/Length1-3`, ObjStm `/N /First`, image `/Width /Height` (BMP header, JPEG SOF), EmbeddedFile `/Params /Size /CheckSum`, `startxref`, trailer `/Prev /Size /XRefStm`, XRef stream `/Prev`: replaced by placeholders the decoder fills in |
 | Small text streams | XMP and other small text streams go to `.txt`, not `.bin` |

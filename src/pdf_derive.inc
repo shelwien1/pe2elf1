@@ -326,17 +326,21 @@ static int derivNeeds(const uint8_t* p, size_t n) {
   return need;
 }
 
+struct DerivEdit {
+  size_t a, b;  // replaced token range
+  Bytes rep;    // placeholder (0x04, code, payload)
+  bool operator<(const DerivEdit& o) const { return a < o.a; }
+};
+
 // encoder: text with the chosen tokens replaced and literal 0x04 escaped
-static void derivEncode(const uint8_t* p, size_t n, std::vector<std::pair<std::pair<size_t, size_t>, uint8_t>> edits,
-                        Bytes& out) {
+static void derivEncode(const uint8_t* p, size_t n, std::vector<DerivEdit> edits, Bytes& out) {
   std::sort(edits.begin(), edits.end());
   out.clear();
   size_t k = 0;
   for (size_t i = 0; i < n;) {
-    if (k < edits.size() && edits[k].first.first == i) {
-      out.push_back(kDerivEsc);
-      out.push_back(edits[k].second);
-      i = edits[k].first.second;
+    if (k < edits.size() && edits[k].a == i) {
+      out.insert(out.end(), edits[k].rep.begin(), edits[k].rep.end());
+      i = edits[k].b;
       k++;
       continue;
     }
@@ -345,14 +349,134 @@ static void derivEncode(const uint8_t* p, size_t n, std::vector<std::pair<std::p
   }
 }
 
+// ---- encrypted strings (plan 8) --------------------------------------------------------------
+// Placeholder 0x04 'e' u8 info, var length, plaintext [, 16-byte IV for AES]. info: bits 0-2
+// spelling policy (0-3 literal, 4 hex upper case, 5 hex lower case), bits 4-5 cipher.
+// Literal policies escape ( ) \ and: 0 nothing else; 1 CR as \r; 2 CR, LF as \r \n;
+// 3 every byte < 32 or >= 127 as 3-digit octal.
+
+struct DerivCrypt {
+  const Bytes* fileKey = nullptr;
+  uint32_t num = 0, gen = 0;
+};
+
+static void strRender(const Bytes& c, int policy, Bytes& out) {
+  static const char* U = "0123456789ABCDEF";
+  static const char* L = "0123456789abcdef";
+  if (policy >= 4) {
+    out.push_back('<');
+    for (uint8_t b : c) {
+      out.push_back((uint8_t)(policy == 5 ? L : U)[b >> 4]);
+      out.push_back((uint8_t)(policy == 5 ? L : U)[b & 15]);
+    }
+    out.push_back('>');
+    return;
+  }
+  out.push_back('(');
+  for (uint8_t b : c) {
+    if (b == '(' || b == ')' || b == '\\') { out.push_back('\\'); out.push_back(b); }
+    else if (policy == 3 && (b < 32 || b >= 127)) {
+      out.push_back('\\');
+      out.push_back((uint8_t)('0' + (b >> 6)));
+      out.push_back((uint8_t)('0' + ((b >> 3) & 7)));
+      out.push_back((uint8_t)('0' + (b & 7)));
+    } else if ((policy == 1 || policy == 2) && b == '\r') { out.push_back('\\'); out.push_back('r'); }
+    else if (policy == 2 && b == '\n') { out.push_back('\\'); out.push_back('n'); }
+    else out.push_back(b);
+  }
+  out.push_back(')');
+}
+
+// string token ranges of an object's text
+static void stringTokens(const uint8_t* p, size_t n, std::vector<std::pair<size_t, size_t>>& out) {
+  size_t i = 0;
+  while (i < n) {
+    uint8_t c = p[i];
+    if (c == '%') { while (i < n && p[i] != '\r' && p[i] != '\n') i++; continue; }
+    if (c == '(') {
+      size_t a = i++;
+      int depth = 1;
+      while (i < n && depth) {
+        if (p[i] == '\\') { i += 2; continue; }
+        if (p[i] == '(') depth++;
+        else if (p[i] == ')') depth--;
+        i++;
+      }
+      if (!depth && i <= n) out.push_back({a, i});
+      continue;
+    }
+    if (c == '<') {
+      if (i + 1 < n && p[i + 1] == '<') { i += 2; continue; }
+      size_t a = i++;
+      while (i < n && p[i] != '>') i++;
+      if (i < n) out.push_back({a, ++i});
+      continue;
+    }
+    i++;
+  }
+}
+
+// encoder: placeholders for the encrypted strings of one object
+static void cryptStrings(const uint8_t* p, size_t n, uint8_t cipher, const DerivCrypt& dc, std::vector<DerivEdit>& edits) {
+  std::vector<std::pair<size_t, size_t>> toks;
+  stringTokens(p, n, toks);
+  for (auto& t : toks) {
+    Lexer lx(p, t.second, t.first);
+    Obj o;
+    if (!lx.parse(o) || o.t != Obj::STR || lx.pos != t.second) continue;
+    Bytes ct(o.s.begin(), o.s.end()), pt;
+    uint8_t iv[16] = {};
+    if (!cipherDecrypt(cipher, *dc.fileKey, dc.num, dc.gen, ct.data(), ct.size(), pt, iv)) continue;
+    Bytes re;
+    cipherEncrypt(cipher, *dc.fileKey, dc.num, dc.gen, iv, pt, re);
+    if (re != ct) continue;
+    int policy = -1;
+    for (int pol = o.hex ? 4 : 0; pol < (o.hex ? 6 : 4) && policy < 0; pol++) {
+      Bytes r;
+      strRender(ct, pol, r);
+      if (r.size() == t.second - t.first && memcmp(r.data(), p + t.first, r.size()) == 0) policy = pol;
+    }
+    if (policy < 0) continue;
+    DerivEdit e{t.first, t.second, {}};
+    e.rep.push_back(kDerivEsc);
+    e.rep.push_back('e');
+    e.rep.push_back((uint8_t)(policy | (cipher << 4)));
+    putLenBytesTo(e.rep, pt.data(), pt.size());
+    if (cipher == CI_AES128 || cipher == CI_AES256) e.rep.insert(e.rep.end(), iv, iv + 16);
+    edits.push_back(std::move(e));
+  }
+}
+
 // decoder: placeholders resolved
 static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const DeriveState& ds, uint32_t objNum,
-                        Bytes& out) {
+                        Bytes& out, const DerivCrypt* dc = nullptr) {
   out.clear();
   for (size_t i = 0; i < n; i++) {
     if (p[i] != kDerivEsc) { out.push_back(p[i]); continue; }
     if (++i >= n) return false;
     if (p[i] == kDerivEsc) { out.push_back(kDerivEsc); continue; }
+    if (p[i] == 'e') {
+      if (!dc || !dc->fileKey || dc->fileKey->empty() || i + 1 >= n) return false;
+      uint8_t info = p[++i];
+      uint8_t cipher = info >> 4;
+      int policy = info & 7;
+      if (cipher < CI_RC4 || cipher > CI_AES256 || policy > 5) return false;
+      Bytes rest(p + i + 1, p + n);
+      RBuf r(rest);
+      Bytes pt;
+      r.bytes(r.len(), pt);
+      uint8_t iv[16] = {};
+      if (cipher != CI_RC4) {
+        Bytes ivb;
+        r.bytes(16, ivb);
+        memcpy(iv, ivb.data(), 16);
+      }
+      Bytes ct;
+      cipherEncrypt(cipher, *dc->fileKey, dc->num, dc->gen, iv, pt, ct);
+      strRender(ct, policy, out);
+      i += r.p;
+      continue;
+    }
     std::string v;
     if (!derivValue(p[i], f, ds, objNum, v)) return false;
     out.insert(out.end(), v.begin(), v.end());
@@ -362,7 +486,7 @@ static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const 
 
 // encoder: choose placeholders for one item text. kind: 0 text item, 1 object item, 2 stream prefix
 static void derivChoose(const uint8_t* p, size_t n, int kind, uint8_t cls, const StreamFacts& f, const DeriveState& ds,
-                        uint32_t objNum, std::vector<std::pair<std::pair<size_t, size_t>, uint8_t>>& edits) {
+                        uint32_t objNum, std::vector<DerivEdit>& edits) {
   std::vector<DerivTok> toks;
   derivWalk(p, n, toks);
   auto tokStr = [&](const DerivTok& t) { return std::string((const char*)p + t.a, t.b - t.a); };
@@ -370,7 +494,7 @@ static void derivChoose(const uint8_t* p, size_t n, int kind, uint8_t cls, const
     std::string s = tokStr(t), v;
     for (uint8_t c : codes)
       if (derivValue(c, f, ds, objNum, v) && v == s) {
-        edits.push_back({{t.a, t.b}, c});
+        edits.push_back({t.a, t.b, Bytes{kDerivEsc, c}});
         return;
       }
   };
