@@ -158,9 +158,16 @@ Measured and not adopted, because they don't beat xz on this corpus:
 - Unescaping literal strings.
 - Keeping Flate layers with large recon encoded: made the total worse.
 
-Speed of `c`, single thread, verify on: 1.6 MB/s aggregate on the test set. Almost all the time is
-preflate (analysis plus the verifying re-encode). Files with highly compressible images or level-9
-text streams run at about 400 KB/s. With `-n` (no verification) those reach about 750 KB/s.
+Speed of `c`, single thread, 120 files run one after another:
+
+| Mode | Aggregate | Slowest files |
+|---|---|---|
+| default (every layer verified) | 1.58 MB/s | 5 files over 50 KB run at 395–430 KB/s |
+| `-n` (no verification) | 2.31 MB/s | 566 KB/s; all files above 500 KB/s |
+
+Almost all the time is preflate: the analysis plus the re-encode that verifies each Flate layer.
+The slow files have level-9 text streams or highly compressible images, where preflate costs
+the most per input byte. Byte-identical streams are decoded once.
 
 ### Round trip and robustness
 
