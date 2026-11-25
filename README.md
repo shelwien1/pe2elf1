@@ -17,7 +17,7 @@ M5–M8 and the M10 list:
 
 | Transform | What it removes / reorders |
 |---|---|
-| Type 1 decryption (`L_T1`) | eexec and charstring encryption of embedded Type 1 fonts → `.t1d` |
+| Type 1 decryption (`L_T1`) | eexec and charstring encryption of embedded Type 1 fonts → `.t1d`; charstrings split into lead bytes, operators and operands |
 | Number lifting, content streams | numbers → `.csn`, grouped by (operator, operand slot); canonical hex strings → `.csh` (binary) |
 | Number lifting, object text | numbers of `.txt` → `.txn`, grouped by (key, in-array, terminator) |
 | Adaptive number coding | per group: varint or fixed width, raw or delta (order-1 entropy estimate) |
@@ -146,6 +146,7 @@ supplied PDFs (55.6 MB, orig.xz 47.5 MB).
 | + classic xref tables | 59.9% | 9.11 MB |
 | + adaptive per-group number coding | 59.4% | 8.90 MB |
 | + XRef stream rows | 59.3% | 8.83 MB |
+| + Type 1 charstrings split into operator / operand pools | 59.2% | 8.78 MB |
 
 Measured and not adopted, because they don't beat xz on this corpus:
 - PNG filters on raw images: raw rows compress best on aggregate.
