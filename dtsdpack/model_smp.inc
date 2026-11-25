@@ -26,6 +26,27 @@ static INLINE double nw_tail(double a) {
   const int i = (int)x;
   return nw_lg.t[i] + (nw_lg.t[i + 1] - nw_lg.t[i]) * (x - (double)i);
 }
+// (since format 173) e^-x, x >= 0: a table of 64ths to 64 made with + - * / alone, as every machine
+// makes it, linear between; past 64, 0 (code_hfvq_nw()'s guesses)
+struct HvEx {
+  double t[64 * 64 + 2];
+};
+static HvEx hv_ex_make(void) {
+  HvEx g;
+  double q = 0.0, u = 1.0;  // (e^-1/64, by its series)
+  for (int k = 0; k < 24; k++) q += u, u *= -1.0 / 64.0 / (double)(k + 1);
+  double e = 1.0;
+  for (int i = 0; i < 64 * 64 + 2; i++) g.t[i] = e, e *= q;
+  return g;
+}
+static const HvEx hv_ex = hv_ex_make();
+static INLINE double hv_exp(double x) {
+  if (!(x > 0.0)) return 1.0;
+  if (!(x < 64.0)) return 0.0;
+  const double y = x * 64.0;
+  const int i = (int)y;
+  return hv_ex.t[i] + (hv_ex.t[i + 1] - hv_ex.t[i]) * (y - (double)i);
+}
 
 // the chi-square distribution's CDF of m = 1..47 degrees of freedom (1.5 times a part's samples after
 // the one coded, 31 at most: nw_bud()) at x = i / 8, i to 96 * 8, made with + - * / and sqrt alone,
@@ -624,6 +645,70 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // what the fit's use and smn's contexts go by)
   double nw_bs[NCH][NSUB], nw_bf[NCH][NSUB], nw_bw[NCH];
   static constexpr double NW_BF = 8.0, NW_BE = 0.005, NW_BM = 0.5;
+  // (since format 173 the logistic's scale of the spread the channel's, nw_lsc, from NW_LS, by the
+  // same log-loss: each sample its log a step NW_LCE of the gradient, (1 - x tanh(x / 2)), kept
+  // within NW_LCL..NW_LCH: FFmpeg's encodes the channels' scales move away from 0.75 to their
+  // cost, `e16.dts` 356 bytes bigger within 0.5..1.2)
+  double nw_lsc[NCH];
+  static constexpr double NW_LCE = 0.002, NW_LCL = 0.7, NW_LCH = 0.9;
+  // (since format 173 a channel the WAV doesn't bind, its HF VQ indexes, after sdn's flag of
+  // whether the subband's last one, by a mixture over the code book's HV_N entries, that one left
+  // out, code_hfvq_nw(): how often each has been the index in the stream and in the subband (hv_t0,
+  // hv_tb: counts as trees, node 1 the root and HV_N + k entry k's leaf, each leaf 1 + HV_INC times
+  // its count), and where the 2 nearest earlier channels have a vector at the subband in the
+  // subframe, the entries near each one's, by exp(beta (cos - 1)) normalized, beta HV_B0 and HV_B1
+  // (hv_row(): their sums from entry 0 up, a row of them for each vector, made as first asked for;
+  // the zero vector, entry 0, near itself alone, the others as far from it as can be); the
+  // mixture's weights by which of the two there are (hv_w: the counts', then the two channels' at
+  // HV_B0, then at HV_B1), each a step HV_ETA toward its share of the index's probability, at least
+  // HV_WMIN)
+  static constexpr int HV_N = 1024, HV_BITS = 10, HV_K = 6;
+  static constexpr U32 HV_INC = 8;
+  static constexpr double HV_B0 = 5.0, HV_B1 = 12.0, HV_ETA = 1.0 / 32.0, HV_WMIN = 1e-3;
+  struct HvRow {
+    double c[2][HV_N + 1];
+  };
+  HvRow* hv_r[HV_N];
+  U32 hv_t0[2 * HV_N], hv_tb[NSUB][2 * HV_N];
+  double hv_w[4][HV_K];
+  void hv_reset() {
+    for (int i = HV_N; i < 2 * HV_N; i++) hv_t0[i] = 1;
+    for (int i = HV_N - 1; i >= 1; i--) hv_t0[i] = hv_t0[2 * i] + hv_t0[2 * i + 1];
+    for (int b = 0; b < NSUB; b++) memcpy(hv_tb[b], hv_t0, sizeof hv_t0);
+    for (int m = 0; m < 4; m++) {
+      const double g1 = m & 1 ? 0.075 : 0.0, g2 = m & 2 ? 0.075 : 0.0, t = 0.7 + 2.0 * (g1 + g2);
+      const double w[HV_K] = {0.35, 0.35, g1, g2, g1, g2};
+      for (int i = 0; i < HV_K; i++) hv_w[m][i] = w[i] / t;
+    }
+  }
+  static void hv_add(U32* t, int v) {
+    for (int n = HV_N + v; n >= 1; n >>= 1) t[n] += HV_INC;
+    if (t[1] >= 1u << 28) {  // (halved, a leaf 1 at least)
+      for (int i = HV_N; i < 2 * HV_N; i++) t[i] = (t[i] >> 1) | 1;
+      for (int i = HV_N - 1; i >= 1; i--) t[i] = t[2 * i] + t[2 * i + 1];
+    }
+  }
+  const HvRow* hv_row(int u) {
+    if (!hv_r[u]) {
+      HvRow* const g = (HvRow*)xmalloc(sizeof(HvRow));
+      const S8* const a = HF_VQ[u];
+      S32 na = 0;
+      for (int i = 0; i < 32; i++) na += a[i] * a[i];
+      double e0[HV_N], e1[HV_N], z0 = 0.0, z1 = 0.0;
+      for (int k = 0; k < HV_N; k++) {
+        const S8* const q = HF_VQ[k];
+        S32 d = 0, nq = 0;
+        for (int i = 0; i < 32; i++) d += a[i] * q[i], nq += q[i] * q[i];
+        const double cs = na > 0 && nq > 0 ? (double)d / sqrt((double)na * (double)nq) : na > 0 ? 0.0 : nq > 0 ? -1.0 : 1.0;
+        e0[k] = hv_exp(HV_B0 * (1.0 - cs)), e1[k] = hv_exp(HV_B1 * (1.0 - cs));
+        z0 += e0[k], z1 += e1[k];
+      }
+      g->c[0][0] = g->c[1][0] = 0.0;
+      for (int k = 0; k < HV_N; k++) g->c[0][k + 1] = g->c[0][k] + e0[k] / z0, g->c[1][k + 1] = g->c[1][k] + e1[k] / z1;
+      hv_r[u] = g;
+    }
+    return hv_r[u];
+  }
   // (since format 162 a part's indexes' energy so far, nw_pe; the stream's ratio of the parts'
   // energies to their scale factors' cells' centres, nw_gs over nw_gn, and the share of them in
   // their cells, nw_bi of nw_bn: nw_cell(); the fit's shrink, its sums, nw_hs and nw_hq, and its
@@ -1465,7 +1550,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     nwd_n[0] = nwd_n[1] = 0, nwg_p[0] = nwg_p[1] = 0;
     for (int c = 0; c < NCH; c++)
       for (int k = 0; k < NSUB; k++) nw_ba[c][k] = nw_bb[c][k] = nw_bs[c][k] = nw_bf[c][k] = 1.0;
-    for (int c = 0; c < NCH; c++) nw_bw[c] = 0.0;
+    for (int c = 0; c < NCH; c++) nw_bw[c] = 0.0, nw_lsc[c] = NW_LS;
+    hv_reset();
     memset(dv_lq, 0, sizeof dv_lq);
     for (int c = 0; c < NCH; c++)
       for (int k = 0; k < NSUB; k++) dv_le[c][k] = -1.0;
@@ -5999,7 +6085,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (nwr) {  // (the residual toward the fit's own value positive)
       const S64 sg = nwd < (double)nwq ? -1 : 1, rlo = sg > 0 ? lo - nwq : nwq - hi, rhi = sg > 0 ? hi - nwq : nwq - lo;
       v = nwq + sg * code_index_nw(D, ENC ? sg * (v - nwq) : 0, rlo, rhi, &how, sg * (nwd - (double)nwq),
-                                   NW_LS * nw_bb[ch][b], bon ? &bud : nullptr);
+                                   nw_lsc[ch] * nw_bb[ch][b], bon ? &bud : nullptr);
     } else if (nwz) {  // (the same about the shrunk fit's value)
       const S64 rlo = zs > 0 ? lo - zq : zq - hi, rhi = zs > 0 ? hi - zq : zq - lo;
       v = zq + zs * code_index_nw(D, ENC ? zs * (v - zq) : 0, rlo, rhi, &how, zs * (zc - (double)zq), zsc,
@@ -6136,13 +6222,18 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       nw_hs[ch][b] += (double)v * nwd0 - nw_hs[ch][b] / 64.0, nw_hq[ch][b] += nwd0 * nwd0 - nw_hq[ch][b] / 64.0;
       const double av = (double)(v < 0 ? -v : v), ar = fabs((double)v - nwd);
       // (since format 172 the blend's weight by the gradient of the residual's log-loss at the
-      // spread s it was coded at: d/dw of -log p, the logistic's density at x = |r| / (NW_LS s),
-      // (1 - x tanh(x / 2)) (nw_bf - nw_bs) / s, tanh(x / 2) as 1 - 2 nw_tail(x))
+      // spread s it was coded at: d/dw of -log p, the logistic's density at x = |r| / (c s), c the
+      // logistic's scale (NW_LS before format 173, nw_lsc since), (1 - x tanh(x / 2)) (nw_bf -
+      // nw_bs) / s, tanh(x / 2) as 1 - 2 nw_tail(x); since format 173 c by it too, d/d(log c) of
+      // -log p being (1 - x tanh(x / 2)))
       if (nwr && ss > 0 && nw_bb[ch][b] >= NW_BM) {
-        const double sb = nw_bb[ch][b], x = ar / (NW_LS * sb), th = 1.0 - 2.0 * nw_tail(x);
+        const double sb = nw_bb[ch][b], x = ar / (nw_lsc[ch] * sb), th = 1.0 - 2.0 * nw_tail(x);
         double& w = nw_bw[ch];
         w -= NW_BE * (1.0 - x * th) / sb * (nw_bf[ch][b] - nw_bs[ch][b]);
         w = w < 0.0 ? 0.0 : w > 1.0 ? 1.0 : w;
+        double& lc = nw_lsc[ch];
+        lc *= 1.0 - NW_LCE * (1.0 - x * th);
+        lc = lc < NW_LCL ? NW_LCL : lc > NW_LCH ? NW_LCH : lc;
       }
       nw_ba[ch][b] += (av - nw_ba[ch][b]) / 64, nw_bs[ch][b] += (ar - nw_bs[ch][b]) / 64;
       nw_bf[ch][b] += (ar - nw_bf[ch][b]) / NW_BF;
@@ -6367,6 +6458,74 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       e[q] = e[i], w[q] = w[i], q++;
     }
     return nw_bud_v(bd, e, w, q, nwq, sg, lo, hi);
+  }
+  // A channel's HF VQ index v (unbound) of subband b, A 1 + the subband's last one (0 none): sdn's
+  // flag of whether that one, as side_ix()'s; else by the mixture (hv_w) without it, its 10 bits
+  // sent to the coder straight, each by the masses of its node's two halves; then the weights and
+  // the counts
+  S64 code_hfvq_nw(const CoreRec& r, const CoreSub& s, int ch, int b, S64 v, S32 A) {
+    int pv = -1;  // (the last one, left out)
+    if (A) {
+      M_sdn_v D;
+      D.fld = SF_HFVQ, D.cc = chan_class(ch), D.bd = b, D.lv = vvar(A, kVal), D.pq = 0, D.st = this->sst, D.ac = 8, D.ab = 0;
+      D.ec = 9, D.tr = 0;
+      B::sel(B::f_sdn, D);
+      if (B::f_sdn.bit(SN_SAME, ENC && v == A - 1)) {
+        this->sst = 1;
+        hv_add(hv_t0, A - 1), hv_add(hv_tb[b], A - 1);
+        return A - 1;
+      }
+      pv = (A - 1) & (HV_N - 1);
+    }
+    this->sst = A ? 2 : 0;
+    const double* g[HV_K] = {};  // (the guesses' sums: ch-1's and ch-2's at HV_B0, then at HV_B1)
+    int m = 0;
+    for (int k = 0; k < 2; k++) {
+      const int e = ch - 1 - k;
+      if (e >= r.ch0() && b >= r.nvqsub[e] && b < r.nsubs[e]) {
+        const HvRow* const h = hv_row(s.hfvq[e][b] & (HV_N - 1));
+        g[2 + k] = h->c[0], g[4 + k] = h->c[1], m |= 1 << k;
+      }
+    }
+    double* const w = hv_w[m];
+    const U32* const t0 = hv_t0;
+    const U32* const tb = hv_tb[b];
+    const double i0 = 1.0 / (double)t0[1], ib = 1.0 / (double)tb[1];
+    int node = 1, lo = 0;
+    for (int d = HV_BITS - 1; d >= 0; d--) {
+      const int h = 1 << d;
+      double L = w[0] * (double)t0[2 * node] * i0 + w[1] * (double)tb[2 * node] * ib;
+      double R = w[0] * (double)t0[2 * node + 1] * i0 + w[1] * (double)tb[2 * node + 1] * ib;
+      for (int k = 2; k < HV_K; k++)
+        if (g[k]) L += w[k] * (g[k][lo + h] - g[k][lo]), R += w[k] * (g[k][lo + 2 * h] - g[k][lo + h]);
+      if (pv >= lo && pv < lo + 2 * h) {  // (the last one's mass out of its half)
+        double M = w[0] * (double)t0[HV_N + pv] * i0 + w[1] * (double)tb[HV_N + pv] * ib;
+        for (int k = 2; k < HV_K; k++)
+          if (g[k]) M += w[k] * (g[k][pv + 1] - g[k][pv]);
+        (pv < lo + h ? L : R) -= M;
+        L = L < 0.0 ? 0.0 : L, R = R < 0.0 ? 0.0 : R;
+      }
+      U32 p = (U32)(L / (L + R) * (double)CO_ONE + 0.5);
+      p = p < 1 ? 1 : p > CO_ONE - 1 ? CO_ONE - 1 : p;
+      const int bit = c->code_bit(p, ENC && ((v >> d) & 1));
+      node = 2 * node + bit, lo += bit * h;
+    }
+    double P[HV_K] = {(double)t0[HV_N + lo] * i0, (double)tb[HV_N + lo] * ib}, T = 0.0;
+    for (int k = 2; k < HV_K; k++)
+      if (g[k]) P[k] = g[k][lo + 1] - g[k][lo];
+    for (int k = 0; k < HV_K; k++) T += w[k] * P[k];
+    if (T > 0.0) {
+      double sum = 0.0;
+      for (int k = 0; k < HV_K; k++) {
+        if (k >= 2 && !g[k]) continue;
+        w[k] += HV_ETA * (w[k] * P[k] / T - w[k]);
+        w[k] = w[k] < HV_WMIN ? HV_WMIN : w[k];
+        sum += w[k];
+      }
+      for (int k = 0; k < HV_K; k++) w[k] /= sum;
+    }
+    hv_add(hv_t0, lo), hv_add(hv_tb[b], lo);
+    return lo;
   }
   S64 code_index_nw(const M_smp_v& D, S64 v, S64 lo, S64 hi, int* how, double nc, double ns, const NwBud* bd = nullptr) {
     M_smn_v E;

@@ -53,6 +53,7 @@ struct Model : ModelX96<f_DEC, LV> {
     n_frames = 0;
     B::ffe = nullptr;
     B::ffr = nullptr;
+    for (int u = 0; u < B::HV_N; u++) B::hv_r[u] = nullptr;
 #define M_INIT(F) B::f_##F.Init(), B::t_##F = nullptr;
     DTSD_FAMS(M_INIT)
 #undef M_INIT
@@ -69,6 +70,8 @@ struct Model : ModelX96<f_DEC, LV> {
     DTSD_FAMS(M_QUIT)
 #undef M_QUIT
     if (B::ffe) free(B::ffe), B::ffe = nullptr;
+    for (int u = 0; u < B::HV_N; u++)
+      if (B::hv_r[u]) free(B::hv_r[u]), B::hv_r[u] = nullptr;
     if (B::ffr) free(B::ffr), B::ffr = nullptr;
   }
   // the run starts: the families' tables mapped and wired to the coder co; the WAV, bound by b
@@ -663,7 +666,7 @@ struct Model : ModelX96<f_DEC, LV> {
         account(CAT_SIDE);
         if (twin_field(fid, ch, b, v, lo, hi)) {
         } else if (bound[ch]) v = B::code_hfvq(r, s, ch, b, v);
-        else v = side_index(SF_HFVQ, ch, b, v, 10, hist.hfvq[ch][b], 8, 0, true);
+        else v = B::code_hfvq_nw(r, s, ch, b, v, hist.hfvq[ch][b]);  // (since format 173 by its mixture; sdn's before)
         break;
       case F_LFE: {  // (against the audio's, or signed: coded 128 up, against the sample before)
         if (!cur_j) B::ffl_use = B::ffl_on();

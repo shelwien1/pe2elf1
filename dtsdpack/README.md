@@ -9,7 +9,7 @@ to code is where the encoder chose otherwise. Decompression, with the same WAV, 
 stream byte for byte.
 
 The core of `s.2.dts` (4 minutes 25 seconds of 5.1 at 1509 kbps; 50008260 bytes) compresses to
-76383 bytes (0.15%); without its audio, dtsdpack's model gets 62.74% and `xz -9e` 88.21%.
+76383 bytes (0.15%); without its audio, dtsdpack's model gets 62.70% and `xz -9e` 88.21%.
 
 The core substream's extensions are coded too: XCH (6.1's back centre) and XXCH (7.1's other
 channels) as more channels, X96 (DTS 96/24's 24-48 kHz band and the core's residuals) as subbands
@@ -104,7 +104,7 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 62.74% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 62.70% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3485 (0.27%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 4624 (0.43%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2589 (0.11%) | | |
@@ -1047,6 +1047,60 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   sample 275 to 272 and 283 to 253 (its best 334 to 358 and 350 to 326: too short a run to time
   apart), and with its WAV 260 to 257 and 286 to 299. With the WAV, every run of the check lists the
   size format 171's build makes, 1455804 bytes in all.
+  Since format 173 an unbound channel's HF VQ vectors, but for whether each is the subband's last
+  one (sdn's still, first), go by a mixture of six guesses at the 1024 entries: the counts of the
+  stream's vectors and of the subband's (each entry 1, and 8 more each time it is seen, halved when
+  they reach 2^28), and the vectors of the two channels before at the same subband and subframe,
+  each entry by e^(β (c - 1)), β 5 and 12, c its cosine with that vector (the zero vector's with
+  itself 1, with any other -1, any other's with it 0; e^-x by a table of 64ths made with + - * /
+  alone). The guesses' weights, a set for each of the four ways those two vectors are at hand, start
+  at 0.35 each for the counts and 0.075 for each other guess, and step after each vector the mixture
+  codes by a 32nd toward each guess's share of its probability, at least 1/1000 each; the subband's
+  last vector, which the flag has ruled out, is taken out of the mixture, and the vector's 10 bits
+  go to the coder straight, each by the mixture's mass in its two halves. By it alone `chs/m.dtsc`
+  is 17291 bytes smaller (sdn's cost of its 120000 vectors 9.52 bits each), `mid.dtsc` 399 (of its
+  10620, 9.69). And the logistic's scale is the channel's own, from 0.75 of the spread as before,
+  stepped where the blend's weight steps, by 0.002 of the gradient of the residual's log-loss in its
+  log, 1 - x tanh(x / 2) at x = |r| / (a s), a the scale (the x the blend's weight steps by too),
+  and kept within 0.7..0.9. Without their WAVs, `s.2.dts`'s whole core 31376045 bytes to 31353344
+  (62.74% of it to 62.70%), the 55 streams of the check lists 123578038 to 123373913 (0.165%:
+  `dtswavsample16.wav` 0.39%, FATE's short samples 0.04-0.46%, `Master_Audio_5.0_96khz.dtsc` 0.27%,
+  `pc/p1.dtsc` 0.25%, `chs/m.dtsc` 0.23%, `lfe/l0.dtsc` 0.22%, `chs/n.dtsc` 0.15%, `dts_es.dtsc`
+  0.11%, `Fire__VooDoo_Studio_30_sec.wav` and its two packings and `ES_6.1_16bit.dtsc` and its
+  packing 0.08%, the rest up to 0.07%, `dx4/cs.dtsc` the same; 5 bigger: FFmpeg's `f1.dts`, `f2.dts`
+  and `f3.dts` by 3, 37 and 8 bytes, `sur/s.dts` by 44, `z192/z.dtsc` by 14, 0.46%). On 10 of the
+  streams 18831526 bytes to 18804298 (0.145%; the mixture alone 0.119%): one β, 8, 12 or 5, 0.113%,
+  0.110%, 0.097% (each entry from half a count and the zero vector's cosines 0, FATE's 7-frame XCH
+  sample, a third of its 142 vectors the zero vector and half the channel before's, 0.54% bigger at
+  8); β 4 and 16, 6 and 10, 0.117% and 0.118% (5 and 12 0.118%, the weights then stepping by a
+  64th); each entry from a 16th or a 32nd of a count 0.118% and 0.117% (an 8th 0.118%); the step
+  0.008 0.116%, 0.03-0.06 0.120%. In the flag's place the subband's last vector as a seventh guess,
+  from 0.05 or 0.2 of the weight: `z192/z.dtsc`, whose 9210 vectors are nearly all the zero vector
+  and the subband's last, 3082 and 3077 bytes, with the flag 3052 (format 172's 3038), with neither
+  3116 (without the flag `mid.dtsc` and `s2h.dtsc` 7 and 4 bytes smaller). The scale, on the 8
+  streams it moves the most, against the mixture alone: within 0.5..1.2 2099 bytes smaller, but
+  FFmpeg's 16-bit `e16.dts` 356 bigger and its 32 kHz encode 200; by 0.001 1456 smaller; within
+  0.6..1.0, 0.6..0.9 or 0.55..0.85 2673, 2640, 2466 (`e16.dts` 54, 78, 209 bigger); within 0.7..0.9
+  2272 (`e16.dts` 55 smaller, the 32 kHz encode 24, FFmpeg's `f2.dts` 37 bigger, `sur/s.dts` 44);
+  before the mixture, on 9 streams within 0.5..1.2, by 0.0005, 0.002, 0.005 or 0.012 0.019%, 0.030%,
+  0.038%, 0.032%. The earlier channels' surprise at the sample's place in its 8 as smn's spare
+  context again, 0.000%. Offline: by their counts in hindsight the no-WAV HF VQ vectors would cost
+  9.27-9.39 bits each on `mid.dtsc`, `s2h.dtsc` and `chs/m.dtsc`, by their counts so far 9.47-9.62;
+  a vector is the channel before's 0.4-0.5% of the time (`chs/m.dtsc`'s 16%), the one before that
+  one's 1.6-2.4% (11%), and the subband below's no nearer than any (its mean cosine with it within
+  0.002 of 0); guesses of exact copies of either gain under 0.01 bits a vector beside the guesses
+  above, of a third channel's or of the subband's last vector nothing. The ADPCM predictors' ranks
+  by their counts would cost 11.3 and 10.5 bits on `mid.dtsc` and `s2h.dtsc`, against vpn's 9.2 and
+  9.0 by the LPC, their copies too rare to help; X96's own VQ vectors (`96-24.dts`'s 11851, without
+  its WAV), 9.62 bits each by such a mixture, 9.68 by the stream's counts alone: left as they are.
+  For 0.03% fewer instructions without the WAV (`mid.dtsc`'s, compressing, 23798 million to 23791,
+  and 0.04% decompressing; FATE's 7-frame XCH sample 1.8% more, the cosines' rows made as its
+  vectors come; with its WAV 0.04% more) and 13 MB more memory (the rows, 16 KB each, `mid.dtsc`'s
+  about 790): the medians of 15 runs interleaved with format 172's build on this host, `mid.dtsc`
+  without its WAV 347 KB/s to 341 compressing and 355 to 339 decompressing (again 350 to 345 and 363
+  to 342, for the same instructions), the XCH sample 282 to 257 and 260 to 259 (its best 341 to 344
+  and 319 to 337), and with its WAV 254 to 251 and 298 to 288. With the WAV, every run of the check
+  lists the size format 172's build makes, 1455804 bytes in all.
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first
@@ -2164,11 +2218,13 @@ touched several (a 7-frame stream's run maps 700 fewer pages, a quarter of them)
 - **sid**: a subband's PMODE (against the gain and the rise above) and TMODE, and the predictors and
   HF VQ vectors coded as they are (X96's, and the core's where X96 codes the subband too); a
   channel's the WAV doesn't bind, its HF VQ vectors and the LFE samples too until format 167 (sdn's
-  since).
+  since; since format 173 the core's HF VQ vectors but for whether each is the subband's last one
+  by a mixture of their own, below).
 - **sdd**: a decoded WAV's (as the scale factor or the bit allocation search shows it, as for abd,
   or at -9 where under 90% of its indexes have been the audio's; sid's until format 132, below).
 - **sdn**: a channel's the WAV doesn't bind, and the LFE's where it isn't bound (sid's, then sdd's,
-  until format 167, above).
+  until format 167, above); since format 173 of its HF VQ vectors only whether each is the
+  subband's last one.
 - **jsc**: the joint scale factors (the core's and X96's), against the source channel's audio or
   their running mean (sid's until format 116, below).
 - **abt**: the bit allocations.
@@ -2497,7 +2553,7 @@ files at that level.
 
 ### The format
 
-"dtsdpack", the format's version (172), the level (9, or 8: above) and above it the stream's packing
+"dtsdpack", the format's version (173), the level (9, or 8: above) and above it the stream's packing
 (since format 145: 0 the core's own, 1 little-endian, 2 and 3 14 bits a word big- and
 little-endian); what the WAV was (whether it was one, and since format 155 whether a heights WAV was
 added into it, its channels and bytes a sample, its size and the CRC-32 of its first 64 KB; then the
@@ -2521,12 +2577,13 @@ up to a third of a 7-frame DTS-HD MA sample's output).
   MB): a 24-bit stream of 16-bit audio would be taken at 16 bits, untried; a 176.4 kHz one's is
   taken the same way, untried.
 - The LFE is predicted at 64x only (LFF 2); a 128x LFE (LFF 1) is coded by the model alone.
-- Without the WAV a channel's side information (bit allocations, scale factors, predictors, HF VQ
-  vectors) goes by its own past, not by the channel before's: `open bitrate.dts`'s second channel,
-  nearly its first (98.1% of its bit allocations and steps the same), codes them in full again (its
-  scale factors 230 KB of the 2.05 MB). In the other streams at hand the channel before's are the
-  same less often than the channel's own last (28.6-40.8% of the bit allocations, against
-  54.9-68.2%; 5.2-8.3% of the scale factors, against 9.9-19.2%).
+- Without the WAV a channel's side information (bit allocations, scale factors, predictors; HF VQ
+  vectors until format 173, above) goes by its own past, not by the channel before's (since
+  format 158 by how that one moved too, and by its fields where theirs agree, above):
+  `open bitrate.dts`'s second channel, nearly its first (98.1% of its bit allocations and steps the
+  same), codes them in full again (its scale factors 230 KB of the 2.05 MB). In the other streams at
+  hand the channel before's are the same less often than the channel's own last (28.6-40.8% of the
+  bit allocations, against 54.9-68.2%; 5.2-8.3% of the scale factors, against 9.9-19.2%).
 - Heights are added back from a heights WAV, or a 7.1.4 WAV's own (FFmpeg's layout, by its channel
   mask exactly): no FFmpeg build that decodes 7.1.4 was at hand, so its WAVs were made by its
   source's rule (`dca_xll.c`); a stream whose XLL codes 7.1.4 itself (none at hand) would have its
