@@ -96,5 +96,5 @@ static bool xmpEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out) {
   out.swap(prefix);
   xmpWrap(in, L, sep, flags, out);
   r.appendTo(r.len(), out);
-  return r.p == recon.size();
+  return r.ok() && r.p == recon.size();
 }

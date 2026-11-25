@@ -116,7 +116,7 @@ static bool objstmEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out) {
   out.clear();
   objstmHeader(nums, offs, sepA, sepB, tail, out);
   out.insert(out.end(), in.begin(), in.end());
-  return true;
+  return r.ok();
 }
 
 // ---- XRef stream rows (L_XREFROWS) ------------------------------------------------------------
@@ -212,5 +212,5 @@ static bool xrefRowsEncodeLayer(const CodecCtx& ctx, const Bytes& recon, const B
   }
   if (q.p != in.size()) return false;
   r.appendTo(r.len(), out);
-  return true;
+  return r.ok() && q.ok();
 }

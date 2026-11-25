@@ -13,6 +13,11 @@
 #include <thread>
 #include <vector>
 
+// pdfdump: no exceptions. Corrupt correction data (and an output over the caller's cap) set this
+// flag of the calling thread; the decode loops stop on it, and the pdfdump wrappers clear it
+// before a call and fail the call when it is set afterwards.
+static thread_local bool tPreflateStop = false;
+
 typedef unsigned char byte;
 typedef unsigned int uint;
 
@@ -1546,7 +1551,8 @@ uint decodeBits(const uint32_t bits) {
   // that was an undefined shift and a division by zero. Valid data never gets here.
   uint32_t step = bits<32 ? ((_high-_low)+1)>>bits : 0;
   if( step==0 ) {
-    throw std::runtime_error("corrupt preflate correction data");
+    tPreflateStop = true;
+    return 0;
   }
   uint result = (_value-_low)/step;
   _low += step*result;
@@ -2738,7 +2744,7 @@ bool preflate_decode(OutputStream &unpacked_output, std::vector<byte> &preflate_
   do {
     PreflateTokenBlock newBlock;
     bool ok = bdec.readBlock(newBlock, last);
-    if( !ok ) {
+    if( !ok||tPreflateStop ) {  // pdfdump: tPreflateStop, output over the cap
       fail = true;
       break;
     }
@@ -3464,6 +3470,9 @@ bool PreflateReencoderTask::decodeAndRepredict() {
   bool eof = true;
   do {
     PreflateTokenBlock block = tokenPredictor.decodeBlock(&pcodec);
+    if( tPreflateStop ) {  // pdfdump: the block may hold a token past the input
+      return false;
+    }
     if( !treePredictor.decodeBlock(block, &pcodec) ) {
       return false;
     }
@@ -3473,7 +3482,10 @@ bool PreflateReencoderTask::decodeAndRepredict() {
     tokenData.push_back(std::move(block));
     // pdfdump: corrupt correction data can describe empty blocks without end
     if( tokenData.size()>uncompressedData.size()+(1u<<20) ) {
-      throw std::runtime_error("corrupt preflate correction data");
+      tPreflateStop = true;
+    }
+    if( tPreflateStop ) {
+      return false;
     }
     if( !lastMetaBlock ) {
       eof = tokenPredictor.inputEOF();
@@ -3816,7 +3828,8 @@ template <uint N> void PreflateSubModel<N>::read(ArithmeticDecoder &codec, const
   for( uint i = zeros; i<N; ++i ) {
     ids[i] = decodeId(codec, N);
     if( ids[i]>=N ) {  // pdfdump: corrupt model data
-      throw std::runtime_error("corrupt preflate correction data");
+      tPreflateStop = true;
+      ids[i] = 0;
     }
     rids[ids[i]] = i;
   }
@@ -4478,14 +4491,15 @@ PreflateTokenPredictor::PreflateTokenPredictor(const PreflateParameters &params_
 }
 
 bool PreflateTokenPredictor::predictEOB() {
-  return state.availableInputSize()==0||currentTokenCount==state.maxTokenCount;
+  return state.availableInputSize()==0||currentTokenCount==state.maxTokenCount||tPreflateStop;  // pdfdump
 }
 
 void PreflateTokenPredictor::commitToken(const PreflateToken &t) {
   // pdfdump: corrupt correction data (or changed unpacked data) can ask for more input than
   // there is; the hash update would then read past the buffer. Valid data never gets here.
   if( t.len>state.availableInputSize() ) {
-    throw std::runtime_error("corrupt preflate correction data");
+    tPreflateStop = true;
+    return;
   }
   if( fast&&t.len>state.lazyMatchLength() ) {
     hash.skipHash(t.len);
@@ -4809,7 +4823,8 @@ PreflateTokenBlock PreflateTokenPredictor::decodeBlock(PreflatePredictionDecoder
       }
     }
     if( block.uncompressedLen>state.availableInputSize() ) {  // pdfdump: see commitToken
-      throw std::runtime_error("corrupt preflate correction data");
+      tPreflateStop = true;
+      block.uncompressedLen = state.availableInputSize();
     }
     hash.updateHash(block.uncompressedLen);
     seq.updateSeq(block.uncompressedLen);
@@ -4833,7 +4848,7 @@ PreflateTokenBlock PreflateTokenPredictor::decodeBlock(PreflatePredictionDecoder
   } else {
     block.tokens.reserve(1<<(6+params.memLevel));
   }
-  while( (checkEOB&&!predictEOB())||(!checkEOB&&currentTokenCount<blocksize) ) {
+  while( !tPreflateStop&&((checkEOB&&!predictEOB())||(!checkEOB&&currentTokenCount<blocksize)) ) {  // pdfdump: stop
     PreflateToken predictedToken = predictToken();
     if( predictedToken.len==1 ) {
       uint notok = codec->decodeLiteralPredictionWrong();

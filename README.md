@@ -57,11 +57,21 @@ unchanged (checked byte for byte on the test set). It also carries guards, marke
 that turn corrupt correction data into an error instead of an out-of-bounds read (see "Round
 trip and robustness").
 
-    make                      # g++ -std=c++17 -O3 -pthread -o pdfdump src/pdfdump.cpp
-    make pdfdump-asan         # ASan + UBSan build
-    clang++ -std=c++17 -O3 -pthread -o pdfdump src/pdfdump.cpp
-    x86_64-w64-mingw32-g++-posix -std=c++17 -O3 -static -o pdfdump.exe src/pdfdump.cpp
-    cl /O2 /std:c++17 /EHsc src\pdfdump.cpp          (MSVC, untested)
+    make                      # g++ -std=c++17 -O3 -fno-exceptions -fno-rtti -pthread -o pdfdump src/pdfdump.cpp
+    make pdfdump-asan         # ASan + UBSan build, same flags
+    clang++ -std=c++17 -O3 -fno-exceptions -fno-rtti -pthread -o pdfdump src/pdfdump.cpp
+    x86_64-w64-mingw32-g++-posix -std=c++17 -O3 -fno-exceptions -fno-rtti -static -o pdfdump.exe src/pdfdump.cpp
+    cl /O2 /std:c++17 /EHs-c- /GR- /D_HAS_EXCEPTIONS=0 src\pdfdump.cpp   (MSVC, untested)
+
+The code uses no exceptions and no RTTI (it also builds with them). Errors are bool returns:
+`fail()` records the first error of the calling thread and returns false, the dump readers
+(`ChanReader`, `RBuf`) are sticky (zeros after an error, `ok()` false), and preflate's guards
+set a thread-local stop flag that its decode loops honour. In `c`, an error in any phase, a
+worker thread's included, falls back to stored mode as before; attempts that may fail (a layer
+that stays encoded, a lift that is skipped) run through `softly()`, which keeps a handled
+failure from leaking into the caller's error state. In `d` and on the command line, an error
+ends the program with its message (`die()`); so does an allocation that cannot be met
+(`std::set_new_handler`), instead of an abort.
 
 Tested with g++ 13.3 and clang 18 on Linux x86-64; the thread pool is also clean under
 ThreadSanitizer (`-fsanitize=thread`). MinGW needs the posix thread model (`-posix` driver) for
@@ -301,7 +311,8 @@ inserted, duplicated ranges), and the 117 files of the 005 set.
 | Encrypted variants, R2/R3/R4/R6 × (3 supplied + 15 qpdf files) | 72/72 extract files identical to the plain rewrite |
 | Decompression bomb (1.1 GiB of zeros in a 1.1 MB Flate stream) | layer kept as `.z` at the 1 GiB cap, round trip intact |
 | qpdf files in stored mode | 14, all without a `%PDF-` header |
-| `d` on corrupted dumps (one dump file bit-flipped, truncated, bytes inserted / deleted / overwritten; 13 inputs, about 3000 cases, ASan + UBSan; format 7: 6 inputs, 4200 more cases) | every case ends in an error message or a CRC mismatch; no sanitizer report after the fixes below |
+| `d` on corrupted dumps (one dump file bit-flipped, truncated, bytes inserted / deleted / overwritten; 13 inputs, about 3000 cases, ASan + UBSan; format 7: 6 inputs, 4200 more cases; built with `-fno-exceptions -fno-rtti`: 15 inputs, 4200 more cases) | every case ends in an error message or a CRC mismatch; no sanitizer report after the fixes below |
+| `c` then `d` on mutated PDFs, no-exceptions build | 450 cases on 3 inputs: every one round-trips byte-exact |
 
 `tests/roundtrip.sh` also fails a file whose dump was written in stored mode because the
 encoder's own verify failed, and the sanitizer build treats UBSan reports as fatal.
@@ -311,7 +322,9 @@ number with an impossible digit count; in preflate's re-encoder, reads past the 
 and stored blocks longer than the remaining data, a division by zero and an out-of-range table
 index in the correction decoder, a corrected match length of 0, blocks without end, and
 literal/length or distance tree sizes beyond the code tables (a stack overflow while predicting
-the distance tree). The
+the distance tree). Without exceptions, preflate's guards set a stop flag instead of throwing;
+the re-encoder now checks it before the tree predictor walks a block whose last token reached
+past the input (found by the same fuzzing). The
 preflate guards only fire on corrupt data. GCC 13's UBSan build miscompiles
 `(cond ? L : U)[i]`, which made that build render hex strings wrongly; those expressions use a
 local pointer now.

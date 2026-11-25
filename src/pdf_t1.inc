@@ -158,7 +158,7 @@ static bool t1GroupOperands(const Bytes& ops, const Bytes& seq, Bytes& out, bool
     }
     for (uint32_t k : keys) putVarTo(out, g[k][at[k]++]);
   }
-  return r.p == seq.size();
+  return r.ok() && r.p == seq.size();
 }
 
 static bool t1CsJoin(RBuf& iv, RBuf& ops, RBuf& nums, size_t lenIV, size_t len, Bytes& out) {
@@ -166,6 +166,7 @@ static bool t1CsJoin(RBuf& iv, RBuf& ops, RBuf& nums, size_t lenIV, size_t len, 
   for (size_t k = 0; k < lenIV; k++) out.push_back(iv.u8());
   for (;;) {
     uint8_t op = ops.u8();
+    if (!ops.ok() || out.size() - st > len) return false;  // (a failed reader reads zeros forever)
     if (op == 255) {
       size_t cnt = ops.u8();
       for (size_t k = 0; k < cnt; k++) t1CsPutNumber(out, (int32_t)unzigzag(nums.var()));
@@ -177,7 +178,7 @@ static bool t1CsJoin(RBuf& iv, RBuf& ops, RBuf& nums, size_t lenIV, size_t len, 
     out.push_back(op);
     if (op == 12) out.push_back(op2);
   }
-  return out.size() - st == len;
+  return out.size() - st == len && iv.ok() && ops.ok() && nums.ok();
 }
 
 // stored form -> the font with the eexec part and (flags bit0) the charstrings still decrypted;
@@ -202,6 +203,7 @@ static bool t1Plain(const Bytes& recon, const Bytes& in, Bytes& out, size_t& s, 
     size_t lenIV = (size_t)r.var(), skelLen = (size_t)r.var(), ivLen = (size_t)r.var(), opsLen = (size_t)r.var();
     size_t tailLen = (size_t)r.var();
     lenIVout = lenIV;
+    if (!r.ok()) return false;
     if (s > in.size() || skelLen > in.size() - s || ivLen > in.size() || opsLen > in.size() || tailLen > in.size())
       return false;
     size_t poolStart = s + skelLen;
@@ -226,14 +228,15 @@ static bool t1Plain(const Bytes& recon, const Bytes& in, Bytes& out, size_t& s, 
       pos = h.first;
     }
     joined.insert(joined.end(), sk + pos, sk + skelLen);
-    if (ivr.p != ivB.size() || opr.p != opsB.size() || nr.p != numB.size()) return false;
+    if (!ivr.ok() || !opr.ok() || !nr.ok() || ivr.p != ivB.size() || opr.p != opsB.size() || nr.p != numB.size())
+      return false;
     if (joined.size() - s != n) return false;
     joined.insert(joined.end(), in.end() - tailLen, in.end());
     src = &joined;
   }
   if (s > src->size() || n > src->size() - s) return false;
   out = *src;
-  return true;
+  return r.ok();
 }
 
 static bool t1EncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out) {

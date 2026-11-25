@@ -374,22 +374,27 @@ static bool cipherDecrypt(uint8_t ci, const Bytes& fileKey, uint32_t num, uint32
   return false;
 }
 
-static void cipherEncrypt(uint8_t ci, const Bytes& fileKey, uint32_t num, uint32_t gen, const uint8_t iv[16],
+// false (out empty) if the file key has the wrong length for the cipher
+static bool cipherEncrypt(uint8_t ci, const Bytes& fileKey, uint32_t num, uint32_t gen, const uint8_t iv[16],
                           const Bytes& in, Bytes& out) {
   if (ci == CI_RC4) {
     Bytes k = objectKey(fileKey, num, gen, false);
     out.resize(in.size());
     if (!in.empty()) rc4(k.data(), k.size(), in.data(), in.size(), out.data());
-    return;
+    return true;
   }
   Bytes k = ci == CI_AES128 ? objectKey(fileKey, num, gen, true) : fileKey;
-  if (k.size() != (ci == CI_AES128 ? 16u : 32u)) fail("bad file key length for %s", kCipherName[ci]);
+  if (k.size() != (ci == CI_AES128 ? 16u : 32u)) {
+    out.clear();
+    return false;
+  }
   size_t p = 16 - in.size() % 16;
   Bytes padded(in);
   padded.insert(padded.end(), p, (uint8_t)p);
   out.resize(16 + padded.size());
   memcpy(out.data(), iv, 16);
   aesCbcEncrypt(k.data(), k.size(), iv, padded.data(), padded.size(), out.data() + 16);
+  return true;
 }
 
 struct Security {

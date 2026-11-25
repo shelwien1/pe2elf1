@@ -508,11 +508,7 @@ static bool parseType1(const Bytes& stored, const Bytes& recon, FontMetrics& m) 
   size_t s, n, lenIV;
   uint8_t flags;
   std::vector<std::string> rd;
-  try {
-    if (!t1Plain(recon, stored, t, s, n, flags, rd, lenIV) || !(flags & 1)) return false;
-  } catch (const std::exception&) {
-    return false;
-  }
+  if (!softly([&] { return t1Plain(recon, stored, t, s, n, flags, rd, lenIV); }) || !(flags & 1)) return false;
   const uint8_t* p = t.data();
   // FontMatrix and Encoding in the cleartext part
   if (const uint8_t* q = memfind(p, s, "/FontMatrix", 11)) {

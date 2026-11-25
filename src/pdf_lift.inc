@@ -678,7 +678,7 @@ static bool liftInlineRestore(const CodecCtx& ctx, RBuf& r, Bytes& out) {
     data.swap(tmp);
   }
   out.insert(out.end(), data.begin(), data.end());
-  return true;
+  return r.ok();
 }
 
 // ---- forward / inverse -----------------------------------------------------------------------
@@ -709,7 +709,7 @@ static bool liftUnpackStrings(const Bytes& in, std::vector<std::pair<const uint8
     out.push_back({in.data() + dp, (size_t)l});
     dp += (size_t)l;
   }
-  return dp == in.size();
+  return hh.ok() && lr.ok() && dp == in.size();
 }
 
 // per group: coding chosen by the encoder, values as the decoder sees them
@@ -1059,7 +1059,7 @@ static bool liftInverse(LiftMode mode, const Bytes& skel, const Bytes& nums, con
       out.push_back(c);
     }
   }
-  return mk == nm && hk == ls.hex.size() && sk == ls.lit.size() && ir.p == ir.b.size();
+  return mk == nm && hk == ls.hex.size() && sk == ls.lit.size() && ir.ok() && nr.ok() && ir.p == ir.b.size();
 }
 
 // forward + verify; false if the transform does not reproduce the input
@@ -1067,12 +1067,10 @@ static bool liftInverse(LiftMode mode, const Bytes& skel, const Bytes& nums, con
 // redoes the lifts with the check if that verify fails)
 static bool liftApply(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums, Bytes& hex, Bytes& str,
                       const CodecCtx* ctx = nullptr, Bytes* inl = nullptr, bool check = true) {
-  try {
+  return softly([&] {
     liftForward(mode, in, skel, nums, hex, str, ctx, inl);
     if (!check) return true;
     Bytes back;
     return liftInverse(mode, skel, nums, hex, str, back, ctx, inl) && back == in;
-  } catch (const std::exception&) {
-    return false;
-  }
+  });
 }

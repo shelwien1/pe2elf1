@@ -173,7 +173,7 @@ static bool cmapDecodeBlock(RBuf& r, Bytes& out) {
     nextSrc = src + w + 1;
   }
   out.insert(out.end(), trail.begin(), trail.end());
-  return true;
+  return r.ok();
 }
 
 static void cmapForward(const Bytes& in, Bytes& skel, Bytes& bin) {
@@ -225,16 +225,14 @@ static bool cmapInverse(const Bytes& skel, const Bytes& bin, Bytes& out) {
       out.push_back(c);
     }
   }
-  return r.p == bin.size();
+  return r.ok() && r.p == bin.size();
 }
 
 static bool cmapApply(const Bytes& in, Bytes& skel, Bytes& bin) {
-  try {
+  return softly([&] {
     cmapForward(in, skel, bin);
     if (bin.empty()) return false;
     Bytes back;
     return cmapInverse(skel, bin, back) && back == in;
-  } catch (const Error&) {
-    return false;
-  }
+  });
 }

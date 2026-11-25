@@ -6,17 +6,53 @@
 
 typedef std::vector<uint8_t> Bytes;
 
-struct Error : std::runtime_error {
-  explicit Error(const std::string& s) : std::runtime_error(s) {}
-};
+// Errors. pdfdump builds with -fno-exceptions -fno-rtti: fail() records the first error of the
+// calling thread and returns false, and every function that can fail returns bool (or leaves a
+// sticky error in its reader) for its caller to pass on. The readers (ChanReader, RBuf) return
+// zeros after an error, so code between a failing read and its check runs on harmless values.
+// die() is for the command line only: message and exit.
+static thread_local bool tFailed = false;
+static thread_local char tFailMsg[1024];
 
-[[noreturn]] static void fail(const char* fmt, ...) {
+static bool fail(const char* fmt, ...) {
+  if (!tFailed) {
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(tFailMsg, sizeof(tFailMsg), fmt, ap);
+    va_end(ap);
+    tFailed = true;
+  }
+  return false;
+}
+static bool failed() { return tFailed; }
+static std::string failMessage() { return tFailed ? std::string(tFailMsg) : std::string(); }
+static void failClear() {
+  tFailed = false;
+  tFailMsg[0] = 0;
+}
+
+// f() as an attempt that may fail (a layer that stays encoded, a lift that is skipped): false if
+// it returns false or records an error; the caller's own error state is left as it was
+template <class F>
+static bool softly(F&& f) {
+  bool was = tFailed;
+  std::string msg = was ? std::string(tFailMsg) : std::string();
+  tFailed = false;
+  bool ok = f() && !tFailed;
+  tFailed = was;
+  if (was) snprintf(tFailMsg, sizeof(tFailMsg), "%s", msg.c_str());
+  else tFailMsg[0] = 0;
+  return ok;
+}
+
+[[noreturn]] static void die(const char* fmt, ...) {
   char buf[1024];
   va_list ap;
   va_start(ap, fmt);
   vsnprintf(buf, sizeof(buf), fmt, ap);
   va_end(ap);
-  throw Error(buf);
+  fprintf(stderr, "pdfdump: %s\n", buf);
+  exit(1);
 }
 
 enum Chan { CH_S, CH_N, CH_T, CH_X, CH_O, CH_F, CH_R, CH_B, CH_COUNT };
@@ -150,57 +186,64 @@ static void serializeHeader(const DumpHeader& h, Bytes& out) {
   out.insert(out.end(), b.begin(), b.end());
 }
 
-// Parses the header at the start of the meta file; returns the offset of channel data.
-static size_t parseHeader(const Bytes& meta, DumpHeader& h) {
+// Parses the header at the start of the meta file; meta0 = the offset of channel data.
+static bool parseHeader(const Bytes& meta, DumpHeader& h, size_t& meta0) {
   size_t p = 0;
-  auto need = [&](size_t n) { if (p + n > meta.size()) fail("dump header truncated"); };
+  bool ok = true;
+  auto need = [&](size_t n) {
+    if (ok && n > meta.size() - std::min(p, meta.size())) ok = fail("dump header truncated");
+    return ok;
+  };
   auto var = [&]() -> uint64_t {
     uint64_t v = 0;
-    for (int sh = 0;; sh += 7) {
-      need(1);
+    for (int sh = 0; need(1); sh += 7) {
       uint8_t c = meta[p++];
-      if (sh > 63) fail("bad varint in header");
+      if (sh > 63) { ok = fail("bad varint in header"); return 0; }
       v |= (uint64_t)(c & 0x7F) << sh;
       if (!(c & 0x80)) return v;
     }
+    return 0;
   };
-  need(8);
-  if (memcmp(meta.data(), kMagic, 8) != 0) fail("not a pdfdump dump (bad magic)");
+  if (!need(8)) return false;
+  if (memcmp(meta.data(), kMagic, 8) != 0) return fail("not a pdfdump dump (bad magic)");
   p = 8;
   uint64_t len = var();
+  if (!ok) return false;
+  if (len > meta.size() - p) return fail("dump header truncated");
   size_t end = p + (size_t)len;
-  if (end > meta.size()) fail("dump header truncated");
   h.version = (uint32_t)var();
-  if (h.version != kFormatVersion) fail("dump format version %u not supported (this build: %u)", h.version, kFormatVersion);
+  if (!ok) return false;
+  if (h.version != kFormatVersion)
+    return fail("dump format version %u not supported (this build: %u)", h.version, kFormatVersion);
   h.flags = var();
   h.origSize = var();
-  need(4);
+  if (!need(4)) return false;
   h.origCrc = meta[p] | (meta[p + 1] << 8) | (meta[p + 2] << 16) | ((uint32_t)meta[p + 3] << 24);
   p += 4;
-  need(1 + CH_COUNT);
+  if (!need(1 + CH_COUNT)) return false;
   size_t nfiles = meta[p++];
-  if (nfiles < 1 || nfiles > CH_COUNT) fail("bad channel map");
+  if (nfiles < 1 || nfiles > CH_COUNT) return fail("bad channel map");
   for (int c = 0; c < CH_COUNT; c++) {
     h.map.fileOf[c] = meta[p++];
-    if (h.map.fileOf[c] >= (int)nfiles) fail("bad channel map");
+    if (h.map.fileOf[c] >= (int)nfiles) return fail("bad channel map");
   }
   h.map.suffix.clear();
   for (size_t i = 0; i < nfiles; i++) {
-    need(1);
+    if (!need(1)) return false;
     size_t n = meta[p++];
-    need(n);
+    if (!need(n)) return false;
     std::string s((const char*)&meta[p], n);
     for (char ch : s)
-      if (!isalnum((unsigned char)ch)) fail("bad channel file suffix");
+      if (!isalnum((unsigned char)ch)) return fail("bad channel file suffix");
     h.map.suffix.push_back(s);
     p += n;
   }
-  need(1);
+  if (!need(1)) return false;
   size_t kl = meta[p++];
-  need(kl);
+  if (!need(kl)) return false;
   h.fileKey.assign(meta.begin() + p, meta.begin() + p + kl);
   p += kl;
-  need(4);
+  if (!need(4)) return false;
   h.zlibHdr[0] = meta[p++];
   h.zlibHdr[1] = meta[p++];
   h.syntaxLevel = meta[p++];
@@ -208,11 +251,14 @@ static size_t parseHeader(const Bytes& meta, DumpHeader& h) {
   h.present = var();
   h.offsetBias = var();
   h.inlineAux = var();
-  if (h.inlineAux >> AX_COUNT) fail("bad inline file set");
+  if (!ok) return false;
+  if (h.inlineAux >> AX_COUNT) return fail("bad inline file set");
   for (int a = 0; a < AX_COUNT; a++)
     if (h.inlineAux >> a & 1) h.inlineLen[a] = var();
-  if (p > end) fail("dump header overrun");
-  return end;
+  if (!ok) return false;
+  if (p > end) return fail("dump header overrun");
+  meta0 = end;
+  return true;
 }
 
 class ChanWriter {
@@ -258,48 +304,83 @@ class ChanReader {
     if (!pos_.empty()) pos_[0] = meta0;
     for (int i = 0; i < CF_COUNT; i++) cfPos_[i] = 0;
   }
+  // n bytes of channel ch; nullptr (and the reader stays failed) if there are fewer
   const uint8_t* get(int ch, size_t n) {
+    if (bad_) return nullptr;
     int f = d_.hdr.map.fileOf[ch];
     const Bytes& b = d_.chan[f];
-    if (n > b.size() - pos_[f]) fail("dump truncated: channel %c overrun", kChanLetters[ch]);
-    const uint8_t* r = b.data() + pos_[f];
+    if (n > b.size() - pos_[f]) {
+      bad_ = true;
+      fail("dump truncated: channel %c overrun", kChanLetters[ch]);
+      return nullptr;
+    }
+    static const uint8_t kNone[1] = {0};  // a 0-byte read of an empty file is not an error
+    const uint8_t* r = b.empty() ? kNone : b.data() + pos_[f];
     pos_[f] += n;
     return r;
   }
-  uint8_t u8(int ch) { return *get(ch, 1); }
+  uint8_t u8(int ch) {
+    const uint8_t* p = get(ch, 1);
+    return p ? *p : 0;
+  }
   uint64_t var(int ch) {
     uint64_t v = 0;
     for (int sh = 0;; sh += 7) {
       uint8_t c = u8(ch);
-      if (sh > 63) fail("bad varint in channel %c", kChanLetters[ch]);
+      if (sh > 63) {
+        bad_ = true;
+        fail("bad varint in channel %c", kChanLetters[ch]);
+        return 0;
+      }
       v |= (uint64_t)(c & 0x7F) << sh;
       if (!(c & 0x80)) return v;
     }
   }
   int64_t svar(int ch) { return unzigzag(var(ch)); }
   size_t pos(int ch) const { return pos_[d_.hdr.map.fileOf[ch]]; }
+  size_t remaining(int ch) const {
+    int f = d_.hdr.map.fileOf[ch];
+    return d_.chan[f].size() - pos_[f];
+  }
   size_t len(int ch, size_t limit = (size_t)1 << 40) {
     uint64_t v = var(ch);
-    if (v > limit) fail("implausible length in channel %c", kChanLetters[ch]);
+    if (v > limit) {
+      bad_ = true;
+      fail("implausible length in channel %c", kChanLetters[ch]);
+      return 0;
+    }
     return (size_t)v;
   }
   void lenBytes(int lenCh, int dataCh, Bytes& out) {
     size_t n = len(lenCh);
     const uint8_t* p = get(dataCh, n);
-    out.assign(p, p + n);
+    if (p) out.assign(p, p + n);
+    else out.clear();
   }
   void classGet(int cf, size_t n, Bytes& out) {
+    out.clear();
+    if (bad_) return;
     const Bytes& b = d_.classFile[cf];
-    if (n > b.size() - cfPos_[cf]) fail("dump truncated: class file .%s overrun", kClassFileSuffix[cf]);
+    if (n > b.size() - cfPos_[cf]) {
+      bad_ = true;
+      fail("dump truncated: class file .%s overrun", kClassFileSuffix[cf]);
+      return;
+    }
     out.assign(b.begin() + cfPos_[cf], b.begin() + cfPos_[cf] + n);
     cfPos_[cf] += n;
   }
+  // an own file; empty, with the error recorded, if it cannot be had
   Bytes own(uint32_t ordinal, const std::string& ext) {
     if (ordinal < ownData_->size()) return (*ownData_)[ordinal];
-    if (!loader_) fail("own file %08X missing", ordinal);
+    if (!loader_) {
+      fail("own file %08X missing", ordinal);
+      return Bytes();
+    }
     return loader_(ordinal, ext);
   }
+  bool ok() const { return !bad_; }
   bool allConsumed() const {
+    if (bad_) return false;
     for (size_t f = 0; f < pos_.size(); f++)
       if (pos_[f] != d_.chan[f].size()) return false;
     for (int i = 0; i < CF_COUNT; i++)
@@ -313,6 +394,7 @@ class ChanReader {
   const std::vector<Bytes>* ownData_;
   std::vector<size_t> pos_;
   size_t cfPos_[CF_COUNT];
+  bool bad_ = false;
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -363,9 +445,9 @@ static bool readFile(const std::string& name, Bytes& out) {
 
 static void writeFile(const std::string& name, const uint8_t* p, size_t n) {
   FILE* f = fopen(name.c_str(), "wb");
-  if (!f) fail("cannot create %s: %s", name.c_str(), strerror(errno));
-  if (n && fwrite(p, 1, n, f) != n) { fclose(f); fail("write error on %s", name.c_str()); }
-  if (fclose(f) != 0) fail("write error on %s", name.c_str());
+  if (!f) die("cannot create %s: %s", name.c_str(), strerror(errno));
+  if (n && fwrite(p, 1, n, f) != n) { fclose(f); die("write error on %s", name.c_str()); }
+  if (fclose(f) != 0) die("write error on %s", name.c_str());
 }
 
 static const uint32_t kBlobFileBit = 0x80000000u;  // OwnLoader: blob file k is ordinal kBlobFileBit | k

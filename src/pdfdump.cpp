@@ -22,12 +22,12 @@
 #include <atomic>
 #include <chrono>
 #include <deque>
-#include <exception>
+#include <new>
+#include <unistd.h>
 #include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
-#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -139,7 +139,7 @@ class Encoder {
 
   void run() {
     auto t0 = std::chrono::steady_clock::now();
-    if (!dump.hdr.map.parse(opt_.chanMap.c_str(), err_)) fail("bad channel map: %s", err_.c_str());
+    if (!dump.hdr.map.parse(opt_.chanMap.c_str(), err_)) die("bad channel map: %s", err_.c_str());
     dump.hdr.origSize = in_.size();
     dump.hdr.origCrc = crc32_update(0, in_.data(), in_.size());
     dump.hdr.filterLevel = (uint8_t)opt_.filterLevel;
@@ -150,16 +150,18 @@ class Encoder {
       Segmenter(in_.data(), in_.size(), seg, opt_.syntaxLevel >= 2).run();
       if (seg.isPdf) {
         modelled = true;
-        try {
-          analyze();
-          emit();
-          itemLengths();
-          auto tl = std::chrono::steady_clock::now();
-          applyLifts(opt_.noVerify);
-          tLift = secondsSince(tl);
-        } catch (const std::exception& e) {  // also bad_alloc and whatever a worker thread threw
+        // an error in any phase (a worker thread's included) falls back to stored mode
+        failClear();
+        analyze();
+        if (!failed()) emit();
+        if (!failed()) itemLengths();
+        auto tl = std::chrono::steady_clock::now();
+        if (!failed()) applyLifts(opt_.noVerify);
+        tLift = secondsSince(tl);
+        if (failed()) {
           modelled = false;
-          storedReason = std::string("encoder error: ") + e.what();
+          storedReason = "encoder error: " + failMessage();
+          failClear();
         }
       } else {
         storedReason = "no %PDF- header in the first 1024 bytes";
@@ -173,13 +175,10 @@ class Encoder {
       std::string why = verifyDump();
       if (!why.empty() && liftsUnchecked_) {
         // a lift that its own check would have refused: redo the lifts with the checks
-        try {
-          undoLifts();
-          applyLifts(true);
-          why = verifyDump();
-        } catch (const std::exception& e) {
-          why = e.what();
-        }
+        undoLifts();
+        applyLifts(true);
+        why = failed() ? failMessage() : verifyDump();
+        failClear();
       }
       tVerify = secondsSince(t1);
       if (!why.empty()) {
@@ -306,7 +305,7 @@ class Encoder {
   // the in-memory restore of the whole dump; "" if it reproduces the input
   std::string verifyDump() {
     std::string why;
-    try {
+    {
       FastRestore fast = [&](size_t k, const StreamDesc& sd, const Bytes& stored, Bytes& payload) {
         if (k >= streams.size()) return false;
         const StreamRec& s = streams[k];
@@ -321,11 +320,10 @@ class Encoder {
         payload.assign(in_.begin() + it.dataStart, in_.begin() + it.dataEnd);
         return true;
       };
-      Bytes re = decodeDump(dump, 0, nullptr, &fast, &b64Orig_);
-      if (re != in_) why = "restored file differs from input";
-    } catch (const std::exception& e) {
-      why = e.what();
-      if (why.empty()) why = "exception";
+      Bytes re;
+      if (!decodeDump(dump, 0, nullptr, re, &fast, &b64Orig_)) why = failMessage();
+      else if (re != in_) why = "restored file differs from input";
+      failClear();
     }
     return why;
   }
@@ -374,14 +372,14 @@ class Encoder {
     };
     unsigned nt = opt_.threads ? opt_.threads : std::max(1u, std::thread::hardware_concurrency());
     if (nt > 1) {
-      std::exception_ptr e1, e2;
+      std::string e1;  // an error the other thread recorded (thread-local), passed on here
       std::thread th([&] {
-        try { runObj(); } catch (...) { e1 = std::current_exception(); }
+        runObj();
+        if (failed()) e1 = failMessage();
       });
-      try { runCs(); } catch (...) { e2 = std::current_exception(); }
+      runCs();
       th.join();
-      if (e1) std::rethrow_exception(e1);
-      if (e2) std::rethrow_exception(e2);
+      if (!e1.empty()) fail("%s", e1.c_str());
     } else {
       runObj();
       runCs();
@@ -634,15 +632,15 @@ class Encoder {
     }
     // largest first, so one big stream does not finish last on its own
     std::stable_sort(work.begin(), work.end(), [&](size_t a, size_t b) { return streams[a].payload > streams[b].payload; });
-    std::vector<std::exception_ptr> err(streams.size());
+    // an error a worker records stops nothing else: it is passed on afterwards, first by stream
+    std::vector<std::string> err(streams.size());
     std::atomic<size_t> next{0};
     auto worker = [&]() {
       for (size_t k; (k = next++) < work.size();) {
-        try {
-          processStream(streams[work[k]]);
-        } catch (...) {
-          err[work[k]] = std::current_exception();
-        }
+        failClear();
+        processStream(streams[work[k]]);
+        if (failed()) err[work[k]] = failMessage();
+        failClear();
       }
     };
     unsigned nt = opt_.threads ? opt_.threads : std::max(1u, std::thread::hardware_concurrency());
@@ -661,7 +659,10 @@ class Encoder {
       for (auto& t : pool) t.join();
     }
     for (auto& e : err)
-      if (e) std::rethrow_exception(e);
+      if (!e.empty()) {
+        fail("%s", e.c_str());
+        return;
+      }
     for (size_t i = 0; i < streams.size(); i++)
       if (dupOf[i] >= 0) copyResult(streams[i], streams[(size_t)dupOf[i]]);
   }
@@ -682,8 +683,7 @@ class Encoder {
         return;
       }
       Bytes re;
-      cipherEncrypt(ci, sec.key, it.num, it.gen, s.desc.iv, pt, re);
-      if (re != cur) {
+      if (!cipherEncrypt(ci, sec.key, it.num, it.gen, s.desc.iv, pt, re) || re != cur) {
         s.remain = R_ENCRYPTED;
         s.data.swap(cur);
         s.decoded = s.data.size();
@@ -1809,14 +1809,14 @@ static int realMain(int argc, char** argv) {
       char o = a[1];
       auto val = [&]() -> std::string {
         if (a.size() > 2) return a.substr(2);
-        if (i + 1 >= argc) fail("option -%c needs a value", o);
+        if (i + 1 >= argc) die("option -%c needs a value", o);
         return argv[++i];
       };
       auto num = [&]() -> long long {
         std::string v = val();
         char* e;
         long long r = strtoll(v.c_str(), &e, 10);
-        if (*e || r < 0) fail("bad value for -%c: %s", o, v.c_str());
+        if (*e || r < 0) die("bad value for -%c: %s", o, v.c_str());
         return r;
       };
       switch (o) {
@@ -1841,7 +1841,7 @@ static int realMain(int argc, char** argv) {
         case 'n': opt.noVerify = true; break;
         case 'v': opt.verbose++; break;
         case 'q': opt.quiet = true; break;
-        default: fail("unknown option %s", a.c_str());
+        default: die("unknown option %s", a.c_str());
       }
     } else {
       pos.push_back(a);
@@ -1850,7 +1850,7 @@ static int realMain(int argc, char** argv) {
   if (mode == "i") {
     if (pos.size() != 1) { usage(); return 2; }
     Bytes in;
-    if (!readFile(pos[0], in)) fail("cannot read %s", pos[0].c_str());
+    if (!readFile(pos[0], in)) die("cannot read %s", pos[0].c_str());
     Encoder E(in, opt);
     E.run();
     printInfo(pos[0].c_str(), in, E, opt);
@@ -1859,7 +1859,7 @@ static int realMain(int argc, char** argv) {
   if (pos.size() != 2) { usage(); return 2; }
   if (mode == "c") {
     Bytes in;
-    if (!readFile(pos[0], in)) fail("cannot read %s", pos[0].c_str());
+    if (!readFile(pos[0], in)) die("cannot read %s", pos[0].c_str());
     Encoder E(in, opt);
     E.run();
     E.writeFiles(pos[1]);
@@ -1881,15 +1881,16 @@ static int realMain(int argc, char** argv) {
   const std::string& prefix = pos[0];
   DumpFiles d;
   Bytes meta;
-  if (!readFile(prefix + ".meta", meta)) fail("cannot read %s.meta", prefix.c_str());
-  size_t meta0 = parseHeader(meta, d.hdr);
+  if (!readFile(prefix + ".meta", meta)) die("cannot read %s.meta", prefix.c_str());
+  size_t meta0 = 0;
+  if (!parseHeader(meta, d.hdr, meta0)) die("%s", failMessage().c_str());
   {
     uint64_t tot = 0;
     for (int a = 0; a < AX_COUNT; a++) {
-      if (d.hdr.inlineLen[a] > meta.size()) fail("inline file overrun");
+      if (d.hdr.inlineLen[a] > meta.size()) die("inline file overrun");
       tot += d.hdr.inlineLen[a];
     }
-    if (tot > meta.size() - meta0) fail("inline file overrun");
+    if (tot > meta.size() - meta0) die("inline file overrun");
     size_t q = meta.size() - (size_t)tot;
     for (int a = 0; a < AX_COUNT; a++) {
       d.aux[a].assign(meta.begin() + q, meta.begin() + q + (size_t)d.hdr.inlineLen[a]);
@@ -1901,19 +1902,21 @@ static int realMain(int argc, char** argv) {
   d.chan[0].swap(meta);
   auto need = [&](const std::string& name, int bit, Bytes& out) {
     if (!(d.hdr.present >> bit & 1)) return;
-    if (!readFile(name, out)) fail("cannot read %s", name.c_str());
+    if (!readFile(name, out)) die("cannot read %s", name.c_str());
   };
   for (size_t f = 1; f < d.chan.size(); f++) need(prefix + "." + d.hdr.map.suffix[f], (int)f, d.chan[f]);
   for (int c = 0; c < CF_COUNT; c++) need(prefix + "." + kClassFileSuffix[c], kPresentClass + c, d.classFile[c]);
   for (int a = 0; a < AX_COUNT; a++) need(prefix + "." + kAuxSuffix[a], kPresentAux + a, d.aux[a]);
-  Bytes out = decodeDump(d, meta0, [&](uint32_t ord, const std::string& ext) {
+  Bytes out;
+  bool ok = decodeDump(d, meta0, [&](uint32_t ord, const std::string& ext) {
     Bytes b;
     std::string name = ownFileName(prefix, ord, ext);
-    if (!readFile(name, b)) fail("cannot read %s", name.c_str());
+    if (!readFile(name, b)) fail("cannot read %s", name.c_str());  // the decoder stops on it
     return b;
-  });
+  }, out);
+  if (!ok) die("%s", failMessage().c_str());
   if (out.size() != d.hdr.origSize || crc32_update(0, out.data(), out.size()) != d.hdr.origCrc)
-    fail("restored file does not match the original size/CRC recorded in the dump");
+    die("restored file does not match the original size/CRC recorded in the dump");
   writeFile(pos[1], out.data(), out.size());
   return 0;
 }
@@ -1921,10 +1924,11 @@ static int realMain(int argc, char** argv) {
 }  // namespace pdd
 
 int main(int argc, char** argv) {
-  try {
-    return pdd::realMain(argc, argv);
-  } catch (const std::exception& e) {
-    fprintf(stderr, "pdfdump: %s\n", e.what());
-    return 1;
-  }
+  // no exceptions: an allocation that cannot be met (a size from a corrupt dump that the checks
+  // let through) ends the program with a message instead of an abort
+  std::set_new_handler([] {
+    fputs("pdfdump: out of memory\n", stderr);
+    _exit(1);
+  });
+  return pdd::realMain(argc, argv);
 }

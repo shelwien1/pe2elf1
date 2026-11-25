@@ -55,18 +55,20 @@ struct ReconDictR {
   std::vector<Bytes> blobs;
   int64_t last[L_COUNT];
   ReconDictR() { for (auto& l : last) l = -1; }
-  void get(ChanReader& r, uint8_t type, Bytes& out) {
+  bool get(ChanReader& r, uint8_t type, Bytes& out) {
     uint64_t v = r.var(CH_N);
+    if (!r.ok()) return false;
     if (v == 0) {
       r.lenBytes(CH_N, CH_R, out);
       blobs.push_back(out);
       last[type] = (int64_t)blobs.size() - 1;
-      return;
+      return r.ok();
     }
-    int64_t k = v == 1 ? last[type] : (int64_t)(v - 2);
-    if (k < 0 || k >= (int64_t)blobs.size()) fail("bad recon blob reference");
+    int64_t k = v == 1 ? last[type] : v - 2 > (uint64_t)INT64_MAX ? -1 : (int64_t)(v - 2);
+    if (k < 0 || k >= (int64_t)blobs.size()) return fail("bad recon blob reference");
     out = blobs[(size_t)k];
     last[type] = k;
+    return true;
   }
 };
 
@@ -122,7 +124,7 @@ static void writeStreamDesc(ChanWriter& w, EmitState& st, StreamDesc& sd, Bytes&
   }
 }
 
-static void readStreamDesc(ChanReader& r, ReadState& st, StreamDesc& sd, Bytes& stored,
+static bool readStreamDesc(ChanReader& r, ReadState& st, StreamDesc& sd, Bytes& stored,
                            std::vector<std::string>& ordExt) {
   sd.cls = r.u8(CH_S);
   sd.storage = r.u8(CH_S);
@@ -131,31 +133,36 @@ static void readStreamDesc(ChanReader& r, ReadState& st, StreamDesc& sd, Bytes& 
     case ST_FILE: {
       size_t n = r.u8(CH_S);
       const uint8_t* p = r.get(CH_S, n);
+      if (!p) return false;
       sd.ext.assign((const char*)p, n);
       for (char c : sd.ext)
-        if (!isalnum((unsigned char)c)) fail("bad extension in stream descriptor");
+        if (!isalnum((unsigned char)c)) return fail("bad extension in stream descriptor");
       break;
     }
     case ST_DUP: sd.ordinal = (uint32_t)r.var(CH_N); break;
     case ST_CLASS:
       sd.classFile = r.u8(CH_S);
-      if (sd.classFile >= CF_COUNT) fail("bad class file id");
+      if (sd.classFile >= CF_COUNT) return fail("bad class file id");
       len = r.len(CH_N);
       break;
     case ST_BIN:
     case ST_TXT: len = r.len(CH_N); break;
-    default: fail("bad stream storage %d", sd.storage);
+    default: return fail("bad stream storage %d", sd.storage);
   }
   sd.cipher = r.u8(CH_S);
-  if (sd.cipher > CI_AES256) fail("bad cipher id");
+  if (sd.cipher > CI_AES256) return fail("bad cipher id");
   if (sd.cipher == CI_RC4 || sd.cipher == CI_AES128) {
     sd.num = (uint32_t)((int64_t)st.prevCipherNum + r.svar(CH_N));
     sd.gen = (uint32_t)r.var(CH_N);
     st.prevCipherNum = sd.num;
   }
-  if (sd.cipher == CI_AES128 || sd.cipher == CI_AES256) memcpy(sd.iv, r.get(CH_R, 16), 16);
+  if (sd.cipher == CI_AES128 || sd.cipher == CI_AES256) {
+    const uint8_t* iv = r.get(CH_R, 16);
+    if (!iv) return false;
+    memcpy(sd.iv, iv, 16);
+  }
   uint8_t flags = r.u8(CH_S);
-  if (flags > 3) fail("bad stream flags");
+  if (flags > 3) return fail("bad stream flags");
   sd.deferred = flags & 1;
   sd.membersDerived = (flags & 2) != 0;
   if (sd.deferred) sd.payloadLen = r.len(CH_N);
@@ -163,12 +170,23 @@ static void readStreamDesc(ChanReader& r, ReadState& st, StreamDesc& sd, Bytes& 
   sd.layers.resize(nl);
   for (auto& l : sd.layers) {
     l.type = r.u8(CH_S);
-    if (l.type == L_NONE || l.type >= L_COUNT) fail("bad layer type");
-    st.recon.get(r, l.type, l.recon);
+    if (!r.ok()) return false;
+    if (l.type == L_NONE || l.type >= L_COUNT) return fail("bad layer type");
+    if (!st.recon.get(r, l.type, l.recon)) return false;
   }
   switch (sd.storage) {
-    case ST_BIN: { const uint8_t* p = r.get(CH_B, len); stored.assign(p, p + len); break; }
-    case ST_TXT: { const uint8_t* p = r.get(CH_T, len); stored.assign(p, p + len); break; }
+    case ST_BIN: {
+      const uint8_t* p = r.get(CH_B, len);
+      if (!p) return false;
+      stored.assign(p, p + len);
+      break;
+    }
+    case ST_TXT: {
+      const uint8_t* p = r.get(CH_T, len);
+      if (!p) return false;
+      stored.assign(p, p + len);
+      break;
+    }
     case ST_CLASS: r.classGet(sd.classFile, len, stored); break;
     case ST_FILE:
       sd.ordinal = st.nextOrdinal++;
@@ -176,26 +194,29 @@ static void readStreamDesc(ChanReader& r, ReadState& st, StreamDesc& sd, Bytes& 
       stored = r.own(sd.ordinal, sd.ext);
       break;
     case ST_DUP:
-      if (sd.ordinal >= ordExt.size()) fail("bad duplicate reference");
+      if (sd.ordinal >= ordExt.size()) return fail("bad duplicate reference");
       stored = r.own(sd.ordinal, ordExt[sd.ordinal]);
       break;
   }
+  return r.ok() && !failed();
 }
 
 // stored bytes -> PDF payload bytes: filter layers innermost first, then the cipher
-static void restorePayload(const CodecCtx& ctx, const Bytes& fileKey, const StreamDesc& sd, Bytes& data) {
+static bool restorePayload(const CodecCtx& ctx, const Bytes& fileKey, const StreamDesc& sd, Bytes& data) {
   for (size_t k = sd.layers.size(); k-- > 0;) {
     Bytes out;
-    if (!layerEncode(ctx, sd.layers[k].type, sd.layers[k].recon, data, out))
-      fail("%s layer failed to re-encode", kLayerName[sd.layers[k].type]);
+    if (!layerEncode(ctx, sd.layers[k].type, sd.layers[k].recon, data, out) || failed())
+      return fail("%s layer failed to re-encode", kLayerName[sd.layers[k].type]);
     data.swap(out);
   }
   if (sd.cipher != CI_NONE) {
-    if (fileKey.empty()) fail("encrypted stream but no file key in dump");
+    if (fileKey.empty()) return fail("encrypted stream but no file key in dump");
     Bytes out;
-    cipherEncrypt(sd.cipher, fileKey, sd.num, sd.gen, sd.iv, data, out);
+    if (!cipherEncrypt(sd.cipher, fileKey, sd.num, sd.gen, sd.iv, data, out))
+      return fail("bad file key length for %s", kCipherName[sd.cipher]);
     data.swap(out);
   }
+  return true;
 }
 
 // Optional shortcut for the encoder's own verify: given the k-th stream's descriptor and stored
@@ -203,8 +224,20 @@ static void restorePayload(const CodecCtx& ctx, const Bytes& fileKey, const Stre
 // encoder already verified layer by layer (so re-running the layer encoders cannot differ).
 typedef std::function<bool(size_t, const StreamDesc&, const Bytes&, Bytes&)> FastRestore;
 
-static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader loader,
-                        const FastRestore* fast = nullptr, const std::vector<Bytes>* blobFast = nullptr) {
+// The whole decoder: false, with the error recorded (failMessage()), on bad dump data.
+static bool decodeDumpImpl(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader loader, const FastRestore* fast,
+                           const std::vector<Bytes>* blobFast, Bytes& out);
+static bool decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader loader, Bytes& out,
+                       const FastRestore* fast = nullptr, const std::vector<Bytes>* blobFast = nullptr) {
+  failClear();
+  out.clear();
+  bool ok = decodeDumpImpl(d, meta0, std::move(loader), fast, blobFast, out) && !failed();
+  if (!ok && !failed()) fail("bad dump data");
+  return ok;
+}
+
+static bool decodeDumpImpl(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader loader, const FastRestore* fast,
+                           const std::vector<Bytes>* blobFast, Bytes& out) {
   CodecCtx ctx;
   ctx.zlibHdr[0] = d.hdr.zlibHdr[0];
   ctx.zlibHdr[1] = d.hdr.zlibHdr[1];
@@ -217,15 +250,17 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
     for (int c = 0; c < CF_COUNT; c++) tmp.classFile[c] = d.classFile[c];
     if (d.hdr.flags & kFlagLiftT) {
       int f = d.hdr.map.fileOf[CH_T];
-      if (f == 0) fail("bad lift flag");
-      if (!liftInverse(LIFT_OBJ, d.chan[f], d.aux[AX_TXN], Bytes(), Bytes(), tmp.chan[f])) fail("text number lift: bad data");
+      if (f == 0) return fail("bad lift flag");
+      if (!liftInverse(LIFT_OBJ, d.chan[f], d.aux[AX_TXN], Bytes(), Bytes(), tmp.chan[f]) || failed())
+        return fail("text number lift: bad data");
     }
     if (d.hdr.flags & kFlagLiftCS)
       if (!liftInverse(LIFT_CS, d.classFile[CF_CS], d.aux[AX_CSN], d.aux[AX_CSH], d.aux[AX_CSS], tmp.classFile[CF_CS],
-                       &ctx, &d.aux[AX_CSI]))
-        fail("content number lift: bad data");
+                       &ctx, &d.aux[AX_CSI]) || failed())
+        return fail("content number lift: bad data");
     if (d.hdr.flags & kFlagCmap)
-      if (!cmapInverse(d.classFile[CF_CMAP], d.aux[AX_CMB], tmp.classFile[CF_CMAP])) fail("cmap transform: bad data");
+      if (!cmapInverse(d.classFile[CF_CMAP], d.aux[AX_CMB], tmp.classFile[CF_CMAP]) || failed())
+        return fail("cmap transform: bad data");
     use = &tmp;
   }
   ChanReader::OwnLoader blobLoader = loader;
@@ -240,22 +275,23 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
   ItemLenPredictor ilp(tchan.data(), tchan.size());
   const Bytes& iln = d.aux[AX_ILN];
   size_t ilnPos = 0;
-  auto itemLen = [&](int kind) -> size_t {
+  // an item's length; false on bad data
+  auto itemLen = [&](int kind, size_t& len) -> bool {
     uint64_t v = 0;
     for (int sh = 0;; sh += 7) {
-      if (ilnPos >= iln.size() || sh > 63) fail("dump truncated: item lengths");
+      if (ilnPos >= iln.size() || sh > 63) return fail("dump truncated: item lengths");
       uint8_t c = iln[ilnPos++];
       v |= (uint64_t)(c & 0x7F) << sh;
       if (!(c & 0x80)) break;
     }
-    if (v > ((uint64_t)1 << 42)) fail("implausible item length");
+    if (v > ((uint64_t)1 << 42)) return fail("implausible item length");
     int64_t n = (int64_t)ilp.predict(r.pos(CH_T), kind) + (v ? unzigzag(v) : 0);
-    if (n < 0) fail("bad item length");
-    return (size_t)n;
+    if (n < 0) return fail("bad item length");
+    len = (size_t)n;
+    return true;
   };
   ReadState st;
   std::vector<std::string> ordExt;
-  Bytes out;
   ObjPositions objPos;
   ctx.objPos = &objPos;
   std::unordered_map<uint64_t, Bytes> rgbaSrc;  // stored BGRA BMPs of L_RGBA streams, for L_ALPHA
@@ -277,7 +313,10 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
   b64.ctx = &ctx;
   b64.file = [&](uint32_t k, const std::string& ext) -> Bytes {
     if (k < d.blobData.size()) return d.blobData[k];
-    if (!blobLoader) fail("blob file %07X missing", k);
+    if (!blobLoader) {
+      fail("blob file %07X missing", k);
+      return Bytes();
+    }
     return blobLoader(kBlobFileBit | k, ext);
   };
   struct Deferred { uint64_t pos; StreamDesc sd; Bytes data; size_t streamNo; };
@@ -290,21 +329,26 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
     local.clear();
   };
   size_t streamNo = 0;
-  out.reserve((size_t)std::min<uint64_t>(d.hdr.origSize, (uint64_t)1 << 32));
+  // (origSize is the dump's own claim: reserve no more than the dump could plausibly hold)
+  out.reserve((size_t)std::min<uint64_t>(d.hdr.origSize, (uint64_t)1 << 28));
   for (;;) {
     uint8_t tag = r.u8(CH_S);
+    if (!r.ok() || failed()) return false;
     if (tag == I_END) break;
     itemStart.push_back(out.size());
     switch (tag) {
       case I_TEXT:
       case I_OBJ: {
-        size_t n = tag == I_OBJ ? itemLen(IL_OBJ) : r.len(CH_N);
+        size_t n = 0;
+        if (tag == I_OBJ ? !itemLen(IL_OBJ, n) : (n = r.len(CH_N), !r.ok())) return false;
         const uint8_t* p = r.get(CH_T, n);
+        if (!p) return false;
         uint32_t num = 0, gen;
         bool hdr = tag == I_OBJ && objHeaderOf(p, n, num, gen);
         if (hdr) objPos.add(num, gen, out.size() - bias);
         DerivCrypt dc{&d.hdr.fileKey, num, hdr ? gen : 0};
-        if (!derivDecode(p, n, noFacts, ds, num, txt, &dc, &local, &sig, &b64, &ex)) fail("bad derived field in item text");
+        if (!derivDecode(p, n, noFacts, ds, num, txt, &dc, &local, &sig, &b64, &ex) || failed())
+          return fail("bad derived field in item text");
         if (hdr) {
           size_t b0 = objBodyStart(txt.data(), txt.size());
           if (b0 != SIZE_MAX) structAddKids(txt.data() + b0, txt.size() - b0, num, gen, sm);
@@ -316,39 +360,43 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
       case I_XREF: {
         ds.xrefPos.push_back(out.size() - bias);
         std::vector<std::pair<uint64_t, int64_t>> xf;
-        readXref(r, objPos, out, &ds.lastXrefEnd, &xf);
+        if (!readXref(r, objPos, out, &ds.lastXrefEnd, &xf)) return false;
         for (auto& x : xf) fwd.push_back({x.first, 10, 2, (uint64_t)x.second + 1, 0});
         break;
       }
       case I_RAW: {
         size_t n = r.len(CH_N);
         const uint8_t* p = r.get(CH_B, n);
+        if (!p) return false;
         out.insert(out.end(), p, p + n);
         break;
       }
       case I_STREAM: {
         StreamDesc sd;
         Bytes data;
-        readStreamDesc(r, st, sd, data, ordExt);
+        if (!readStreamDesc(r, st, sd, data, ordExt)) return false;
         if (!sd.layers.empty() && sd.layers.back().type == L_RGBA) rgbaSrc[streamNo] = data;
         if (objstmMembersOf(sd)) {
           ObjstmMembers mem;
           bool ok = mem.init(sd);
+          if (failed()) return false;
           if (sd.membersDerived) {
-            if (!ok) fail("bad derived ObjStm members");
+            if (!ok) return fail("bad derived ObjStm members");
             Bytes real;
             ex.members = &mem;
             bool good = derivDecode(data.data(), data.size(), noFacts, ds, 0, real, nullptr, nullptr, nullptr, nullptr, &ex);
             ex.members = nullptr;
-            if (!good) fail("bad derived field in ObjStm members");
+            if (!good || failed()) return fail("bad derived field in ObjStm members");
             data.swap(real);
           }
           if (ok) mem.advance(data.data(), data.size(), mem.nums.size(), sm);
         } else if (sd.membersDerived) {
-          fail("bad stream flags");
+          return fail("bad stream flags");
         }
-        size_t n = itemLen(IL_PRE);
+        size_t n = 0;
+        if (!itemLen(IL_PRE, n)) return false;
         const uint8_t* p = r.get(CH_T, n);
+        if (!p) return false;
         uint64_t start = out.size();
         uint32_t num = 0, gen = 0;
         if (objHeaderOf(p, n, num, gen)) {
@@ -361,15 +409,18 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
         Bytes payload;
         bool defer = sd.deferred;
         if (defer) {
+          if (sd.payloadLen > d.hdr.origSize) return fail("deferred stream larger than the file");
           payload.assign((size_t)sd.payloadLen, 0);
         } else if (!(fast && (*fast)(streamNo, sd, data, payload))) {
           payload.swap(data);
-          restorePayload(ctx, d.hdr.fileKey, sd, payload);
+          if (!restorePayload(ctx, d.hdr.fileKey, sd, payload)) return false;
         }
+        if (failed()) return false;
         f.payloadKnown = true;
         f.payloadLen = payload.size();
         DerivCrypt dc{&d.hdr.fileKey, num, gen};
-        if (!derivDecode(p, n, f, ds, num, txt, &dc, &local, &sig, &b64)) fail("bad derived field in stream dictionary");
+        if (!derivDecode(p, n, f, ds, num, txt, &dc, &local, &sig, &b64) || failed())
+          return fail("bad derived field in stream dictionary");
         rebase(out.size());
         out.insert(out.end(), txt.begin(), txt.end());
         if (defer) deferred.push_back({out.size(), sd, std::move(data), streamNo});
@@ -381,29 +432,33 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
           ds.lastXRefStm = (int64_t)(start - bias);
         }
         streamNo++;
-        n = itemLen(IL_SUF);
+        if (!itemLen(IL_SUF, n)) return false;
         p = r.get(CH_T, n);
-        if (!derivDecode(p, n, noFacts, ds, 0, txt, nullptr, &local)) fail("bad derived field in item text");
+        if (!p) return false;
+        if (!derivDecode(p, n, noFacts, ds, 0, txt, nullptr, &local) || failed())
+          return fail("bad derived field in item text");
         rebase(out.size());
         out.insert(out.end(), txt.begin(), txt.end());
         break;
       }
-      default: fail("bad item tag %d", tag);
+      default: return fail("bad item tag %d", tag);
     }
+    if (out.size() > d.hdr.origSize) return fail("restored file larger than recorded");
   }
   if (!r.allConsumed() || ilnPos != iln.size() || sig.pos != sig.data->size() || b64.dpos != b64.data->size() || b64.rpos != b64.rec->size() ||
       (!d.blobData.empty() && b64.nextFile != d.blobData.size()))
-    fail("dump has unconsumed data");
+    return fail("dump has unconsumed data");
   // forward-dependent streams: every object position is known now
   for (auto& df : deferred) {
     Bytes payload;
     if (!(fast && (*fast)(df.streamNo, df.sd, df.data, payload))) {
       payload.swap(df.data);
-      restorePayload(ctx, d.hdr.fileKey, df.sd, payload);
+      if (!restorePayload(ctx, d.hdr.fileKey, df.sd, payload)) return false;
     }
-    if (payload.size() != df.sd.payloadLen || df.pos + payload.size() > out.size()) fail("deferred stream size mismatch");
+    if (payload.size() != df.sd.payloadLen || df.pos + payload.size() > out.size())
+      return fail("deferred stream size mismatch");
     memcpy(out.data() + df.pos, payload.data(), payload.size());
   }
-  if (!fwdApply(out, itemStart, fwd, bias)) fail("bad forward slot");
-  return out;
+  if (!fwdApply(out, itemStart, fwd, bias)) return fail("bad forward slot");
+  return !failed();
 }

@@ -443,7 +443,7 @@ static bool ccittEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out) {
   if (p.cols < 1 || p.cols > 1 << 16 || padCount > 7) return false;
   if (!ccittEncodeAll(p, g4, in, nrows, padCount, padVal, out)) return false;
   r.appendTo(r.len(), out);
-  return true;
+  return r.ok();
 }
 
 static bool ccittDecodeFP(const FilterParams& fp, const Bytes& in, Bytes& out, Bytes& recon) {

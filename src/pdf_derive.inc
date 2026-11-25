@@ -459,8 +459,7 @@ static void cryptStrings(const uint8_t* p, size_t n, uint8_t cipher, const Deriv
     uint8_t iv[16] = {};
     if (!cipherDecrypt(cipher, *dc.fileKey, dc.num, dc.gen, ct.data(), ct.size(), pt, iv)) continue;
     Bytes re;
-    cipherEncrypt(cipher, *dc.fileKey, dc.num, dc.gen, iv, pt, re);
-    if (re != ct) continue;
+    if (!cipherEncrypt(cipher, *dc.fileKey, dc.num, dc.gen, iv, pt, re) || re != ct) continue;
     int policy = -1;
     for (int pol = o.hex ? 4 : 0; pol < (o.hex ? 6 : 4) && policy < 0; pol++) {
       Bytes r;
@@ -1088,7 +1087,7 @@ static bool objstmReconNums(const Bytes& recon, std::vector<uint64_t>& nums, boo
   corr.assign(N, 0);
   if (!exact)
     for (auto& c : corr) c = unzigzag(r.var());
-  return true;
+  return r.ok();
 }
 
 struct ObjstmMembers {
@@ -1434,7 +1433,8 @@ static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const 
         memcpy(iv, ivb.data(), 16);
       }
       Bytes ct;
-      cipherEncrypt(cipher, *dc->fileKey, dc->num, dc->gen, iv, pt, ct);
+      if (!cipherEncrypt(cipher, *dc->fileKey, dc->num, dc->gen, iv, pt, ct) || !r.ok())
+        return fail("bad encrypted string in item text");
       strRender(ct, policy, out);
       i += r.p;
       continue;

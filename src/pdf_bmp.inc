@@ -83,7 +83,7 @@ static bool bmpEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out) {
   }
   RBuf r(recon);
   r.appendTo(r.len(), out);
-  return true;
+  return r.ok();
 }
 
 // ---- RGB image + 8-bit /SMask as one 32 bpp BMP (plan M10, opt-in -a) -------------------------
@@ -159,7 +159,7 @@ static bool rgbaEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out) {
   }
   RBuf r(recon);
   r.appendTo(r.len(), out);
-  return true;
+  return r.ok();
 }
 
 // alpha bytes of the image's BGRA BMP -> the mask's raw samples + tail (layerEncode for L_ALPHA)
@@ -177,5 +177,5 @@ static bool alphaEncodeLayer(const CodecCtx& ctx, const Bytes& recon, Bytes& out
     for (size_t x = 0; x < w; x++) out.push_back(s[4 * x + 3]);
   }
   r.appendTo(r.len(), out);
-  return true;
+  return r.ok();
 }

@@ -179,7 +179,8 @@ static int64_t xrefEnd(const std::vector<std::pair<uint64_t, uint64_t>>& subs) {
   return e;
 }
 
-static void readXref(ChanReader& r, const ObjPositions& op, Bytes& out, int64_t* endOut = nullptr,
+// false on bad data (error recorded)
+static bool readXref(ChanReader& r, const ObjPositions& op, Bytes& out, int64_t* endOut = nullptr,
                      std::vector<std::pair<uint64_t, int64_t>>* fwd = nullptr) {
   int64_t prevTarget = -1;
   std::vector<int64_t> targets;
@@ -188,7 +189,7 @@ static void readXref(ChanReader& r, const ObjPositions& op, Bytes& out, int64_t*
   r.lenBytes(CH_N, CH_T, t);
   out.insert(out.end(), t.begin(), t.end());
   uint8_t sep = r.u8(CH_S), e0 = r.u8(CH_S), e1 = r.u8(CH_S);
-  size_t ns = r.len(CH_N, 1 << 30);
+  size_t ns = r.len(CH_N, std::min<size_t>(1 << 30, r.remaining(CH_N)));  // each needs a byte
   std::vector<std::pair<uint64_t, uint64_t>> subs(ns);
   std::vector<Bytes> eol2(ns);
   uint64_t prevEnd = 0, total = 0;
@@ -198,7 +199,7 @@ static void readXref(ChanReader& r, const ObjPositions& op, Bytes& out, int64_t*
     r.lenBytes(CH_N, CH_T, eol2[s]);
     prevEnd = subs[s].first + subs[s].second;
     total += subs[s].second;
-    if (total > ((uint64_t)1 << 32)) fail("bad xref section");
+    if (total > r.remaining(CH_N) + 1) return fail("bad xref section");  // a byte per entry
   }
   std::vector<XrefEntry> ents;
   std::vector<char> types;
@@ -216,14 +217,14 @@ static void readXref(ChanReader& r, const ObjPositions& op, Bytes& out, int64_t*
       else if (kind == 3) { e.type = 'f'; e.off = r.var(CH_N); e.gen = (uint32_t)r.var(CH_N); }
       else if (kind == 4) { e.type = 'f'; e.gen = 65535; }
       else if (kind == 5) {
-        if (!fwd) fail("forward xref entry without patch list");
+        if (!fwd) return fail("forward xref entry without patch list");
         int64_t t = prevTarget + 1 + r.svar(CH_N);
         prevTarget = t;
         e.gen = (uint32_t)r.var(CH_N);
         targets.resize(ents.size() + 1, -1);
         targets[ents.size()] = t;
       }
-      else fail("bad xref entry kind");
+      else return fail("bad xref entry kind");
       ents.push_back(e);
       types.push_back(e.type);
       kinds.push_back((uint8_t)kind);
@@ -241,11 +242,12 @@ static void readXref(ChanReader& r, const ObjPositions& op, Bytes& out, int64_t*
       XrefEntry& e = ents[ei];
       if (kinds[ei] == 2) e.off = nextFree[ei];
       if (kinds[ei] == 5) fwd->push_back({out.size(), targets[ei]});
-      if (e.off > 9999999999ull || e.gen > 99999) fail("bad xref entry");
+      if (e.off > 9999999999ull || e.gen > 99999) return fail("bad xref entry");
       l = snprintf(buf, sizeof(buf), "%010llu %05u %c", (unsigned long long)e.off, e.gen, e.type);
       out.insert(out.end(), buf, buf + l);
       out.push_back(e0);
       out.push_back(e1);
     }
   }
+  return r.ok();
 }

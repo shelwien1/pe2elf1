@@ -33,36 +33,47 @@ struct FilterParams {
   std::vector<std::pair<uint64_t, uint64_t>> xrefIndex;  // L_XREFROWS: /Index ranges
 };
 
-// recon record reader
+// recon record reader. Sticky: after a read past the end it returns zeros and empty strings,
+// records the error once, and ok() is false; a function that reads a record returns
+// "its own result && r.ok()".
 struct RBuf {
   const Bytes& b;
   size_t p = 0;
+  bool bad = false;
   explicit RBuf(const Bytes& v) : b(v) {}
+  bool ok() const { return !bad; }
+  bool broke(const char* why) {
+    if (!bad) fail("%s", why);
+    bad = true;
+    p = b.size();
+    return false;
+  }
   uint8_t u8() {
-    if (p >= b.size()) fail("recon record truncated");
+    if (p >= b.size()) return (uint8_t)broke("recon record truncated");
     return b[p++];
   }
   uint64_t var() {
     uint64_t v = 0;
     for (int sh = 0;; sh += 7) {
       uint8_t c = u8();
-      if (sh > 63) fail("bad varint in recon record");
+      if (sh > 63) return broke("bad varint in recon record");
       v |= (uint64_t)(c & 0x7F) << sh;
-      if (!(c & 0x80)) return v;
+      if (!(c & 0x80)) return bad ? 0 : v;
     }
   }
   size_t len() {
     uint64_t v = var();
-    if (v > b.size() - p) fail("recon record truncated");
+    if (v > b.size() - p) return broke("recon record truncated");
     return (size_t)v;
   }
   void bytes(size_t n, Bytes& out) {
-    if (n > b.size() - p) fail("recon record truncated");
+    out.clear();
+    if (n > b.size() - p) { broke("recon record truncated"); return; }
     out.assign(b.begin() + p, b.begin() + p + n);
     p += n;
   }
   void appendTo(size_t n, Bytes& out) {
-    if (n > b.size() - p) fail("recon record truncated");
+    if (n > b.size() - p) { broke("recon record truncated"); return; }
     out.insert(out.end(), b.begin() + p, b.begin() + p + n);
     p += n;
   }
@@ -96,7 +107,10 @@ struct VecOut : public ::OutputStream {
   size_t limit;
   explicit VecOut(Bytes& v_, size_t lim = SIZE_MAX) : v(v_), limit(lim) {}
   size_t write(const byte* buf, const size_t sz) override {
-    if (sz > limit - std::min(limit, v.size())) throw Error("decoded stream exceeds size limit");
+    if (sz > limit - std::min(limit, v.size())) {  // over the cap: preflate stops at its next block
+      tPreflateStop = true;
+      return 0;
+    }
     if (sz == 1) {  // preflate writes literals one at a time
       v.push_back(buf[0]);
       return 1;
@@ -166,7 +180,9 @@ static bool flateDecode(const CodecCtx& ctx, const Bytes& in, Bytes& out, Bytes&
   {
     SpanIn si(in.data() + off, in.size() - off);
     VecOut vo(out, kMaxDecoded);
-    if (!preflate_decode(vo, diff, dsize, si, [] {}, 0, kMetaBlockSize)) {
+    tPreflateStop = false;
+    if (!preflate_decode(vo, diff, dsize, si, [] {}, 0, kMetaBlockSize) || tPreflateStop) {
+      if (tPreflateStop) return false;  // over the size cap, or corrupt
       // Unterminated deflate (e.g. Acrobat): ends with an empty stored block 00 00 FF FF and no
       // final block. Append an empty final static block (03 00) at the flush point and retry.
       size_t c = in.size();
@@ -179,11 +195,12 @@ static bool flateDecode(const CodecCtx& ctx, const Bytes& in, Bytes& out, Bytes&
       out.clear();
       diff.clear();
       VecOut v2(out, kMaxDecoded);
-      if (!preflate_decode(v2, diff, dsize, s2, [] {}, 0, kMetaBlockSize) || dsize != buf.size()) return false;
+      if (!preflate_decode(v2, diff, dsize, s2, [] {}, 0, kMetaBlockSize) || tPreflateStop || dsize != buf.size())
+        return false;
       Bytes re;
       VecOut ro(re);
       SpanIn ui(out.data(), out.size());
-      if (!preflate_reencode(ro, diff, ui, out.size(), [] {}) || re != buf) return false;
+      if (!preflate_reencode(ro, diff, ui, out.size(), [] {}) || tPreflateStop || re != buf) return false;
       dsize = c - off;
       terminated = true;
     }
@@ -194,7 +211,7 @@ static bool flateDecode(const CodecCtx& ctx, const Bytes& in, Bytes& out, Bytes&
     VecOut ro(re);
     double t1 = nowSec();
     SpanIn ui(out.data(), out.size());  // not the vector overload: its MemStream memcpy()s from null for empty data
-    bool rok = preflate_reencode(ro, diff, ui, out.size(), [] {});
+    bool rok = preflate_reencode(ro, diff, ui, out.size(), [] {}) && !tPreflateStop;
     {
       std::lock_guard<std::mutex> lk(gFlateProfMu);
       gFlateProf.enc += nowSec() - t1;
@@ -232,13 +249,17 @@ static bool flateEncode(const CodecCtx& ctx, const Bytes& recon, const Bytes& in
   out.clear();
   if (mode == 0) { out.push_back(ctx.zlibHdr[0]); out.push_back(ctx.zlibHdr[1]); }
   else if (mode == 1) { out.push_back(r.u8()); out.push_back(r.u8()); }
-  else if (mode != 2) fail("bad flate recon");
+  else if (mode != 2) return fail("bad flate recon");
   Bytes diffB;
   r.bytes(r.len(), diffB);
+  if (!r.ok()) return false;
   std::vector<byte> diff(diffB.begin(), diffB.end());
   VecOut vo(out);
   SpanIn ui(in.data(), in.size());
-  if (!preflate_reencode(vo, diff, ui, in.size(), [] {})) return false;
+  tPreflateStop = false;
+  bool ok = preflate_reencode(vo, diff, ui, in.size(), [] {});
+  if (tPreflateStop) return fail("corrupt preflate correction data");
+  if (!ok) return false;
   uint8_t tmode = r.u8();
   if (tmode == 2) {
     if (out.size() < 2) return false;
@@ -248,10 +269,10 @@ static bool flateEncode(const CodecCtx& ctx, const Bytes& recon, const Bytes& in
     out.push_back((uint8_t)(a >> 24)); out.push_back((uint8_t)(a >> 16));
     out.push_back((uint8_t)(a >> 8)); out.push_back((uint8_t)a);
   } else if (tmode != 1) {
-    fail("bad flate recon tail");
+    return fail("bad flate recon tail");
   }
   r.appendTo(r.len(), out);
-  return true;
+  return r.ok();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -357,7 +378,7 @@ static bool pngEncode(const Bytes& recon, const Bytes& in, Bytes& out) {
   RBuf r(recon);
   int colors = (int)r.var(), bpc = (int)r.var(), columns = (int)r.var();
   size_t bpp, rowlen;
-  if (!pngGeometry(colors, bpc, columns, bpp, rowlen)) fail("bad PNG recon");
+  if (!r.ok() || !pngGeometry(colors, bpc, columns, bpp, rowlen)) return fail("bad PNG recon");
   if (in.size() % rowlen) return false;
   size_t nrows = in.size() / rowlen;
   if (nrows == 0) rowlen = 0;  // nothing to filter: no row buffers for a (possibly huge) row length
@@ -365,7 +386,7 @@ static bool pngEncode(const Bytes& recon, const Bytes& in, Bytes& out) {
   Bytes tags;
   if (mode == 0) tags.assign(nrows, r.u8());
   else if (mode == 2) { r.bytes(r.len(), tags); if (tags.size() != nrows) return false; }
-  else if (mode != 1) fail("bad PNG recon mode");
+  else if (mode != 1) return fail("bad PNG recon mode");
   out.assign(nrows * (rowlen + 1), 0);
   Bytes zero(rowlen, 0), tmp;
   for (size_t i = 0; i < nrows; i++) {
@@ -377,7 +398,7 @@ static bool pngEncode(const Bytes& recon, const Bytes& in, Bytes& out) {
     pngFilterRow(tag, cur, prev, rowlen, bpp, dst + 1);
   }
   r.appendTo(r.len(), out);
-  return true;
+  return r.ok();
 }
 
 // TIFF predictor 2, 8 and 16 bits per component.
@@ -412,7 +433,7 @@ static bool tiffEncode(const Bytes& recon, const Bytes& in, Bytes& out) {
   RBuf r(recon);
   int colors = (int)r.var(), bpc = (int)r.var(), columns = (int)r.var();
   size_t bpp, rowlen;
-  if (!pngGeometry(colors, bpc, columns, bpp, rowlen) || (bpc != 8 && bpc != 16)) fail("bad TIFF recon");
+  if (!r.ok() || !pngGeometry(colors, bpc, columns, bpp, rowlen) || (bpc != 8 && bpc != 16)) return fail("bad TIFF recon");
   if (in.size() % rowlen) return false;
   size_t nrows = in.size() / rowlen;
   out = in;
@@ -431,7 +452,7 @@ static bool tiffEncode(const Bytes& recon, const Bytes& in, Bytes& out) {
     }
   }
   r.appendTo(r.len(), out);
-  return true;
+  return r.ok();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -527,7 +548,7 @@ static bool ahxEncode(const Bytes& recon, const Bytes& in, Bytes& out) {
   r.bytes(r.len(), eol);
   ahxWrite(in, f & 1, W, eol, (f & 4) != 0, (f & 8) != 0, (f & 2) != 0, out);
   r.appendTo(r.len(), out);
-  return true;
+  return r.ok();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -647,7 +668,7 @@ static bool a85Encode(const Bytes& recon, const Bytes& in, Bytes& out) {
   r.bytes(r.len(), eol);
   a85Write(in, f & 1, (f & 2) != 0, W, eol, (f & 4) != 0, (f & 8) != 0, out);
   r.appendTo(r.len(), out);
-  return true;
+  return r.ok();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -735,7 +756,7 @@ static bool rlEncode(const Bytes& recon, const Bytes& in, Bytes& out) {
   if (p != in.size()) return false;
   if (r.u8()) out.push_back(128);
   r.appendTo(r.len(), out);
-  return true;
+  return r.ok();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -890,7 +911,7 @@ static bool lzwEncode(const Bytes& recon, const Bytes& in, Bytes& out) {
   if (padCount) put((uint32_t)padVal, padCount);
   if (bitcnt) return false;
   r.appendTo(r.len(), out);
-  return true;
+  return r.ok();
 }
 
 // LZW encoding with an initial Clear and EOD (used only by the self-test).
@@ -976,15 +997,15 @@ static bool layerEncode(const CodecCtx& ctx, uint8_t type, const Bytes& recon, c
     case L_XMPJPG: return xmpEncodeLayer(recon, in, out);
     case L_ICCREF: return iccRefEncodeLayer(recon, in, out);
   }
-  fail("unknown layer type %d", type);
+  return fail("unknown layer type %d", type);
 }
 
 // Encoder side. Each decoder is responsible for exactness; this wrapper re-checks through
 // layerEncode (the decoder's own path) so no layer can be committed unverified.
 static bool layerDecode(const CodecCtx& ctx, uint8_t type, const FilterParams& fp, const Bytes& in, Bytes& out,
                         Bytes& recon) {
-  bool ok = false;
-  try {
+  return softly([&] {  // a layer that cannot be undone stays encoded
+    bool ok = false;
     switch (type) {
       case L_FLATE: ok = flateDecode(ctx, in, out, recon); break;  // verified internally
       case L_LZW: ok = lzwDecode(fp, in, out, recon); break;
@@ -1003,7 +1024,5 @@ static bool layerDecode(const CodecCtx& ctx, uint8_t type, const FilterParams& f
     if (type == L_FLATE) return true;
     Bytes re;
     return layerEncode(ctx, type, recon, out, re) && re == in;
-  } catch (const std::exception&) {  // a layer that cannot be undone stays encoded
-    return false;
-  }
+  });
 }
