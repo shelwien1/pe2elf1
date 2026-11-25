@@ -283,10 +283,8 @@ class Encoder {
     const Obj* encRef = nullptr;
     const Obj* id = nullptr;
     std::vector<const Obj*> trailers;
-    size_t ti = 0;
     for (size_t i = 0; i < seg.items.size(); i++) {
       const Item& it = seg.items[i];
-      (void)ti;
       if (it.kind == Item::STREAM) {
         const Obj* t = seg.objs[it.obj].get("Type");
         if (t && t->isName("XRef")) trailers.push_back(&seg.objs[it.obj]);
@@ -696,10 +694,7 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
   total += own;
   printf("  own files %zu (%s)  total %s\n", E.dump.ownData.size(), human(own).c_str(), human(total).c_str());
   uint64_t rawb = st.itemBytes[Item::RAW];
-  uint64_t recon = 0;
-  // channel R bytes
-  ChanWriter* dummy = nullptr;
-  (void)dummy;
+  uint64_t recon = 0;  // channel R bytes (exact only when R has a file of its own)
   int rf = E.dump.hdr.map.fileOf[CH_R];
   bool rAlone = true;
   for (int c = 0; c < CH_COUNT; c++)

@@ -42,6 +42,7 @@ struct Md5 {
     h[0] += a; h[1] += b; h[2] += c; h[3] += d;
   }
   void update(const void* data, size_t n) {
+    if (n == 0) return;  // data may be null for an empty vector
     const uint8_t* p = (const uint8_t*)data;
     size_t fill = len & 63;
     len += n;

@@ -123,8 +123,9 @@ junk inserted, duplicated ranges).
 | Check | Result |
 |---|---|
 | Byte-exact round trip (`c` → disk → `d` → `cmp`) | 3/3 supplied, 628/628 qpdf, 60/60 mutated |
-| Same, under ASan + UBSan | see the commit log for the latest run |
-| Encrypted variants, R2/R3/R4/R6 × 3 supplied files | 12/12 extract files identical to the plain rewrite |
+| Same, under ASan + UBSan (`halt_on_error=1`) | 691/691 (one UBSan report, `memcpy` from an empty `/ID`, fixed) |
+| Encrypted variants, R2/R3/R4/R6 × (3 supplied + 15 qpdf files) | 72/72 extract files identical to the plain rewrite |
+| Decompression bomb (1.1 GiB of zeros in a 1.1 MB Flate stream) | layer kept as `.z` at the 1 GiB cap, round trip intact |
 | Extracted files open in native libraries (PIL, fontTools, XML parser) | 75 BMP, 18 JPEG, 21 TrueType, 2 CFF, 9 XML, 24 Type 1 |
 | qpdf files in stored mode | 14, all without a `%PDF-` header |
 
