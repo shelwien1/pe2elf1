@@ -18,12 +18,22 @@
 //   e  encrypted string, stored as plaintext   f  forward slot   G  signature blob (.p7s)
 //   B  base64 blob (.b64, .b64r)
 //   w  start of a /Widths or /W array whose widths come from the embedded font, stands for "[":
-//      letter 'a' + (kind | map << 2), letter 'a' + rule, then " <ordinal> <FirstChar> " in decimal
-//      (the own-file ordinal of the font program; text, so that the number lifter reads it as
-//      numbers and no payload byte can open a string or a comment for it)
+//      letters 'a' + kind, 'a' + map, 'a' + rule, then " <font> <FirstChar> " and for Type 1
+//      " h<L_T1 recon in hex> ", for a CIDToGIDMap stream " <map> " (text, so that the number
+//      lifter reads it as text and numbers and no payload byte opens a string or a comment).
+//      A source is "o<ordinal>.<ext>" (own file) or "s<object number>" (a stream stored inline
+//      in an earlier item).
+//   v  the same as w, but after the "[" (stands for nothing): for "N G obj[" with no space, where
+//      a placeholder in place of the "[" would hide the keyword from the decoder's header parse
 //   x  a width of that array, as the font predicts it (see pdf_font.inc)
 //   k  "N G R": the structure parent (/P) of this top-level object, from the /K of earlier objects
 //   K  the same for ObjStm member k: " <k> " follows in decimal
+//   n  start of a /ParentTree leaf's /Nums array, stands for "["; in ObjStm member k " <k> " follows
+//   q  start of an array object that is a /Nums value, stands for "[": " <key> " follows, and in
+//      ObjStm member k "<k> " (the decoder adds the /K of the members before k first); Q the same
+//      after the "[" (see v)
+//   r  "N G R" in it: the structure element of that MCID on the page whose /StructParents is the
+//      key (array values), or the element whose OBJR names the object with that /StructParent
 
 static const uint8_t kDerivEsc = 4;
 
@@ -345,7 +355,7 @@ static int derivNeeds(const uint8_t* p, size_t n) {
 struct DerivEdit {
   size_t a, b;  // replaced token range
   Bytes rep;    // placeholder (0x04, code, payload)
-  bool operator<(const DerivEdit& o) const { return a < o.a; }
+  bool operator<(const DerivEdit& o) const { return a < o.a || (a == o.a && b < o.b); }  // insertions first
 };
 
 // encoder: text with the chosen tokens replaced and literal 0x04 escaped
@@ -701,18 +711,74 @@ static bool fwdApply(Bytes& out, const std::vector<uint64_t>& itemStart, const s
 }
 
 // ---- widths from embedded fonts (plan2 P8) ------------------------------------------------------
-// Font programs by own-file ordinal; kind decides the parser and the file extension.
+// streams the decoder keeps for width sources: stored inline (not own files), at most 64 KB, not
+// object streams; the encoder makes the same choice when it names a source "s<num>"
+static const size_t kInlineSourceMax = 65536;
+static bool inlineSourceOk(const StreamDesc& sd, size_t size) {
+  return (sd.storage == ST_BIN || sd.storage == ST_TXT) && sd.cls != SC_OBJSTM && size <= kInlineSourceMax;
+}
+
+static bool parseFontOf(int kind, const Bytes& b, const Bytes& t1recon, FontMetrics& m) {
+  switch (kind) {
+    case WK_TT: case WK_CID2: case WK_CID2M: return parseTrueType(b.data(), b.size(), m);
+    case WK_CFF: return parseCff(b.data(), b.size(), m) && m.cidGid.empty();
+    case WK_CID0: return parseCff(b.data(), b.size(), m) && !m.cidGid.empty();
+    case WK_T1: return parseType1(b, t1recon, m);
+  }
+  return false;
+}
+
+// Font programs (and CIDToGIDMap streams) by source text; the metrics are parsed once.
 struct DerivFonts {
-  std::function<Bytes(uint32_t, const std::string&)> load;
-  std::map<std::pair<uint32_t, bool>, std::unique_ptr<FontMetrics>> cache;
-  const FontMetrics* get(uint32_t ord, bool cff) {
-    auto& e = cache[{ord, cff}];
+  std::function<Bytes(uint32_t, const std::string&)> load;  // own file by ordinal and extension
+  std::unordered_map<uint32_t, Bytes> inl;                   // inline streams seen so far
+  std::map<std::string, std::unique_ptr<FontMetrics>> cache;
+  bool source(const std::string& src, Bytes& out) {
+    if (src.size() < 2) return false;
+    if (src[0] == 's') {
+      uint64_t num = 0;
+      for (size_t i = 1; i < src.size(); i++) {
+        if (src[i] < '0' || src[i] > '9' || i > 10) return false;
+        num = num * 10 + (src[i] - '0');
+      }
+      auto f = inl.find((uint32_t)num);
+      if (f == inl.end() || num > 0xFFFFFFFFull) return false;
+      out = f->second;
+      return true;
+    }
+    if (src[0] != 'o' || !load) return false;
+    size_t dot = src.find('.');
+    if (dot == std::string::npos || dot < 2 || dot + 1 >= src.size() || dot > 11) return false;
+    uint64_t ord = 0;
+    for (size_t i = 1; i < dot; i++) {
+      if (src[i] < '0' || src[i] > '9') return false;
+      ord = ord * 10 + (src[i] - '0');
+    }
+    std::string ext = src.substr(dot + 1);
+    for (char c : ext)
+      if (!isalnum((unsigned char)c)) return false;
+    if (ord > 0xFFFFFFFFull) return false;
+    out = load((uint32_t)ord, ext);
+    return true;
+  }
+  const FontMetrics* get(int kind, const std::string& font, const std::string& t1hex, const std::string& map) {
+    std::string key = std::string(1, (char)('a' + kind)) + " " + font + " " + t1hex + " " + map;
+    auto& e = cache[key];
     if (!e) {
       e.reset(new FontMetrics());
-      if (load) {
-        Bytes b = load(ord, cff ? "cff" : "ttf");
-        if (cff) parseCff(b.data(), b.size(), *e);
-        else parseTrueType(b.data(), b.size(), *e);
+      Bytes b, rec;
+      if (kind == WK_T1) {
+        if (t1hex.size() < 3 || t1hex[0] != 'h' || t1hex.size() % 2 == 0) return nullptr;
+        for (size_t i = 1; i + 1 < t1hex.size(); i += 2) {
+          int hi = hexVal((uint8_t)t1hex[i]), lo = hexVal((uint8_t)t1hex[i + 1]);
+          if (hi < 0 || lo < 0) return nullptr;
+          rec.push_back((uint8_t)(hi * 16 + lo));
+        }
+      }
+      if (source(font, b) && parseFontOf(kind, b, rec, *e) && kind == WK_CID2M) {
+        Bytes mb;
+        if (!source(map, mb)) e->ok = false;
+        else e->cidMap.swap(mb);
       }
     }
     return e->ok ? e.get() : nullptr;
@@ -787,7 +853,30 @@ static size_t topKeyValue(const uint8_t* p, size_t n, const char* key) {
 // reference or the references in a /K array. Both sides add an object's /K after its own /P is
 // done, top-level objects in item order and ObjStm members in member order.
 struct StructMap {
-  std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>> parent;
+  typedef std::pair<uint32_t, uint32_t> Ref;
+  std::unordered_map<uint32_t, Ref> parent;
+  // for /ParentTree: /StructParents -> page, /StructParent -> object, (page, MCID) -> element,
+  // object named by an OBJR -> element
+  std::unordered_map<uint32_t, uint32_t> spPage, spObj;
+  std::unordered_map<uint64_t, Ref> mcElem;
+  std::unordered_map<uint32_t, Ref> objrElem;
+  bool parentTreeRef(bool arr, uint64_t key, uint64_t idx, Ref& r) const {
+    if (key > 0xFFFFFFFFull) return false;
+    if (arr) {
+      auto pg = spPage.find((uint32_t)key);
+      if (pg == spPage.end() || idx > 0xFFFFFFFFull) return false;
+      auto e = mcElem.find((uint64_t)pg->second << 32 | idx);
+      if (e == mcElem.end()) return false;
+      r = e->second;
+      return true;
+    }
+    auto o = spObj.find((uint32_t)key);
+    if (o == spObj.end()) return false;
+    auto e = objrElem.find(o->second);
+    if (e == objrElem.end()) return false;
+    r = e->second;
+    return true;
+  }
 };
 
 // text of one object value (no "N G obj" header)
@@ -795,17 +884,146 @@ static void structAddKids(const uint8_t* p, size_t n, uint32_t num, uint32_t gen
   bool any = false;
   for (const uint8_t* q = p; (q = memfind(q, n - (q - p), "/K", 2)) != nullptr; q += 2)
     if (q + 2 >= p + n || !isRegular(q[2])) { any = true; break; }
-  if (!any) return;
+  bool sp = memfind(p, n, "/StructParent", 13) != nullptr;
+  if (!any && !sp) return;
   Lexer lx(p, n, 0);
   Obj o;
   if (!lx.parse(o) || o.t != Obj::DICT) return;
+  auto uint32Of = [](const Obj* v, uint32_t& x) {
+    if (!v || v->t != Obj::INT || v->i < 0 || v->i > 0xFFFFFFFFll) return false;
+    x = (uint32_t)v->i;
+    return true;
+  };
+  uint32_t x;
+  if (uint32Of(o.get("StructParents"), x)) sm.spPage[x] = num;
+  if (uint32Of(o.get("StructParent"), x)) sm.spObj[x] = num;
   const Obj* k = o.get("K");
   if (!k) return;
+  const Obj* pg = o.get("Pg");
+  int64_t page = pg && pg->t == Obj::REF && pg->i >= 0 && pg->i <= 0xFFFFFFFFll ? pg->i : -1;
   auto add = [&](const Obj& r) {
     if (r.t == Obj::REF && r.i >= 0 && r.i <= 0xFFFFFFFFll) sm.parent[(uint32_t)r.i] = {num, gen};
+    else if (r.t == Obj::INT && page >= 0 && r.i >= 0 && r.i <= 0xFFFFFFFFll)
+      sm.mcElem[(uint64_t)page << 32 | (uint64_t)r.i] = {num, gen};
+    else if (r.t == Obj::DICT) {
+      const Obj* t = r.get("Type");
+      const Obj* mcid = r.get("MCID");
+      const Obj* p2 = r.get("Pg");
+      int64_t pgx = p2 && p2->t == Obj::REF && p2->i >= 0 && p2->i <= 0xFFFFFFFFll ? p2->i : page;
+      if (mcid && mcid->t == Obj::INT && mcid->i >= 0 && mcid->i <= 0xFFFFFFFFll && pgx >= 0 &&
+          (!t || (t->t == Obj::NAME && t->s == "MCR")))
+        sm.mcElem[(uint64_t)pgx << 32 | (uint64_t)mcid->i] = {num, gen};
+      const Obj* ob = r.get("Obj");
+      if (t && t->t == Obj::NAME && t->s == "OBJR" && ob && ob->t == Obj::REF && ob->i >= 0 && ob->i <= 0xFFFFFFFFll)
+        sm.objrElem[(uint32_t)ob->i] = {num, gen};
+    }
   };
   if (k->t == Obj::ARR) for (auto& e : k->a) add(e);
   else add(*k);
+}
+
+static std::string refStr(std::pair<uint32_t, uint32_t> r);
+
+// Walks the /Nums array of a number tree leaf: key, value, key, value, ...; a value is "N G R",
+// null, or an array of those. Encoder and decoder feed it the same tokens.
+struct NumsWalk {
+  int depth = 0, st = 0;  // st at depth 1: 0 expects a key, 1 a value
+  int refPart = 0;        // inside "N G R": 1 after N, 2 after G
+  uint64_t key = 0, idx = 0;
+  bool done = false, bad = false;
+  bool atElement() const { return refPart == 0 && (depth == 2 || (depth == 1 && st == 1)); }
+  void elementDone() {
+    if (depth == 2) idx++;
+    else st = 0;
+  }
+  void open() {
+    if (refPart) { bad = true; return; }
+    depth++;
+    if (depth == 1) return;
+    if (depth == 2 && st == 1) { idx = 0; return; }
+    bad = true;
+  }
+  void close() {
+    if (refPart) { bad = true; return; }
+    if (depth == 2) st = 0;
+    else if (depth == 1 && st != 0) bad = true;
+    if (--depth == 0) done = true;
+    if (depth < 0) bad = true;
+  }
+  void integer(const uint8_t* t, size_t n) {
+    if (depth == 1 && st == 0 && !refPart) {
+      uint64_t v = 0;
+      if (n == 0 || n > 10) { bad = true; return; }
+      for (size_t i = 0; i < n; i++) {
+        if (t[i] < '0' || t[i] > '9') { bad = true; return; }
+        v = v * 10 + (t[i] - '0');
+      }
+      key = v;
+      st = 1;
+      return;
+    }
+    if (refPart == 0 && atElement()) refPart = 1;
+    else if (refPart == 1) refPart = 2;
+    else bad = true;
+  }
+  void word(const uint8_t* t, size_t n) {
+    if (n == 1 && t[0] == 'R' && refPart == 2) { refPart = 0; elementDone(); return; }
+    if (n == 4 && memcmp(t, "null", 4) == 0 && atElement()) { elementDone(); return; }
+    bad = true;
+  }
+};
+
+// encoder: placeholders for the /Nums array opening at v[a] (value text v, edits at base + offset);
+// key >= 0: v[a] opens an array object that is the /Nums value of that key
+static size_t numsChoose(const uint8_t* v, size_t n, size_t a, size_t base, const StructMap& sm,
+                         std::vector<DerivEdit>& edits, int64_t key, long member, bool after = false) {
+  NumsWalk w;
+  if (key >= 0) {
+    w.depth = 1;
+    w.st = 1;
+    w.key = (uint64_t)key;
+  }
+  std::vector<DerivEdit> ed;
+  size_t refStart = 0;
+  StructMap::Ref pred;
+  bool havePred = false;
+  for (size_t i = a; i < n && !w.done && !w.bad;) {
+    uint8_t c = v[i];
+    if (isWS(c)) { i++; continue; }
+    if (c == '[') { w.open(); i++; continue; }
+    if (c == ']') {
+      w.close();
+      i++;
+      if (key >= 0 && w.depth == 1) w.done = true;
+      continue;
+    }
+    if (!isRegular(c)) return 0;
+    size_t j = i;
+    while (j < n && isRegular(v[j])) j++;
+    if (c >= '0' && c <= '9') {
+      if (w.atElement()) {
+        refStart = i;
+        havePred = sm.parentTreeRef(w.depth == 2, w.key, w.idx, pred);
+      }
+      w.integer(v + i, j - i);
+    } else {
+      bool endRef = j - i == 1 && v[i] == 'R' && w.refPart == 2;
+      w.word(v + i, j - i);
+      if (endRef && havePred && refStr(pred) == std::string((const char*)v + refStart, j - refStart))
+        ed.push_back({base + refStart, base + j, Bytes{kDerivEsc, 'r'}});
+      if (endRef) havePred = false;
+    }
+    i = j;
+  }
+  if (!w.done || w.bad || ed.size() < 2) return 0;
+  Bytes rep{kDerivEsc, (uint8_t)(key < 0 ? 'n' : after ? 'Q' : 'q')};
+  std::string f = key < 0 ? (member >= 0 ? " " : "") : " " + decStr((uint64_t)key) + " ";
+  if (member >= 0) f += decStr((uint64_t)member) + " ";
+  rep.insert(rep.end(), f.begin(), f.end());
+  if (after) edits.push_back({base + a + 1, base + a + 1, rep});
+  else edits.push_back({base + a, base + a + 1, rep});
+  edits.insert(edits.end(), ed.begin(), ed.end());
+  return ed.size();
 }
 
 // "N G R" at p[a]; its end in e
@@ -928,13 +1146,13 @@ struct DerivExtra {
 
 // encoder: placeholders for the /Widths or /W array opening at p[a]; the map and rule with the
 // most exact predictions win. Returns the number of widths replaced.
-static size_t widthsChoose(const uint8_t* p, size_t n, size_t a, int kind, uint32_t ord, uint32_t first,
-                           const FontMetrics& m, std::vector<DerivEdit>& edits) {
+static size_t widthsChoose(const uint8_t* p, size_t n, size_t a, int kind, const std::string& fields, uint32_t first,
+                           const FontMetrics& m, std::vector<DerivEdit>& edits, bool after = false) {
   std::vector<WidthTok> tk;
   if (!widthsTokens(p, n, a, tk)) return 0;
   auto run = [&](int map, int rule, std::vector<size_t>* hitTok) -> size_t {
     WidthsWalk ww;
-    ww.cid = kind == WK_CID2;
+    ww.cid = kind == WK_CID2 || kind == WK_CID2M || kind == WK_CID0;
     ww.first = first;
     size_t hits = 0;
     std::string s;
@@ -956,19 +1174,27 @@ static size_t widthsChoose(const uint8_t* p, size_t n, size_t a, int kind, uint3
   };
   int bestMap = 0, bestRule = 0;
   size_t best = 0;
-  for (int map = 0; map < (kind == WK_TT ? kWidthMaps : 1); map++)
+  for (int map = 0; map < widthMaps(kind); map++)
     for (int rule = 0; rule < kWidthRules; rule++) {
       size_t h = run(map, rule, nullptr);
       if (h > best) { best = h; bestMap = map; bestRule = rule; }
     }
-  if (best < 3) return 0;
+  // an array where few widths match costs more than it saves (the remaining numbers lose their
+  // neighbours in the lifter's groups): at least 20% of the numbers, 70% for Type 1 (TeX writes
+  // widths from TFM metrics with a decimal; the header also carries the L_T1 recon). 120-file
+  // set, PDF-specific xz: any 3 hits 7733.7 KB, 30% 7727.7 KB, 20% with Type 1 at 70% 7725.6 KB,
+  // Type 1 off 7725.6 KB
+  size_t nnum = 0;
+  for (auto& t : tk) nnum += t.t == 0;
+  if (best < 3 || best * 10 < (size_t)(kind == WK_T1 ? 7 : 2) * nnum) return 0;
   std::vector<size_t> hit;
   run(bestMap, bestRule, &hit);
-  Bytes rep{kDerivEsc, 'w', (uint8_t)('a' + (kind | bestMap << 2)), (uint8_t)('a' + bestRule)};
-  char buf[32];
-  int l = snprintf(buf, sizeof(buf), " %u %u ", ord, first);
-  rep.insert(rep.end(), buf, buf + l);
-  edits.push_back({a, a + 1, rep});
+  Bytes rep{kDerivEsc, (uint8_t)(after ? 'v' : 'w'), (uint8_t)('a' + kind), (uint8_t)('a' + bestMap),
+            (uint8_t)('a' + bestRule)};
+  // fields: " <font> <FirstChar> [h<recon>] [<map>] "
+  rep.insert(rep.end(), fields.begin(), fields.end());
+  if (after) edits.push_back({a + 1, a + 1, rep});
+  else edits.push_back({a, a + 1, rep});
   for (size_t t : hit) edits.push_back({tk[t].a, tk[t].b, Bytes{kDerivEsc, 'x'}});
   return hit.size();
 }
@@ -1002,29 +1228,99 @@ static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const 
       out.insert(out.end(), v.begin(), v.end());
       continue;
     }
-    if (p[i] == 'w') {
-      if (!fonts || i + 2 >= n || p[i + 1] < 'a' || p[i + 2] < 'a') return false;
-      int km = p[i + 1] - 'a', kind = km & 3, map = km >> 2, rule = p[i + 2] - 'a';
-      if (kind >= WK_COUNT || map >= kWidthMaps || rule >= kWidthRules) return false;
-      i += 3;
-      uint64_t num[2];
-      for (int f = 0; f < 2; f++) {
-        if (i >= n || p[i++] != ' ') return false;
+    if (p[i] == 'n' || p[i] == 'q' || p[i] == 'Q') {
+      if (!ex || !ex->sm) return false;
+      bool arrObj = p[i] != 'n', after = p[i] == 'Q';
+      i++;
+      NumsWalk w;
+      auto decimal = [&](uint64_t& v) {  // digits then a space
         size_t d0 = i;
-        num[f] = 0;
-        while (i < n && p[i] >= '0' && p[i] <= '9' && i - d0 < 10) num[f] = num[f] * 10 + (p[i++] - '0');
-        if (i == d0) return false;
+        v = 0;
+        while (i < n && p[i] >= '0' && p[i] <= '9' && i - d0 < 10) v = v * 10 + (p[i++] - '0');
+        return i > d0 && i < n && p[i++] == ' ';
+      };
+      if (arrObj || ex->members) {
+        if (i >= n || p[i++] != ' ') return false;
+      }
+      if (arrObj) {  // "<key> "
+        uint64_t k;
+        if (!decimal(k)) return false;
+        w.depth = 1;
+        w.st = 1;
+        w.key = k;
+      }
+      if (ex->members) {  // "<member> ": the /K of the members before it first
+        uint64_t m;
+        if (!decimal(m) || m >= ex->members->nums.size() ||
+            !ex->members->advance(out.data(), out.size(), (size_t)m, *ex->sm))
+          return false;
+      }
+      w.open();
+      if (!after) out.push_back('[');
+      while (!w.done) {
+        if (i >= n || w.bad) return false;
+        uint8_t c = p[i];
+        if (isWS(c)) { out.push_back(c); i++; }
+        else if (c == '[') { w.open(); out.push_back(c); i++; }
+        else if (c == ']') {
+          w.close();
+          out.push_back(c);
+          i++;
+          if (arrObj && w.depth == 1) w.done = true;
+        }
+        else if (c == kDerivEsc && i + 1 < n && p[i + 1] == 'r') {
+          StructMap::Ref r;
+          if (!w.atElement() || !ex->sm->parentTreeRef(w.depth == 2, w.key, w.idx, r)) return false;
+          std::string v = refStr(r);
+          out.insert(out.end(), v.begin(), v.end());
+          w.elementDone();
+          i += 2;
+        } else if (isRegular(c) && c != kDerivEsc) {
+          size_t j = i;
+          while (j < n && isRegular(p[j]) && p[j] != kDerivEsc) j++;
+          if (c >= '0' && c <= '9') w.integer(p + i, j - i);
+          else w.word(p + i, j - i);
+          out.insert(out.end(), p + i, p + j);
+          i = j;
+        } else {
+          return false;
+        }
+      }
+      if (w.bad) return false;
+      i--;
+      continue;
+    }
+    if (p[i] == 'w' || p[i] == 'v') {
+      bool after = p[i] == 'v';
+      if (!fonts || i + 3 >= n || p[i + 1] < 'a' || p[i + 2] < 'a' || p[i + 3] < 'a') return false;
+      int kind = p[i + 1] - 'a', map = p[i + 2] - 'a', rule = p[i + 3] - 'a';
+      if (kind >= WK_COUNT || map >= widthMaps(kind) || rule >= kWidthRules) return false;
+      i += 4;
+      // " <font> <FirstChar> [h<recon>] [<map>] "
+      int nf = 2 + (kind == WK_T1) + (kind == WK_CID2M);
+      std::string fld[4];
+      for (int f = 0; f < nf; f++) {
+        if (i >= n || p[i++] != ' ') return false;
+        size_t f0 = i;
+        while (i < n && p[i] != ' ' && i - f0 < 4096) i++;
+        if (i == f0) return false;
+        fld[f].assign((const char*)p + f0, i - f0);
       }
       if (i >= n || p[i++] != ' ') return false;
-      uint64_t ord = num[0], first = num[1];
-      if (ord > 0xFFFFFFFFull || first > 0xFFFFFF) return false;
-      const FontMetrics* m = fonts->get((uint32_t)ord, kind == WK_CFF);
+      uint64_t first = 0;
+      for (char c : fld[1]) {
+        if (c < '0' || c > '9' || first > 0xFFFFFF) return false;
+        first = first * 10 + (c - '0');
+      }
+      if (first > 0xFFFFFF) return false;
+      const FontMetrics* m = fonts->get(kind, fld[0], kind == WK_T1 ? fld[2] : std::string(),
+                                        kind == WK_CID2M ? fld[2] : std::string());
       if (!m) return false;
       WidthsWalk ww;
-      ww.cid = kind == WK_CID2;
+      ww.cid = kind == WK_CID2 || kind == WK_CID2M || kind == WK_CID0;
       ww.first = (uint32_t)first;
       ww.open();
-      out.push_back('[');
+      if (!after) out.push_back('[');
       std::string s;
       while (!ww.done) {
         if (i >= n || ww.bad) return false;

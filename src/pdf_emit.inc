@@ -351,7 +351,10 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
         const uint8_t* p = r.get(CH_T, n);
         uint64_t start = out.size();
         uint32_t num = 0, gen = 0;
-        if (objHeaderOf(p, n, num, gen)) objPos.add(num, gen, start - bias);
+        if (objHeaderOf(p, n, num, gen)) {
+          objPos.add(num, gen, start - bias);
+          if (inlineSourceOk(sd, data.size())) fonts.inl[num] = data;  // a later width source
+        }
         int need = derivNeeds(p, n);
         StreamFacts f;
         streamFacts(ctx, sd, data, (need & 1) != 0, (need & 2) != 0, f);

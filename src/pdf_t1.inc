@@ -180,11 +180,16 @@ static bool t1CsJoin(RBuf& iv, RBuf& ops, RBuf& nums, size_t lenIV, size_t len, 
   return out.size() - st == len;
 }
 
-static bool t1EncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out) {
+// stored form -> the font with the eexec part and (flags bit0) the charstrings still decrypted;
+// s, n: the private part. Shared by the layer and the width derivation (pdf_font.inc).
+static bool t1Plain(const Bytes& recon, const Bytes& in, Bytes& out, size_t& s, size_t& n, uint8_t& flags,
+                    std::vector<std::string>& rd, size_t& lenIVout) {
   RBuf r(recon);
-  size_t s = (size_t)r.var(), n = (size_t)r.var();
-  uint8_t flags = r.u8();
-  std::vector<std::string> rd(r.u8());
+  s = (size_t)r.var();
+  n = (size_t)r.var();
+  flags = r.u8();
+  rd.assign(r.u8(), std::string());
+  lenIVout = 4;
   for (auto& x : rd) {
     Bytes b;
     r.bytes(r.len(), b);
@@ -196,6 +201,7 @@ static bool t1EncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out) {
     // rebuild the private part from skeleton + pools; n is its length after the rebuild
     size_t lenIV = (size_t)r.var(), skelLen = (size_t)r.var(), ivLen = (size_t)r.var(), opsLen = (size_t)r.var();
     size_t tailLen = (size_t)r.var();
+    lenIVout = lenIV;
     if (s > in.size() || skelLen > in.size() - s || ivLen > in.size() || opsLen > in.size() || tailLen > in.size())
       return false;
     size_t poolStart = s + skelLen;
@@ -227,6 +233,14 @@ static bool t1EncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out) {
   }
   if (s > src->size() || n > src->size() - s) return false;
   out = *src;
+  return true;
+}
+
+static bool t1EncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out) {
+  size_t s, n, lenIV;
+  uint8_t flags;
+  std::vector<std::string> rd;
+  if (!t1Plain(recon, in, out, s, n, flags, rd, lenIV)) return false;
   uint8_t* p = out.data() + s;
   if (flags & 1) {
     std::vector<std::pair<size_t, size_t>> blobs;

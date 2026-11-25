@@ -48,9 +48,9 @@ namespace pdd {
 #include "pdf_bmp.inc"
 #include "pdf_tiff.inc"
 #include "pdf_icc.inc"
-#include "pdf_font.inc"
 #include "pdf_ccitt.inc"
 #include "pdf_t1.inc"
+#include "pdf_font.inc"
 #include "pdf_objstm.inc"
 #include "pdf_class.inc"
 #include "pdf_lift.inc"
@@ -120,7 +120,8 @@ struct Stats {
   uint64_t typedBytes = 0, payloadBytes = 0, layeredPayload = 0;
   uint64_t bmpCount = 0;
   uint64_t derived = 0, stringsDecrypted = 0, sigBlobs = 0, rgbaMerged = 0, b64Blobs = 0, b64Bytes = 0, xmpThumbs = 0,
-           iccRefs = 0, itemLenPredicted = 0, widthArrays = 0, widthsDerived = 0, structParents = 0, membersDerived = 0;
+           iccRefs = 0, itemLenPredicted = 0, widthArrays = 0, widthsDerived = 0, structParents = 0, membersDerived = 0,
+           parentTreeRefs = 0, widthsByKind[8] = {};
 };
 
 class Encoder {
@@ -251,7 +252,11 @@ class Encoder {
   std::unordered_map<int, int> streamOfItem_;
   std::vector<uint32_t> ownOrd_;                     // stream -> own-file ordinal (ST_FILE)
   std::unordered_map<uint32_t, size_t> streamByNum_;  // object number -> stream
-  std::unordered_map<uint32_t, std::unique_ptr<FontMetrics>> fontCache_;  // by own-file ordinal
+  std::map<std::string, std::unique_ptr<FontMetrics>> fontCache_;  // by source
+  std::vector<std::string> ordExt_;                      // own-file ordinal -> extension
+  std::unordered_map<uint32_t, const Obj*> widthArrays_;  // array object -> font dictionary naming it
+  std::unordered_map<uint32_t, uint32_t> numsArrays_;     // array object -> its /Nums key
+  std::unordered_map<uint32_t, size_t> inlineSeen_;       // inline-stored streams written so far
   StructMap sm_;                                      // structure parents, in item order
   Bytes preT_, preCS_, preCmap_;                      // texts before unchecked lifts
   bool liftsUnchecked_ = false;
@@ -1102,7 +1107,24 @@ class Encoder {
   // dictionary can name its font program's file before the program's own item comes
   void assignOrdinals() {
     ownOrd_.assign(streams.size(), UINT32_MAX);
+    ordExt_.clear();
     streamByNum_.clear();
+    widthArrays_.clear();
+    numsArrays_.clear();
+    for (auto& e : idx_.byNum) {  // width arrays and /Nums values that are objects of their own
+      const Obj* o = e.second;
+      if (!o || o->t != Obj::DICT) continue;
+      const Obj* nums = o->get("Nums");
+      if (nums && nums->t == Obj::ARR)
+        for (size_t k = 0; k + 1 < nums->a.size(); k += 2)
+          if (nums->a[k].t == Obj::INT && nums->a[k].i >= 0 && nums->a[k].i <= 0xFFFFFFFFll && nums->a[k + 1].t == Obj::REF &&
+              nums->a[k + 1].i >= 0 && nums->a[k + 1].i <= 0xFFFFFFFFll)
+            numsArrays_[(uint32_t)nums->a[k + 1].i] = (uint32_t)nums->a[k].i;
+      for (const char* k : {"Widths", "W"}) {
+        const Obj* w = o->get(k);
+        if (w && w->t == Obj::REF && w->i >= 0 && w->i <= 0xFFFFFFFFll) widthArrays_[(uint32_t)w->i] = o;
+      }
+    }
     std::unordered_map<uint64_t, std::vector<size_t>> seen;
     uint32_t next = 0;
     for (size_t i = 0; i < seg.items.size(); i++) {
@@ -1125,64 +1147,152 @@ class Encoder {
         seen[h].push_back(si);
       }
       ownOrd_[si] = next++;
+      ordExt_.push_back(s.desc.ext);
     }
   }
 
-  // /Widths of simple TrueType and Type1C fonts, /W of CIDFontType2 fonts (identity CIDToGIDMap):
-  // widths the embedded font program predicts become placeholders (plan2 P8)
-  // p: the object's value (no header); edits are made at base + offset
-  void widthsDerive(const uint8_t* p, size_t n, size_t base, std::vector<DerivEdit>& edits) {
-    if (!memfind(p, n, "/Widths", 7) && !memfind(p, n, "/CIDFontType2", 13)) return;
-    Lexer lx(p, n, 0);
-    Obj o;
-    if (!lx.parse(o) || o.t != Obj::DICT) return;
-    const Obj* sub = o.get("Subtype");
-    if (!sub || sub->t != Obj::NAME) return;
-    int kind;
-    if (sub->s == "TrueType") kind = WK_TT;
-    else if (sub->s == "Type1" || sub->s == "MMType1") kind = WK_CFF;
-    else if (sub->s == "CIDFontType2") kind = WK_CID2;
-    else return;
-    const char* key = kind == WK_CID2 ? "/W" : "/Widths";
-    const Obj* arr = o.get(key + 1);
-    if (!arr || arr->t != Obj::ARR) return;
-    uint32_t first = 0;
-    if (kind == WK_CID2) {
-      const Obj* m = idx_.resolve(o.get("CIDToGIDMap"));
-      if (m && !(m->t == Obj::NAME && m->s == "Identity")) return;
-    } else {
-      const Obj* fc = idx_.resolve(o.get("FirstChar"));
-      if (!fc || fc->t != Obj::INT || fc->i < 0 || fc->i > 0xFFFF) return;
-      first = (uint32_t)fc->i;
-    }
-    const Obj* fd = idx_.resolve(o.get("FontDescriptor"));
-    if (!fd || fd->t != Obj::DICT) return;
-    const Obj* ff = fd->get(kind == WK_CFF ? "FontFile3" : "FontFile2");
-    if (!ff || ff->t != Obj::REF) return;
-    auto sf = streamByNum_.find((uint32_t)ff->i);
-    if (sf == streamByNum_.end()) return;
+  // a stream as a width source: its own file ("o<ord>.<ext>") or, stored inline in an item
+  // already written, "s<num>"; data = its stored form
+  bool streamSource(uint32_t num, std::string& src, const Bytes*& data, const StreamRec*& rec) {
+    auto sf = streamByNum_.find(num);
+    if (sf == streamByNum_.end()) return false;
     const StreamRec& s = streams[sf->second];
-    const char* ext = kind == WK_CFF ? "cff" : "ttf";
-    if (s.remain != R_DONE || s.desc.ext != ext || (s.desc.storage != ST_FILE && s.desc.storage != ST_DUP)) return;
-    uint32_t ord = s.desc.storage == ST_DUP ? s.desc.ordinal : ownOrd_[sf->second];
-    if (ord == UINT32_MAX) return;
-    auto& fm = fontCache_[ord];
+    if (s.remain != R_DONE) return false;
+    rec = &s;
+    if (s.desc.storage == ST_FILE || s.desc.storage == ST_DUP) {
+      uint32_t ord = s.desc.storage == ST_DUP ? s.desc.ordinal : ownOrd_[sf->second];
+      if (ord >= ordExt_.size()) return false;
+      src = "o" + decStr(ord) + "." + ordExt_[ord];
+      data = !s.data.empty() ? &s.data : ord < dump.ownData.size() ? &dump.ownData[ord] : nullptr;
+      return data != nullptr;
+    }
+    auto f = inlineSeen_.find(num);
+    if (!inlineSourceOk(s.desc, s.data.size()) || f == inlineSeen_.end() || f->second != sf->second) return false;
+    src = "s" + decStr(num);
+    data = &s.data;
+    return true;
+  }
+
+  // kind, header fields and metrics for the widths of font dictionary o
+  struct WidthFont {
+    int kind;
+    uint32_t first = 0;
+    std::string fields;
+    const FontMetrics* m = nullptr;
+  };
+  bool widthFont(const Obj& o, WidthFont& wf) {
+    const Obj* sub = o.get("Subtype");
+    if (!sub || sub->t != Obj::NAME) return false;
+    const Obj* fd = idx_.resolve(o.get("FontDescriptor"));
+    if (!fd || fd->t != Obj::DICT) return false;
+    const char* ffKey;
+    if (sub->s == "TrueType") { wf.kind = WK_TT; ffKey = "FontFile2"; }
+    else if (sub->s == "Type1" || sub->s == "MMType1") {
+      wf.kind = fd->get("FontFile3") ? WK_CFF : WK_T1;
+      ffKey = wf.kind == WK_CFF ? "FontFile3" : "FontFile";
+    } else if (sub->s == "CIDFontType2") { wf.kind = WK_CID2; ffKey = "FontFile2"; }
+    else if (sub->s == "CIDFontType0") { wf.kind = WK_CID0; ffKey = "FontFile3"; }
+    else return false;
+    const Obj* ff = fd->get(ffKey);
+    if (!ff || ff->t != Obj::REF) return false;
+    std::string src, mapSrc, t1hex;
+    const Bytes* data;
+    const Bytes* mapData = nullptr;
+    const StreamRec* rec;
+    if (!streamSource((uint32_t)ff->i, src, data, rec)) return false;
+    if (wf.kind == WK_CID2) {
+      const Obj* m = o.get("CIDToGIDMap");
+      if (m && m->t == Obj::REF) {
+        const StreamRec* mr;
+        if (!streamSource((uint32_t)m->i, mapSrc, mapData, mr)) return false;
+        wf.kind = WK_CID2M;
+      } else if (m && !(m->t == Obj::NAME && m->s == "Identity")) {
+        return false;
+      }
+    }
+    Bytes recon;
+    if (wf.kind == WK_T1) {
+      if (rec->desc.layers.empty() || rec->desc.layers.back().type != L_T1) return false;
+      recon = rec->desc.layers.back().recon;
+      static const char* hx = "0123456789abcdef";
+      t1hex = "h";
+      for (uint8_t c : recon) { t1hex += hx[c >> 4]; t1hex += hx[c & 15]; }
+    }
+    if (wf.kind != WK_CID2 && wf.kind != WK_CID2M && wf.kind != WK_CID0) {
+      const Obj* fc = idx_.resolve(o.get("FirstChar"));
+      if (!fc || fc->t != Obj::INT || fc->i < 0 || fc->i > 0xFFFF) return false;
+      wf.first = (uint32_t)fc->i;
+    }
+    std::string key = std::string(1, (char)('a' + wf.kind)) + " " + src + " " + t1hex + " " + mapSrc;
+    auto& fm = fontCache_[key];
     if (!fm) {
       fm.reset(new FontMetrics());
-      const Bytes* b = !s.data.empty() ? &s.data : ord < dump.ownData.size() ? &dump.ownData[ord] : nullptr;
-      if (b && kind == WK_CFF) parseCff(b->data(), b->size(), *fm);
-      else if (b) parseTrueType(b->data(), b->size(), *fm);
+      if (parseFontOf(wf.kind, *data, recon, *fm) && wf.kind == WK_CID2M) fm->cidMap = *mapData;
     }
-    if (!fm->ok || fm->cff != (kind == WK_CFF)) return;
-    size_t at = topKeyValue(p, n, key);
-    if (at == SIZE_MAX || p[at] != '[') return;
+    if (!fm->ok) return false;
+    wf.m = fm.get();
+    wf.fields = " " + src + " " + decStr(wf.first) + " ";
+    if (wf.kind == WK_T1) wf.fields += t1hex + " ";
+    if (wf.kind == WK_CID2M) wf.fields += mapSrc + " ";
+    return true;
+  }
+
+  // /Widths and /W from the font programs (plan2 P8): in a font dictionary (direct array) or in
+  // an array object a font dictionary names. p: the object's value (no header); edits at base +.
+  // top: a top-level object's value, right after "obj": a placeholder there must not touch the
+  // keyword (the decoder reads "N G obj" before it resolves any placeholder)
+  void widthsDerive(const uint8_t* p, size_t n, size_t base, uint32_t num, bool top, std::vector<DerivEdit>& edits) {
+    size_t at = SIZE_MAX;
+    const Obj* fontDict = nullptr;
+    Obj o;
+    size_t i0 = 0;
+    while (i0 < n && isWS(p[i0])) i0++;
+    bool after = false;
+    if (i0 < n && p[i0] == '[') {
+      after = top && i0 == 0;
+      auto f = widthArrays_.find(num);
+      if (f == widthArrays_.end()) return;
+      fontDict = f->second;
+      at = i0;
+    } else {
+      if (!memfind(p, n, "/Widths", 7) && !memfind(p, n, "/W", 2)) return;
+      Lexer lx(p, n, 0);
+      if (!lx.parse(o) || o.t != Obj::DICT) return;
+      const Obj* sub = o.get("Subtype");
+      bool cid = sub && sub->t == Obj::NAME && (sub->s == "CIDFontType2" || sub->s == "CIDFontType0");
+      const Obj* arr = o.get(cid ? "W" : "Widths");
+      if (!arr || arr->t != Obj::ARR) return;
+      at = topKeyValue(p, n, cid ? "/W" : "/Widths");
+      if (at == SIZE_MAX || p[at] != '[') return;
+      fontDict = &o;
+    }
+    WidthFont wf;
+    if (!widthFont(*fontDict, wf)) return;
     std::vector<DerivEdit> we;
-    size_t got = widthsChoose(p, n, at, kind, ord, first, *fm, we);
+    size_t got = widthsChoose(p, n, at, wf.kind, wf.fields, wf.first, *wf.m, we, after);
     for (auto& e : we) edits.push_back({e.a + base, e.b + base, e.rep});
     if (got) {
       st.widthArrays++;
       st.widthsDerived += got;
+      st.widthsByKind[wf.kind] += got;
     }
+  }
+
+  // /ParentTree leaves: refs predicted from page /StructParents and the structure elements' MCIDs
+  // member: ObjStm member index, -1 for a top-level object
+  void numsDerive(const uint8_t* p, size_t n, size_t base, uint32_t num, long member, std::vector<DerivEdit>& edits) {
+    size_t i0 = 0;
+    while (i0 < n && isWS(p[i0])) i0++;
+    if (i0 < n && p[i0] == '[') {  // an array object that is a /Nums value
+      auto f = numsArrays_.find(num);
+      if (f != numsArrays_.end())  // "obj[": header after the bracket (see widthsDerive)
+        st.parentTreeRefs += numsChoose(p, n, i0, base, sm_, edits, (int64_t)f->second, member, member < 0 && i0 == 0);
+      return;
+    }
+    if (!memfind(p, n, "/Nums", 5)) return;
+    size_t at = topKeyValue(p, n, "/Nums");
+    if (at == SIZE_MAX || p[at] != '[') return;
+    st.parentTreeRefs += numsChoose(p, n, at, base, sm_, edits, -1, member);
   }
 
   // ObjStm members: /P and widths placeholders inside the member text; every member's /K goes into
@@ -1200,7 +1310,8 @@ class Encoder {
       size_t vn = (size_t)(b - a);
       uint32_t num = (uint32_t)mem.nums[k];
       if (structChoose(v, vn, (size_t)a, num, (long)k, sm_, ed)) st.structParents++;
-      widthsDerive(v, vn, (size_t)a, ed);
+      widthsDerive(v, vn, (size_t)a, num, false, ed);
+      numsDerive(v, vn, (size_t)a, num, (long)k, ed);
       structAddKids(v, vn, num, 0, sm_);
     }
     if (ed.empty()) return false;
@@ -1263,7 +1374,8 @@ class Encoder {
         body = objBodyStart(in_.data() + a, b - a);
         if (body != SIZE_MAX) {
           if (structChoose(in_.data() + a + body, b - a - body, body, hn, -1, sm_, edits)) st.structParents++;
-          widthsDerive(in_.data() + a + body, b - a - body, body, edits);
+          widthsDerive(in_.data() + a + body, b - a - body, body, hn, true, edits);
+          numsDerive(in_.data() + a + body, b - a - body, body, hn, -1, edits);
         }
       }
       derivEncode(in_.data() + a, b - a, edits, txt);
@@ -1333,6 +1445,12 @@ class Encoder {
           Bytes prefix;
           prefix.swap(txt);
           writeStreamDesc(w, es, s.desc, s.desc.membersDerived ? members : s.data);
+          {
+            uint32_t pn, pg;
+            if (inlineSourceOk(s.desc, s.data.size()) &&
+                objHeaderOf(in_.data() + it.start, it.dataStart - it.start, pn, pg))
+              inlineSeen_[pn] = si;
+          }
           if (s.desc.storage == ST_FILE && s.desc.ordinal != ownOrd_[si]) fail("own file ordinal out of order");
           itemText(w, IL_PRE, prefix);
           uint32_t lr;
@@ -1467,9 +1585,16 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
   if (st.itemLenPredicted) printf("item lengths predicted from the text: %llu\n", (unsigned long long)st.itemLenPredicted);
   if (st.structParents) printf("structure parents (/P) from /K: %llu\n", (unsigned long long)st.structParents);
   if (st.membersDerived) printf("ObjStm streams with derived member fields: %llu\n", (unsigned long long)st.membersDerived);
-  if (st.widthArrays)
-    printf("widths from the embedded fonts: %llu in %llu arrays\n", (unsigned long long)st.widthsDerived,
+  if (st.parentTreeRefs) printf("structure parent tree entries from /K: %llu\n", (unsigned long long)st.parentTreeRefs);
+  if (st.widthArrays) {
+    printf("widths from the embedded fonts: %llu in %llu arrays (", (unsigned long long)st.widthsDerived,
            (unsigned long long)st.widthArrays);
+    static const char* const kn[WK_COUNT] = {"TrueType", "Type1C", "CIDFontType2", "Type 1", "CIDFontType0", "CIDFontType2 map"};
+    bool sp = false;
+    for (int k = 0; k < WK_COUNT; k++)
+      if (st.widthsByKind[k]) { printf("%s%s %llu", sp ? ", " : "", kn[k], (unsigned long long)st.widthsByKind[k]); sp = true; }
+    printf(")\n");
+  }
   if (st.derived)
     printf("derived fields: %llu\n", (unsigned long long)(st.derived - st.stringsDecrypted - st.sigBlobs - st.b64Blobs));
   if (st.b64Blobs)
