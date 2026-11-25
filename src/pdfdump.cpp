@@ -36,11 +36,13 @@ namespace pdd {
 
 #include "chan.inc"
 #include "pdf_lex.inc"
+#include "pdf_xref.inc"
 #include "pdf_seg.inc"
 #include "pdf_crypt.inc"
 #include "pdf_filt.inc"
 #include "pdf_bmp.inc"
 #include "pdf_t1.inc"
+#include "pdf_objstm.inc"
 #include "pdf_class.inc"
 #include "pdf_lift.inc"
 #include "pdf_emit.inc"
@@ -104,7 +106,7 @@ static uint8_t layerOfFilter(const std::string& f) {
 }
 
 struct Stats {
-  uint64_t itemCount[4] = {}, itemBytes[4] = {};
+  uint64_t itemCount[Item::KIND_COUNT] = {}, itemBytes[Item::KIND_COUNT] = {};
   struct F { uint64_t present = 0, undone = 0, terminal = 0, bytes = 0; };
   std::map<std::string, F> filters;
   struct C { uint64_t count = 0, payload = 0, stored = 0; };
@@ -227,6 +229,18 @@ class Encoder {
   std::deque<std::vector<std::pair<uint32_t, Obj>>> members_;
   std::unordered_map<int, int> streamOfItem_;
   std::unordered_map<uint32_t, std::vector<int>> streamsByNum_;
+
+  // mostly printable ASCII / UTF-8 text (XMP, PostScript, JavaScript, ...)
+  static bool isText(const Bytes& b) {
+    if (b.empty()) return false;
+    size_t bad = 0;
+    for (uint8_t c : b)
+      if (!((c >= 0x20 && c < 0x7F) || c == '\r' || c == '\n' || c == '\t' || c >= 0xC0 || (c >= 0x80 && c < 0xC0)))
+        bad++;
+    size_t hi = 0;
+    for (uint8_t c : b) hi += c >= 0x80;
+    return bad * 50 <= b.size() && hi * 10 <= b.size();
+  }
 
   static double secondsSince(std::chrono::steady_clock::time_point t) {
     return std::chrono::duration<double>(std::chrono::steady_clock::now() - t).count();
@@ -541,6 +555,21 @@ class Encoder {
       s.data.swap(out);
       s.t1 = true;
     }
+    // object streams: header table derived from the members
+    for (auto& s : streams) {
+      if (s.desc.cls != SC_OBJSTM || s.remain != R_DONE) continue;
+      const Obj& d = seg.objs[seg.items[s.item].obj];
+      const Obj* N = idx_.resolve(d.get("N"));
+      const Obj* F = idx_.resolve(d.get("First"));
+      if (!N || !F || N->t != Obj::INT || F->t != Obj::INT) continue;
+      FilterParams fp;
+      fp.objstmN = N->i;
+      fp.objstmFirst = F->i;
+      Bytes out, recon;
+      if (!layerDecode(ctx_, L_OBJSTM, fp, s.data, out, recon)) continue;
+      s.desc.layers.push_back({L_OBJSTM, std::move(recon)});
+      s.data.swap(out);
+    }
     // extension and storage
     for (auto& s : streams) {
       uint8_t cls = s.desc.cls;
@@ -571,7 +600,9 @@ class Encoder {
       else if ((cls == SC_CONTENT || cls == SC_CMAP) && s.remain == R_DONE) {
         s.desc.storage = ST_CLASS;
         s.desc.classFile = cls == SC_CONTENT ? CF_CS : CF_CMAP;
-      } else if (s.data.size() < opt_.smallThreshold) s.desc.storage = ST_BIN;
+      } else if (s.data.size() < opt_.smallThreshold) {
+        s.desc.storage = isText(s.data) ? ST_TXT : ST_BIN;  // small text streams sit with the object text
+      }
       else s.desc.storage = ST_FILE;
     }
   }
@@ -580,9 +611,15 @@ class Encoder {
     ChanWriter w(dump);
     EmitState es;
     std::unordered_map<uint64_t, std::vector<uint32_t>> dedup;
+    ObjPositions objPos;
     for (size_t i = 0; i < seg.items.size(); i++) {
       const Item& it = seg.items[i];
       size_t len = it.end - it.start;
+      if (it.kind == Item::OBJ || it.kind == Item::STREAM) {
+        uint32_t num, gen;
+        size_t hl = (it.kind == Item::STREAM ? it.dataStart : it.end) - it.start;
+        if (objHeaderOf(in_.data() + it.start, hl, num, gen)) objPos.add(num, gen, it.start);
+      }
       st.itemCount[it.kind]++;
       st.itemBytes[it.kind] += len;
       switch (it.kind) {
@@ -597,6 +634,10 @@ class Encoder {
         case Item::OBJ:
           w.u8(CH_S, I_OBJ);
           w.lenBytes(CH_N, CH_T, in_.data() + it.start, len);
+          break;
+        case Item::XREF:
+          w.u8(CH_S, I_XREF);
+          writeXref(w, seg.xrefs[it.xref], objPos);
           break;
         case Item::STREAM: {
           StreamRec& s = streams[streamOfItem_[(int)i]];
@@ -696,9 +737,9 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
     printf("stored mode: %s\n", E.storedReason.c_str());
     return;
   }
-  static const char* kn[] = {"text", "raw", "obj", "stream"};
+  static const char* kn[] = {"text", "raw", "obj", "stream", "xref"};
   printf("items:");
-  for (int k = 0; k < 4; k++)
+  for (int k = 0; k < Item::KIND_COUNT; k++)
     printf("  %s %llu (%s)", kn[k], (unsigned long long)st.itemCount[k], human(st.itemBytes[k]).c_str());
   printf("\n");
   if (E.sec.present) {

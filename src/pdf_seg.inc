@@ -5,13 +5,14 @@
 // costs compactness.
 
 struct Item {
-  enum Kind : uint8_t { TEXT, RAW, OBJ, STREAM };
+  enum Kind : uint8_t { TEXT, RAW, OBJ, STREAM, XREF, KIND_COUNT };
   Kind kind = TEXT;
   size_t start = 0, end = 0;           // [start, end)
   size_t dataStart = 0, dataEnd = 0;   // STREAM payload [dataStart, dataEnd)
   uint32_t num = 0, gen = 0;
   int obj = -1;                        // index into Segmentation::objs
   uint8_t extent = 0;                  // STREAM: how the extent was found (kExtentName)
+  int xref = -1;                       // XREF: index into Segmentation::xrefs
 };
 static const char* const kExtentName[] = {"Length", "Length-ref", "endstream-scan", "endobj-scan", "eof"};
 
@@ -26,6 +27,7 @@ struct Segmentation {
   std::vector<Item> items;
   std::vector<Obj> objs;
   std::vector<Obj> trailers;  // classic trailer dicts in file order
+  std::vector<XrefSection> xrefs;
   std::vector<ObjCand> cands;
   std::unordered_map<uint32_t, std::vector<size_t>> candByNum;  // objnum -> offsets
 };
@@ -108,7 +110,36 @@ class Segmenter {
     return bad * 10 <= (b - a);
   }
 
+  // text region: classic xref sections become items of their own
   void addRegion(size_t a, size_t b, bool forceRaw) {
+    if (b <= a) return;
+    if (!forceRaw) {
+      const uint8_t* p = d_ + a;
+      for (;;) {
+        p = memfind(p, (d_ + b) - p, "xref", 4);
+        if (!p) break;
+        size_t at = (size_t)(p - d_);
+        XrefSection x;
+        if (parseXrefAt(d_, b, at, x) && x.end <= b) {
+          addPlain(a, at, false);
+          Item it;
+          it.kind = Item::XREF;
+          it.start = at;
+          it.end = x.end;
+          it.xref = (int)s_.xrefs.size();
+          s_.xrefs.push_back(std::move(x));
+          s_.items.push_back(it);
+          a = it.end;
+          p = d_ + a;
+        } else {
+          p += 4;
+        }
+      }
+    }
+    addPlain(a, b, forceRaw);
+  }
+
+  void addPlain(size_t a, size_t b, bool forceRaw) {
     if (b <= a) return;
     Item it;
     it.start = a;

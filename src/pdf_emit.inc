@@ -3,7 +3,7 @@
 // The routines that produce PDF bytes are shared by c and d. c runs the whole decoder on the
 // in-memory dump before committing any output file.
 
-enum ItemTag : uint8_t { I_END = 0, I_TEXT = 1, I_RAW = 2, I_OBJ = 3, I_STREAM = 4 };
+enum ItemTag : uint8_t { I_END = 0, I_TEXT = 1, I_RAW = 2, I_OBJ = 3, I_STREAM = 4, I_XREF = 5 };
 enum Storage : uint8_t { ST_BIN, ST_TXT, ST_CLASS, ST_FILE, ST_DUP, ST_COUNT };
 static const char* const kStorageName[ST_COUNT] = {"bin", "txt", "class", "file", "dup"};
 
@@ -217,6 +217,7 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
   ReadState st;
   std::vector<std::string> ordExt;
   Bytes out;
+  ObjPositions objPos;
   size_t streamNo = 0;
   out.reserve((size_t)std::min<uint64_t>(d.hdr.origSize, (uint64_t)1 << 32));
   for (;;) {
@@ -227,9 +228,14 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
       case I_OBJ: {
         size_t n = r.len(CH_N);
         const uint8_t* p = r.get(CH_T, n);
+        uint32_t num, gen;
+        if (tag == I_OBJ && objHeaderOf(p, n, num, gen)) objPos.add(num, gen, out.size());
         out.insert(out.end(), p, p + n);
         break;
       }
+      case I_XREF:
+        readXref(r, objPos, out);
+        break;
       case I_RAW: {
         size_t n = r.len(CH_N);
         const uint8_t* p = r.get(CH_B, n);
@@ -242,6 +248,8 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
         readStreamDesc(r, st, sd, data, ordExt);
         size_t n = r.len(CH_N);
         const uint8_t* p = r.get(CH_T, n);
+        uint32_t num, gen;
+        if (objHeaderOf(p, n, num, gen)) objPos.add(num, gen, out.size());
         out.insert(out.end(), p, p + n);
         Bytes payload;
         if (fast && (*fast)(streamNo, sd, data, payload)) {
