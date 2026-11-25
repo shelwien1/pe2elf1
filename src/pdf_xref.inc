@@ -164,7 +164,13 @@ static void writeXref(ChanWriter& w, const XrefSection& x, const ObjPositions& o
     }
 }
 
-static void readXref(ChanReader& r, const ObjPositions& op, Bytes& out) {
+static int64_t xrefEnd(const std::vector<std::pair<uint64_t, uint64_t>>& subs) {
+  int64_t e = -1;
+  for (auto& s : subs) e = std::max<int64_t>(e, (int64_t)(s.first + s.second));
+  return e;
+}
+
+static void readXref(ChanReader& r, const ObjPositions& op, Bytes& out, int64_t* endOut = nullptr) {
   out.insert(out.end(), {'x', 'r', 'e', 'f'});
   Bytes t;
   r.lenBytes(CH_N, CH_T, t);
@@ -203,6 +209,7 @@ static void readXref(ChanReader& r, const ObjPositions& op, Bytes& out) {
       kinds.push_back((uint8_t)kind);
     }
   std::vector<uint64_t> nextFree = xrefNextFree(subs, types);
+  if (endOut) *endOut = xrefEnd(subs);
   char buf[48];
   size_t ei = 0;
   for (size_t s = 0; s < ns; s++) {

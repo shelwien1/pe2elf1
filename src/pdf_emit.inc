@@ -19,6 +19,8 @@ struct StreamDesc {
   std::vector<Layer> layers;  // undo order: outermost filter first
 };
 
+#include "pdf_derive.inc"
+
 // Recon blobs go through a per-file dictionary of distinct blobs. Reference coding (channel N):
 // 0 = new blob (length N, bytes R), 1 = same blob as the previous layer of this type, k+2 = blob k.
 struct ReconDictW {
@@ -221,6 +223,9 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
   Bytes out;
   ObjPositions objPos;
   ctx.objPos = &objPos;
+  DeriveState ds;
+  StreamFacts noFacts;
+  Bytes txt;
   size_t streamNo = 0;
   out.reserve((size_t)std::min<uint64_t>(d.hdr.origSize, (uint64_t)1 << 32));
   for (;;) {
@@ -231,13 +236,16 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
       case I_OBJ: {
         size_t n = r.len(CH_N);
         const uint8_t* p = r.get(CH_T, n);
-        uint32_t num, gen;
-        if (tag == I_OBJ && objHeaderOf(p, n, num, gen)) objPos.add(num, gen, out.size());
-        out.insert(out.end(), p, p + n);
+        uint32_t num = 0, gen;
+        bool hdr = tag == I_OBJ && objHeaderOf(p, n, num, gen);
+        if (hdr) objPos.add(num, gen, out.size());
+        if (!derivDecode(p, n, noFacts, ds, num, txt)) fail("bad derived field in item text");
+        out.insert(out.end(), txt.begin(), txt.end());
         break;
       }
       case I_XREF:
-        readXref(r, objPos, out);
+        ds.xrefPos.push_back(out.size());
+        readXref(r, objPos, out, &ds.lastXrefEnd);
         break;
       case I_RAW: {
         size_t n = r.len(CH_N);
@@ -251,20 +259,33 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
         readStreamDesc(r, st, sd, data, ordExt);
         size_t n = r.len(CH_N);
         const uint8_t* p = r.get(CH_T, n);
+        uint64_t start = out.size();
         uint32_t num, gen;
-        if (objHeaderOf(p, n, num, gen)) objPos.add(num, gen, out.size());
-        out.insert(out.end(), p, p + n);
+        if (objHeaderOf(p, n, num, gen)) objPos.add(num, gen, start);
+        int need = derivNeeds(p, n);
+        StreamFacts f;
+        streamFacts(ctx, sd, data, (need & 1) != 0, (need & 2) != 0, f);
         Bytes payload;
-        if (fast && (*fast)(streamNo, sd, data, payload)) {
-          out.insert(out.end(), payload.begin(), payload.end());
-        } else {
-          restorePayload(ctx, d.hdr.fileKey, sd, data);
-          out.insert(out.end(), data.begin(), data.end());
+        if (!(fast && (*fast)(streamNo, sd, data, payload))) {
+          payload.swap(data);
+          restorePayload(ctx, d.hdr.fileKey, sd, payload);
+        }
+        f.payloadKnown = true;
+        f.payloadLen = payload.size();
+        if (!derivDecode(p, n, f, ds, num, txt)) fail("bad derived field in stream dictionary");
+        out.insert(out.end(), txt.begin(), txt.end());
+        out.insert(out.end(), payload.begin(), payload.end());
+        uint32_t lr;
+        if (lengthRefOf(txt.data(), txt.size(), lr)) ds.lenRef[lr] = payload.size();
+        if (sd.cls == SC_XREF) {
+          ds.xrefPos.push_back(start);
+          ds.lastXRefStm = (int64_t)start;
         }
         streamNo++;
         n = r.len(CH_N);
         p = r.get(CH_T, n);
-        out.insert(out.end(), p, p + n);
+        if (!derivDecode(p, n, noFacts, ds, 0, txt)) fail("bad derived field in item text");
+        out.insert(out.end(), txt.begin(), txt.end());
         break;
       }
       default: fail("bad item tag %d", tag);

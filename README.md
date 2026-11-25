@@ -25,6 +25,7 @@ M5–M8 and the M10 list:
 | Classic xref tables (`I_XREF`) | entries predicted from object positions; free entries from the free list |
 | XRef stream rows (`L_XREFROWS`) | rows predicted from object positions and ObjStm order |
 | CMap blocks | uniform `bfchar`/`bfrange` bodies → `.cmb` (binary, delta-coded codes and destinations) |
+| Derived fields | stream `/Length` (direct and indirect object), `/DL`, `/Length1-3`, ObjStm `/N /First`, image `/Width /Height` (BMP header, JPEG SOF), EmbeddedFile `/Params /Size /CheckSum`, `startxref`, trailer `/Prev /Size /XRefStm`, XRef stream `/Prev`: replaced by placeholders the decoder fills in |
 | Small text streams | XMP and other small text streams go to `.txt`, not `.bin` |
 
 Not built: the token-level object coder (M5 proper: `/Length` and other derived dict values,
@@ -52,6 +53,7 @@ Tested with g++ 13.3 and clang 18 on Linux x86-64.
 | `-s N` | syntax depth: 0 = stored, 1 = items + raw object text | 1 |
 | `-p N` | small-stream threshold: a stream whose stored form is under N bytes goes to `<P>.bin` instead of its own file | 1024 |
 | `-D` | disable dedup of extracted files | dedup on |
+| `-d` | do not derive computable fields | derive on |
 | `-c MAP` | channel→file map, e.g. `S,N,T,X,O,F,R,B` to split every channel | `SN,TX,O,F,R,B` |
 | `-n` | no verification: skip the final in-memory restore and the per-stream Flate re-encode (about 1.8× faster on Flate-heavy files) | verify on |
 | `-v` / `-q` | per-stream report / quiet | |
@@ -150,6 +152,7 @@ supplied PDFs (55.6 MB, orig.xz 47.5 MB).
 | + XRef stream rows | 59.3% | 8.83 MB |
 | + Type 1 charstrings split into operator / operand pools | 59.2% | 8.78 MB |
 | + CMap `bfchar`/`bfrange` blocks as binary | 59.2% | 8.77 MB |
+| + derived fields (`/Length`, `startxref`, `/Prev`, ...) | 59.1% | 8.75 MB |
 
 Measured and not adopted, because they don't beat xz on this corpus:
 - PNG filters on raw images: raw rows compress best on aggregate.
@@ -198,5 +201,6 @@ inserted, duplicated ranges), and the 117 files of the 005 set.
     src/pdf_objstm.inc  ObjStm header derivation, XRef stream row derivation
     src/pdf_lift.inc    number lifting (content streams, object text), per-group coding
     src/pdf_cmap.inc    CMap bfchar/bfrange blocks as binary
+    src/pdf_derive.inc  derived fields: placeholders, stream facts, xref section state
     src/pdf_emit.inc    item records, stream descriptors, recon dictionary, decoder
     src/preflate.inc    from ziprec, unmodified

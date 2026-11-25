@@ -46,7 +46,7 @@ namespace pdd {
 #include "pdf_class.inc"
 #include "pdf_lift.inc"
 #include "pdf_cmap.inc"
-#include "pdf_emit.inc"
+#include "pdf_emit.inc"  // includes pdf_derive.inc
 
 static const int kSyntaxLevelMax = 1;  // 1 = items + raw object text (M1..M4)
 
@@ -58,6 +58,7 @@ struct Options {
   bool dedup = true;
   std::string chanMap = kDefaultChanMap;
   bool noVerify = false;
+  bool derive = true;  // derived fields (-d disables)
   int verbose = 0;
   bool quiet = false;
 };
@@ -119,6 +120,7 @@ struct Stats {
   uint64_t reconBlobs = 0, reconRefs = 0;
   uint64_t typedBytes = 0, payloadBytes = 0, layeredPayload = 0;
   uint64_t bmpCount = 0;
+  uint64_t derived = 0;
 };
 
 class Encoder {
@@ -708,6 +710,18 @@ class Encoder {
     EmitState es;
     std::unordered_map<uint64_t, std::vector<uint32_t>> dedup;
     ObjPositions objPos;
+    DeriveState ds;
+    StreamFacts noFacts;
+    Bytes txt;
+    std::vector<std::pair<std::pair<size_t, size_t>, uint8_t>> edits;
+    ctx_.objPos = &objPos;
+    // item text with derived fields replaced (kind: 0 text, 1 object, 2 stream prefix, 3 plain)
+    auto derived = [&](size_t a, size_t b, int kind, uint8_t cls, const StreamFacts& f, uint32_t num) {
+      edits.clear();
+      if (kind < 3 && opt_.derive) derivChoose(in_.data() + a, b - a, kind, cls, f, ds, num, edits);
+      derivEncode(in_.data() + a, b - a, edits, txt);
+      st.derived += edits.size();
+    };
     for (size_t i = 0; i < seg.items.size(); i++) {
       const Item& it = seg.items[i];
       size_t len = it.end - it.start;
@@ -721,18 +735,25 @@ class Encoder {
       switch (it.kind) {
         case Item::TEXT:
           w.u8(CH_S, I_TEXT);
-          w.lenBytes(CH_N, CH_T, in_.data() + it.start, len);
+          derived(it.start, it.end, 0, 0, noFacts, 0);
+          w.lenBytes(CH_N, CH_T, txt);
           break;
         case Item::RAW:
           w.u8(CH_S, I_RAW);
           w.lenBytes(CH_N, CH_B, in_.data() + it.start, len);
           break;
-        case Item::OBJ:
+        case Item::OBJ: {
           w.u8(CH_S, I_OBJ);
-          w.lenBytes(CH_N, CH_T, in_.data() + it.start, len);
+          uint32_t num = 0, gen;
+          objHeaderOf(in_.data() + it.start, len, num, gen);
+          derived(it.start, it.end, 1, 0, noFacts, num);
+          w.lenBytes(CH_N, CH_T, txt);
           break;
+        }
         case Item::XREF:
           w.u8(CH_S, I_XREF);
+          ds.xrefPos.push_back(it.start);
+          ds.lastXrefEnd = xrefEnd(seg.xrefs[it.xref].subs);
           writeXref(w, seg.xrefs[it.xref], objPos);
           break;
         case Item::STREAM: {
@@ -751,15 +772,44 @@ class Encoder {
                 }
           }
           accountStream(s);
+          // facts for derived fields come from the stored form, exactly as the decoder sees it
+          StreamFacts f;
+          f.payloadKnown = true;
+          f.payloadLen = s.payload;
+          {
+            std::vector<DerivTok> toks;
+            derivWalk(in_.data() + it.start, it.dataStart - it.start, toks);
+            bool wantDec = false, wantMd5 = false;
+            for (auto& t : toks) {
+              if (t.path == "/DL" || t.path == "/Length1" || t.path == "/Length3" || t.path == "/First" ||
+                  t.path == "/Params/Size")
+                wantDec = true;
+              if (t.path == "/Params/CheckSum") wantMd5 = true;
+            }
+            if (opt_.derive) streamFacts(ctx_, s.desc, s.data, wantDec, wantMd5, f);
+          }
+          uint32_t num = 0, gen;
+          objHeaderOf(in_.data() + it.start, it.dataStart - it.start, num, gen);
+          derived(it.start, it.dataStart, 2, s.desc.cls, f, num);
+          Bytes prefix;
+          prefix.swap(txt);
           writeStreamDesc(w, es, s.desc, s.data);
           if (s.desc.storage == ST_FILE && opt_.dedup) dedup[h].push_back(s.desc.ordinal);
-          w.lenBytes(CH_N, CH_T, in_.data() + it.start, it.dataStart - it.start);
-          w.lenBytes(CH_N, CH_T, in_.data() + it.dataEnd, it.end - it.dataEnd);
+          w.lenBytes(CH_N, CH_T, prefix);
+          uint32_t lr;
+          if (lengthRefOf(in_.data() + it.start, it.dataStart - it.start, lr)) ds.lenRef[lr] = s.payload;
+          if (s.desc.cls == SC_XREF) {
+            ds.xrefPos.push_back(it.start);
+            ds.lastXRefStm = (int64_t)it.start;
+          }
+          derived(it.dataEnd, it.end, 3, 0, noFacts, 0);
+          w.lenBytes(CH_N, CH_T, txt);
           break;
         }
       }
     }
     w.u8(CH_S, I_END);
+    ctx_.objPos = nullptr;
     st.reconBlobs = es.recon.count;
     st.reconRefs = es.recon.refs;
   }
@@ -872,6 +922,7 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
     printf("\n");
   }
   if (st.bmpCount) printf("bmp3 images: %llu\n", (unsigned long long)st.bmpCount);
+  if (st.derived) printf("derived fields: %llu\n", (unsigned long long)st.derived);
   printf("dump:");
   uint64_t total = 0;
   for (size_t f = 0; f < E.dump.chan.size(); f++) {
@@ -1024,6 +1075,7 @@ static void usage() {
           "  -s N     syntax depth: 0 stored, 1 items + raw object text (default %d)\n"
           "  -p N     small-stream threshold: streams below N bytes share <P>.bin (default 1024)\n"
           "  -D       disable dedup of extracted streams\n"
+          "  -d       do not derive computable fields (/Length, xref offsets, ...)\n"
           "  -c MAP   channel->file map, e.g. S,N,T,X,O,F,R,B (default %s)\n"
           "  -n       no verification: skip the final in-memory restore and the per-stream Flate re-encode\n"
           "  -v / -q  per-stream report / quiet\n",
@@ -1068,6 +1120,7 @@ static int realMain(int argc, char** argv) {
         }
         case 'p': opt.smallThreshold = (size_t)num(); break;
         case 'D': opt.dedup = false; break;
+        case 'd': opt.derive = false; break;
         case 'c': opt.chanMap = val(); break;
         case 'n': opt.noVerify = true; break;
         case 'v': opt.verbose++; break;
