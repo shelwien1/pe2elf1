@@ -5,8 +5,8 @@
 //                re-encodes byte-exactly (each decoder checks this itself, through layerEncode).
 //   layerEncode  (both sides):   decoded bytes + recon -> PDF-side bytes.
 
-enum LayerType : uint8_t { L_NONE, L_FLATE, L_LZW, L_AHX, L_A85, L_RL, L_PNG, L_TIFF, L_BMP, L_T1, L_OBJSTM, L_XREFROWS, L_CCITT, L_TIFW, L_RGBA, L_ALPHA, L_COUNT };
-static const char* const kLayerName[L_COUNT] = {"-", "Flate", "LZW", "AHx", "A85", "RL", "PNG", "TIFF", "BMP", "T1", "ObjStm", "XRefRows", "CCITT", "TIF", "RGBA", "Alpha"};
+enum LayerType : uint8_t { L_NONE, L_FLATE, L_LZW, L_AHX, L_A85, L_RL, L_PNG, L_TIFF, L_BMP, L_T1, L_OBJSTM, L_XREFROWS, L_CCITT, L_TIFW, L_RGBA, L_ALPHA, L_XMPJPG, L_COUNT };
+static const char* const kLayerName[L_COUNT] = {"-", "Flate", "LZW", "AHx", "A85", "RL", "PNG", "TIFF", "BMP", "T1", "ObjStm", "XRefRows", "CCITT", "TIF", "RGBA", "Alpha", "XMPJPG"};
 
 struct Layer {
   uint8_t type = L_NONE;
@@ -912,7 +912,7 @@ static bool lzwTestEncode(const Bytes& in, Bytes& out, int early) {
 // filter names
 
 static bool isPseudoLayerType(uint8_t t) {
-  return t == L_BMP || t == L_T1 || t == L_OBJSTM || t == L_XREFROWS || t == L_TIFW || t == L_RGBA;
+  return t == L_BMP || t == L_T1 || t == L_OBJSTM || t == L_XREFROWS || t == L_TIFW || t == L_RGBA || t == L_XMPJPG;
 }
 
 static std::string normFilter(const std::string& f) {
@@ -947,6 +947,7 @@ static bool ccittEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out);  
 static bool tifwEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out);   // pdf_tiff.inc
 static bool rgbaEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out);   // pdf_bmp.inc
 static bool alphaEncodeLayer(const CodecCtx& ctx, const Bytes& recon, Bytes& out);
+static bool xmpEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out);  // pdf_xmp.inc
 struct CcittParams;
 static bool ccittDecodeFP(const FilterParams& fp, const Bytes& in, Bytes& out, Bytes& recon);
 static bool xrefRowsDecodeLayer(const CodecCtx& ctx, const Bytes& in, const std::vector<uint64_t>& W,
@@ -969,6 +970,7 @@ static bool layerEncode(const CodecCtx& ctx, uint8_t type, const Bytes& recon, c
     case L_TIFW: return tifwEncodeLayer(recon, in, out);
     case L_RGBA: return rgbaEncodeLayer(recon, in, out);
     case L_ALPHA: return in.empty() && alphaEncodeLayer(ctx, recon, out);
+    case L_XMPJPG: return xmpEncodeLayer(recon, in, out);
   }
   fail("unknown layer type %d", type);
 }

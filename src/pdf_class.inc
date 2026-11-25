@@ -33,6 +33,7 @@ static const char* sniffExt(const uint8_t* p, size_t n) {
   if (has(0, "%!PS-AdobeFont", 14) || has(0, "%!FontType1", 11)) return "pfa";
   if (has(0, "%!PS", 4)) return "ps";
   if (has(36, "acsp", 4)) return "icc";
+  if (has(0, "\x7F" "ELF", 4)) return "elf";
   // text signatures, after an optional UTF-8 BOM and whitespace
   size_t i = 0;
   if (has(0, "\xEF\xBB\xBF", 3)) i = 3;

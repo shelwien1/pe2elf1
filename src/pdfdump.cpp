@@ -53,7 +53,8 @@ namespace pdd {
 #include "pdf_class.inc"
 #include "pdf_lift.inc"
 #include "pdf_cmap.inc"
-#include "pdf_emit.inc"  // includes pdf_derive.inc
+#include "pdf_emit.inc"
+#include "pdf_xmp.inc"  // includes pdf_derive.inc
 
 // syntax depth: 1 = items + raw object text; 2 = + object-level structure (xref sections and streams,
 // ObjStm headers, derived fields, encrypted strings, forward slots, object text number lifting);
@@ -116,7 +117,7 @@ struct Stats {
   uint64_t reconBlobs = 0, reconRefs = 0;
   uint64_t typedBytes = 0, payloadBytes = 0, layeredPayload = 0;
   uint64_t bmpCount = 0;
-  uint64_t derived = 0, stringsDecrypted = 0, sigBlobs = 0, rgbaMerged = 0, b64Blobs = 0, b64Bytes = 0;
+  uint64_t derived = 0, stringsDecrypted = 0, sigBlobs = 0, rgbaMerged = 0, b64Blobs = 0, b64Bytes = 0, xmpThumbs = 0;
 };
 
 class Encoder {
@@ -217,6 +218,9 @@ class Encoder {
       const Bytes& b = dump.ownData[i];
       writeFile(ownFileName(prefix, (uint32_t)i, dump.ownExt[i]), b.data(), b.size());
     }
+    for (size_t i = 0; i < dump.blobData.size(); i++)
+      writeFile(ownFileName(prefix, kBlobFileBit | (uint32_t)i, dump.blobExt[i]), dump.blobData[i].data(),
+                dump.blobData[i].size());
   }
 
   uint64_t chanFileSize(size_t f) const {
@@ -286,6 +290,8 @@ class Encoder {
     stored = true;
     dump.hdr.flags = kFlagStored;
     for (auto& a : dump.aux) a.clear();
+    dump.blobData.clear();
+    dump.blobExt.clear();
     dump.chan.assign(dump.hdr.map.suffix.size(), Bytes());
     for (auto& c : dump.classFile) c.clear();
     dump.ownData.clear();
@@ -823,6 +829,18 @@ class Encoder {
       s.data.swap(out);
       s.t1 = true;
     }
+    // XMP packets with a base64 JPEG thumbnail: the JPEG becomes the stored form (.jpg)
+    for (auto& s : streams) {
+      if (s.remain != R_DONE || s.bmp || s.tif || s.t1 || s.data.size() < 256) continue;
+      static const char kTag[] = "GImg:image>";
+      if (std::search(s.data.begin(), s.data.end(), kTag, kTag + sizeof(kTag) - 1) == s.data.end()) continue;
+      Bytes jpeg, recon, back;
+      if (!xmpThumbSplit(s.data, jpeg, recon)) continue;
+      if (!layerEncode(ctx_, L_XMPJPG, recon, jpeg, back) || back != s.data) continue;
+      s.desc.layers.push_back({L_XMPJPG, std::move(recon)});
+      s.data.swap(jpeg);
+      st.xmpThumbs++;
+    }
     // object streams: header table derived from the members
     for (auto& s : streams) {
       if (s.desc.cls != SC_OBJSTM || s.remain != R_DONE || opt_.syntaxLevel < 2) continue;
@@ -980,7 +998,8 @@ class Encoder {
         sigStrings(in_.data() + a, b - a, edits, dump.aux[AX_P7S]);
         st.sigBlobs += edits.size() - before;
         before = edits.size();
-        b64Strings(ctx_, in_.data() + a, b - a, edits, dump.aux[AX_B64], dump.aux[AX_B64R], &b64Orig_, st.b64Bytes);
+        b64Strings(ctx_, in_.data() + a, b - a, edits, dump.aux[AX_B64], dump.aux[AX_B64R], &b64Orig_, st.b64Bytes,
+                   dump.blobData, dump.blobExt);
         st.b64Blobs += edits.size() - before;
       }
       // strings of top-level objects of an encrypted file: stored decrypted
@@ -1198,6 +1217,7 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
   }
   if (st.bmpCount) printf("bmp3 images: %llu\n", (unsigned long long)st.bmpCount);
   if (st.rgbaMerged) printf("RGB + soft mask merged (-a): %llu\n", (unsigned long long)st.rgbaMerged);
+  if (st.xmpThumbs) printf("XMP thumbnails as JPEG: %llu\n", (unsigned long long)st.xmpThumbs);
   if (st.derived)
     printf("derived fields: %llu\n", (unsigned long long)(st.derived - st.stringsDecrypted - st.sigBlobs - st.b64Blobs));
   if (st.b64Blobs)
@@ -1473,8 +1493,9 @@ static int realMain(int argc, char** argv) {
       for (auto& c : E.dump.classFile) total += c.size();
       for (auto& a : E.dump.aux) total += a.size();
       for (auto& b : E.dump.ownData) total += b.size();
+      for (auto& b : E.dump.blobData) total += b.size();
       fprintf(stderr, "%s: %llu -> %llu bytes in %zu files%s\n", pos[0].c_str(), (unsigned long long)in.size(),
-              (unsigned long long)total, E.dump.ownData.size() + E.dump.chan.size(),
+              (unsigned long long)total, E.dump.ownData.size() + E.dump.blobData.size() + E.dump.chan.size(),
               E.stored ? (" (stored: " + E.storedReason + ")").c_str() : "");
     }
     return 0;

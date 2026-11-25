@@ -524,8 +524,11 @@ static void sigStrings(const uint8_t* p, size_t n, std::vector<DerivEdit>& edits
 // A run of >= 1024 base64 characters (not all hex digits) that decodes and re-encodes to itself
 // (JavaScript data, data: URIs, ...) and either decodes to a zlib stream or sits in quotes
 // ("...", '...', or after the comma of a data: URI): placeholder 0x04 'B' u8 flags; bit0 = the decoded bytes were
-// a zlib/deflate stream, stored inflated (L_FLATE recon in .b64r), bit1 = no '=' padding. The data
-// goes to the .b64 aux file; .b64r holds per blob var data length [, Flate recon with its length].
+// a zlib/deflate stream, stored inflated (L_FLATE recon in .b64r), bit1 = no '=' padding. Data of
+// 64 KB or more gets a file of its own (<P>b%07X.<ext>, ext by signature: elf, jpg, ...), smaller
+// data goes to the .b64 aux file. .b64r holds per blob: var data length, u8 own file, [ext with
+// its length,] [Flate recon with its length].
+static const size_t kBlobFileMin = 64 * 1024;
 
 static const char kB64Alpha[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 static int b64Val(uint8_t c) {
@@ -582,11 +585,29 @@ struct B64Blobs {
   size_t dpos = 0, rpos = 0, index = 0;
   const std::vector<Bytes>* fastZ = nullptr;  // encoder verify: the original zlib bytes per blob
   const CodecCtx* ctx = nullptr;
+  std::function<Bytes(uint32_t, const std::string&)> file;  // blob file k with its extension
+  uint32_t nextFile = 0;
 };
 
 // encoder: placeholders for the base64 runs of one object; data and recon appended
 static void b64Strings(const CodecCtx& ctx, const uint8_t* p, size_t n, std::vector<DerivEdit>& edits, Bytes& data,
-                       Bytes& rec, std::vector<Bytes>* orig, uint64_t& blobBytes) {
+                       Bytes& rec, std::vector<Bytes>* orig, uint64_t& blobBytes, std::vector<Bytes>& files,
+                       std::vector<std::string>& fileExt) {
+  auto put = [&](Bytes& v) {
+    putVarTo(rec, v.size());
+    blobBytes += v.size();
+    if (v.size() >= kBlobFileMin) {
+      const char* e = sniffExt(v.data(), v.size());
+      std::string ext = e ? e : "bin";
+      rec.push_back(1);
+      putLenBytesTo(rec, (const uint8_t*)ext.data(), ext.size());
+      fileExt.push_back(ext);
+      files.push_back(std::move(v));
+    } else {
+      rec.push_back(0);
+      data.insert(data.end(), v.begin(), v.end());
+    }
+  };
   size_t taken = edits.size();
   size_t i = 0;
   while (i < n) {
@@ -615,19 +636,15 @@ static void b64Strings(const CodecCtx& ctx, const uint8_t* p, size_t n, std::vec
     if (dec.size() >= 2 && zlibHeaderValid(dec[0], dec[1]) &&
         layerDecode(ctx, L_FLATE, FilterParams(), dec, out, recon)) {
       flags |= 1;
-      putVarTo(rec, out.size());
+      put(out);
       putLenBytesTo(rec, recon.data(), recon.size());
-      data.insert(data.end(), out.begin(), out.end());
-      blobBytes += out.size();
       if (orig) orig->push_back(std::move(dec));
     } else {
       // not a zlib stream: only quoted runs ("...", '...', data:...;base64,...") count as base64;
       // a run of name characters such as a /CharSet string (/A/B/C...) also matches the alphabet
       uint8_t prev = a ? p[a - 1] : 0, next = i < n ? p[i] : 0;
       if (!(prev == '"' || prev == '\'' || prev == ',') || !(next == '"' || next == '\'')) continue;
-      putVarTo(rec, dec.size());
-      data.insert(data.end(), dec.begin(), dec.end());
-      blobBytes += dec.size();
+      put(dec);
       if (orig) orig->push_back(Bytes());
     }
     edits.push_back({a, i, {kDerivEsc, 'B', flags}});
@@ -705,9 +722,18 @@ static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const 
       RBuf rr(*b64->rec);
       rr.p = b64->rpos;
       uint64_t dl = rr.var();
-      if (dl > b64->data->size() - b64->dpos) return false;
-      Bytes v(b64->data->begin() + b64->dpos, b64->data->begin() + b64->dpos + dl);
-      b64->dpos += dl;
+      Bytes v;
+      if (rr.u8()) {
+        Bytes ext;
+        rr.bytes(rr.len(), ext);
+        if (!b64->file) return false;
+        v = b64->file(b64->nextFile++, std::string(ext.begin(), ext.end()));
+        if (v.size() != dl) return false;
+      } else {
+        if (dl > b64->data->size() - b64->dpos) return false;
+        v.assign(b64->data->begin() + b64->dpos, b64->data->begin() + b64->dpos + dl);
+        b64->dpos += dl;
+      }
       if (flags & 1) {
         Bytes rc, z;
         rr.bytes(rr.len(), rc);

@@ -116,6 +116,8 @@ struct DumpFiles {
   std::vector<std::string> ownExt;   // own files by ordinal
   std::vector<Bytes> ownData;
   Bytes aux[AX_COUNT];
+  std::vector<std::string> blobExt;  // large base64 blobs of object text, own files <P>b%07X.<ext>
+  std::vector<Bytes> blobData;
 };
 
 static void serializeHeader(const DumpHeader& h, Bytes& out) {
@@ -353,7 +355,14 @@ static void writeFile(const std::string& name, const uint8_t* p, size_t n) {
   if (fclose(f) != 0) fail("write error on %s", name.c_str());
 }
 
+static const uint32_t kBlobFileBit = 0x80000000u;  // OwnLoader: blob file k is ordinal kBlobFileBit | k
+
 static std::string ownFileName(const std::string& prefix, uint32_t ordinal, const std::string& ext) {
+  if (ordinal & kBlobFileBit) {
+    char buf[16];
+    snprintf(buf, sizeof(buf), "b%07X", ordinal & ~kBlobFileBit);
+    return prefix + buf + "." + ext;
+  }
   char buf[16];
   snprintf(buf, sizeof(buf), "%08X", ordinal);
   return prefix + buf + "." + ext;

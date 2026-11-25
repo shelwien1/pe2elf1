@@ -226,6 +226,7 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
       if (!cmapInverse(d.classFile[CF_CMAP], d.aux[AX_CMB], tmp.classFile[CF_CMAP])) fail("cmap transform: bad data");
     use = &tmp;
   }
+  ChanReader::OwnLoader blobLoader = loader;
   ChanReader r(*use, meta0, std::move(loader), &d.ownData);
   ReadState st;
   std::vector<std::string> ordExt;
@@ -249,6 +250,11 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
   b64.rec = &d.aux[AX_B64R];
   b64.fastZ = blobFast;
   b64.ctx = &ctx;
+  b64.file = [&](uint32_t k, const std::string& ext) -> Bytes {
+    if (k < d.blobData.size()) return d.blobData[k];
+    if (!blobLoader) fail("blob file %07X missing", k);
+    return blobLoader(kBlobFileBit | k, ext);
+  };
   struct Deferred { uint64_t pos; StreamDesc sd; Bytes data; size_t streamNo; };
   std::vector<Deferred> deferred;
   auto rebase = [&](uint64_t base) {
@@ -337,7 +343,8 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
       default: fail("bad item tag %d", tag);
     }
   }
-  if (!r.allConsumed() || sig.pos != sig.data->size() || b64.dpos != b64.data->size() || b64.rpos != b64.rec->size())
+  if (!r.allConsumed() || sig.pos != sig.data->size() || b64.dpos != b64.data->size() || b64.rpos != b64.rec->size() ||
+      (!d.blobData.empty() && b64.nextFile != d.blobData.size()))
     fail("dump has unconsumed data");
   // forward-dependent streams: every object position is known now
   for (auto& df : deferred) {

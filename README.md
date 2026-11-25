@@ -32,7 +32,8 @@ redundancy inventory of §2A, M6, M7, M9 stage 1, and the M10 ideas that measure
 | Derived fields | stream `/Length` (direct and indirect object), `/DL`, `/Length1-3`, ObjStm `/N /First`, image `/Width /Height` and `/DecodeParms /Columns /Rows` (BMP / TIFF header, JPEG SOF), EmbeddedFile `/Params /Size /CheckSum`, `startxref`, trailer `/Prev /Size /XRefStm`, XRef stream `/Prev`: replaced by placeholders the decoder fills in |
 | Signature blobs | a hex `/Contents` string holding one DER SEQUENCE and then only zero bytes (the space a signature dictionary reserves) → the DER element to `.p7s` (CMS / PKCS#7, elements concatenated), case and padding length in the placeholder |
 | RGB + soft mask (`-a`, `L_RGBA` / `L_ALPHA`) | an RGB image and its 8-bit `/SMask` of the same size as one BGRA BMP on the image; the mask's stream keeps no data and is restored, deferred, from the alpha bytes |
-| Base64 blobs in object text | a canonical base64 run of 1024+ characters (JavaScript data, `data:` URIs) that decodes to a zlib stream, or sits in quotes → decoded bytes to `.b64`, zlib streams inflated through preflate (recon in `.b64r`). linux.pdf (Linux in a PDF: a RISC-V kernel and ELF files as base64 zlib in the `/JS` string): dump.xz 3.89 → 3.21 MB (−17.5%) |
+| Base64 blobs in object text | a canonical base64 run of 1024+ characters (JavaScript data, `data:` URIs) that decodes to a zlib stream, or sits in quotes → decoded bytes (zlib streams inflated through preflate, recon in `.b64r`) to a file of their own from 64 KB up (`<P>b%07X.<ext>`, extension by signature: `elf`, `jpg`, ...), smaller ones to `.b64`. linux.pdf (Linux in a PDF: a RISC-V kernel and ELF files as base64 zlib in the `/JS` string): dump.xz 3.89 → 3.21 MB (−17.5%) |
+| XMP thumbnails (`L_XMPJPG`) | the base64 JPEG of an XMP packet's `<xmpGImg:image>` (76-character lines joined by `&#xA;`) becomes the stream's stored form, a `.jpg`; the recon keeps the XMP text around it and the wrapping. 21 thumbnails in 7 files of the 808-file set; dump.xz −0.5 to −3.6 KB per file, before any JPEG recompressor |
 | Small text streams | XMP and other small text streams go to `.txt`, not `.bin` |
 
 Plan items measured and not adopted are listed under "xz results" below, with the exact
@@ -93,8 +94,9 @@ ThreadSanitizer (`-fsanitize=thread`). MinGW needs the posix thread model (`-pos
 | `<P>.cmap` | all decoded CMaps (`/ToUnicode`, embedded encodings), concatenated, `bfchar`/`bfrange` bodies replaced by markers |
 | `<P>.cmb` | those bodies as binary |
 | `<P>.p7s` | signature blobs (DER CMS / PKCS#7), concatenated in file order |
-| `<P>.b64` | base64 blobs of object text, decoded (and inflated where they were zlib streams), concatenated |
-| `<P>.b64r` | per blob: data length, Flate recon |
+| `<P>.b64` | base64 blobs of object text under 64 KB, decoded (and inflated where they were zlib streams), concatenated |
+| `<P>.b64r` | per blob: data length, own file or not (+ extension), Flate recon |
+| `<P>b%07X.<ext>` | base64 blobs of 64 KB and more, one file each, numbered in file order |
 | `<P>%08X.<ext>` | one file per extracted stream; ordinal in file order |
 
 Files that would be empty are not written; the header records which ones exist, so `d` never
@@ -228,6 +230,13 @@ Measured and not adopted, because they don't beat xz on this corpus (upper bound
   flag per string counted as side information). Its unmapped baseline reproduces the real `.csh`
   within 0.2%. On the 8 files with the most hex text: 260.2 KB → 269.2 KB (+3.5%, worse on 6 of
   8; Tarasov +4.6 KB, Way of Men +2.2 KB, two files −0.4 KB each).
+- `b64prep` (an external base64 extractor: whitespace-wrapped and URL-safe base64, entropy test,
+  4 alignments) as the base64 stage: on linux.pdf it stalls (a 2.5 MB run is longer than its
+  512 KB window, so the region is rescanned for every byte; 467 KB of output after 10 minutes),
+  and it does not inflate zlib under the base64, which is most of linux.pdf's gain (base64 →
+  bytes alone: 3.69 → 3.62 MB of xz; inflated: 3.07 MB). On the 21 XMP streams with thumbnails it
+  only cuts out line fragments (`&#xA;` is not whitespace to it): xz +1.2 KB. No other base64 is
+  in the 808-file set. It may suit attachments (`.eml`) as a separate stage after `pdfdump`.
 - Signature blobs to `.p7s` (M10): adopted, though the test sets have no signed files. On a
   synthetic file with two RSA-2048 signatures (8 KB reserved each), the dump goes from 3084 to
   2952 bytes of xz: certificates and signatures are mostly random bytes, so the gain is the hex
@@ -272,6 +281,7 @@ inserted, duplicated ranges), and the 117 files of the 005 set.
     src/pdf_filt.inc    Flate (preflate wrapper), LZW, AHx, A85, RL, PNG/TIFF predictors
     src/pdf_bmp.inc     BMP3 wrap/unwrap
     src/pdf_tiff.inc    TIFF container for streams matching a TIFF subformat
+    src/pdf_xmp.inc     XMP thumbnail (base64 JPEG) as the stream's stored form
     src/pdf_ccitt.inc   CCITT G3/G4 decoder and re-encoder (opt-in layer)
     src/pdf_crypt.inc   MD5, SHA-256/384/512, RC4, AES, standard security handler
     src/pdf_class.inc   ObjStm expansion, classification, signatures, image description
