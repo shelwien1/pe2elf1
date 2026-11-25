@@ -9,7 +9,7 @@ to code is where the encoder chose otherwise. Decompression, with the same WAV, 
 stream byte for byte.
 
 The core of `s.2.dts` (4 minutes 25 seconds of 5.1 at 1509 kbps; 50008260 bytes) compresses to
-76383 bytes (0.15%); without its audio, dtsdpack's model gets 62.91% and `xz -9e` 88.21%.
+76383 bytes (0.15%); without its audio, dtsdpack's model gets 62.80% and `xz -9e` 88.21%.
 
 The core substream's extensions are coded too: XCH (6.1's back centre) and XXCH (7.1's other
 channels) as more channels, X96 (DTS 96/24's 24-48 kHz band and the core's residuals) as subbands
@@ -104,7 +104,7 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 62.91% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76383 (0.15%) | 62.80% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3485 (0.27%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 4624 (0.43%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2589 (0.11%) | | |
@@ -952,6 +952,49 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   and 289, and with its WAV, the same instructions, 261 and 257 to 262 and 255 and 292 and 257 to
   300 and 299. With the WAV, every run of the check lists the size format 169's build makes,
   1455804 bytes in all.
+  Since format 171 each sample goes into the fits' sums weighed by 1 / (s^2 + e^2 / 4) as well as by
+  its step, s the spread (the mean distance of the indexes from their prediction, in steps) and e
+  the fit's own error, in steps: fits of what the coder pays for, the error over its spread, that
+  don't follow what they can't predict. The cascade's four choices (the fit alone, with the NLMS
+  fit's value, with both parts', and their blend, below) go by the means of e^2 / (e^2 + 16 s^2) of
+  their errors, a 256th a sample, not by their mean squares: a choice is as good as how often it's
+  near, not as how far its misses go; and its NLMS fit steps by 0.08 of the power (0.02 before), its
+  least squares part forgets by 0.85 (0.88), its ridge 0.02 (0.04). The blend, a fourth choice: the
+  cascade's two parts and, in the bottom four subbands, the other fit's value less the one taken, by
+  a least squares fit of the fit's error on the three, forgetting by 0.998 a sample (its ridge 0.01
+  of its mean diagonal, solved at every sample by L D L'). Without their WAVs, `s.2.dts`'s whole
+  core 31461240 bytes to 31402725 (62.91% of it to 62.80%), the 55 streams of the check lists
+  124639675 to 123818319 (0.66%: FFmpeg's 32 and 44.1 kHz encodes 12.2% and 7.5%, its `f4.dts` and
+  its packing 7.4%, its 16-bit `e16.dts` 4.9%, `Fire__VooDoo_Studio_30_sec.wav` and its two packings
+  2.2%, `dtswavsample16.wav` 0.75%, `96-24.dts` and its packings 0.46%, `lfe/l0.dtsc` 0.36%,
+  `chs/m.dtsc` 0.33%, `chs/n.dtsc` 0.29%, the rest up to 0.25%; 12 bigger: FFmpeg's `f2.dts` by 1945
+  bytes (0.25%), `f1c.dts`'s packing by 570 (0.86%), `f1.dts` by 241, FATE's short samples by 4-43
+  bytes, `dx4/cs.dtsc` by 22, `z192/z.dtsc` by 20). On 9 of the streams (10403585 bytes to 10333421,
+  0.67%; the blend alone 0.05%, with the weights 0.59%): weighed by 1 / s^2 alone 0.34% smaller
+  (`mid.dtsc` 0.34% bigger), by 1 / s 0.29%, by 1 / (1 + e^2 / 10) 0.10%; with e^2 by 0.1, 0.5, 1 or
+  2 in place of 0.25 0.53%, 0.52%, 0.49%, 0.42% (with the blend alone before); s^1.5 for s^2 0.45%;
+  for s^2 the mean square of the fit's errors, a 16th or an 8th a sample, 0.48% and 0.52%; e left
+  out in the warm-up, FATE's short samples 1.9% smaller but `f2.dts` 2.7% bigger; the cascade's and
+  the blend's least squares sums weighed alike too, 0.003% smaller and 0.026% bigger; the choices by
+  log(1 + e^2 / (4 s^2)) as good, by e^2 / s^2 0.03% bigger, 4, 8 or 32 for the 16 the same within
+  0.004%, a 128th or a 512th a sample (by the log) 0.006% and 0.002% bigger, the two fits' switch
+  measured alike too 0.002% smaller; the spread a 16th a sample (and the mean |v| and the shrink's
+  sums alike) 0.13% smaller, all of it `Fire__VooDoo_Studio_30_sec.wav`'s (0.63%; `mid.dtsc` 0.14%
+  bigger; the spread alone so, `s.2.dts`'s whole core 0.12%); the long fit in the bottom six
+  subbands, the same; for the blend, the blend of the two parts in the gate's place 0.015% smaller,
+  the fit's own value among its inputs, the blend the whole prediction, 0.52% bigger, the two parts
+  alone as a fourth choice 0.031% smaller, with the subband below's error of the sample too 0.041%,
+  above the bottom four subbands for the third the fit's value by its weights before the last refit
+  0.002% smaller than none, a 16-tap NLMS fit's of the last 16 values 0.04% bigger. The fits'
+  Cholesky by rows, each entry less a dot product of whole 4s, makes 6.3% fewer instructions on
+  FATE's 7-frame XCH sample but runs 7% slower on `mid.dtsc` and 14% on that sample, its dot
+  products' sums waiting on each other. For 1.0% more instructions without the WAV (`mid.dtsc`'s,
+  compressing; FATE's 7-frame XCH sample 1.5%, with its WAV the same): the medians of 15 runs
+  interleaved with format 170's build on this host (slower again today, format 170's own `mid.dtsc`
+  318-346 KB/s from 383-389), `mid.dtsc` without its WAV 318 KB/s to 310 compressing and 316 to 305
+  decompressing (in a quieter hour 346 to 341 and 360 to 354), the XCH sample 273 to 276 and 278 to
+  271 (of 61 runs, 292 to 282 and 295 to 282), and with its WAV 193 to 200 and 280 to 281. With the
+  WAV, every run of the check lists the size format 170's build makes, 1455804 bytes in all.
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first
@@ -2402,7 +2445,7 @@ files at that level.
 
 ### The format
 
-"dtsdpack", the format's version (170), the level (9, or 8: above) and above it the stream's packing
+"dtsdpack", the format's version (171), the level (9, or 8: above) and above it the stream's packing
 (since format 145: 0 the core's own, 1 little-endian, 2 and 3 14 bits a word big- and
 little-endian); what the WAV was (whether it was one, and since format 155 whether a heights WAV was
 added into it, its channels and bytes a sample, its size and the CRC-32 of its first 64 KB; then the
