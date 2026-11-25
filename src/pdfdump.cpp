@@ -87,26 +87,6 @@ struct FilterRef {
   const Obj* parms = nullptr;
 };
 
-static std::string normFilter(const std::string& f) {
-  static const char* const ab[][2] = {{"AHx", "ASCIIHexDecode"}, {"A85", "ASCII85Decode"}, {"LZW", "LZWDecode"},
-                                      {"Fl", "FlateDecode"},     {"RL", "RunLengthDecode"}, {"CCF", "CCITTFaxDecode"},
-                                      {"DCT", "DCTDecode"}};
-  for (auto& a : ab)
-    if (f == a[0]) return a[1];
-  return f;
-}
-static bool isTerminalFilter(const std::string& f) {
-  return f == "DCTDecode" || f == "JPXDecode" || f == "JBIG2Decode" || f == "CCITTFaxDecode";
-}
-static uint8_t layerOfFilter(const std::string& f) {
-  if (f == "FlateDecode") return L_FLATE;
-  if (f == "LZWDecode") return L_LZW;
-  if (f == "ASCIIHexDecode") return L_AHX;
-  if (f == "ASCII85Decode") return L_A85;
-  if (f == "RunLengthDecode") return L_RL;
-  return L_NONE;
-}
-
 struct Stats {
   uint64_t itemCount[Item::KIND_COUNT] = {}, itemBytes[Item::KIND_COUNT] = {};
   struct F { uint64_t present = 0, undone = 0, terminal = 0, bytes = 0; };
@@ -266,10 +246,12 @@ class Encoder {
       dump.aux[AX_TXN].swap(nu);
       dump.hdr.flags |= kFlagLiftT;
     }
-    if (!dump.classFile[CF_CS].empty() && liftApply(LIFT_CS, dump.classFile[CF_CS], sk, nu, hx)) {
+    Bytes inl;
+    if (!dump.classFile[CF_CS].empty() && liftApply(LIFT_CS, dump.classFile[CF_CS], sk, nu, hx, &ctx_, &inl)) {
       dump.classFile[CF_CS].swap(sk);
       dump.aux[AX_CSN].swap(nu);
       dump.aux[AX_CSH].swap(hx);
+      dump.aux[AX_CSI].swap(inl);
       dump.hdr.flags |= kFlagLiftCS;
     }
     if (!dump.classFile[CF_CMAP].empty() && cmapApply(dump.classFile[CF_CMAP], sk, nu)) {

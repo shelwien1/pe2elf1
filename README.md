@@ -25,6 +25,7 @@ M5–M8 and the M10 list:
 | Classic xref tables (`I_XREF`) | entries predicted from object positions; free entries from the free list |
 | XRef stream rows (`L_XREFROWS`) | rows predicted from object positions and ObjStm order |
 | CMap blocks | uniform `bfchar`/`bfrange` bodies → `.cmb` (binary, delta-coded codes and destinations) |
+| Inline images with filters | `BI … ID <data> EI` whose filters (Flate, LZW, A85, AHx, RL, predictors) can be undone exactly → decoded data and recon in `.csi` |
 | Derived fields | stream `/Length` (direct and indirect object), `/DL`, `/Length1-3`, ObjStm `/N /First`, image `/Width /Height` (BMP header, JPEG SOF), EmbeddedFile `/Params /Size /CheckSum`, `startxref`, trailer `/Prev /Size /XRefStm`, XRef stream `/Prev`: replaced by placeholders the decoder fills in |
 | Small text streams | XMP and other small text streams go to `.txt`, not `.bin` |
 
@@ -72,6 +73,7 @@ Tested with g++ 13.3 and clang 18 on Linux x86-64.
 | `<P>.cs` | all decoded content streams concatenated, numbers and hex strings replaced by markers |
 | `<P>.csn` | the numbers lifted from `.cs`, per (operator, operand slot) group |
 | `<P>.csh` | the hex strings lifted from `.cs`, as binary |
+| `<P>.csi` | inline image data of `.cs` with its filters undone (decoded data + recon) |
 | `<P>.cmap` | all decoded CMaps (`/ToUnicode`, embedded encodings), concatenated, `bfchar`/`bfrange` bodies replaced by markers |
 | `<P>.cmb` | those bodies as binary |
 | `<P>%08X.<ext>` | one file per extracted stream; ordinal in file order |

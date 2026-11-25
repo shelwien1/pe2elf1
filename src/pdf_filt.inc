@@ -890,6 +890,31 @@ static bool lzwTestEncode(const Bytes& in, Bytes& out, int early) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// filter names
+
+static bool isPseudoLayerType(uint8_t t) { return t == L_BMP || t == L_T1 || t == L_OBJSTM || t == L_XREFROWS; }
+
+static std::string normFilter(const std::string& f) {
+  static const char* const ab[][2] = {{"AHx", "ASCIIHexDecode"}, {"A85", "ASCII85Decode"}, {"LZW", "LZWDecode"},
+                                      {"Fl", "FlateDecode"},     {"RL", "RunLengthDecode"}, {"CCF", "CCITTFaxDecode"},
+                                      {"DCT", "DCTDecode"}};
+  for (auto& a : ab)
+    if (f == a[0]) return a[1];
+  return f;
+}
+static bool isTerminalFilter(const std::string& f) {
+  return f == "DCTDecode" || f == "JPXDecode" || f == "JBIG2Decode" || f == "CCITTFaxDecode";
+}
+static uint8_t layerOfFilter(const std::string& f) {
+  if (f == "FlateDecode") return L_FLATE;
+  if (f == "LZWDecode") return L_LZW;
+  if (f == "ASCIIHexDecode") return L_AHX;
+  if (f == "ASCII85Decode") return L_A85;
+  if (f == "RunLengthDecode") return L_RL;
+  return L_NONE;
+}
+
+// ---------------------------------------------------------------------------------------------
 
 static bool bmpEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out);  // pdf_bmp.inc
 static bool t1EncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out);   // pdf_t1.inc

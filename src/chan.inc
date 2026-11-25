@@ -32,8 +32,8 @@ enum ClassFile { CF_CS, CF_CMAP, CF_COUNT };
 static const char* const kClassFileSuffix[CF_COUNT] = {"cs", "cmap"};
 
 // Aux files: outputs of whole-file transforms (number lifting, pdf_lift.inc).
-enum AuxFile { AX_TXN, AX_CSN, AX_CSH, AX_CMB, AX_COUNT };
-static const char* const kAuxSuffix[AX_COUNT] = {"txn", "csn", "csh", "cmb"};
+enum AuxFile { AX_TXN, AX_CSN, AX_CSH, AX_CMB, AX_CSI, AX_COUNT };
+static const char* const kAuxSuffix[AX_COUNT] = {"txn", "csn", "csh", "cmb", "csi"};
 
 // header flags
 static const uint64_t kFlagStored = 1, kFlagLiftT = 2, kFlagLiftCS = 4, kFlagCmap = 8;

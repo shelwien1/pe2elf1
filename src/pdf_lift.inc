@@ -9,8 +9,10 @@
 // so encoder and decoder always agree on it; the lexer only has to be good, not right. The
 // encoder runs the inverse and compares before using the result.
 //
-// Skeleton bytes: 0x00 X = literal byte X (X <= 3), 0x01 = number, 0x02 = hex string with
-// upper-case (or no) letters, 0x03 = hex string with lower-case letters.
+// Skeleton bytes: 0x00 X = literal byte X (X <= 4), 0x01 = number, 0x02 = hex string with
+// upper-case (or no) letters, 0x03 = hex string with lower-case letters, 0x04 = inline image data
+// whose filters were undone (content-stream mode; record in the inline buffer: u8 layer count,
+// per layer u8 type + recon, then the decoded data, lengths as varints).
 // Number value: zigzag(mantissa) * 8 + code; code 0 = integer, 1..6 = "I.F" with that many
 // fraction digits, 7 = escape followed by varint(scale * 4 + form), form bit0 = no integer part
 // (".5"), bit1 = trailing dot ("5."). Numbers file: one mode byte per group (see liftEncodeGroup),
@@ -23,7 +25,7 @@ struct LiftNum {
   uint32_t code, ext;
 };
 
-static inline bool liftCtl(uint8_t c) { return c <= 3; }
+static inline bool liftCtl(uint8_t c) { return c <= 4; }
 
 // canonical number spelling -> value; false if the token is not lifted
 static bool liftParseNum(const uint8_t* p, size_t n, LiftNum& v) {
@@ -137,6 +139,7 @@ static void liftGroup(LiftMode mode, const uint8_t* s, size_t n, LiftGroups& g) 
     if (c == 0) { i += 2; continue; }
     if (c == 1) { marker(); i++; continue; }
     if (c == 2 || c == 3) { if (!arr) operands++; i++; continue; }
+    if (c == 4) { i++; continue; }
     if (isWS(c)) { i++; continue; }
     if (c == '%') {
       size_t j = i;
@@ -213,6 +216,9 @@ static void liftGroup(LiftMode mode, const uint8_t* s, size_t n, LiftGroups& g) 
         operands = 0;
         arr = 0;
         if (j - i == 2 && s[i] == 'I' && s[i + 1] == 'D') {
+          // lifted inline image data: whitespace, marker, then EI
+          size_t w = j < n && s[j] == 0 ? j + 2 : j + 1;
+          if (w < n && s[w] == 4) { i = w + 1; continue; }
           // inline image data up to whitespace "EI" (whitespace or end)
           size_t k = j + 1;
           while (k + 2 <= n && !(s[k] == 'E' && s[k + 1] == 'I' && isWS(s[k - 1]) && (k + 2 == n || isWS(s[k + 2]))))
@@ -297,13 +303,94 @@ static uint8_t liftChooseMode(const std::vector<LiftNum>& v, LiftEntropy& est) {
   return best;
 }
 
+// ---- inline images with filters ---------------------------------------------------------------
+// BI <dict> ID <data> EI: when every filter of the dict can be undone exactly, the data is
+// replaced by the decoded bytes and the layers' recon records.
+
+static bool liftInlineImage(const CodecCtx& ctx, const uint8_t* dict, size_t dn, const uint8_t* data, size_t len,
+                            Bytes& rec) {
+  Lexer lx(dict, dn, 0);
+  Obj filt, parms;
+  for (;;) {
+    lx.skipWS();
+    if (lx.eof()) break;
+    Obj k, v;
+    if (!lx.parse(k) || k.t != Obj::NAME || !lx.parse(v)) return false;
+    if (k.s == "F" || k.s == "Filter") filt = v;
+    else if (k.s == "DP" || k.s == "DecodeParms") parms = v;
+  }
+  std::vector<std::pair<std::string, const Obj*>> fl;
+  if (filt.t == Obj::NAME) fl.push_back({normFilter(filt.s), parms.t == Obj::DICT ? &parms : nullptr});
+  else if (filt.t == Obj::ARR)
+    for (size_t k = 0; k < filt.a.size(); k++) {
+      if (filt.a[k].t != Obj::NAME) return false;
+      const Obj* pp = parms.t == Obj::ARR && k < parms.a.size() && parms.a[k].t == Obj::DICT ? &parms.a[k] : nullptr;
+      fl.push_back({normFilter(filt.a[k].s), pp});
+    }
+  if (fl.empty()) return false;
+  Bytes cur(data, data + len), out, recon;
+  std::vector<Layer> layers;
+  for (auto& f : fl) {
+    uint8_t lt = layerOfFilter(f.first);
+    if (!lt) return false;
+    FilterParams fp;
+    if (f.second) {
+      auto geti = [&](const char* key, int& v) {
+        const Obj* o = f.second->get(key);
+        if (o && o->t == Obj::INT && o->i >= 0 && o->i < (1 << 30)) v = (int)o->i;
+      };
+      geti("Predictor", fp.predictor);
+      geti("Colors", fp.colors);
+      geti("BitsPerComponent", fp.bpc);
+      geti("Columns", fp.columns);
+      geti("EarlyChange", fp.earlyChange);
+    }
+    if (!layerDecode(ctx, lt, fp, cur, out, recon)) return false;
+    layers.push_back({lt, recon});
+    cur.swap(out);
+    if ((lt == L_FLATE || lt == L_LZW) && fp.predictor > 1) {
+      uint8_t pl = fp.predictor == 2 ? L_TIFF : fp.predictor >= 10 ? L_PNG : L_NONE;
+      if (!pl || !layerDecode(ctx, pl, fp, cur, out, recon)) return false;
+      layers.push_back({pl, recon});
+      cur.swap(out);
+    }
+  }
+  rec.clear();
+  rec.push_back((uint8_t)layers.size());
+  for (auto& l : layers) {
+    rec.push_back(l.type);
+    putLenBytesTo(rec, l.recon.data(), l.recon.size());
+  }
+  putLenBytesTo(rec, cur.data(), cur.size());
+  return true;
+}
+
+static bool liftInlineRestore(const CodecCtx& ctx, RBuf& r, Bytes& out) {
+  size_t nl = r.u8();
+  std::vector<Layer> layers(nl);
+  for (auto& l : layers) {
+    l.type = r.u8();
+    if (l.type == L_NONE || l.type >= L_COUNT || isPseudoLayerType(l.type)) return false;
+    r.bytes(r.len(), l.recon);
+  }
+  Bytes data, tmp;
+  r.bytes(r.len(), data);
+  for (size_t k = nl; k-- > 0;) {
+    if (!layerEncode(ctx, layers[k].type, layers[k].recon, data, tmp)) return false;
+    data.swap(tmp);
+  }
+  out.insert(out.end(), data.begin(), data.end());
+  return true;
+}
+
 // ---- forward / inverse -----------------------------------------------------------------------
 static inline void liftLit(Bytes& out, uint8_t c) {
   if (liftCtl(c)) out.push_back(0);
   out.push_back(c);
 }
 
-static void liftForward(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums, Bytes& hex) {
+static void liftForward(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums, Bytes& hex,
+                        const CodecCtx* ctx = nullptr, Bytes* inl = nullptr) {
   const uint8_t* p = in.data();
   size_t n = in.size(), i = 0;
   skel.clear();
@@ -311,6 +398,8 @@ static void liftForward(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums
   hex.clear();
   skel.reserve(n);
   std::vector<LiftNum> vals;
+  size_t biPos = SIZE_MAX;
+  if (inl) inl->clear();
   auto copy = [&](size_t a, size_t b) {
     for (size_t k = a; k < b; k++) liftLit(skel, p[k]);
   };
@@ -381,11 +470,21 @@ static void liftForward(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums
       continue;
     }
     copy(i, j);
+    if (mode == LIFT_CS && j - i == 2 && p[i] == 'B' && p[i + 1] == 'I') biPos = j;
     if (mode == LIFT_CS && j - i == 2 && p[i] == 'I' && p[i + 1] == 'D') {
       size_t k = j + 1;
       while (k + 2 <= n && !(p[k] == 'E' && p[k + 1] == 'I' && isWS(p[k - 1]) && (k + 2 == n || isWS(p[k + 2])))) k++;
       k = std::min(k, n);
-      copy(j, k);
+      Bytes rec;
+      if (ctx && inl && biPos != SIZE_MAX && j < k && isWS(p[j]) && k < n &&
+          liftInlineImage(*ctx, p + biPos, i - biPos, p + j + 1, k - (j + 1), rec)) {
+        liftLit(skel, p[j]);
+        skel.push_back(4);
+        inl->insert(inl->end(), rec.begin(), rec.end());
+      } else {
+        copy(j, k);
+      }
+      biPos = SIZE_MAX;
       i = k;
       continue;
     }
@@ -410,7 +509,10 @@ static void liftForward(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums
   nums.insert(nums.end(), data.begin(), data.end());
 }
 
-static bool liftInverse(LiftMode mode, const Bytes& skel, const Bytes& nums, const Bytes& hex, Bytes& out) {
+static bool liftInverse(LiftMode mode, const Bytes& skel, const Bytes& nums, const Bytes& hex, Bytes& out,
+                        const CodecCtx* ctx = nullptr, const Bytes* inl = nullptr) {
+  Bytes noInl;
+  RBuf ir(inl ? *inl : noInl);
   LiftGroups g;
   liftGroup(mode, skel.data(), skel.size(), g);
   std::vector<size_t> cnt(g.count, 0);
@@ -454,6 +556,8 @@ static bool liftInverse(LiftMode mode, const Bytes& skel, const Bytes& nums, con
       if (mk >= g.ofMarker.size()) return false;
       uint32_t id = g.ofMarker[mk++];
       liftSpellNum(per[id][next[id]++], out);
+    } else if (c == 4) {
+      if (!ctx || !liftInlineRestore(*ctx, ir, out)) return false;
     } else if (c == 2 || c == 3) {
       size_t len = hr.len();
       const char* hx = c == 3 ? L : U;
@@ -468,15 +572,16 @@ static bool liftInverse(LiftMode mode, const Bytes& skel, const Bytes& nums, con
       out.push_back(c);
     }
   }
-  return mk == g.ofMarker.size() && hr.p == hex.size();
+  return mk == g.ofMarker.size() && hr.p == hex.size() && ir.p == ir.b.size();
 }
 
 // forward + verify; false if the transform does not reproduce the input
-static bool liftApply(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums, Bytes& hex) {
+static bool liftApply(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums, Bytes& hex,
+                      const CodecCtx* ctx = nullptr, Bytes* inl = nullptr) {
   try {
-    liftForward(mode, in, skel, nums, hex);
+    liftForward(mode, in, skel, nums, hex, ctx, inl);
     Bytes back;
-    return liftInverse(mode, skel, nums, hex, back) && back == in;
+    return liftInverse(mode, skel, nums, hex, back, ctx, inl) && back == in;
   } catch (const Error&) {
     return false;
   }
