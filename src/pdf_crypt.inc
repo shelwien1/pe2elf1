@@ -204,8 +204,10 @@ static void rc4(const uint8_t* key, size_t klen, const uint8_t* in, size_t n, ui
 struct Aes {
   static uint8_t sbox[256], inv[256];
   static void init() {
-    static bool done = false;
-    if (done) return;
+    static const bool once = build();  // thread-safe one-time initialization
+    (void)once;
+  }
+  static bool build() {
     uint8_t p = 1, q = 1;
     do {
       p = (uint8_t)(p ^ (p << 1) ^ ((p & 0x80) ? 0x1B : 0));
@@ -219,7 +221,7 @@ struct Aes {
     } while (p != 1);
     sbox[0] = 0x63;
     for (int i = 0; i < 256; i++) inv[sbox[i]] = (uint8_t)i;
-    done = true;
+    return true;
   }
   static uint8_t xt(uint8_t x) { return (uint8_t)((x << 1) ^ ((x & 0x80) ? 0x1B : 0)); }
   static uint8_t mul(uint8_t a, uint8_t b) {

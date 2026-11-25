@@ -85,3 +85,97 @@ static bool bmpEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out) {
   r.appendTo(r.len(), out);
   return true;
 }
+
+// ---- RGB image + 8-bit /SMask as one 32 bpp BMP (plan M10, opt-in -a) -------------------------
+// The image's stored form becomes a BGRA BMP (layer L_RGBA, recon as for L_BMP); the mask keeps no
+// data of its own (layer L_ALPHA: var index of the image's stream, then the L_BMP recon) and is
+// restored from the alpha bytes once the image's stored form is known (the mask is deferred).
+
+// 24 bpp image BMP + 8 bpp mask BMP of the same size -> 32 bpp BGRA BMP; false if they don't match
+static bool rgbaMerge(const Bytes& rgb, const Bytes& a, Bytes& out) {
+  if (rgb.size() < 54 || a.size() < 54 || rd16(&rgb[28]) != 24 || rd16(&a[28]) != 8) return false;
+  uint32_t w = rd32(&rgb[18]), h = rd32(&rgb[22]);
+  if (rd32(&a[18]) != w || rd32(&a[22]) != h || !w || !h || (int32_t)h < 0) return false;
+  size_t so = rd32(&rgb[10]), ao = rd32(&a[10]);
+  size_t srow = ((size_t)w * 3 + 3) & ~(size_t)3, arow = ((size_t)w + 3) & ~(size_t)3;
+  if (so > rgb.size() || ao > a.size() || (rgb.size() - so) / srow < h || (a.size() - ao) / arow < h) return false;
+  uint64_t total = 54 + 4 * (uint64_t)w * h;
+  if (total >= 0xFFFFFFFFull) return false;
+  out.clear();
+  out.reserve((size_t)total);
+  out.push_back('B');
+  out.push_back('M');
+  le32(out, (uint32_t)total);
+  le32(out, 0);
+  le32(out, 54);
+  le32(out, 40);
+  le32(out, w);
+  le32(out, h);
+  le16(out, 1);
+  le16(out, 32);
+  le32(out, 0);
+  le32(out, (uint32_t)(total - 54));
+  le32(out, 2835);
+  le32(out, 2835);
+  le32(out, 0);
+  le32(out, 0);
+  for (size_t y = 0; y < h; y++) {
+    const uint8_t* s = rgb.data() + so + y * srow;
+    const uint8_t* m = a.data() + ao + y * arow;
+    for (size_t x = 0; x < w; x++) {
+      out.push_back(s[3 * x]);
+      out.push_back(s[3 * x + 1]);
+      out.push_back(s[3 * x + 2]);
+      out.push_back(m[x]);
+    }
+  }
+  return true;
+}
+
+static bool bmp32Geometry(const Bytes& in, uint32_t& w, uint32_t& h, size_t& off) {
+  if (in.size() < 54 || in[0] != 'B' || in[1] != 'M' || rd16(&in[28]) != 32) return false;
+  w = rd32(&in[18]);
+  int32_t sh = (int32_t)rd32(&in[22]);
+  off = rd32(&in[10]);
+  if (sh <= 0 || w == 0 || w > 0x3FFFFFFF || off > in.size()) return false;
+  h = (uint32_t)sh;
+  return (in.size() - off) / 4 / w >= h;
+}
+
+// BGRA BMP -> the image's raw RGB samples + tail (layerEncode for L_RGBA)
+static bool rgbaEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out) {
+  uint32_t w, h;
+  size_t off;
+  if (!bmp32Geometry(in, w, h, off)) return false;
+  out.clear();
+  out.reserve((size_t)w * h * 3);
+  for (int64_t y = (int64_t)h - 1; y >= 0; y--) {
+    const uint8_t* s = in.data() + off + (size_t)y * w * 4;
+    for (size_t x = 0; x < w; x++) {
+      out.push_back(s[4 * x + 2]);
+      out.push_back(s[4 * x + 1]);
+      out.push_back(s[4 * x]);
+    }
+  }
+  RBuf r(recon);
+  r.appendTo(r.len(), out);
+  return true;
+}
+
+// alpha bytes of the image's BGRA BMP -> the mask's raw samples + tail (layerEncode for L_ALPHA)
+static bool alphaEncodeLayer(const CodecCtx& ctx, const Bytes& recon, Bytes& out) {
+  RBuf r(recon);
+  uint64_t k = r.var();
+  const Bytes* src = ctx.alphaSource ? ctx.alphaSource(k) : nullptr;
+  uint32_t w, h;
+  size_t off;
+  if (!src || !bmp32Geometry(*src, w, h, off)) return false;
+  out.clear();
+  out.reserve((size_t)w * h);
+  for (int64_t y = (int64_t)h - 1; y >= 0; y--) {
+    const uint8_t* s = src->data() + off + (size_t)y * w * 4;
+    for (size_t x = 0; x < w; x++) out.push_back(s[4 * x + 3]);
+  }
+  r.appendTo(r.len(), out);
+  return true;
+}

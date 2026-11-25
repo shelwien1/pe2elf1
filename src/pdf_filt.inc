@@ -5,8 +5,8 @@
 //                re-encodes byte-exactly (each decoder checks this itself, through layerEncode).
 //   layerEncode  (both sides):   decoded bytes + recon -> PDF-side bytes.
 
-enum LayerType : uint8_t { L_NONE, L_FLATE, L_LZW, L_AHX, L_A85, L_RL, L_PNG, L_TIFF, L_BMP, L_T1, L_OBJSTM, L_XREFROWS, L_CCITT, L_TIFW, L_COUNT };
-static const char* const kLayerName[L_COUNT] = {"-", "Flate", "LZW", "AHx", "A85", "RL", "PNG", "TIFF", "BMP", "T1", "ObjStm", "XRefRows", "CCITT", "TIF"};
+enum LayerType : uint8_t { L_NONE, L_FLATE, L_LZW, L_AHX, L_A85, L_RL, L_PNG, L_TIFF, L_BMP, L_T1, L_OBJSTM, L_XREFROWS, L_CCITT, L_TIFW, L_RGBA, L_ALPHA, L_COUNT };
+static const char* const kLayerName[L_COUNT] = {"-", "Flate", "LZW", "AHx", "A85", "RL", "PNG", "TIFF", "BMP", "T1", "ObjStm", "XRefRows", "CCITT", "TIF", "RGBA", "Alpha"};
 
 struct Layer {
   uint8_t type = L_NONE;
@@ -18,6 +18,8 @@ struct CodecCtx {
   uint8_t zlibHdr[2] = {0x78, 0x9C};
   const ObjPositions* objPos = nullptr;  // objects written so far (L_XREFROWS predictions)
   bool verify = true;  // encoder: re-encode each Flate layer and compare (off with -n)
+  // L_ALPHA: the stored form (32 bpp BMP) of the k-th stream, or null
+  std::function<const Bytes*(uint64_t)> alphaSource;
 };
 
 // Predictor / filter parameters from /DecodeParms (encoder side only).
@@ -124,6 +126,7 @@ struct FlateProf {
   uint64_t unpacked = 0, streams = 0;
 };
 static FlateProf gFlateProf;
+static std::mutex gFlateProfMu;  // streams are processed on several threads
 static double nowSec() {
   return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
@@ -147,7 +150,12 @@ static bool flateDecode(const CodecCtx& ctx, const Bytes& in, Bytes& out, Bytes&
   struct ProfGuard {
     double t0;
     Bytes& out;
-    ~ProfGuard() { gFlateProf.dec += nowSec() - t0; gFlateProf.unpacked += out.size(); gFlateProf.streams++; }
+    ~ProfGuard() {
+      std::lock_guard<std::mutex> lk(gFlateProfMu);
+      gFlateProf.dec += nowSec() - t0;
+      gFlateProf.unpacked += out.size();
+      gFlateProf.streams++;
+    }
   } guard{t0, out};
   {
     SpanIn si(in.data() + off, in.size() - off);
@@ -181,8 +189,11 @@ static bool flateDecode(const CodecCtx& ctx, const Bytes& in, Bytes& out, Bytes&
     double t1 = nowSec();
     SpanIn ui(out.data(), out.size());  // not the vector overload: its MemStream memcpy()s from null for empty data
     bool rok = preflate_reencode(ro, diff, ui, out.size(), [] {});
-    gFlateProf.enc += nowSec() - t1;
-    gFlateProf.dec -= nowSec() - t1;
+    {
+      std::lock_guard<std::mutex> lk(gFlateProfMu);
+      gFlateProf.enc += nowSec() - t1;
+      gFlateProf.dec -= nowSec() - t1;
+    }
     if (!rok) return false;
     if (re.size() != dsize || memcmp(re.data(), in.data() + off, dsize) != 0) return false;
   }
@@ -895,7 +906,7 @@ static bool lzwTestEncode(const Bytes& in, Bytes& out, int early) {
 // filter names
 
 static bool isPseudoLayerType(uint8_t t) {
-  return t == L_BMP || t == L_T1 || t == L_OBJSTM || t == L_XREFROWS || t == L_TIFW;
+  return t == L_BMP || t == L_T1 || t == L_OBJSTM || t == L_XREFROWS || t == L_TIFW || t == L_RGBA;
 }
 
 static std::string normFilter(const std::string& f) {
@@ -928,6 +939,8 @@ static bool objstmDecodeLayer(const Bytes& in, int64_t N, int64_t First, Bytes& 
 static bool xrefRowsEncodeLayer(const CodecCtx& ctx, const Bytes& recon, const Bytes& in, Bytes& out);
 static bool ccittEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out);  // pdf_ccitt.inc
 static bool tifwEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out);   // pdf_tiff.inc
+static bool rgbaEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out);   // pdf_bmp.inc
+static bool alphaEncodeLayer(const CodecCtx& ctx, const Bytes& recon, Bytes& out);
 struct CcittParams;
 static bool ccittDecodeFP(const FilterParams& fp, const Bytes& in, Bytes& out, Bytes& recon);
 static bool xrefRowsDecodeLayer(const CodecCtx& ctx, const Bytes& in, const std::vector<uint64_t>& W,
@@ -948,6 +961,8 @@ static bool layerEncode(const CodecCtx& ctx, uint8_t type, const Bytes& recon, c
     case L_XREFROWS: return xrefRowsEncodeLayer(ctx, recon, in, out);
     case L_CCITT: return ccittEncodeLayer(recon, in, out);
     case L_TIFW: return tifwEncodeLayer(recon, in, out);
+    case L_RGBA: return rgbaEncodeLayer(recon, in, out);
+    case L_ALPHA: return in.empty() && alphaEncodeLayer(ctx, recon, out);
   }
   fail("unknown layer type %d", type);
 }

@@ -66,7 +66,7 @@ static void streamFacts(const CodecCtx& ctx, const StreamDesc& sd, const Bytes& 
   // image dimensions straight from the stored form
   bool bmp = false, tif = false;
   uint32_t tw, th;
-  for (auto& l : sd.layers) bmp |= l.type == L_BMP, tif |= l.type == L_TIFW;
+  for (auto& l : sd.layers) bmp |= l.type == L_BMP || l.type == L_RGBA, tif |= l.type == L_TIFW;
   if (bmp && stored.size() >= 26 && stored[0] == 'B' && stored[1] == 'M') {
     f.w = rd32(&stored[18]);
     f.h = (int32_t)rd32(&stored[22]);

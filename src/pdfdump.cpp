@@ -19,15 +19,19 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <deque>
+#include <exception>
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -66,6 +70,8 @@ struct Options {
   bool noVerify = false;
   bool derive = true;  // derived fields (-d disables)
   bool ccitt = false;  // decode CCITT fax images to bitmaps (-g)
+  unsigned threads = 0;  // streams decoded in parallel (-j); 0 = one per CPU
+  bool rgba = false;     // RGB image + 8-bit soft mask as one 32 bpp BMP (-a)
   int verbose = 0;
   bool quiet = false;
 };
@@ -110,7 +116,7 @@ struct Stats {
   uint64_t reconBlobs = 0, reconRefs = 0;
   uint64_t typedBytes = 0, payloadBytes = 0, layeredPayload = 0;
   uint64_t bmpCount = 0;
-  uint64_t derived = 0, stringsDecrypted = 0, sigBlobs = 0;
+  uint64_t derived = 0, stringsDecrypted = 0, sigBlobs = 0, rgbaMerged = 0;
 };
 
 class Encoder {
@@ -430,15 +436,33 @@ class Encoder {
       snprintf(b, sizeof(b), "%s/%d/%d/%d/%d/%d;", f.name.c_str(), fp.predictor, fp.colors, fp.bpc, fp.columns,
                fp.earlyChange);
       k += b;
+      if (f.name == "CCITTFaxDecode") {
+        FilterParams cp = ccittParams(f.parms);
+        snprintf(b, sizeof(b), "K%d/%d/%d/%d%d%d%d;", cp.ccittK, cp.ccittCols, cp.ccittRows, cp.ccittEol, cp.ccittAlign,
+                 cp.ccittEob, cp.ccittBlack1);
+        k += b;
+      }
     }
     return k;
   }
 
-  // identical unencrypted payload + identical chain -> identical result; reuse it
-  bool fromCache(StreamRec& s, const Obj& d, const std::vector<FilterRef>& fl) {
+  // payload size, filter chain and cipher of a stream, before any decoding
+  void streamPrep(StreamRec& s) {
     const Item& it = seg.items[s.item];
-    if (s.wantCipher != CI_NONE || d.get("F") || it.dataEnd - it.dataStart < 64) return false;
-    std::string key = chainKey(fl);
+    const Obj& d = seg.objs[it.obj];
+    s.payload = it.dataEnd - it.dataStart;
+    std::vector<FilterRef> fl = getFilters(d);
+    for (auto& f : fl) s.chain.push_back(f.name);
+    s.wantCipher = streamCipher(d, it.num, fl);
+  }
+
+  // identical unencrypted payload + identical chain -> identical result: index of the earlier
+  // stream to copy, or -1 (and s is registered for later duplicates)
+  int cacheLookup(StreamRec& s) {
+    const Item& it = seg.items[s.item];
+    const Obj& d = seg.objs[it.obj];
+    if (s.wantCipher != CI_NONE || d.get("F") || it.dataEnd - it.dataStart < 64) return -1;
+    std::string key = chainKey(getFilters(d));
     uint64_t h = fnv1a64(in_.data() + it.dataStart, it.dataEnd - it.dataStart) ^ fnv1a64((const uint8_t*)key.data(), key.size());
     auto& v = cache_[h];
     for (int k : v) {
@@ -446,29 +470,78 @@ class Encoder {
       const Item& oi = seg.items[o.item];
       if (oi.dataEnd - oi.dataStart == it.dataEnd - it.dataStart &&
           memcmp(in_.data() + oi.dataStart, in_.data() + it.dataStart, it.dataEnd - it.dataStart) == 0 &&
-          chainKey(getFilters(seg.objs[oi.obj])) == key) {
-        s.desc.layers = o.desc.layers;
-        s.data = o.data;
-        s.remain = o.remain;
-        s.stop = o.stop;
-        s.decoded = o.decoded;
-        return true;
-      }
+          chainKey(getFilters(seg.objs[oi.obj])) == key)
+        return k;
     }
     v.push_back((int)(&s - streams.data()));
-    return false;
+    return -1;
   }
 
+  void copyResult(StreamRec& s, const StreamRec& o) {
+    s.desc.layers = o.desc.layers;
+    s.data = o.data;
+    s.remain = o.remain;
+    s.stop = o.stop;
+    s.decoded = o.decoded;
+    // the stop filter's parameters from this stream's own chain (same chain key, same position)
+    std::vector<FilterRef> fl = getFilters(seg.objs[seg.items[s.item].obj]);
+    std::vector<FilterRef> ofl = getFilters(seg.objs[seg.items[o.item].obj]);
+    for (size_t k = 0; k < ofl.size() && k < fl.size(); k++)
+      if (o.stopParms == ofl[k].parms) s.stopParms = fl[k].parms;
+    s.stopLast = o.stopLast;
+  }
+
+  // every stream: prep and dedup in file order, the filter work on a thread pool (results do not
+  // depend on the thread count), duplicates copied afterwards
+  void processAll() {
+    std::vector<int> dupOf(streams.size(), -1);
+    std::vector<size_t> work;
+    for (size_t i = 0; i < streams.size(); i++) {
+      streamPrep(streams[i]);
+      dupOf[i] = cacheLookup(streams[i]);
+      if (dupOf[i] < 0) work.push_back(i);
+    }
+    // largest first, so one big stream does not finish last on its own
+    std::stable_sort(work.begin(), work.end(), [&](size_t a, size_t b) { return streams[a].payload > streams[b].payload; });
+    std::vector<std::exception_ptr> err(streams.size());
+    std::atomic<size_t> next{0};
+    auto worker = [&]() {
+      for (size_t k; (k = next++) < work.size();) {
+        try {
+          processStream(streams[work[k]]);
+        } catch (...) {
+          err[work[k]] = std::current_exception();
+        }
+      }
+    };
+    unsigned nt = opt_.threads ? opt_.threads : std::max(1u, std::thread::hardware_concurrency());
+    nt = (unsigned)std::min<size_t>(nt, work.size());
+    // tables that preflate and the AES code build lazily on first use: build them before the pool
+    PreflateBlockTrees::staticLitLenTreeDecoder();
+    PreflateBlockTrees::staticDistTreeDecoder();
+    PreflateBlockTrees::staticLitLenTreeEncoder();
+    PreflateBlockTrees::staticDistTreeEncoder();
+    Aes::init();
+    if (nt <= 1) {
+      worker();
+    } else {
+      std::vector<std::thread> pool;
+      for (unsigned t = 0; t < nt; t++) pool.emplace_back(worker);
+      for (auto& t : pool) t.join();
+    }
+    for (auto& e : err)
+      if (e) std::rethrow_exception(e);
+    for (size_t i = 0; i < streams.size(); i++)
+      if (dupOf[i] >= 0) copyResult(streams[i], streams[(size_t)dupOf[i]]);
+  }
+
+  // filters (and cipher) of one stream undone as far as they verify; streamPrep has run
   void processStream(StreamRec& s) {
     const Item& it = seg.items[s.item];
     const Obj& d = seg.objs[it.obj];
-    s.payload = it.dataEnd - it.dataStart;
     Bytes cur(in_.begin() + it.dataStart, in_.begin() + it.dataEnd);
     std::vector<FilterRef> fl = getFilters(d);
-    for (auto& f : fl) s.chain.push_back(f.name);
-    uint8_t ci = streamCipher(d, it.num, fl);
-    s.wantCipher = ci;
-    if (fromCache(s, d, fl)) return;
+    uint8_t ci = s.wantCipher;
     if (ci != CI_NONE) {
       Bytes pt;
       if (sec.key.empty() || !cipherDecrypt(ci, sec.key, it.num, it.gen, cur.data(), cur.size(), pt, s.desc.iv)) {
@@ -533,7 +606,7 @@ class Encoder {
     s.decoded = s.data.size();
   }
 
-  FilterParams ccittParams(const Obj* parms) {
+  FilterParams ccittParams(const Obj* parms) const {
     FilterParams fp;
     if (!parms) return fp;
     auto geti = [&](const char* k, int& v) {
@@ -587,7 +660,7 @@ class Encoder {
       streamsByNum_[seg.items[i].num].push_back((int)streams.size());
       streams.push_back(std::move(s));
     }
-    for (auto& s : streams) processStream(s);
+    processAll();
     // read-only ObjStm expansion; rebuild the index in file order with members
     Classifier cl(idx_);
     std::vector<int> objstmOf(seg.items.size(), -1);
@@ -646,6 +719,40 @@ class Encoder {
       s.desc.layers.push_back({L_BMP, std::move(recon)});
       s.data.swap(bmp);
       s.bmp = true;
+    }
+    // -a: RGB image + 8-bit soft mask of the same size as one BGRA BMP; the mask is restored from it
+    if (opt_.rgba) {
+      std::vector<char> merged(streams.size(), 0);
+      for (size_t i = 0; i < streams.size(); i++) {
+        StreamRec& s = streams[i];
+        if (!s.bmp || merged[i] || s.desc.layers.empty() || s.desc.layers.back().type != L_BMP) continue;
+        const Obj* sm = seg.objs[seg.items[s.item].obj].get("SMask");
+        if (!sm || sm->t != Obj::REF) continue;
+        auto f = streamsByNum_.find((uint32_t)sm->i);
+        if (f == streamsByNum_.end()) continue;
+        size_t j = (size_t)f->second.back();
+        StreamRec& t = streams[j];
+        if (j == i || merged[j] || !t.bmp || t.desc.layers.empty() || t.desc.layers.back().type != L_BMP) continue;
+        Bytes rgba, rawS, rawT, chk, arecon;
+        if (!rgbaMerge(s.data, t.data, rgba)) continue;
+        if (!layerEncode(ctx_, L_BMP, s.desc.layers.back().recon, s.data, rawS) ||
+            !layerEncode(ctx_, L_BMP, t.desc.layers.back().recon, t.data, rawT))
+          continue;
+        if (!rgbaEncodeLayer(s.desc.layers.back().recon, rgba, chk) || chk != rawS) continue;
+        putVarTo(arecon, i);
+        arecon.insert(arecon.end(), t.desc.layers.back().recon.begin(), t.desc.layers.back().recon.end());
+        CodecCtx c2 = ctx_;
+        c2.alphaSource = [&](uint64_t k) -> const Bytes* { return k == i ? &rgba : nullptr; };
+        if (!alphaEncodeLayer(c2, arecon, chk) || chk != rawT) continue;
+        s.desc.layers.back().type = L_RGBA;
+        s.data.swap(rgba);
+        t.desc.layers.back() = {L_ALPHA, std::move(arecon)};
+        t.data.clear();
+        t.desc.deferred = true;
+        t.desc.payloadLen = t.payload;
+        merged[i] = merged[j] = 1;
+        st.rgbaMerged++;
+      }
     }
     // streams matching a TIFF subformat (own files only) go into a TIFF container
     for (auto& s : streams) {
@@ -1086,6 +1193,7 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
     printf("\n");
   }
   if (st.bmpCount) printf("bmp3 images: %llu\n", (unsigned long long)st.bmpCount);
+  if (st.rgbaMerged) printf("RGB + soft mask merged (-a): %llu\n", (unsigned long long)st.rgbaMerged);
   if (st.derived) printf("derived fields: %llu\n", (unsigned long long)(st.derived - st.stringsDecrypted - st.sigBlobs));
   if (st.sigBlobs)
     printf("signature blobs: %llu (%llu bytes of DER in .p7s)\n", (unsigned long long)st.sigBlobs,
@@ -1273,8 +1381,11 @@ static void usage() {
           "  -g       decode CCITT fax images (G3 1D, G4) to bitmaps (BMP); off by default: xz\n"
           "           compresses the bitmaps worse than the fax data, a bilevel recompressor may not.\n"
           "           Without -g, fax data whose parameters match a TIFF subformat is stored as .tif\n"
+          "  -a       RGB images with an 8-bit /SMask of the same size: both in one 32 bpp BMP (BGRA);\n"
+          "           xz -3%% on those images, off by default for BMP recompressors without alpha\n"
           "  -c MAP   channel->file map, e.g. S,N,T,X,O,F,R,B (default %s)\n"
           "  -n       no verification: skip the final in-memory restore and the per-stream Flate re-encode\n"
+          "  -j N     decode streams on N threads (default: one per CPU); the dump does not depend on N\n"
           "  -v / -q  per-stream report / quiet\n",
           kSyntaxLevelMax, kDefaultChanMap);
 }
@@ -1319,6 +1430,8 @@ static int realMain(int argc, char** argv) {
         case 'D': opt.dedup = false; break;
         case 'd': opt.derive = false; break;
         case 'g': opt.ccitt = true; break;
+        case 'j': opt.threads = (unsigned)std::min(256LL, num()); break;
+        case 'a': opt.rgba = true; break;
         case 'c': opt.chanMap = val(); break;
         case 'n': opt.noVerify = true; break;
         case 'v': opt.verbose++; break;

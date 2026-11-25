@@ -31,18 +31,11 @@ redundancy inventory of §2A, M6, M7, M9 stage 1, and the M10 ideas that measure
 | TIFF container (`L_TIFW`) | streams matching a TIFF subformat become the single strip of a baseline TIFF (`.tif`): CCITT fax data (compression 4 = G4, 3 = G3 with EOLs, 2 = 1D byte-aligned), image data left Flate/LZW/RunLength-encoded (8, 5, 32773, Predictor 1 or 2), and raw samples BMP can't hold (2 or 16 bpc, 2-bit palette, data longer than the image). Nothing is re-coded; `d` takes the strip back out |
 | Derived fields | stream `/Length` (direct and indirect object), `/DL`, `/Length1-3`, ObjStm `/N /First`, image `/Width /Height` and `/DecodeParms /Columns /Rows` (BMP / TIFF header, JPEG SOF), EmbeddedFile `/Params /Size /CheckSum`, `startxref`, trailer `/Prev /Size /XRefStm`, XRef stream `/Prev`: replaced by placeholders the decoder fills in |
 | Signature blobs | a hex `/Contents` string holding one DER SEQUENCE and then only zero bytes (the space a signature dictionary reserves) → the DER element to `.p7s` (CMS / PKCS#7, elements concatenated), case and padding length in the placeholder |
+| RGB + soft mask (`-a`, `L_RGBA` / `L_ALPHA`) | an RGB image and its 8-bit `/SMask` of the same size as one BGRA BMP on the image; the mask's stream keeps no data and is restored, deferred, from the alpha bytes |
 | Small text streams | XMP and other small text streams go to `.txt`, not `.bin` |
 
-Plan items measured and not adopted are listed under "xz results" below. Not built, with the
-measured upper bound of what they could gain:
-- Hint table regeneration (M9 stage 2): the 78 hint streams of the 808-file regression set hold
-  43 KB of Flate data (82 KB decoded) in all, so at most a few tens of KB of xz, and only for
-  tables written by qpdf's algorithm (other producers' tables don't follow the same rules).
-- ToUnicode remap (M10): on the 8 files with the most hex text, xz of `.csh` is already within
-  0–16% of xz of the document's entire Unicode text from `pdftotext` (82.7 vs 82.0 KB, 51.0 vs
-  51.1 KB on the two largest), so remapping glyph codes to Unicode could gain a few KB per file
-  at most, against per-stream font resource resolution.
-- RGB + SMask merged into a 32 bpp BMP (M10): only pays with an RGBA codec downstream.
+Plan items measured and not adopted are listed under "xz results" below, with the exact
+measurement behind each.
 
 `-s` selects how much of this is applied (see Options).
 
@@ -51,12 +44,15 @@ measured upper bound of what they could gain:
 Single translation unit: `src/pdfdump.cpp` includes the `src/*.inc` modules. `src/preflate.inc`
 (from ziprec) is included unmodified and is the only code that isn't ours.
 
-    make                      # g++ -std=c++17 -O2 -o pdfdump src/pdfdump.cpp
+    make                      # g++ -std=c++17 -O2 -pthread -o pdfdump src/pdfdump.cpp
     make pdfdump-asan         # ASan + UBSan build
-    clang++ -std=c++17 -O2 -o pdfdump src/pdfdump.cpp
+    clang++ -std=c++17 -O2 -pthread -o pdfdump src/pdfdump.cpp
+    x86_64-w64-mingw32-g++-posix -std=c++17 -O2 -static -o pdfdump.exe src/pdfdump.cpp
     cl /O2 /std:c++17 /EHsc src\pdfdump.cpp          (MSVC, untested)
 
-Tested with g++ 13.3 and clang 18 on Linux x86-64.
+Tested with g++ 13.3 and clang 18 on Linux x86-64; the thread pool is also clean under
+ThreadSanitizer (`-fsanitize=thread`). MinGW needs the posix thread model (`-posix` driver) for
+`std::thread`; the Windows build compiles but has not been run.
 
 ## Options
 
@@ -69,6 +65,8 @@ Tested with g++ 13.3 and clang 18 on Linux x86-64.
 | `-D` | disable dedup of extracted files | dedup on |
 | `-d` | do not derive computable fields | derive on |
 | `-g` | decode CCITT fax images (Group 4, Group 3 1D) to 1 bpp BMP; exact re-encode with the T.4/T.6 mode rules. Without it, fax data matching a TIFF subformat is stored as `.tif` | off |
+| `-a` | RGB images with an 8-bit `/SMask` of the same size: both in one 32 bpp BMP (BGRA) on the image; the mask is restored from its alpha bytes. xz −3% on those images, off by default since BMP recompressors may not take alpha | off |
+| `-j N` | undo the filters of N streams at a time (threads); the dump does not depend on N | one per CPU |
 | `-c MAP` | channel→file map, e.g. `S,N,T,X,O,F,R,B` to split every channel | `SN,TX,O,F,R,B` |
 | `-n` | no verification: skip the final in-memory restore and the per-stream Flate re-encode (about 1.8× faster on Flate-heavy files) | verify on |
 | `-v` / `-q` | per-stream report / quiet | |
@@ -147,6 +145,15 @@ against poppler's `pdfimages` on the test files). Fax data that matches no subfo
   damage). A pre-scan of every `N G obj` header in the file serves the same purpose and works when
   the xref is broken.
 - **Files without `%PDF-`** in the first 1024 bytes go to stored mode, as the plan specifies.
+- **Object syntax stays text** (§3.3, §5.3). Instead of a tagged binary token stream, object text
+  keeps its spelling and only numbers are lifted (`.txn`); the token-stream parts measured
+  against it lost (name table +4%, unescaped strings, gap model; see "xz results"). With no value
+  tags, the M10 item "schema-implied tags" reduces to the `/` that starts a name value after a
+  key with a fixed value type. Dropping all 108,079 of them on the README test set (keys such as
+  `/Type /Subtype /BaseFont /Filter /S /BM /Encoding /ColorSpace`) saves 856 bytes of `.txt` xz
+  (−0.22%): xz already predicts them from the key, so they stay.
+- **Streams are decoded on a thread pool** (`-j`). Dedup is decided in file order first, and
+  results are assembled in stream order, so the dump is byte-identical for any thread count.
 
 ## Tests
 
@@ -182,6 +189,14 @@ supplied PDFs (55.6 MB, orig.xz 47.5 MB).
 | + encrypted strings, inline image filters, linearization forward slots | 59.1% | 8.75 MB |
 | + TIFF container, `.csh` lengths apart from bytes, signature blobs | 59.0% | 8.71 MB |
 
+Integer predictions of M10, measured by switching the delta mode of the per-group number coding
+off (README test set): content-stream operands against the previous use of the same operator and
+slot, `.csn` 3297 KB → 3117 KB (−180 KB); object-text numbers, array elements included, against
+the previous element of their group, `.txn` 395 KB → 388 KB (−7 KB). Both are in (adaptive per
+group). RGB + soft mask as one 32 bpp BMP (M10), 400 pairs in the 808-file set: per-file xz of the
+BMPs 8.41 MB → 8.15 MB (−3.0%, smaller for 347 pairs); built as `-a`, off by default because the
+BMPs go to an image recompressor that may not handle alpha.
+
 Measured and not adopted, because they don't beat xz on this corpus (upper bounds where noted):
 - PNG filters on raw images: raw rows compress best on aggregate.
 - Lifting numbers without grouping, or with plain deltas: both lose to text.
@@ -197,21 +212,36 @@ Measured and not adopted, because they don't beat xz on this corpus (upper bound
 - CCITT G4 / G3 to 1 bpp BMP (M10): implemented, but opt-in (`-g`). xz of the bitmaps is 24%
   larger than the fax data; on the 8 test files with CCITT images, dump.xz goes from 60.8% to
   62.1% of orig.xz. It may pay with a dedicated bilevel recompressor.
+- Hint table regeneration (M9 stage 2): exact ceiling measured by dropping the hint streams'
+  data altogether. On the 78 linearized files of the 808-file set, dump.xz goes from 43.58 MB to
+  43.55 MB (−34.9 KB, −0.08%), and that assumes every table regenerates. Only tables written by
+  qpdf's algorithm would, and few of these files come from qpdf.
+- ToUnicode remap (M10): exact prototype (qpdf JSON for the object graph; page and form
+  resources resolved to fonts; ToUnicode `bfchar`/`bfrange` parsed; a content-stream hex string
+  remapped to UTF-8 when its font's map is injective on the codes used; font id per `Tf` and a
+  flag per string counted as side information). Its unmapped baseline reproduces the real `.csh`
+  within 0.2%. On the 8 files with the most hex text: 260.2 KB → 269.2 KB (+3.5%, worse on 6 of
+  8; Tarasov +4.6 KB, Way of Men +2.2 KB, two files −0.4 KB each).
 - Signature blobs to `.p7s` (M10): adopted, though the test sets have no signed files. On a
   synthetic file with two RSA-2048 signatures (8 KB reserved each), the dump goes from 3084 to
   2952 bytes of xz: certificates and signatures are mostly random bytes, so the gain is the hex
   overhead only. The blobs are standard CMS files for any downstream tool.
 
-Speed of `c`, single thread, 120 files run one after another:
+Speed of `c`, 120 files run one after another on a 4-CPU machine (the dump is byte-identical
+for every `-j`):
 
 | Mode | Aggregate | Slowest files |
 |---|---|---|
-| default (every layer verified) | 1.73 MB/s | 3 files over 50 KB run at 429–484 KB/s |
-| `-n` (no verification) | 2.65 MB/s | 712 KB/s; all files over 50 KB above 700 KB/s |
+| default, 4 threads | 3.28 MB/s | every file at or above 513 KB/s; files over 50 KB at 810 KB/s or more |
+| `-n` (no verification), 4 threads | 4.49 MB/s | every file at or above 678 KB/s |
+| `-j 1` (single thread) | 1.74 MB/s | 4 files over 50 KB at 368–459 KB/s |
+| `-j 1 -n` | 2.65 MB/s | files over 50 KB at 712 KB/s or more |
 
 Almost all the time is preflate: the analysis plus the re-encode that verifies each Flate layer.
 The slow files have level-9 text streams or highly compressible images, where preflate costs
-the most per input byte. Byte-identical streams are decoded once.
+the most per input byte. Byte-identical streams are decoded once. Streams are independent, so
+the filter work runs on a thread pool; the slowest files are those dominated by one large
+stream.
 
 ### Round trip and robustness
 

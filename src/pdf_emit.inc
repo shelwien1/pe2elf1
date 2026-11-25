@@ -232,6 +232,11 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
   Bytes out;
   ObjPositions objPos;
   ctx.objPos = &objPos;
+  std::unordered_map<uint64_t, Bytes> rgbaSrc;  // stored BGRA BMPs of L_RGBA streams, for L_ALPHA
+  ctx.alphaSource = [&](uint64_t k) -> const Bytes* {
+    auto f = rgbaSrc.find(k);
+    return f == rgbaSrc.end() ? nullptr : &f->second;
+  };
   const uint64_t bias = d.hdr.offsetBias;
   DeriveState ds;
   StreamFacts noFacts;
@@ -285,6 +290,7 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
         StreamDesc sd;
         Bytes data;
         readStreamDesc(r, st, sd, data, ordExt);
+        if (!sd.layers.empty() && sd.layers.back().type == L_RGBA) rgbaSrc[streamNo] = data;
         size_t n = r.len(CH_N);
         const uint8_t* p = r.get(CH_T, n);
         uint64_t start = out.size();
