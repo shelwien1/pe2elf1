@@ -12,8 +12,8 @@ files; `d` rebuilds the original byte-for-byte. Design and roadmap: [docs/pdfdum
 
 Milestones **M0–M4** of the plan are implemented: every stream payload is decoded as far as it
 can be re-encoded exactly and written as a typed file, encrypted files included. On top of that,
-the PDF-specific data is transformed so that xz compresses it better. This covers parts of
-M5–M8 and the M10 list:
+the PDF-specific data is transformed so that xz compresses it better. The transforms cover the
+redundancy inventory of §2A, M6, M7, M9 stage 1, and the M10 ideas that measured a gain:
 
 | Transform | What it removes / reorders |
 |---|---|
@@ -31,9 +31,13 @@ M5–M8 and the M10 list:
 | Derived fields | stream `/Length` (direct and indirect object), `/DL`, `/Length1-3`, ObjStm `/N /First`, image `/Width /Height` (BMP header, JPEG SOF), EmbeddedFile `/Params /Size /CheckSum`, `startxref`, trailer `/Prev /Size /XRefStm`, XRef stream `/Prev`: replaced by placeholders the decoder fills in |
 | Small text streams | XMP and other small text streams go to `.txt`, not `.bin` |
 
-Not built: the token-level object coder of M5 (name table, gap model; numbers, derived values and
-encrypted strings are handled by the transforms above), content-stream operator coding beyond
-number lifting (M8), hint table regeneration (M9 stage 2). `-s` above 1 is clamped to 1.
+Plan items measured and not adopted are listed under "xz results" below. Not built, because
+they can't be evaluated here or are out of reach:
+- Hint table regeneration (M9 stage 2): only reproduces tables written by qpdf's algorithm.
+- ToUnicode remap (M10): needs per-stream font resource resolution across streams.
+- RGB + SMask merged into a 32 bpp BMP (M10): only pays with an RGBA codec downstream.
+
+`-s` selects how much of this is applied (see Options).
 
 ## Build
 
@@ -53,10 +57,11 @@ Tested with g++ 13.3 and clang 18 on Linux x86-64.
 |---|---|---|
 | `-P PW` | password for encrypted input, tried as the user password and then as the owner password (`c` only) | the empty user password is always tried first |
 | `-f N` | 0 = keep streams encoded (still decrypted), 1 = undo filters | 1 |
-| `-s N` | syntax depth: 0 = stored, 1 = items + raw object text | 1 |
+| `-s N` | syntax depth: 0 = stored; 1 = items + raw object text (payload extraction only); 2 = + object-level structure (xref, ObjStm, derived fields, encrypted strings, forward slots, object text lifting); 3 = + content streams and CMaps | 3 |
 | `-p N` | small-stream threshold: a stream whose stored form is under N bytes goes to `<P>.bin` instead of its own file | 1024 |
 | `-D` | disable dedup of extracted files | dedup on |
 | `-d` | do not derive computable fields | derive on |
+| `-g` | decode CCITT fax images (Group 4, Group 3 1D) to 1 bpp BMP; exact re-encode with the T.4/T.6 mode rules | off |
 | `-c MAP` | channel→file map, e.g. `S,N,T,X,O,F,R,B` to split every channel | `SN,TX,O,F,R,B` |
 | `-n` | no verification: skip the final in-memory restore and the per-stream Flate re-encode (about 1.8× faster on Flate-heavy files) | verify on |
 | `-v` / `-q` | per-stream report / quiet | |
@@ -159,12 +164,22 @@ supplied PDFs (55.6 MB, orig.xz 47.5 MB).
 | + derived fields (`/Length`, `startxref`, `/Prev`, ...) | 59.1% | 8.75 MB |
 | + encrypted strings, inline image filters, linearization forward slots | 59.1% | 8.75 MB |
 
-Measured and not adopted, because they don't beat xz on this corpus:
+Measured and not adopted, because they don't beat xz on this corpus (upper bounds where noted):
 - PNG filters on raw images: raw rows compress best on aggregate.
 - Lifting numbers without grouping, or with plain deltas: both lose to text.
 - Splitting content streams per operator as text.
-- Unescaping literal strings.
+- Unescaping literal strings (§3.3).
 - Keeping Flate layers with large recon encoded: made the total worse.
+- Moving unfiltered inline image data out of the content streams: −0.2%.
+- Name table (§5.3) on the lifted object text: +4% (worse).
+- Gap model (§3.4): at most −1.5% of `.txt` even with all whitespace canonical.
+- UTF-16BE strings as UTF-8 (§3.3): −0.7 KB.
+- Graph predictors `/Parent` `/Count` (M10): at most −1 KB.
+- Dates as binary, `/ID` pairs (M10): at most −2 KB and −6 KB (`/ID` is random).
+- CCITT G4 / G3 to 1 bpp BMP (M10): implemented, but opt-in (`-g`). xz of the bitmaps is 24%
+  larger than the fax data; on the 8 test files with CCITT images, dump.xz goes from 60.8% to
+  62.1% of orig.xz. It may pay with a dedicated bilevel recompressor.
+- Signature blobs to `.p7s` (M10): no signed files in the test set.
 
 Speed of `c`, single thread, 120 files run one after another:
 
@@ -199,6 +214,7 @@ inserted, duplicated ranges), and the 117 files of the 005 set.
     src/pdf_seg.inc     segmenter: items, stream extents, raw regions, xref sections, trailers
     src/pdf_filt.inc    Flate (preflate wrapper), LZW, AHx, A85, RL, PNG/TIFF predictors
     src/pdf_bmp.inc     BMP3 wrap/unwrap
+    src/pdf_ccitt.inc   CCITT G3/G4 decoder and re-encoder (opt-in layer)
     src/pdf_crypt.inc   MD5, SHA-256/384/512, RC4, AES, standard security handler
     src/pdf_class.inc   ObjStm expansion, classification, signatures, image description
     src/pdf_xref.inc    classic xref sections (I_XREF), object position tracking

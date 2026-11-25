@@ -5,8 +5,8 @@
 //                re-encodes byte-exactly (each decoder checks this itself, through layerEncode).
 //   layerEncode  (both sides):   decoded bytes + recon -> PDF-side bytes.
 
-enum LayerType : uint8_t { L_NONE, L_FLATE, L_LZW, L_AHX, L_A85, L_RL, L_PNG, L_TIFF, L_BMP, L_T1, L_OBJSTM, L_XREFROWS, L_COUNT };
-static const char* const kLayerName[L_COUNT] = {"-", "Flate", "LZW", "AHx", "A85", "RL", "PNG", "TIFF", "BMP", "T1", "ObjStm", "XRefRows"};
+enum LayerType : uint8_t { L_NONE, L_FLATE, L_LZW, L_AHX, L_A85, L_RL, L_PNG, L_TIFF, L_BMP, L_T1, L_OBJSTM, L_XREFROWS, L_CCITT, L_COUNT };
+static const char* const kLayerName[L_COUNT] = {"-", "Flate", "LZW", "AHx", "A85", "RL", "PNG", "TIFF", "BMP", "T1", "ObjStm", "XRefRows", "CCITT"};
 
 struct Layer {
   uint8_t type = L_NONE;
@@ -25,6 +25,8 @@ struct FilterParams {
   int predictor = 1, colors = 1, bpc = 8, columns = 1, earlyChange = 1;
   bool t1Charstrings = true;  // L_T1: also remove charstring encryption
   int64_t objstmN = 0, objstmFirst = 0;  // L_OBJSTM: /N and /First
+  int ccittK = 0, ccittCols = 1728, ccittRows = 0;  // L_CCITT
+  bool ccittEol = false, ccittAlign = false, ccittEob = true, ccittBlack1 = false;
   std::vector<uint64_t> xrefW;                     // L_XREFROWS: /W
   std::vector<std::pair<uint64_t, uint64_t>> xrefIndex;  // L_XREFROWS: /Index ranges
 };
@@ -922,6 +924,9 @@ static bool t1DecodeLayer(const Bytes& in, Bytes& out, Bytes& recon, bool charst
 static bool objstmEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out);  // pdf_objstm.inc
 static bool objstmDecodeLayer(const Bytes& in, int64_t N, int64_t First, Bytes& out, Bytes& recon);
 static bool xrefRowsEncodeLayer(const CodecCtx& ctx, const Bytes& recon, const Bytes& in, Bytes& out);
+static bool ccittEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out);  // pdf_ccitt.inc
+struct CcittParams;
+static bool ccittDecodeFP(const FilterParams& fp, const Bytes& in, Bytes& out, Bytes& recon);
 static bool xrefRowsDecodeLayer(const CodecCtx& ctx, const Bytes& in, const std::vector<uint64_t>& W,
                                 const std::vector<std::pair<uint64_t, uint64_t>>& index, Bytes& out, Bytes& recon);
 
@@ -938,6 +943,7 @@ static bool layerEncode(const CodecCtx& ctx, uint8_t type, const Bytes& recon, c
     case L_T1: return t1EncodeLayer(recon, in, out);
     case L_OBJSTM: return objstmEncodeLayer(recon, in, out);
     case L_XREFROWS: return xrefRowsEncodeLayer(ctx, recon, in, out);
+    case L_CCITT: return ccittEncodeLayer(recon, in, out);
   }
   fail("unknown layer type %d", type);
 }
@@ -959,6 +965,7 @@ static bool layerDecode(const CodecCtx& ctx, uint8_t type, const FilterParams& f
       case L_T1: ok = t1DecodeLayer(in, out, recon, fp.t1Charstrings); break;
       case L_OBJSTM: ok = objstmDecodeLayer(in, fp.objstmN, fp.objstmFirst, out, recon); break;
       case L_XREFROWS: ok = xrefRowsDecodeLayer(ctx, in, fp.xrefW, fp.xrefIndex, out, recon); break;
+      case L_CCITT: ok = ccittDecodeFP(fp, in, out, recon); break;
       default: return false;
     }
     if (!ok) return false;

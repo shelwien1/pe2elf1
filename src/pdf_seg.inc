@@ -34,7 +34,8 @@ struct Segmentation {
 
 class Segmenter {
  public:
-  Segmenter(const uint8_t* d, size_t n, Segmentation& s) : d_(d), n_(n), s_(s) {}
+  Segmenter(const uint8_t* d, size_t n, Segmentation& s, bool xrefItems = true)
+      : d_(d), n_(n), s_(s), xrefItems_(xrefItems) {}
 
   void run() {
     s_.isPdf = false;
@@ -67,6 +68,7 @@ class Segmenter {
   const uint8_t* d_;
   size_t n_;
   Segmentation& s_;
+  bool xrefItems_;
 
   void scanCandidates() {
     const uint8_t* p = d_;
@@ -113,7 +115,7 @@ class Segmenter {
   // text region: classic xref sections become items of their own
   void addRegion(size_t a, size_t b, bool forceRaw) {
     if (b <= a) return;
-    if (!forceRaw) {
+    if (!forceRaw && xrefItems_) {
       const uint8_t* p = d_ + a;
       for (;;) {
         p = memfind(p, (d_ + b) - p, "xref", 4);

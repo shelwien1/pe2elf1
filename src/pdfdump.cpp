@@ -27,6 +27,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -41,6 +42,7 @@ namespace pdd {
 #include "pdf_crypt.inc"
 #include "pdf_filt.inc"
 #include "pdf_bmp.inc"
+#include "pdf_ccitt.inc"
 #include "pdf_t1.inc"
 #include "pdf_objstm.inc"
 #include "pdf_class.inc"
@@ -48,7 +50,10 @@ namespace pdd {
 #include "pdf_cmap.inc"
 #include "pdf_emit.inc"  // includes pdf_derive.inc
 
-static const int kSyntaxLevelMax = 1;  // 1 = items + raw object text (M1..M4)
+// syntax depth: 1 = items + raw object text; 2 = + object-level structure (xref sections and streams,
+// ObjStm headers, derived fields, encrypted strings, forward slots, object text number lifting);
+// 3 = + content streams and CMaps (number/hex lifting, inline image filters, CMap blocks)
+static const int kSyntaxLevelMax = 3;
 
 struct Options {
   std::string password;
@@ -59,6 +64,7 @@ struct Options {
   std::string chanMap = kDefaultChanMap;
   bool noVerify = false;
   bool derive = true;  // derived fields (-d disables)
+  bool ccitt = false;  // decode CCITT fax images to bitmaps (-g)
   int verbose = 0;
   bool quiet = false;
 };
@@ -124,8 +130,9 @@ class Encoder {
     dump.hdr.filterLevel = (uint8_t)opt_.filterLevel;
     dump.hdr.syntaxLevel = (uint8_t)opt_.syntaxLevel;
     bool modelled = false;
+    if (opt_.syntaxLevel < 2) opt_.derive = false;
     if (opt_.syntaxLevel > 0) {
-      Segmenter(in_.data(), in_.size(), seg).run();
+      Segmenter(in_.data(), in_.size(), seg, opt_.syntaxLevel >= 2).run();
       if (seg.isPdf) {
         modelled = true;
         try {
@@ -221,6 +228,7 @@ class Encoder {
   std::unordered_map<int, int> streamOfItem_;
   std::unordered_map<uint32_t, std::vector<int>> streamsByNum_;
   std::unordered_map<uint64_t, std::vector<int>> cache_;
+  uint64_t bias_ = 0;  // offset bias (plan 4, step 1)
 
   // mostly printable ASCII / UTF-8 text (XMP, PostScript, JavaScript, ...)
   static bool isText(const Bytes& b) {
@@ -241,11 +249,13 @@ class Encoder {
   void applyLifts() {
     Bytes sk, nu, hx;
     int ft = dump.hdr.map.fileOf[CH_T];
+    if (opt_.syntaxLevel < 2) return;
     if (ft != 0 && !dump.chan[ft].empty() && liftApply(LIFT_OBJ, dump.chan[ft], sk, nu, hx) && hx.empty()) {
       dump.chan[ft].swap(sk);
       dump.aux[AX_TXN].swap(nu);
       dump.hdr.flags |= kFlagLiftT;
     }
+    if (opt_.syntaxLevel < 3) return;
     Bytes inl;
     if (!dump.classFile[CF_CS].empty() && liftApply(LIFT_CS, dump.classFile[CF_CS], sk, nu, hx, &ctx_, &inl)) {
       dump.classFile[CF_CS].swap(sk);
@@ -483,6 +493,32 @@ class Encoder {
     } else {
       for (auto& f : fl) {
         if (f.name == "Crypt") continue;
+        if (f.name == "CCITTFaxDecode" && opt_.ccitt) {
+          FilterParams fp;
+          if (f.parms) {
+            auto geti = [&](const char* k, int& v) {
+              const Obj* o = idx_.resolve(f.parms->get(k));
+              if (o && o->t == Obj::INT) v = (int)std::max<int64_t>(-1000000, std::min<int64_t>(1000000, o->i));
+            };
+            auto getb = [&](const char* k, bool& v) {
+              const Obj* o = idx_.resolve(f.parms->get(k));
+              if (o && o->t == Obj::BOOL) v = o->i != 0;
+            };
+            geti("K", fp.ccittK);
+            geti("Columns", fp.ccittCols);
+            geti("Rows", fp.ccittRows);
+            getb("EndOfLine", fp.ccittEol);
+            getb("EncodedByteAlign", fp.ccittAlign);
+            getb("EndOfBlock", fp.ccittEob);
+            getb("BlackIs1", fp.ccittBlack1);
+          }
+          Bytes out, recon;
+          if (layerDecode(ctx_, L_CCITT, fp, cur, out, recon)) {
+            s.desc.layers.push_back({L_CCITT, std::move(recon)});
+            cur.swap(out);
+            continue;
+          }
+        }
         if (isTerminalFilter(f.name)) { s.remain = R_TERMINAL; s.stop = f.name; break; }
         uint8_t lt = layerOfFilter(f.name);
         if (!lt) { s.remain = R_ENCODED; s.stop = f.name; break; }
@@ -503,7 +539,26 @@ class Encoder {
     s.decoded = s.data.size();
   }
 
+  // offset bias: with junk before %PDF-, some files count offsets from the header. Pick the bias
+  // under which more classic xref entries / XRef-stream-free objects land on object starts.
+  void chooseBias() {
+    bias_ = 0;
+    if (seg.hdrPos == 0) return;
+    std::unordered_set<uint64_t> starts;
+    for (auto& it : seg.items)
+      if (it.kind == Item::OBJ || it.kind == Item::STREAM) starts.insert(it.start);
+    size_t hit0 = 0, hitB = 0;
+    for (auto& x : seg.xrefs)
+      for (auto& e : x.entries)
+        if (e.type == 'n') {
+          hit0 += starts.count(e.off);
+          hitB += starts.count(e.off + seg.hdrPos);
+        }
+    if (hitB > hit0) bias_ = seg.hdrPos;
+  }
+
   void analyze() {
+    chooseBias();
     // index of top-level objects (latest definition wins)
     for (auto& it : seg.items)
       if (it.kind == Item::OBJ || it.kind == Item::STREAM) idx_.byNum[it.num] = &seg.objs[it.obj];
@@ -596,7 +651,7 @@ class Encoder {
     }
     // object streams: header table derived from the members
     for (auto& s : streams) {
-      if (s.desc.cls != SC_OBJSTM || s.remain != R_DONE) continue;
+      if (s.desc.cls != SC_OBJSTM || s.remain != R_DONE || opt_.syntaxLevel < 2) continue;
       const Obj& d = seg.objs[seg.items[s.item].obj];
       const Obj* N = idx_.resolve(d.get("N"));
       const Obj* F = idx_.resolve(d.get("First"));
@@ -611,7 +666,7 @@ class Encoder {
     }
     // XRef streams: rows predicted from object positions known to the decoder at that point
     for (auto& s : streams) {
-      if (s.desc.cls != SC_XREF || s.remain != R_DONE) continue;
+      if (s.desc.cls != SC_XREF || s.remain != R_DONE || opt_.syntaxLevel < 2) continue;
       const Obj& d = seg.objs[seg.items[s.item].obj];
       const Obj* W = idx_.resolve(d.get("W"));
       const Obj* Ix = idx_.resolve(d.get("Index"));
@@ -642,8 +697,8 @@ class Encoder {
         uint32_t num, gen;
         size_t hl = (it.kind == Item::STREAM ? it.dataStart : it.end) - it.start;
         if (!objHeaderOf(in_.data() + it.start, hl, num, gen)) continue;
-        if (i <= s.item) snap.add(num, gen, it.start);
-        all.add(num, gen, it.start);
+        if (i <= s.item) snap.add(num, gen, it.start - bias_);
+        all.add(num, gen, it.start - bias_);
       }
       Bytes out, recon, out2, recon2;
       ctx_.objPos = &snap;
@@ -729,7 +784,10 @@ class Encoder {
     FwdAnchors fa;
     for (auto& it : seg.items) fa.starts.push_back(it.start);
     fa.fileSize = in_.size();
+    fa.bias = bias_;
+    dump.hdr.offsetBias = bias_;
     std::function<int64_t(uint64_t)> itemAt = [&](uint64_t off) -> int64_t {
+      off += bias_;
       auto f = std::lower_bound(fa.starts.begin(), fa.starts.end(), off);
       return f != fa.starts.end() && *f == off ? (int64_t)(f - fa.starts.begin()) : -1;
     };
@@ -760,7 +818,7 @@ class Encoder {
       if (it.kind == Item::OBJ || it.kind == Item::STREAM) {
         uint32_t num, gen;
         size_t hl = (it.kind == Item::STREAM ? it.dataStart : it.end) - it.start;
-        if (objHeaderOf(in_.data() + it.start, hl, num, gen)) objPos.add(num, gen, it.start);
+        if (objHeaderOf(in_.data() + it.start, hl, num, gen)) objPos.add(num, gen, it.start - bias_);
       }
       st.itemCount[it.kind]++;
       st.itemBytes[it.kind] += len;
@@ -784,7 +842,7 @@ class Encoder {
         }
         case Item::XREF:
           w.u8(CH_S, I_XREF);
-          ds.xrefPos.push_back(it.start);
+          ds.xrefPos.push_back(it.start - bias_);
           ds.lastXrefEnd = xrefEnd(seg.xrefs[it.xref].subs);
           writeXref(w, seg.xrefs[it.xref], objPos, opt_.derive ? &itemAt : nullptr);
           break;
@@ -831,8 +889,8 @@ class Encoder {
           uint32_t lr;
           if (lengthRefOf(in_.data() + it.start, it.dataStart - it.start, lr)) ds.lenRef[lr] = s.payload;
           if (s.desc.cls == SC_XREF) {
-            ds.xrefPos.push_back(it.start);
-            ds.lastXRefStm = (int64_t)it.start;
+            ds.xrefPos.push_back(it.start - bias_);
+            ds.lastXRefStm = (int64_t)(it.start - bias_);
           }
           derived(it.dataEnd, it.end, 3, 0, noFacts, 0);
           w.lenBytes(CH_N, CH_T, txt);
@@ -1105,10 +1163,13 @@ static void usage() {
           "options (c / info):\n"
           "  -P PW    password for encrypted input (user or owner); empty user password is tried automatically\n"
           "  -f N     0 keep streams encoded, 1 undo filters (default 1)\n"
-          "  -s N     syntax depth: 0 stored, 1 items + raw object text (default %d)\n"
+          "  -s N     syntax depth: 0 stored, 1 items + raw object text, 2 + object structure and\n"
+          "           derived fields, 3 + content streams and CMaps (default %d)\n"
           "  -p N     small-stream threshold: streams below N bytes share <P>.bin (default 1024)\n"
           "  -D       disable dedup of extracted streams\n"
           "  -d       do not derive computable fields (/Length, xref offsets, ...)\n"
+          "  -g       decode CCITT fax images (G3 1D, G4) to bitmaps (BMP); off by default: xz\n"
+          "           compresses the bitmaps worse than the fax data, a bilevel recompressor may not\n"
           "  -c MAP   channel->file map, e.g. S,N,T,X,O,F,R,B (default %s)\n"
           "  -n       no verification: skip the final in-memory restore and the per-stream Flate re-encode\n"
           "  -v / -q  per-stream report / quiet\n",
@@ -1154,6 +1215,7 @@ static int realMain(int argc, char** argv) {
         case 'p': opt.smallThreshold = (size_t)num(); break;
         case 'D': opt.dedup = false; break;
         case 'd': opt.derive = false; break;
+        case 'g': opt.ccitt = true; break;
         case 'c': opt.chanMap = val(); break;
         case 'n': opt.noVerify = true; break;
         case 'v': opt.verbose++; break;

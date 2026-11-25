@@ -232,6 +232,7 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
   Bytes out;
   ObjPositions objPos;
   ctx.objPos = &objPos;
+  const uint64_t bias = d.hdr.offsetBias;
   DeriveState ds;
   StreamFacts noFacts;
   Bytes txt;
@@ -259,7 +260,7 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
         const uint8_t* p = r.get(CH_T, n);
         uint32_t num = 0, gen;
         bool hdr = tag == I_OBJ && objHeaderOf(p, n, num, gen);
-        if (hdr) objPos.add(num, gen, out.size());
+        if (hdr) objPos.add(num, gen, out.size() - bias);
         DerivCrypt dc{&d.hdr.fileKey, num, hdr ? gen : 0};
         if (!derivDecode(p, n, noFacts, ds, num, txt, &dc, &local)) fail("bad derived field in item text");
         rebase(out.size());
@@ -267,7 +268,7 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
         break;
       }
       case I_XREF: {
-        ds.xrefPos.push_back(out.size());
+        ds.xrefPos.push_back(out.size() - bias);
         std::vector<std::pair<uint64_t, int64_t>> xf;
         readXref(r, objPos, out, &ds.lastXrefEnd, &xf);
         for (auto& x : xf) fwd.push_back({x.first, 10, 2, (uint64_t)x.second + 1, 0});
@@ -287,7 +288,7 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
         const uint8_t* p = r.get(CH_T, n);
         uint64_t start = out.size();
         uint32_t num = 0, gen = 0;
-        if (objHeaderOf(p, n, num, gen)) objPos.add(num, gen, start);
+        if (objHeaderOf(p, n, num, gen)) objPos.add(num, gen, start - bias);
         int need = derivNeeds(p, n);
         StreamFacts f;
         streamFacts(ctx, sd, data, (need & 1) != 0, (need & 2) != 0, f);
@@ -310,8 +311,8 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
         uint32_t lr;
         if (lengthRefOf(txt.data(), txt.size(), lr)) ds.lenRef[lr] = payload.size();
         if (sd.cls == SC_XREF) {
-          ds.xrefPos.push_back(start);
-          ds.lastXRefStm = (int64_t)start;
+          ds.xrefPos.push_back(start - bias);
+          ds.lastXRefStm = (int64_t)(start - bias);
         }
         streamNo++;
         n = r.len(CH_N);
@@ -335,6 +336,6 @@ static Bytes decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader 
     if (payload.size() != df.sd.payloadLen || df.pos + payload.size() > out.size()) fail("deferred stream size mismatch");
     memcpy(out.data() + df.pos, payload.data(), payload.size());
   }
-  if (!fwdApply(out, itemStart, fwd)) fail("bad forward slot");
+  if (!fwdApply(out, itemStart, fwd, bias)) fail("bad forward slot");
   return out;
 }

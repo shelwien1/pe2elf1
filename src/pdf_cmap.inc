@@ -45,7 +45,11 @@ static bool cmapCaseOf(const std::string& h, int& lower) {
 static void cmapPutHex(Bytes& out, uint64_t v, size_t digits, bool lower) {
   static const char* U = "0123456789ABCDEF";
   static const char* L = "0123456789abcdef";
-  for (size_t k = digits; k-- > 0;) out.push_back((uint8_t)(lower ? L : U)[(v >> (4 * k)) & 15]);
+  const char* hx = lower ? L : U;
+  for (size_t k = digits; k-- > 0;) {
+    unsigned nib = (unsigned)(v >> (4 * k)) & 15u;  // (a local: GCC's UBSan misreports the shift inline)
+    out.push_back((uint8_t)hx[nib]);
+  }
 }
 
 // body [a, b) of one block; true and record on success

@@ -462,7 +462,8 @@ struct FwdPatch {
   int64_t delta;
 };
 
-static bool fwdApply(Bytes& out, const std::vector<uint64_t>& itemStart, const std::vector<FwdPatch>& patches) {
+static bool fwdApply(Bytes& out, const std::vector<uint64_t>& itemStart, const std::vector<FwdPatch>& patches,
+                     uint64_t bias = 0) {
   for (auto& p : patches) {
     uint64_t v;
     if (p.target == 0) v = out.size();
@@ -473,9 +474,10 @@ static bool fwdApply(Bytes& out, const std::vector<uint64_t>& itemStart, const s
         uint64_t e = k + 1 < itemStart.size() ? itemStart[k + 1] : out.size();
         v = e - itemStart[k];
       } else {
-        v = itemStart[k];
+        v = itemStart[k] - bias;
       }
     }
+    if (p.target == 0) v -= bias;
     v += (uint64_t)p.delta;
     char buf[32];
     int l = (p.mode & 2) ? snprintf(buf, sizeof(buf), "%0*llu", p.width, (unsigned long long)v)
@@ -543,17 +545,19 @@ static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const 
 struct FwdAnchors {
   std::vector<uint64_t> starts;  // item starts, ascending
   uint64_t fileSize = 0;
+  uint64_t bias = 0;             // values are file offsets minus this
   // placeholder for position value v of a token with `width` digits; false if no anchor
   bool position(uint64_t v, size_t width, bool zeroPad, Bytes& rep) const {
     uint64_t target;
     int64_t delta;
-    if (v == fileSize) { target = 0; delta = 0; }
+    uint64_t pos = v + bias;  // position in the file
+    if (pos == fileSize) { target = 0; delta = 0; }
     else {
-      auto it = std::upper_bound(starts.begin(), starts.end(), v);
+      auto it = std::upper_bound(starts.begin(), starts.end(), pos);
       if (it == starts.begin()) return false;
       size_t k = (size_t)(it - starts.begin()) - 1;
       target = k + 1;
-      delta = (int64_t)(v - starts[k]);
+      delta = (int64_t)(pos - starts[k]);
       if (delta > 64) return false;
     }
     rep = {kDerivEsc, 'f', (uint8_t)width, (uint8_t)(zeroPad ? 2 : 0)};
@@ -562,6 +566,7 @@ struct FwdAnchors {
     return true;
   }
   bool length(uint64_t itemPos, uint64_t v, size_t width, Bytes& rep) const {
+    itemPos += bias;
     auto it = std::lower_bound(starts.begin(), starts.end(), itemPos);
     if (it == starts.end() || *it != itemPos) return false;
     size_t k = (size_t)(it - starts.begin());

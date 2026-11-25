@@ -25,7 +25,7 @@ static const char* const kChanSuffix[CH_COUNT] = {"meta", "num", "txt", "str", "
 static const char* const kDefaultChanMap = "SN,TX,O,F,R,B";
 
 static const uint8_t kMagic[8] = {'P', 'D', 'F', 'D', 'U', 'M', 'P', 0x1A};
-static const uint32_t kFormatVersion = 4;
+static const uint32_t kFormatVersion = 5;
 
 // Class files: all streams of a class concatenated, regardless of size.
 enum ClassFile { CF_CS, CF_CMAP, CF_COUNT };
@@ -101,6 +101,7 @@ struct DumpHeader {
   Bytes fileKey;               // recovered file encryption key (empty: none)
   uint8_t zlibHdr[2] = {0x78, 0x9C};  // most common zlib header in the file
   uint8_t syntaxLevel = 1, filterLevel = 1;
+  uint64_t offsetBias = 0;  // file offsets in xref data are counted from here (junk before %PDF-)
   uint64_t present = 0;  // which files exist: bit f = channel file f, 8 + c = class file, 16 + a = aux
   ChanMap map;
 };
@@ -132,6 +133,7 @@ static void serializeHeader(const DumpHeader& h, Bytes& out) {
   b.push_back(h.syntaxLevel);
   b.push_back(h.filterLevel);
   putVarTo(b, h.present);
+  putVarTo(b, h.offsetBias);
   out.insert(out.end(), kMagic, kMagic + 8);
   putVarTo(out, b.size());
   out.insert(out.end(), b.begin(), b.end());
@@ -193,6 +195,7 @@ static size_t parseHeader(const Bytes& meta, DumpHeader& h) {
   h.syntaxLevel = meta[p++];
   h.filterLevel = meta[p++];
   h.present = var();
+  h.offsetBias = var();
   if (p > end) fail("dump header overrun");
   return end;
 }
