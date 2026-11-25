@@ -742,6 +742,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   U16 nwz_n[3][2];
   int nwd_n[2];
   int nwg_p[2];
+  // (since format 174) an unbound channel's ABITS counted by its last one (1 + it, 0 none), de and
+  // lbd (how its energy and the subband below's ABITS moved, model.inc), each count from NWA_A,
+  // halved where they reach NWA_L: its first two candidates' outside predictions (model.inc)
+  U16 nwa_n[28][10][10][27];
+  U32 nwa_t[28][10][10];
+  static constexpr double NWA_A = 0.1;
+  static constexpr U32 NWA_L = 512;
   // (a miss's weight, in 16ths: 1 + the log2 of its distance, to 16)
   static int nw_gpen(int g, int v) {
     static const U8 L16[17] = {0, 0, 16, 25, 32, 37, 41, 45, 48, 51, 53, 55, 57, 59, 61, 63, 64};
@@ -1548,6 +1555,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     memset(nw_e0, 0, sizeof nw_e0);
     for (int k = 0; k < 3; k++) nwz_n[k][0] = 32, nwz_n[k][1] = 1;
     nwd_n[0] = nwd_n[1] = 0, nwg_p[0] = nwg_p[1] = 0;
+    memset(nwa_n, 0, sizeof nwa_n), memset(nwa_t, 0, sizeof nwa_t);
     for (int c = 0; c < NCH; c++)
       for (int k = 0; k < NSUB; k++) nw_ba[c][k] = nw_bb[c][k] = nw_bs[c][k] = nw_bf[c][k] = 1.0;
     for (int c = 0; c < NCH; c++) nw_bw[c] = 0.0, nw_lsc[c] = NW_LS;

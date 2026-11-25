@@ -555,6 +555,29 @@ struct Model : ModelX96<f_DEC, LV> {
             sx = dn > 0 ? 2 : dn < 0 ? 3 : 1;
           }
         }
+        // (since format 174 an unbound channel's first two candidates, as abits_code() takes them, by
+        // the counts of its ABITS where its last one, de and lbd were the same (B::nwa_n): their
+        // outside predictions, P(not the first) and P(not the second, not the first), each count
+        // from a tenth, halved at 512. The family has lbd as a context of its mixers alone (abn's
+        // index w), and its counters see neither it with the last ABITS nor de with it: in
+        // `dtswavsample16.wav`'s 6.56 million ABITS the subband below's unchanged leaves this one
+        // so 88.6% of the time, its moving down by one 47.6%, it moving too 29.0%; by such counts
+        // 0.68 bits an ABITS, abn's 0.81)
+        const int nwl = clip(hist.abits[ch][b], 0, 27);
+        if (!bound[ch] && !zk) {
+          const S32 A0 = hist.abits[ch][b], Al = alt >= lo && alt <= hi ? alt + 1 : 0, Bw = b ? s.abits[ch][b - 1] + 1 : 0;
+          const S32 c1 = Sn ? Sn : A0, c2 = Al ? Al : Sn ? A0 : Bw;
+          const U16* const n = B::nwa_n[nwl][de][lbd];
+          const double t = (double)B::nwa_t[nwl][de][lbd], al = B::NWA_A;
+          if (c1 >= 1 && c1 <= 27) {
+            const double p1 = ((double)n[c1 - 1] + al) / (t + 27.0 * al);
+            pq1 = clip((int)(4096.0 * (1.0 - p1) + 0.5), 64, 4096 - 64);
+            if (c2 >= 1 && c2 <= 27 && c2 != c1) {
+              const double p2 = ((double)n[c2 - 1] + al) / (t - (double)n[c1 - 1] + 26.0 * al);
+              pq2 = clip((int)(4096.0 * (1.0 - p2) + 0.5), 64, 4096 - 64);
+            }
+          }
+        }
         if (zk) v = 0;
         else if (!twin_field(fid, ch, b, v, lo, hi) && !(B::ffe_ok && !pass && bound[ch] && B::ff_abits(ch, b, v, lo, hi)))
           v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
@@ -562,6 +585,15 @@ struct Model : ModelX96<f_DEC, LV> {
                          alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag, (fs && ut) || nws ? sx : 0, pq1, pq2, B::ss_rule() || B::ab_rule(), !bound[ch]);
         v = checked(v, lo, hi);
         if (nws) B::nwd_n[0] += v > nws - 1, B::nwd_n[1] += v < nws - 1;
+        if (!bound[ch] && !zk && v >= 0 && v <= 26) {
+          U16* const n = B::nwa_n[nwl][de][lbd];
+          U32& t = B::nwa_t[nwl][de][lbd];
+          n[v]++, t++;
+          if (t >= B::NWA_L) {
+            t = 0;
+            for (int k = 0; k < 27; k++) n[k] = (U16)((n[k] + 1) >> 1), t += n[k];
+          }
+        }
         if (nsv) {
           int* const p = B::nwg_p;
           p[0] += B::nw_gpen(og1 < 0 ? 0 : og1, (int)v) - (p[0] >> 8), p[1] += B::nw_gpen((int)nsv - 1, (int)v) - (p[1] >> 8);
