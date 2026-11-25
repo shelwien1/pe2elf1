@@ -116,10 +116,10 @@ files hold 47%.
 P1 to P4 together: about −620 KB, 7.3% of the PDF-specific total. All four are linear passes
 over data the lifter already walks, so `c` speed is unaffected.
 
-Outcome (section 7 has the details): all eight items are in. PDF-specific xz 8458 KB → 7737 KB
-(−8.5%), dump.xz 59.01% → 57.35% of orig.xz. `c` speed was not unaffected after all: single
-thread, best of 3 runs per file, 2.51 → 2.42 MB/s (−3.5%), every file at 661 KB/s or more; with
-4 threads 4.72 → 4.46 MB/s. The per-group choice among three codings and the walk cost the most;
+Outcome (section 7 has the details): all eight items are in. PDF-specific xz 8458 KB → 7726 KB
+(−8.7%), dump.xz 59.01% → 57.33% of orig.xz. `c` speed was not unaffected after all: single
+thread, best of 3 runs per file, 2.51 → 2.36 MB/s (−6%), every file at 659 KB/s or more; with
+4 threads 4.72 → 4.46 MB/s (measured before the last P8 additions). The per-group choice among three codings and the walk cost the most;
 the lifts' own inverse check is skipped when the final verify runs.
 
 ### P1. One decimal unit per number group
@@ -245,6 +245,7 @@ measured with (section 1: 8.46 MB).
 | + P8 widths of top-level font dictionaries | 27,267,632 (57.42%) | 7,767,744 (−31.3 KB) |
 | + P8 structure parents, derived fields inside ObjStm members | 27,253,688 (57.39%) | 7,753,872 (−13.9 KB) |
 | + P6 (format 8) | 27,236,112 (57.35%) | 7,736,692 (−17.2 KB) |
+| + P8: Type 1, CIDFontType0, `CIDToGIDMap` streams, width arrays as objects, `/ParentTree` (format 9) | 27,228,420 (57.33%) | 7,725,612 (−11.1 KB) |
 
 **P1–P4.** One lifter pass, measured together: −633 KB against the −620 KB estimated. Per group
 the encoder takes the cheapest of the plain form, the unit form (P1) and the residual form (P2,
@@ -279,27 +280,46 @@ Small aux files at the end of `.meta` (their lengths in the header): a file of i
 tar header. Threshold, PDF-specific xz: none 7810.5 KB, 4 KB 7803.8 KB, 16 KB 7801.1 KB, 64 KB
 7799.1 KB, every aux file 7803.6 KB (the large ones lose their neighbours in the tar). 64 KB.
 
-**P8.** Implemented for the font programs and structure trees the dump can reach:
+**P8.** Implemented: widths from the font programs, `/P` and `/ParentTree` from `/K`.
 
-- `/Widths` of simple TrueType fonts (`/FontFile2`), simple Type1C fonts (`/FontFile3`, built-in
-  CFF encoding), `/W` of CIDFontType2 fonts with an identity `CIDToGIDMap`. A placeholder in place
-  of the array's `[` names the kind, the code-to-glyph map (TrueType: (3,0) at 0xF000 + code,
-  (1,0), (3,1), glyph id = code), the rounding rule (round, floor, ceil of advance · 1000 /
-  unitsPerEm, or rounded to 1–3 decimals) and the font program's own-file ordinal; every width
-  the font predicts exactly becomes a 2-byte placeholder, the others stay numbers. The encoder
-  picks the map and rule with the most hits per array. Own-file ordinals are assigned (and
-  duplicates found) before the first item is written, since a font dictionary often comes before
-  its font program. 52,949 widths in 411 arrays.
+- Widths: `/Widths` of simple TrueType (`/FontFile2`), Type1C (`/FontFile3`, built-in CFF
+  encoding) and Type 1 fonts (`/FontFile`: `hsbw` / `sbw` of each charstring, a `div` in front
+  of it included, read from the `.t1d` stored form with the L_T1 recon carried in the
+  placeholder; the font's own encoding or StandardEncoding); `/W` of CIDFontType2 (identity
+  `CIDToGIDMap` or the map stream's bytes) and CIDFontType0 fonts (CID → glyph by the CFF charset,
+  default and nominal width per FDArray font DICT). A placeholder in place of the array's `[`
+  names the kind, the code-to-glyph map, the rounding rule (round, floor, ceil of advance · 1000 /
+  unitsPerEm, or rounded to 1–3 decimals) and the sources: an own file (`o<ordinal>.<ext>`) or a
+  stream stored inline in an earlier item (`s<object number>`, the decoder keeps those up to
+  64 KB). Every width the font predicts exactly becomes a 2-byte placeholder, the others stay
+  numbers; the encoder picks the map and rule with the most hits per array, and derives an array
+  only when at least 20% of its widths match (70% for Type 1, see below). Arrays that are objects
+  of their own (pdfTeX writes all its `/Widths` that way) are derived from the font dictionary that
+  names them. Own-file ordinals are assigned (and duplicates found) before the first item is
+  written, since a font dictionary often comes before its font program. 62,757 widths in 545
+  arrays: CIDFontType2 26,571 (743 of them through map streams), TrueType 21,338, Type1C 13,135,
+  CIDFontType0 555, Type 1 415.
 - `/P` of structure elements: both sides keep a child → parent map from every `/K` seen so far
   (top-level objects in item order, ObjStm members in member order) and replace a `/P` the map
   predicts. 16,198 of the 18,991 parents that come before their children.
-- Derived fields inside ObjStm members (needed by both: 78% of the structure elements and most
-  font dictionaries of modern files are members). The member text is stored with placeholders
-  (stream flag); a `/P` placeholder carries its member index, and the decoder finds the member
-  boundaries in the restored text with the ObjStm layer's own offset prediction.
-- Not covered: Type 1 fonts (`/FontFile`; TeX writes widths for the whole code range from TFM
-  metrics, 15% match), `CIDToGIDMap` streams (26 fonts), CIDFontType0 (605 widths), parents that
-  come after their children (10,066).
+- `/ParentTree`: the same pass records page `/StructParents`, object `/StructParent`, each
+  element's MCIDs (with its `/Pg`, or the MCR's) and OBJRs. A `/Nums` leaf, or an array object
+  that is a `/Nums` value, has every reference the records predict replaced. 19,930 of the
+  45,809 entries; 22,533 are predictable at all (20,292 of the others are in two files whose
+  pages carry no `/StructParents`, 1,870 are not references), the rest come before their
+  elements.
+- Derived fields inside ObjStm members (needed by all of the above: 78% of the structure
+  elements and most font dictionaries of modern files are members). The member text is stored
+  with placeholders (stream flag); placeholders that need the structure records carry their
+  member index, and the decoder finds the member boundaries in the restored text with the ObjStm
+  layer's own offset prediction.
+- A placeholder never follows `obj` directly: the decoder reads the `N G obj` header before it
+  resolves any placeholder, so for `12 0 obj[...` the array header goes after the bracket.
+- Type 1 threshold. TeX writes widths for the whole code range from TFM metrics, with a decimal
+  (277.8 where the charstring says 277), and the placeholder carries the L_T1 recon: derived
+  wherever 3 or more widths match, Type 1 arrays cost +1.9 KB over leaving them; at 70% they are
+  neutral (415 widths, fonts other than TeX's). PDF-specific xz: any 3 hits 7733.7 KB, 30%
+  everywhere 7727.7 KB, 20% with Type 1 at 70% 7725.6 KB, Type 1 off 7725.6 KB.
 
 Measured before the implementation, with pikepdf and fontTools on the 120 files:
 

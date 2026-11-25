@@ -31,8 +31,8 @@ redundancy inventory of §2A, M6, M7, M9 stage 1, and the M10 ideas that measure
 | Inline images with filters | `BI … ID <data> EI` whose filters (Flate, LZW, A85, AHx, RL, predictors) can be undone exactly → decoded data and recon in `.csi` |
 | TIFF container (`L_TIFW`) | streams matching a TIFF subformat become the single strip of a baseline TIFF (`.tif`): CCITT fax data (compression 4 = G4, 3 = G3 with EOLs, 2 = 1D byte-aligned), image data left Flate/LZW/RunLength-encoded (8, 5, 32773, Predictor 1 or 2), and raw samples BMP can't hold (2 or 16 bpc, 2-bit palette, data longer than the image). Nothing is re-coded; `d` takes the strip back out |
 | Derived fields | stream `/Length` (direct and indirect object), `/DL`, `/Length1-3`, ObjStm `/N /First`, image `/Width /Height` and `/DecodeParms /Columns /Rows` (BMP / TIFF header, JPEG SOF), EmbeddedFile `/Params /Size /CheckSum`, `startxref`, trailer `/Prev /Size /XRefStm`, XRef stream `/Prev`: replaced by placeholders the decoder fills in |
-| Widths from the font programs | `/Widths` of simple TrueType and Type1C fonts, `/W` of CIDFontType2 fonts (identity `CIDToGIDMap`): every width the embedded font program predicts (glyph advance · 1000 / unitsPerEm, map and rounding chosen per array) becomes a placeholder; the decoder reads the font's own file. 52,949 widths in 411 arrays of the 120 test files |
-| Structure parents | `/P` of a structure element, when an earlier object's `/K` lists the element: 16,198 in the 120 test files |
+| Widths from the font programs | `/Widths` of simple TrueType, Type1C and Type 1 fonts (`hsbw`/`sbw` of the charstrings), `/W` of CIDFontType2 (identity `CIDToGIDMap` or the map stream) and CIDFontType0 fonts: every width the embedded font program predicts (glyph advance · 1000 / unitsPerEm, map and rounding chosen per array) becomes a placeholder; the decoder reads the font's own file, or a stream stored inline in an earlier item. Arrays in the font dictionary or objects of their own; only arrays where 20% of the widths match (70% for Type 1). 62,757 widths in 545 arrays of the 120 test files |
+| Structure parents | `/P` of a structure element, when an earlier object's `/K` lists the element: 16,198 in the 120 test files. `/ParentTree` leaves and their per-page arrays: references predicted from page `/StructParents` and the MCIDs and OBJRs of the elements seen so far: 19,930 |
 | Derived fields in ObjStm members | the placeholders above also inside object streams (member text stored with placeholders, a stream flag says so); 78% of the structure elements and most font dictionaries of modern files are members |
 | Signature blobs | a hex `/Contents` string holding one DER SEQUENCE and then only zero bytes (the space a signature dictionary reserves) → the DER element to `.p7s` (CMS / PKCS#7, elements concatenated), case and padding length in the placeholder |
 | RGB + soft mask (`-a`, `L_RGBA` / `L_ALPHA`) | an RGB image and its 8-bit `/SMask` of the same size as one BGRA BMP on the image; the mask's stream keeps no data and is restored, deferred, from the alpha bytes |
@@ -213,6 +213,7 @@ supplied PDFs (55.6 MB, orig.xz 47.5 MB).
 | + plan2 P7: item lengths; small aux files in `.meta` | 57.5% | 7.80 MB |
 | + plan2 P8: widths from font programs, structure parents, derived fields in ObjStm members | 57.4% | 7.75 MB |
 | + plan2 P6: Type 1 operands by (operator, operand count) | 57.35% | 7.74 MB |
+| + plan2 P8: Type 1 / CIDFontType0 / map-stream widths, width arrays as objects, `/ParentTree` | 57.33% | 7.73 MB |
 
 Integer predictions of M10, measured by switching the delta mode of the per-group number coding
 off (README test set): content-stream operands against the previous use of the same operator and
@@ -256,8 +257,9 @@ Measured and not adopted, because they don't beat xz on this corpus (upper bound
   in the 808-file set. It may suit attachments (`.eml`) as a separate stage after `pdfdump`.
 - Type 1 charstring operands grouped with the slot in the key (plan2 P6 as prototyped): `.t1d`
   +1.02%; by (operator, operand count), adopted, −1.09%.
-- Widths of Type 1 (`/FontFile`) fonts from their charstrings (plan2 P8): 15% exact; TeX writes
-  widths for the whole code range from TFM metrics, with a decimal.
+- Widths of Type 1 (`/FontFile`) fonts from their charstrings wherever 3 widths match (plan2 P8):
+  +1.9 KB against leaving those arrays; TeX writes widths for the whole code range from TFM
+  metrics, with a decimal. Adopted for arrays where 70% match (neutral here).
 - Signature blobs to `.p7s` (M10): adopted, though the test sets have no signed files. On a
   synthetic file with two RSA-2048 signatures (8 KB reserved each), the dump goes from 3084 to
   2952 bytes of xz: certificates and signatures are mostly random bytes, so the gain is the hex
@@ -271,9 +273,10 @@ The dump is byte-identical for every `-j` and with or without `-n`.
 |---|---|---|---|
 | default, 4 threads | 4.46 MB/s | every file at 671 KB/s or more | 4.72 MB/s, 673 KB/s |
 | `-n` (no verification), 4 threads | 5.92 MB/s | every file at 871 KB/s or more | 6.46 MB/s, 783 KB/s |
-| `-j 1` (single thread) | 2.42 MB/s | every file at 661 KB/s or more | 2.51 MB/s, 679 KB/s |
+| `-j 1` (single thread) | 2.36 MB/s | every file at 659 KB/s or more | 2.51 MB/s, 679 KB/s |
 | `-j 1 -n` | 3.23 MB/s | every file at 874 KB/s or more | 3.52 MB/s, 776 KB/s |
 
+The `-j 1` row is the final build (format 9); the other rows were measured one commit earlier.
 Plan2's number lifting is most of the difference: on intel.pdf it takes 0.19 s of 1.05 s. With
 verification on, the lifts skip their own inverse check (the final verify restores everything
 anyway); if that verify fails, the encoder redoes the lifts with their checks before it would
