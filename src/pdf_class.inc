@@ -42,23 +42,22 @@ static const char* sniffExt(const uint8_t* p, size_t n) {
   return nullptr;
 }
 
-// extension from an attachment file name: [a-z0-9]{1,8}
-static std::string fileNameExt(const std::string& name0) {
-  std::string name = name0;
-  if (name.size() >= 2 && (uint8_t)name[0] == 0xFE && (uint8_t)name[1] == 0xFF) {
-    std::string a;
-    for (size_t i = 2; i + 1 < name.size(); i += 2) a += name[i] ? '?' : name[i + 1];
-    name = a;
+// extension from an attachment file name: [a-z0-9]{1,8}, else empty
+static ShortName fileNameExt(const std::string& name) {
+  // UTF-16BE (BOM FE FF): character k at 2 + 2k; a character over 0xFF reads as '?'
+  bool u16 = name.size() >= 2 && (uint8_t)name[0] == 0xFE && (uint8_t)name[1] == 0xFF;
+  size_t nc = u16 ? (name.size() - 2) / 2 : name.size();
+  auto at = [&](size_t k) -> char { return u16 ? (name[2 + 2 * k] ? '?' : name[3 + 2 * k]) : name[k]; };
+  ShortName e;
+  size_t dot = nc;
+  while (dot > 0 && at(dot - 1) != '.') dot--;
+  if (dot == 0) return e;
+  if (nc - dot > 8) return e;
+  for (size_t k = dot; k < nc; k++) {
+    char c = (char)tolower((unsigned char)at(k));
+    if (!isalnum((unsigned char)c) || (unsigned char)at(k) >= 0x80) { e.clear(); return e; }
+    e.append(&c, 1);
   }
-  size_t dot = name.rfind('.');
-  if (dot == std::string::npos) return "";
-  std::string e;
-  for (size_t i = dot + 1; i < name.size(); i++) {
-    char c = (char)tolower((unsigned char)name[i]);
-    if (!isalnum((unsigned char)c) || (unsigned char)name[i] >= 0x80) return "";
-    e += c;
-  }
-  if (e.empty() || e.size() > 8) return "";
   return e;
 }
 
@@ -239,7 +238,7 @@ struct ImgColor {
   int64_t bpc = -1;
   bool mask = false, inverted = false;  // /ImageMask; /Decode starts high-to-low
   int comps = 0;                        // components; -1 Indexed; 0 unknown
-  std::vector<uint32_t> palette;        // Indexed over gray / RGB: 2^bpc entries, 0x00RRGGBB
+  Palette palette;                      // Indexed over gray / RGB: 2^bpc entries
 };
 
 static bool imageColor(const ObjIndex& idx, const Obj& d, const std::function<const Bytes*(const Obj*)>& streamData,
@@ -322,8 +321,8 @@ static bool imageColor(const ObjIndex& idx, const Obj& d, const std::function<co
   return true;
 }
 
-static void grayRamp(std::vector<uint32_t>& pal, int bits, bool inv) {
-  int nent = 1 << bits;
+static void grayRamp(Palette& pal, int bits, bool inv) {
+  int nent = 1 << bits;  // bits 1..8
   for (int i = 0; i < nent; i++) {
     int v = i * 255 / (nent - 1);
     if (inv) v = 255 - v;

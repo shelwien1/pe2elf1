@@ -20,82 +20,100 @@ struct TiffSpec {
   int compression = 1;   // 1, 2, 3, 4, 5, 8, 32773
   int predictor = 1;     // 1 or 2
   uint32_t t4 = 0;       // T4Options (compression 3)
-  std::vector<uint32_t> palette;  // 0x00RRGGBB, 2^bps entries (photometric 3)
+  Palette palette;       // 2^bps entries (photometric 3)
 };
 
 static bool tiffWrap(const TiffSpec& sp, const Bytes& strip, Bytes& out) {
   if (!sp.width || !sp.height || sp.spp < 1 || sp.spp > 8 || strip.size() >= 0xFFFFFF00u) return false;
   if (sp.photometric == 3 && sp.palette.size() != ((size_t)1 << sp.bps)) return false;
-  struct E { uint16_t tag, type; uint32_t count; Bytes v; };
-  std::vector<E> es;
-  auto shorts = [&](uint16_t tag, const std::vector<uint32_t>& vs) {
-    E e{tag, 3, (uint32_t)vs.size(), {}};
-    for (uint32_t x : vs) { e.v.push_back((uint8_t)(x >> 8)); e.v.push_back((uint8_t)x); }
-    es.push_back(std::move(e));
+  // at most 17 tags; values: BitsPerSample <= 16 bytes, ColorMap <= 3 * 256 shorts
+  struct E { uint16_t tag, type; uint32_t count, off, len; };
+  FixedVec<E, 20> es;
+  uint8_t vb[2048];
+  size_t vn = 0;
+  bool room = true;
+  auto add = [&](uint16_t tag, uint16_t type, uint32_t count, const uint8_t* v, size_t len) {
+    if (len > sizeof(vb) - vn || !es.push_back(E{tag, type, count, (uint32_t)vn, (uint32_t)len})) { room = false; return; }
+    memcpy(vb + vn, v, len);
+    vn += len;
   };
+  auto shortsN = [&](uint16_t tag, const uint32_t* vs, size_t n) {
+    uint8_t v[2 * 3 * 256];
+    if (n > sizeof(v) / 2) { room = false; return; }
+    for (size_t i = 0; i < n; i++) { v[2 * i] = (uint8_t)(vs[i] >> 8); v[2 * i + 1] = (uint8_t)vs[i]; }
+    add(tag, 3, (uint32_t)n, v, 2 * n);
+  };
+  auto shorts = [&](uint16_t tag, uint32_t x) { shortsN(tag, &x, 1); };
   auto longv = [&](uint16_t tag, uint32_t x) {
-    E e{tag, 4, 1, {}};
-    for (int k = 3; k >= 0; k--) e.v.push_back((uint8_t)(x >> (8 * k)));
-    es.push_back(std::move(e));
+    uint8_t v[4];
+    for (int k = 0; k < 4; k++) v[k] = (uint8_t)(x >> (8 * (3 - k)));
+    add(tag, 4, 1, v, 4);
   };
   auto rational = [&](uint16_t tag, uint32_t a, uint32_t b) {
-    E e{tag, 5, 1, {}};
-    for (uint32_t x : {a, b})
-      for (int k = 3; k >= 0; k--) e.v.push_back((uint8_t)(x >> (8 * k)));
-    es.push_back(std::move(e));
+    uint8_t v[8];
+    for (int k = 0; k < 4; k++) { v[k] = (uint8_t)(a >> (8 * (3 - k))); v[4 + k] = (uint8_t)(b >> (8 * (3 - k))); }
+    add(tag, 5, 1, v, 8);
   };
   longv(256, sp.width);
   longv(257, sp.height);
-  shorts(258, std::vector<uint32_t>((size_t)sp.spp, (uint32_t)sp.bps));
-  shorts(259, {(uint32_t)sp.compression});
-  shorts(262, {(uint32_t)sp.photometric});
+  uint32_t bps[8];
+  for (int k = 0; k < sp.spp; k++) bps[k] = (uint32_t)sp.bps;
+  shortsN(258, bps, (size_t)sp.spp);
+  shorts(259, (uint32_t)sp.compression);
+  shorts(262, (uint32_t)sp.photometric);
   longv(273, 0);  // StripOffsets, set below
-  shorts(277, {(uint32_t)sp.spp});
+  shorts(277, (uint32_t)sp.spp);
   longv(278, sp.height);
   longv(279, (uint32_t)strip.size());
   rational(282, 72, 1);
   rational(283, 72, 1);
-  shorts(284, {1});
+  shorts(284, 1);
   if (sp.compression == 3) longv(292, sp.t4);
   if (sp.compression == 4) longv(293, 0);
-  shorts(296, {2});
-  if (sp.predictor == 2) shorts(317, {2});
+  shorts(296, 2);
+  if (sp.predictor == 2) shorts(317, 2);
   if (sp.photometric == 3) {
-    std::vector<uint32_t> cm;
+    uint32_t cm[3 * 256];
+    size_t nc = 0;
     for (int ch = 2; ch >= 0; ch--)
-      for (uint32_t c : sp.palette) cm.push_back(((c >> (8 * ch)) & 0xFF) * 257);
-    shorts(320, cm);
+      for (uint32_t c : sp.palette) cm[nc++] = ((c >> (8 * ch)) & 0xFF) * 257;
+    shortsN(320, cm, nc);
   }
-  if (sp.photometric == 5) shorts(332, {1});
+  if (sp.photometric == 5) shorts(332, 1);
+  if (!room) return false;
   size_t ifd = 8, extra = ifd + 2 + 12 * es.size() + 4, x = extra;
   for (auto& e : es)
-    if (e.v.size() > 4) x += (e.v.size() + 1) & ~(size_t)1;
+    if (e.len > 4) x += (e.len + 1) & ~(size_t)1;
   for (auto& e : es)
     if (e.tag == 273)
-      for (int k = 0; k < 4; k++) e.v[k] = (uint8_t)(x >> (8 * (3 - k)));
+      for (int k = 0; k < 4; k++) vb[e.off + k] = (uint8_t)(x >> (8 * (3 - k)));
   out.clear();
   out.reserve(x + strip.size());
   const uint8_t hdr[8] = {'M', 'M', 0, 42, 0, 0, 0, 8};
   out.insert(out.end(), hdr, hdr + 8);
   out.push_back((uint8_t)(es.size() >> 8));
   out.push_back((uint8_t)es.size());
-  Bytes ext;
+  size_t extAt = out.size() + 12 * es.size() + 4, ext = 0;  // values over 4 bytes follow the IFD
   for (auto& e : es) {
     out.push_back((uint8_t)(e.tag >> 8)); out.push_back((uint8_t)e.tag);
     out.push_back((uint8_t)(e.type >> 8)); out.push_back((uint8_t)e.type);
     for (int k = 3; k >= 0; k--) out.push_back((uint8_t)(e.count >> (8 * k)));
-    if (e.v.size() <= 4) {
-      out.insert(out.end(), e.v.begin(), e.v.end());
-      out.insert(out.end(), 4 - e.v.size(), 0);
+    if (e.len <= 4) {
+      out.insert(out.end(), vb + e.off, vb + e.off + e.len);
+      out.insert(out.end(), 4 - e.len, 0);
     } else {
-      size_t off = extra + ext.size();
+      size_t off = extra + ext;
       for (int k = 3; k >= 0; k--) out.push_back((uint8_t)(off >> (8 * k)));
-      ext.insert(ext.end(), e.v.begin(), e.v.end());
-      if (ext.size() & 1) ext.push_back(0);
+      ext += (e.len + 1) & ~(size_t)1;
     }
   }
   out.insert(out.end(), 4, 0);  // no next IFD
-  out.insert(out.end(), ext.begin(), ext.end());
+  if (out.size() != extAt) return false;
+  for (auto& e : es)
+    if (e.len > 4) {
+      out.insert(out.end(), vb + e.off, vb + e.off + e.len);
+      if (e.len & 1) out.push_back(0);
+    }
   out.insert(out.end(), strip.begin(), strip.end());
   return out.size() == x + strip.size();
 }

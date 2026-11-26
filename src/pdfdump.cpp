@@ -63,6 +63,8 @@ namespace pdd {
 // 3 = + content streams and CMaps (number/hex lifting, inline image filters, CMap blocks)
 static const int kSyntaxLevelMax = 3;
 
+static const unsigned kMaxThreads = 256;  // -j and the default (one per CPU) are capped here
+
 struct Options {
   std::string password;
   int filterLevel = 1;
@@ -134,7 +136,7 @@ class Encoder {
   Security sec;
   std::vector<StreamRec> streams;
   bool stored = false;
-  std::string storedReason;
+  Message storedReason;
   double tEncode = 0, tVerify = 0, tLift = 0;
 
   void run() {
@@ -160,30 +162,31 @@ class Encoder {
         tLift = secondsSince(tl);
         if (failed()) {
           modelled = false;
-          storedReason = "encoder error: " + failMessage();
+          storedReason.format("encoder error: %s", failMessage());
           failClear();
         }
       } else {
-        storedReason = "no %PDF- header in the first 1024 bytes";
+        storedReason.set("no %PDF- header in the first 1024 bytes");
       }
     } else {
-      storedReason = "syntax level 0";
+      storedReason.set("syntax level 0");
     }
     tEncode = secondsSince(t0);
     if (modelled && !opt_.noVerify) {
       auto t1 = std::chrono::steady_clock::now();
-      std::string why = verifyDump();
+      Message why = verifyDump();
       if (!why.empty() && liftsUnchecked_) {
         // a lift that its own check would have refused: redo the lifts with the checks
         undoLifts();
         applyLifts(true);
-        why = failed() ? failMessage() : verifyDump();
+        if (failed()) why.set(failMessage());
+        else why = verifyDump();
         failClear();
       }
       tVerify = secondsSince(t1);
       if (!why.empty()) {
         modelled = false;
-        storedReason = "verify failed: " + why;
+        storedReason.format("verify failed: %s", why.c_str());
         fprintf(stderr, "pdfdump: internal error, %s; writing stored mode\n", storedReason.c_str());
       }
     }
@@ -226,10 +229,10 @@ class Encoder {
         writeFile(prefix + "." + kAuxSuffix[a], dump.aux[a].data(), dump.aux[a].size());
     for (size_t i = 0; i < dump.ownData.size(); i++) {
       const Bytes& b = dump.ownData[i];
-      writeFile(ownFileName(prefix, (uint32_t)i, dump.ownExt[i]), b.data(), b.size());
+      writeFile(ownFileName(prefix, (uint32_t)i, dump.ownExt[i].c_str()), b.data(), b.size());
     }
     for (size_t i = 0; i < dump.blobData.size(); i++)
-      writeFile(ownFileName(prefix, kBlobFileBit | (uint32_t)i, dump.blobExt[i]), dump.blobData[i].data(),
+      writeFile(ownFileName(prefix, kBlobFileBit | (uint32_t)i, dump.blobExt[i].c_str()), dump.blobData[i].data(),
                 dump.blobData[i].size());
   }
 
@@ -253,7 +256,7 @@ class Encoder {
   std::vector<uint32_t> ownOrd_;                     // stream -> own-file ordinal (ST_FILE)
   std::unordered_map<uint32_t, size_t> streamByNum_;  // object number -> stream
   FontCache fontCache_;                               // metrics of recent font programs
-  std::vector<std::string> ordExt_;                      // own-file ordinal -> extension
+  std::vector<ShortName> ordExt_;                        // own-file ordinal -> extension
   std::unordered_map<uint32_t, const Obj*> widthArrays_;  // array object -> font dictionary naming it
   std::unordered_map<uint32_t, uint32_t> numsArrays_;     // array object -> its /Nums key
   std::unordered_map<uint32_t, size_t> inlineSeen_;       // inline-stored streams written so far
@@ -304,8 +307,8 @@ class Encoder {
   }
 
   // the in-memory restore of the whole dump; "" if it reproduces the input
-  std::string verifyDump() {
-    std::string why;
+  Message verifyDump() {
+    Message why;
     {
       FastRestore fast = [&](size_t k, const StreamDesc& sd, const Bytes& stored, Bytes& payload) {
         if (k >= streams.size()) return false;
@@ -322,8 +325,8 @@ class Encoder {
         return true;
       };
       Bytes re;
-      if (!decodeDump(dump, 0, nullptr, re, &fast, &b64Orig_)) why = failMessage();
-      else if (re != in_) why = "restored file differs from input";
+      if (!decodeDump(dump, 0, nullptr, re, &fast, &b64Orig_)) why.set(failMessage());
+      else if (re != in_) why.set("restored file differs from input");
       failClear();
     }
     return why;
@@ -373,10 +376,10 @@ class Encoder {
     };
     unsigned nt = opt_.threads ? opt_.threads : std::max(1u, std::thread::hardware_concurrency());
     if (nt > 1) {
-      std::string e1;  // an error the other thread recorded (thread-local), passed on here
+      Message e1;  // an error the other thread recorded (thread-local), passed on here
       std::thread th([&] {
         runObj();
-        if (failed()) e1 = failMessage();
+        if (failed()) e1.set(failMessage());
       });
       runCs();
       th.join();
@@ -470,7 +473,8 @@ class Encoder {
       for (auto& f : fl)
         if (f.name == "Crypt") {
           const Obj* n = f.parms ? idx_.resolve(f.parms->get("Name")) : nullptr;
-          return sec.filterCipher(n && n->t == Obj::NAME ? n->s : "Identity");
+          if (n && n->t == Obj::NAME) return sec.filterCipher(n->s.data(), n->s.size());
+          return CI_NONE;
         }
       if (t && t->isName("EmbeddedFile")) return sec.embeddedCipher();
       if (t && t->isName("Metadata") && !sec.encryptMetadata) return CI_NONE;
@@ -516,7 +520,7 @@ class Encoder {
 
   // most common zlib header among Flate streams (plaintext)
   void chooseZlibHeader() {
-    std::map<uint16_t, size_t> cnt;
+    std::unique_ptr<uint64_t[]> cnt(new uint64_t[65536]());  // per 16-bit header
     for (auto& it : seg.items) {
       if (it.kind != Item::STREAM || it.dataEnd - it.dataStart < 2) continue;
       const Obj& d = seg.objs[it.obj];
@@ -545,12 +549,12 @@ class Encoder {
       }
       if (zlibHeaderValid(h[0], h[1])) cnt[(uint16_t)(h[0] << 8 | h[1])]++;
     }
-    size_t best = 0;
-    for (auto& c : cnt)
-      if (c.second > best) {
-        best = c.second;
-        dump.hdr.zlibHdr[0] = (uint8_t)(c.first >> 8);
-        dump.hdr.zlibHdr[1] = (uint8_t)c.first;
+    uint64_t best = 0;
+    for (uint32_t c = 0; c < 65536; c++)
+      if (cnt[c] > best) {
+        best = cnt[c];
+        dump.hdr.zlibHdr[0] = (uint8_t)(c >> 8);
+        dump.hdr.zlibHdr[1] = (uint8_t)c;
       }
     ctx_.zlibHdr[0] = dump.hdr.zlibHdr[0];
     ctx_.zlibHdr[1] = dump.hdr.zlibHdr[1];
@@ -634,18 +638,23 @@ class Encoder {
     // largest first, so one big stream does not finish last on its own
     std::stable_sort(work.begin(), work.end(), [&](size_t a, size_t b) { return streams[a].payload > streams[b].payload; });
     // an error a worker records stops nothing else: it is passed on afterwards, first by stream
-    std::vector<std::string> err(streams.size());
+    std::mutex errMu;
+    size_t errAt = SIZE_MAX;
+    Message err;
     std::atomic<size_t> next{0};
     auto worker = [&]() {
       for (size_t k; (k = next++) < work.size();) {
         failClear();
         processStream(streams[work[k]]);
-        if (failed()) err[work[k]] = failMessage();
+        if (failed()) {
+          std::lock_guard<std::mutex> lk(errMu);
+          if (work[k] < errAt) { errAt = work[k]; err.set(failMessage()); }
+        }
         failClear();
       }
     };
     unsigned nt = opt_.threads ? opt_.threads : std::max(1u, std::thread::hardware_concurrency());
-    nt = (unsigned)std::min<size_t>(nt, work.size());
+    nt = (unsigned)std::min<size_t>(std::min(nt, kMaxThreads), work.size());
     // tables that preflate and the AES code build lazily on first use: build them before the pool
     PreflateBlockTrees::staticLitLenTreeDecoder();
     PreflateBlockTrees::staticDistTreeDecoder();
@@ -655,15 +664,14 @@ class Encoder {
     if (nt <= 1) {
       worker();
     } else {
-      std::vector<std::thread> pool;
-      for (unsigned t = 0; t < nt; t++) pool.emplace_back(worker);
-      for (auto& t : pool) t.join();
+      std::thread pool[kMaxThreads];
+      for (unsigned t = 0; t < nt; t++) pool[t] = std::thread(worker);
+      for (unsigned t = 0; t < nt; t++) pool[t].join();
     }
-    for (auto& e : err)
-      if (!e.empty()) {
-        fail("%s", e.c_str());
-        return;
-      }
+    if (errAt != SIZE_MAX) {
+      fail("%s", err.c_str());
+      return;
+    }
     for (size_t i = 0; i < streams.size(); i++)
       if (dupOf[i] >= 0) copyResult(streams[i], streams[(size_t)dupOf[i]]);
   }
@@ -1074,28 +1082,29 @@ class Encoder {
     // extension and storage
     for (auto& s : streams) {
       uint8_t cls = s.desc.cls;
-      std::string ext;
+      ShortName ext;
       if (s.tif) {
-        ext = "tif";
+        ext.set("tif");
       } else if (s.remain == R_ENCRYPTED) {
-        ext = "enc";
+        ext.set("enc");
       } else if (s.remain == R_TERMINAL) {
-        if (s.stop == "DCTDecode") ext = "jpg";
-        else if (s.stop == "JPXDecode") ext = sniffExt(s.data.data(), s.data.size()) && std::string(sniffExt(s.data.data(), s.data.size())) == "j2k" ? "j2k" : "jp2";
-        else if (s.stop == "JBIG2Decode") ext = "jb2";
-        else ext = "g4";
+        const char* sig = sniffExt(s.data.data(), s.data.size());
+        if (s.stop == "DCTDecode") ext.set("jpg");
+        else if (s.stop == "JPXDecode") ext.set(sig && strcmp(sig, "j2k") == 0 ? "j2k" : "jp2");
+        else if (s.stop == "JBIG2Decode") ext.set("jb2");
+        else ext.set("g4");
       } else if (s.bmp) {
-        ext = "bmp";
+        ext.set("bmp");
       } else if (s.t1) {
-        ext = "t1d";
+        ext.set("t1d");
       } else if (const char* sig = sniffExt(s.data.data(), s.data.size())) {
-        ext = sig;
+        ext.set(sig);
       } else {
         uint32_t num = seg.items[s.item].num;
         auto an = cl.attachName.find(num);
         if (cls == SC_ATTACH && an != cl.attachName.end()) ext = fileNameExt(an->second);
-        if (ext.empty()) ext = s.remain == R_ENCODED ? "z" : kClassExt[cls];
-        if (cls == SC_CONTENT || cls == SC_CMAP) ext = s.remain == R_ENCODED ? "z" : "bin";
+        if (ext.empty()) ext.set(s.remain == R_ENCODED ? "z" : kClassExt[cls]);
+        if (cls == SC_CONTENT || cls == SC_CMAP) ext.set(s.remain == R_ENCODED ? "z" : "bin");
       }
       s.desc.ext = ext;
       if (cls == SC_OBJSTM && s.remain == R_DONE) s.desc.storage = ST_TXT;
@@ -1169,7 +1178,7 @@ class Encoder {
     if (s.desc.storage == ST_FILE || s.desc.storage == ST_DUP) {
       uint32_t ord = s.desc.storage == ST_DUP ? s.desc.ordinal : ownOrd_[sf->second];
       if (ord >= ordExt_.size()) return false;
-      src = "o" + decStr(ord) + "." + ordExt_[ord];
+      src = "o" + decStr(ord) + "." + ordExt_[ord].c_str();
       data = !s.data.empty() ? &s.data : ord < dump.ownData.size() ? &dump.ownData[ord] : nullptr;
       return data != nullptr;
     }
@@ -1510,7 +1519,7 @@ class Encoder {
     }
     if (s.bmp) st.bmpCount++;
     if (s.desc.storage == ST_FILE || s.desc.storage == ST_DUP) {
-      auto& e = st.exts[s.desc.ext];
+      auto& e = st.exts[s.desc.ext.c_str()];
       if (s.desc.storage == ST_FILE) { e.first++; e.second += s.data.size(); }
     }
     bool typed = s.desc.storage == ST_CLASS ||
@@ -1552,10 +1561,9 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
     printf("  %s %llu (%s)", kn[k], (unsigned long long)st.itemCount[k], human(st.itemBytes[k]).c_str());
   printf("\n");
   if (E.sec.present) {
-    printf("encryption: %s handler V%d R%d, %s\n", E.sec.standard ? "standard" : "non-standard", E.sec.V, E.sec.R,
-           E.sec.key.empty() ? "no key (payloads kept as ciphertext)"
-                             : ("key recovered from " + E.sec.keySource + ", " + std::to_string(E.sec.key.size()) +
-                                " bytes").c_str());
+    printf("encryption: %s handler V%d R%d, ", E.sec.standard ? "standard" : "non-standard", E.sec.V, E.sec.R);
+    if (E.sec.key.empty()) printf("no key (payloads kept as ciphertext)\n");
+    else printf("key recovered from %s, %zu bytes\n", E.sec.keySource, E.sec.key.size());
     printf("  streams decrypted: RC4 %llu, AES-128 %llu, AES-256 %llu, kept encrypted %llu\n",
            (unsigned long long)st.cipherCount[CI_RC4], (unsigned long long)st.cipherCount[CI_AES128],
            (unsigned long long)st.cipherCount[CI_AES256], (unsigned long long)st.cipherKept);
@@ -1842,7 +1850,7 @@ static int realMain(int argc, char** argv) {
         case 'D': opt.dedup = false; break;
         case 'd': opt.derive = false; break;
         case 'g': opt.ccitt = true; break;
-        case 'j': opt.threads = (unsigned)std::min(256LL, num()); break;
+        case 'j': opt.threads = (unsigned)std::min((long long)kMaxThreads, num()); break;
         case 'a': opt.rgba = true; break;
         case 'c': opt.chanMap = val(); break;
         case 'n': opt.noVerify = true; break;
@@ -1878,9 +1886,9 @@ static int realMain(int argc, char** argv) {
       for (auto& a : E.dump.aux) total += a.size();
       for (auto& b : E.dump.ownData) total += b.size();
       for (auto& b : E.dump.blobData) total += b.size();
-      fprintf(stderr, "%s: %llu -> %llu bytes in %zu files%s\n", pos[0].c_str(), (unsigned long long)in.size(),
+      fprintf(stderr, "%s: %llu -> %llu bytes in %zu files%s%s%s\n", pos[0].c_str(), (unsigned long long)in.size(),
               (unsigned long long)total, E.dump.ownData.size() + E.dump.blobData.size() + E.dump.hdr.map.nfiles,
-              E.stored ? (" (stored: " + E.storedReason + ")").c_str() : "");
+              E.stored ? " (stored: " : "", E.stored ? E.storedReason.c_str() : "", E.stored ? ")" : "");
     }
     return 0;
   }
@@ -1890,7 +1898,7 @@ static int realMain(int argc, char** argv) {
   Bytes meta;
   if (!readFile(prefix + ".meta", meta)) die("cannot read %s.meta", prefix.c_str());
   size_t meta0 = 0;
-  if (!parseHeader(meta, d.hdr, meta0)) die("%s", failMessage().c_str());
+  if (!parseHeader(meta, d.hdr, meta0)) die("%s", failMessage());
   {
     uint64_t tot = 0;
     for (int a = 0; a < AX_COUNT; a++) {
@@ -1914,13 +1922,13 @@ static int realMain(int argc, char** argv) {
   for (int c = 0; c < CF_COUNT; c++) need(prefix + "." + kClassFileSuffix[c], kPresentClass + c, d.classFile[c]);
   for (int a = 0; a < AX_COUNT; a++) need(prefix + "." + kAuxSuffix[a], kPresentAux + a, d.aux[a]);
   Bytes out;
-  bool ok = decodeDump(d, meta0, [&](uint32_t ord, const std::string& ext) {
+  bool ok = decodeDump(d, meta0, [&](uint32_t ord, const char* ext) {
     Bytes b;
     std::string name = ownFileName(prefix, ord, ext);
     if (!readFile(name, b)) fail("cannot read %s", name.c_str());  // the decoder stops on it
     return b;
   }, out);
-  if (!ok) die("%s", failMessage().c_str());
+  if (!ok) die("%s", failMessage());
   if (out.size() != d.hdr.origSize || crc32_update(0, out.data(), out.size()) != d.hdr.origCrc)
     die("restored file does not match the original size/CRC recorded in the dump");
   writeFile(pos[1], out.data(), out.size());

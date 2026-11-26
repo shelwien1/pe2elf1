@@ -8,10 +8,13 @@ static inline void le32(Bytes& b, uint32_t v) { for (int i = 0; i < 4; i++) b.pu
 static inline uint32_t rd32(const uint8_t* p) { return p[0] | (p[1] << 8) | (p[2] << 16) | ((uint32_t)p[3] << 24); }
 static inline uint32_t rd16(const uint8_t* p) { return p[0] | (p[1] << 8); }
 
+// image palettes: 0x00RRGGBB, at most 256 entries (Indexed images and gray ramps of 1-8 bits)
+typedef FixedVec<uint32_t, 256> Palette;
+
 struct BmpSpec {
   uint32_t width = 0, height = 0;
   int bpp = 0;                    // 1, 4, 8, 24, 32
-  std::vector<uint32_t> palette;  // 0x00RRGGBB, 2^bpp entries for bpp <= 8
+  Palette palette;                // 2^bpp entries for bpp <= 8
 };
 
 static size_t bmpPdfRow(uint32_t w, int bpp) { return ((size_t)w * bpp + 7) / 8; }

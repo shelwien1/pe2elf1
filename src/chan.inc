@@ -63,7 +63,7 @@ static bool fail(const char* fmt, ...) {
   return false;
 }
 static bool failed() { return tFailed; }
-static std::string failMessage() { return tFailed ? std::string(tFailMsg) : std::string(); }
+static const char* failMessage() { return tFailed ? tFailMsg : ""; }
 static void failClear() {
   tFailed = false;
   tFailMsg[0] = 0;
@@ -116,23 +116,55 @@ static const size_t kAuxInlineMax = 65536;
 // header flags
 static const uint64_t kFlagStored = 1, kFlagLiftT = 2, kFlagLiftCS = 4, kFlagCmap = 8;
 
-// A short name kept in place (file suffixes, extensions): at most 15 characters.
-struct ShortName {
-  char s[16] = {};
-  uint8_t n = 0;
+// A string of at most N bytes kept in place, NUL-terminated (names, suffixes, extensions).
+// set() and append() fail, leaving the string as it was, when the result would not fit.
+template <size_t N>
+struct FixedStr {
+  char s[N + 1] = {};
+  uint32_t n = 0;
+  FixedStr() {}
+  explicit FixedStr(const char* p) { set(p); }
   bool set(const char* p, size_t len) {
-    if (len > 15) return false;
+    if (len > N) return false;
     memcpy(s, p, len);
     s[len] = 0;
-    n = (uint8_t)len;
+    n = (uint32_t)len;
     return true;
   }
   bool set(const char* p) { return set(p, strlen(p)); }
+  bool append(const char* p, size_t len) {
+    if (len > N - n) return false;
+    memcpy(s + n, p, len);
+    n += (uint32_t)len;
+    s[n] = 0;
+    return true;
+  }
+  void clear() { n = 0; s[0] = 0; }
+  // printf into the string, cut at N bytes; false if it was cut
+  bool format(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    int r = vsnprintf(s, N + 1, fmt, ap);
+    va_end(ap);
+    if (r < 0) { clear(); return false; }
+    n = (uint32_t)std::min<size_t>((size_t)r, N);
+    return (size_t)r <= N;
+  }
   const char* c_str() const { return s; }
+  const char* data() const { return s; }
   size_t size() const { return n; }
-  bool operator==(const ShortName& o) const { return n == o.n && memcmp(s, o.s, n) == 0; }
-  bool operator!=(const ShortName& o) const { return !(*this == o); }
+  bool empty() const { return n == 0; }
+  bool eq(const char* p, size_t len) const { return n == len && memcmp(s, p, len) == 0; }
+  bool operator==(const char* p) const { return eq(p, strlen(p)); }
+  bool operator!=(const char* p) const { return !(*this == p); }
+  bool operator==(const FixedStr& o) const { return eq(o.s, o.n); }
+  bool operator!=(const FixedStr& o) const { return !(*this == o); }
 };
+typedef FixedStr<15> ShortName;
+// PDF names: at most 127 bytes (ISO 32000-1 Annex C)
+typedef FixedStr<127> PdfName;
+// messages: an error (fail(), at most 1023 bytes) with a short prefix
+typedef FixedStr<1279> Message;
 
 // Key material (hashes, file and object keys, /O /U /OE /UE): at most 64 bytes, kept in place.
 // assign() keeps the first 64 bytes of a longer input (the handlers read at most 48 of any).
@@ -251,10 +283,10 @@ struct DumpFiles {
   DumpHeader hdr;
   Bytes chan[CH_COUNT];              // physical channel files (hdr.map.nfiles; data only, no header)
   Bytes classFile[CF_COUNT];
-  std::vector<std::string> ownExt;   // own files by ordinal
+  std::vector<ShortName> ownExt;     // own files by ordinal
   std::vector<Bytes> ownData;
   Bytes aux[AX_COUNT];
-  std::vector<std::string> blobExt;  // large base64 blobs of object text, own files <P>b%07X.<ext>
+  std::vector<ShortName> blobExt;    // large base64 blobs of object text, own files <P>b%07X.<ext>
   std::vector<Bytes> blobData;
 };
 
@@ -386,7 +418,7 @@ class ChanWriter {
   void lenBytes(int lenCh, int dataCh, const uint8_t* p, size_t n) { var(lenCh, n); put(dataCh, p, n); }
   void lenBytes(int lenCh, int dataCh, const Bytes& v) { lenBytes(lenCh, dataCh, v.data(), v.size()); }
   void classPut(int cf, const uint8_t* p, size_t n) { d_.classFile[cf].insert(d_.classFile[cf].end(), p, p + n); }
-  uint32_t ownAdd(const std::string& ext, Bytes&& data) {
+  uint32_t ownAdd(const ShortName& ext, Bytes&& data) {
     d_.ownExt.push_back(ext);
     d_.ownData.push_back(std::move(data));
     return (uint32_t)(d_.ownExt.size() - 1);
@@ -400,7 +432,7 @@ class ChanWriter {
 class ChanReader {
  public:
   // ownLoader: fetches own file by (ordinal, ext); used when the dump comes from disk.
-  typedef std::function<Bytes(uint32_t, const std::string&)> OwnLoader;
+  typedef std::function<Bytes(uint32_t, const char*)> OwnLoader;  // ordinal, extension
   ChanReader(const DumpFiles& d, size_t meta0, OwnLoader loader, const std::vector<Bytes>* ownData = nullptr)
       : d_(d), loader_(std::move(loader)), ownData_(ownData ? ownData : &d.ownData) {
     for (auto& p : pos_) p = 0;
@@ -473,7 +505,7 @@ class ChanReader {
     cfPos_[cf] += n;
   }
   // an own file; empty, with the error recorded, if it cannot be had
-  Bytes own(uint32_t ordinal, const std::string& ext) {
+  Bytes own(uint32_t ordinal, const char* ext) {
     if (ordinal < ownData_->size()) return (*ownData_)[ordinal];
     if (!loader_) {
       fail("own file %08X missing", ordinal);
@@ -555,7 +587,7 @@ static void writeFile(const std::string& name, const uint8_t* p, size_t n) {
 
 static const uint32_t kBlobFileBit = 0x80000000u;  // OwnLoader: blob file k is ordinal kBlobFileBit | k
 
-static std::string ownFileName(const std::string& prefix, uint32_t ordinal, const std::string& ext) {
+static std::string ownFileName(const std::string& prefix, uint32_t ordinal, const char* ext) {
   if (ordinal & kBlobFileBit) {
     char buf[16];
     snprintf(buf, sizeof(buf), "b%07X", ordinal & ~kBlobFileBit);

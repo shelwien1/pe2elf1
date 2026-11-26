@@ -604,20 +604,21 @@ struct B64Blobs {
   size_t dpos = 0, rpos = 0, index = 0;
   const std::vector<Bytes>* fastZ = nullptr;  // encoder verify: the original zlib bytes per blob
   const CodecCtx* ctx = nullptr;
-  std::function<Bytes(uint32_t, const std::string&)> file;  // blob file k with its extension
+  std::function<Bytes(uint32_t, const char*)> file;  // blob file k with its extension
   uint32_t nextFile = 0;
 };
 
 // encoder: placeholders for the base64 runs of one object; data and recon appended
 static void b64Strings(const CodecCtx& ctx, const uint8_t* p, size_t n, std::vector<DerivEdit>& edits, Bytes& data,
                        Bytes& rec, std::vector<Bytes>* orig, uint64_t& blobBytes, std::vector<Bytes>& files,
-                       std::vector<std::string>& fileExt) {
+                       std::vector<ShortName>& fileExt) {
   auto put = [&](Bytes& v) {
     putVarTo(rec, v.size());
     blobBytes += v.size();
     if (v.size() >= kBlobFileMin) {
       const char* e = sniffExt(v.data(), v.size());
-      std::string ext = e ? e : "bin";
+      ShortName ext;
+      ext.set(e ? e : "bin");
       rec.push_back(1);
       putLenBytesTo(rec, (const uint8_t*)ext.data(), ext.size());
       fileExt.push_back(ext);
@@ -729,7 +730,7 @@ static bool parseFontOf(int kind, const Bytes& b, const Bytes& t1recon, FontMetr
 
 // Font programs (and CIDToGIDMap streams) by source text; the metrics are parsed once.
 struct DerivFonts {
-  std::function<Bytes(uint32_t, const std::string&)> load;  // own file by ordinal and extension
+  std::function<Bytes(uint32_t, const char*)> load;  // own file by ordinal and extension
   std::unordered_map<uint32_t, Bytes> inl;                   // inline streams seen so far
   FontCache cache;
   bool source(const std::string& src, Bytes& out) {
@@ -753,11 +754,12 @@ struct DerivFonts {
       if (src[i] < '0' || src[i] > '9') return false;
       ord = ord * 10 + (src[i] - '0');
     }
-    std::string ext = src.substr(dot + 1);
-    for (char c : ext)
-      if (!isalnum((unsigned char)c)) return false;
+    ShortName ext;
+    if (!ext.set(src.data() + dot + 1, src.size() - dot - 1)) return false;
+    for (size_t k = 0; k < ext.size(); k++)
+      if (!isalnum((unsigned char)ext.c_str()[k])) return false;
     if (ord > 0xFFFFFFFFull) return false;
-    out = load((uint32_t)ord, ext);
+    out = load((uint32_t)ord, ext.c_str());
     return true;
   }
   const FontMetrics* get(int kind, const std::string& font, const std::string& t1hex, const std::string& map) {
@@ -1372,13 +1374,14 @@ static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const 
       uint64_t dl = rr.var();
       Bytes v;
       if (rr.u8()) {
-        Bytes ext;
-        rr.bytes(rr.len(), ext);
-        if (ext.empty() || ext.size() > 8) return false;
-        for (uint8_t c : ext)
-          if (!isalnum(c)) return false;  // part of a file name
+        size_t el = rr.len();
+        const uint8_t* ep = rr.take(el);
+        ShortName ext;
+        if (!ep || !el || el > 8 || !ext.set((const char*)ep, el)) return false;
+        for (size_t k = 0; k < el; k++)
+          if (!isalnum(ep[k])) return false;  // part of a file name
         if (!b64->file) return false;
-        v = b64->file(b64->nextFile++, std::string(ext.begin(), ext.end()));
+        v = b64->file(b64->nextFile++, ext.c_str());
         if (v.size() != dl) return false;
       } else {
         if (dl > b64->data->size() - b64->dpos) return false;

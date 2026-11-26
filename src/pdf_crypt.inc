@@ -408,10 +408,12 @@ struct Security {
   Bytes ID0;            // any length: all of it goes into the key hash
   int32_t P = 0;
   bool encryptMetadata = true;
-  std::string stmF = "Identity", strF = "Identity", eff;
-  std::map<std::string, uint8_t> cfm;
+  // /StmF /StrF /EFF; a name over 127 bytes (the PDF limit) is not kept and reads as Identity
+  PdfName stmF{"Identity"}, strF{"Identity"}, eff;
+  struct CryptFilter { PdfName name; uint8_t cipher; };
+  FixedVec<CryptFilter, 32> cfm;  // /CF entries; any past 32 are ignored
   KeyBuf key;
-  std::string keySource;  // "empty user password", "user password", "owner password"
+  const char* keySource = "";  // "empty user password", "user password", "owner password"
 
   static Bytes strBytes(const Obj* o) {
     if (!o || o->t != Obj::STR) return Bytes();
@@ -447,22 +449,32 @@ struct Security {
               else if (cm->isName("AESV2")) m = CI_AES128;
               else if (cm->isName("AESV3")) m = CI_AES256;
             }
-            cfm[cf->a[k].s] = m;
+            const std::string& nm = cf->a[k].s;
+            CryptFilter* e = nullptr;
+            for (auto& c : cfm)
+              if (c.name.eq(nm.data(), nm.size())) e = &c;
+            if (e) e->cipher = m;
+            else {
+              CryptFilter c;
+              if (c.name.set(nm.data(), nm.size())) { c.cipher = m; cfm.push_back(c); }
+            }
           }
         }
       }
-      if (const Obj* s = enc.get("StmF")) if (s->t == Obj::NAME) stmF = s->s;
-      if (const Obj* s = enc.get("StrF")) if (s->t == Obj::NAME) strF = s->s;
-      if (const Obj* s = enc.get("EFF")) if (s->t == Obj::NAME) eff = s->s;
+      if (const Obj* s = enc.get("StmF")) if (s->t == Obj::NAME) stmF.set(s->s.data(), s->s.size());
+      if (const Obj* s = enc.get("StrF")) if (s->t == Obj::NAME) strF.set(s->s.data(), s->s.size());
+      if (const Obj* s = enc.get("EFF")) if (s->t == Obj::NAME) eff.set(s->s.data(), s->s.size());
     }
   }
 
-  uint8_t filterCipher(const std::string& name) const {
+  uint8_t filterCipher(const char* name, size_t len) const {
     if (V < 4) return CI_RC4;
-    if (name == "Identity") return CI_NONE;
-    auto it = cfm.find(name);
-    return it == cfm.end() ? (uint8_t)CI_NONE : it->second;
+    if (len == 8 && memcmp(name, "Identity", 8) == 0) return CI_NONE;
+    for (auto& c : cfm)
+      if (c.name.eq(name, len)) return c.cipher;
+    return CI_NONE;
   }
+  uint8_t filterCipher(const PdfName& name) const { return filterCipher(name.data(), name.size()); }
   uint8_t streamCipher() const { return filterCipher(stmF); }
   uint8_t embeddedCipher() const { return filterCipher(eff.empty() ? stmF : eff); }
 
@@ -470,12 +482,14 @@ struct Security {
 
   // Candidate key lengths: qpdf's rule first (V<=1: 40 bits, V4: 128, V2/3: /Length if valid
   // else 128), then the spec default of 40 bits. The U check decides which one is right.
-  std::vector<size_t> keyLens() const {
-    if (R == 2 || V <= 1) return {5};
-    if (V == 4) return {16};
+  FixedVec<size_t, 2> keyLens() const {
+    FixedVec<size_t, 2> r;
+    if (R == 2 || V <= 1) { r.push_back(5); return r; }
+    if (V == 4) { r.push_back(16); return r; }
     size_t n = (lengthBits % 8 == 0 && lengthBits >= 40 && lengthBits <= 128) ? (size_t)lengthBits / 8 : 16;
-    if (n == 5) return {5};
-    return {n, 5};
+    r.push_back(n);
+    if (n != 5) r.push_back(5);
+    return r;
   }
   size_t keyLen() const { return klen; }
 

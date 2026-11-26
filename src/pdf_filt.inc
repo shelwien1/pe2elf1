@@ -76,6 +76,12 @@ struct RBuf {
     out.assign(b.begin() + p, b.begin() + p + n);
     p += n;
   }
+  // the next n bytes in place; null when fewer are left
+  const uint8_t* take(size_t n) {
+    if (n > b.size() - p) { broke("recon record truncated"); return nullptr; }
+    p += n;
+    return b.data() + p - n;
+  }
   void appendTo(size_t n, Bytes& out) {
     if (n > b.size() - p) { broke("recon record truncated"); return; }
     out.insert(out.end(), b.begin() + p, b.begin() + p + n);
@@ -861,8 +867,9 @@ static bool lzwEncode(const Bytes& recon, const Bytes& in, Bytes& out) {
     bitcnt += w;
     while (bitcnt >= 8) { out.push_back((uint8_t)(bitbuf >> (bitcnt - 8))); bitcnt -= 8; }
   };
-  std::vector<uint16_t> child((size_t)4096 * 256, 0);
-  std::vector<uint32_t> used;
+  std::unique_ptr<uint16_t[]> child(new uint16_t[(size_t)4096 * 256]());  // (code, byte) -> code, 2 MB
+  uint32_t used[4096];  // child entries set since the last clear (at most 4096 - 258)
+  size_t nused = 0;
   int encNext = 258, decNext = 258, codesSinceClear = 0;
   auto width = [&]() {
     int w = 9;
@@ -870,8 +877,8 @@ static bool lzwEncode(const Bytes& recon, const Bytes& in, Bytes& out) {
     return w;
   };
   auto reset = [&]() {
-    for (uint32_t u : used) child[u] = 0;
-    used.clear();
+    for (size_t k = 0; k < nused; k++) child[used[k]] = 0;
+    nused = 0;
     encNext = decNext = 258;
     codesSinceClear = 0;
   };
@@ -901,7 +908,7 @@ static bool lzwEncode(const Bytes& recon, const Bytes& in, Bytes& out) {
     if (j < limit && encNext < 4096) {
       size_t idx = (size_t)code * 256 + in[j];
       child[idx] = (uint16_t)encNext++;
-      used.push_back((uint32_t)idx);
+      used[nused++] = (uint32_t)idx;
     }
     i = j;
   }

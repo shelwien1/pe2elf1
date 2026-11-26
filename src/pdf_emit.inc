@@ -11,7 +11,7 @@ struct StreamDesc {
   uint8_t cls = 0;
   uint8_t storage = ST_BIN;
   uint8_t classFile = 0;
-  std::string ext;          // ST_FILE
+  ShortName ext;            // ST_FILE: [a-z0-9]+
   uint32_t ordinal = 0;     // ST_FILE (assigned at emit) / ST_DUP (target)
   uint8_t cipher = CI_NONE;
   uint32_t num = 0, gen = 0;
@@ -125,7 +125,7 @@ static void writeStreamDesc(ChanWriter& w, EmitState& st, StreamDesc& sd, Bytes&
 }
 
 static bool readStreamDesc(ChanReader& r, ReadState& st, StreamDesc& sd, Bytes& stored,
-                           std::vector<std::string>& ordExt) {
+                           std::vector<ShortName>& ordExt) {
   sd.cls = r.u8(CH_S);
   sd.storage = r.u8(CH_S);
   size_t len = 0;
@@ -134,9 +134,9 @@ static bool readStreamDesc(ChanReader& r, ReadState& st, StreamDesc& sd, Bytes& 
       size_t n = r.u8(CH_S);
       const uint8_t* p = r.get(CH_S, n);
       if (!p) return false;
-      sd.ext.assign((const char*)p, n);
-      for (char c : sd.ext)
-        if (!isalnum((unsigned char)c)) return fail("bad extension in stream descriptor");
+      if (!sd.ext.set((const char*)p, n)) return fail("bad extension in stream descriptor");
+      for (size_t k = 0; k < n; k++)
+        if (!isalnum(p[k])) return fail("bad extension in stream descriptor");
       break;
     }
     case ST_DUP: sd.ordinal = (uint32_t)r.var(CH_N); break;
@@ -191,11 +191,11 @@ static bool readStreamDesc(ChanReader& r, ReadState& st, StreamDesc& sd, Bytes& 
     case ST_FILE:
       sd.ordinal = st.nextOrdinal++;
       ordExt.push_back(sd.ext);
-      stored = r.own(sd.ordinal, sd.ext);
+      stored = r.own(sd.ordinal, sd.ext.c_str());
       break;
     case ST_DUP:
       if (sd.ordinal >= ordExt.size()) return fail("bad duplicate reference");
-      stored = r.own(sd.ordinal, ordExt[sd.ordinal]);
+      stored = r.own(sd.ordinal, ordExt[sd.ordinal].c_str());
       break;
   }
   return r.ok() && !failed();
@@ -266,7 +266,7 @@ static bool decodeDumpImpl(const DumpFiles& d, size_t meta0, ChanReader::OwnLoad
   ChanReader::OwnLoader blobLoader = loader;
   ChanReader r(*use, meta0, std::move(loader), &d.ownData);
   DerivFonts fonts;
-  fonts.load = [&](uint32_t ord, const std::string& ext) { return r.own(ord, ext); };
+  fonts.load = [&](uint32_t ord, const char* ext) { return r.own(ord, ext); };
   StructMap sm;
   DerivExtra ex;
   ex.fonts = &fonts;
@@ -291,7 +291,7 @@ static bool decodeDumpImpl(const DumpFiles& d, size_t meta0, ChanReader::OwnLoad
     return true;
   };
   ReadState st;
-  std::vector<std::string> ordExt;
+  std::vector<ShortName> ordExt;
   ObjPositions objPos;
   ctx.objPos = &objPos;
   std::unordered_map<uint64_t, Bytes> rgbaSrc;  // stored BGRA BMPs of L_RGBA streams, for L_ALPHA
@@ -311,7 +311,7 @@ static bool decodeDumpImpl(const DumpFiles& d, size_t meta0, ChanReader::OwnLoad
   b64.rec = &d.aux[AX_B64R];
   b64.fastZ = blobFast;
   b64.ctx = &ctx;
-  b64.file = [&](uint32_t k, const std::string& ext) -> Bytes {
+  b64.file = [&](uint32_t k, const char* ext) -> Bytes {
     if (k < d.blobData.size()) return d.blobData[k];
     if (!blobLoader) {
       fail("blob file %07X missing", k);
