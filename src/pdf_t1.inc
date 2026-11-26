@@ -202,9 +202,9 @@ static bool t1Plain(const Bytes& recon, const Bytes& in, Bytes& out, size_t& s, 
   rd.resize(r.u8());  // a u8: never more than the capacity
   lenIVout = 4;
   for (auto& x : rd) {
-    Bytes b;
-    r.bytes(r.len(), b);
-    if (!x.set((const char*)b.data(), b.size())) return false;
+    size_t l = r.len();
+    const uint8_t* q = r.take(l);
+    if (!q || !x.set((const char*)q, l)) return false;
   }
   Bytes joined;
   const Bytes* src = &in;

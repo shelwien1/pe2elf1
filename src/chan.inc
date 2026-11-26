@@ -127,7 +127,7 @@ struct FixedStr {
   explicit FixedStr(const char* p) { set(p); }
   bool set(const char* p, size_t len) {
     if (len > N) return false;
-    memcpy(s, p, len);
+    if (len) memcpy(s, p, len);  // p may be null when len is 0
     s[len] = 0;
     n = (uint32_t)len;
     return true;
@@ -135,7 +135,7 @@ struct FixedStr {
   bool set(const char* p) { return set(p, strlen(p)); }
   bool append(const char* p, size_t len) {
     if (len > N - n) return false;
-    memcpy(s + n, p, len);
+    if (len) memcpy(s + n, p, len);
     n += (uint32_t)len;
     s[n] = 0;
     return true;

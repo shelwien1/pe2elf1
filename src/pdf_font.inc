@@ -40,7 +40,7 @@ struct FontMetrics {
   }
   void setCidMap(const uint8_t* p, size_t n) {
     cidMapLen = (uint32_t)std::min(n, sizeof(cidMap));
-    memcpy(cidMap, p, cidMapLen);
+    if (cidMapLen) memcpy(cidMap, p, cidMapLen);  // p may be null for an empty map
   }
 };
 
