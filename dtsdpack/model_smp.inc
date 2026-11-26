@@ -749,6 +749,36 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   U32 nwa_t[28][10][10];
   static constexpr double NWA_A = 0.1;
   static constexpr U32 NWA_L = 512;
+  // (since format 176) an unbound channel's first scale factor's move from its last one by a least
+  // squares fit of SFL_X things (sfl_x(); SFL_N with the 0s that make them a whole 4), one for each
+  // channel's group of subbands (sfl_g()) and one for the channel's whole, the whole's taken where
+  // the group's has had fewer than SFL_GN: each scale factor's things into its fits' sums (nw_add()),
+  // which are refitted every SFL_K, their sums decayed by SFL_LK, SFL_K scale factors' worth of
+  // SFL_LAM, first (sfl_fit()); each subband's mean distance from the fit's value, a 16th a scale
+  // factor (sfl_e, sfl_m whether there is one), and 1 + the last one's last one (sfl_p, 0 none): the
+  // outside predictions of the scale factor's decisions by a logistic distribution about that value,
+  // of scale SFL_S times that mean, at least SFL_S0 (SFL_S1 where there is none yet:
+  // scale_val_n()), and that value rounded the first guess where it has been the scale factor more
+  // often than the first guess as before (the last one, the channel before's move or the running
+  // mean's, above), by SFL_TA and a fourth, where the two differ (sfl_t, by channel, halved at
+  // SFL_TL); the channel before's moves' mean this
+  // subframe, sfl_c1 (sfl_cv whether it is there yet), and the sum and count of the channel's own
+  // moves in its subbands below sfl_k0 (sfl_s0, sfl_n0)
+  static constexpr int SFL_X = 17, SFL_N = 20, SFL_K = 32, SFL_G = 6;
+  static constexpr U32 SFL_GN = 256, SFL_TA = 64, SFL_TL = 1024;
+  static constexpr double SFL_LAM = 0.999, SFL_S = 0.85, SFL_S0 = 0.3, SFL_S1 = 2.0, SFL_RIDGE = 1e-3;
+  static constexpr double SFL_L2 = SFL_LAM * SFL_LAM, SFL_L4 = SFL_L2 * SFL_L2, SFL_L8 = SFL_L4 * SFL_L4;
+  static constexpr double SFL_LK = SFL_L8 * SFL_L8 * SFL_L8 * SFL_L8;  // (SFL_LAM to the SFL_K)
+  static_assert(SFL_K == 32 && SFL_N % 4 == 0 && SFL_N >= SFL_X, "SFL_LK is SFL_LAM to the 32nd; nw_add()'s whole 4s");
+  NwFitT<SFL_N> sfl_f[NCH][SFL_G + 1];
+  U32 sfl_n[NCH][SFL_G];
+  double sfl_e[NCH][NSUB], sfl_c1[NCH], sfl_s0[NCH], sfl_n0[NCH];
+  int sfl_k0[NCH];
+  U8 sfl_m[NCH][NSUB], sfl_cv[NCH], sfl_all[NCH];  // (sfl_all: every group's fit has had SFL_GN, the whole's needed no more)
+  S16 sfl_p[NCH][NSUB];
+  U32 sfl_t[NCH][2];
+  // (the subbands' groups: 0-1, 2-3, 4-7, 8-11, 12-19, 20-31)
+  static int sfl_g(int b) { return b < 4 ? b >> 1 : b < 12 ? 2 + (b >= 8) : 4 + (b >= 20); }
   // (a miss's weight, in 16ths: 1 + the log2 of its distance, to 16)
   static int nw_gpen(int g, int v) {
     static const U8 L16[17] = {0, 0, 16, 25, 32, 37, 41, 45, 48, 51, 53, 55, 57, 59, 61, 63, 64};
@@ -1556,6 +1586,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int k = 0; k < 3; k++) nwz_n[k][0] = 32, nwz_n[k][1] = 1;
     nwd_n[0] = nwd_n[1] = 0, nwg_p[0] = nwg_p[1] = 0;
     memset(nwa_n, 0, sizeof nwa_n), memset(nwa_t, 0, sizeof nwa_t);
+    memset(sfl_f, 0, sizeof sfl_f), memset(sfl_n, 0, sizeof sfl_n), memset(sfl_e, 0, sizeof sfl_e);
+    memset(sfl_m, 0, sizeof sfl_m), memset(sfl_p, 0, sizeof sfl_p), memset(sfl_cv, 0, sizeof sfl_cv), memset(sfl_all, 0, sizeof sfl_all);
+    memset(sfl_t, 0, sizeof sfl_t);
     for (int c = 0; c < NCH; c++)
       for (int k = 0; k < NSUB; k++) nw_ba[c][k] = nw_bb[c][k] = nw_bs[c][k] = nw_bf[c][k] = 1.0;
     for (int c = 0; c < NCH; c++) nw_bw[c] = 0.0, nw_lsc[c] = NW_LS;
@@ -1723,7 +1756,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // channels, and their subbands' energy and how it goes
   void smp_subframe(const CoreRec& r, int sf) {
     const CoreSub& s = r.sub[sf];
-    memset(nw_e0, 0, sizeof nw_e0);
+    memset(nw_e0, 0, sizeof nw_e0), memset(sfl_cv, 0, sizeof sfl_cv);
     nwd_n[0] = nwd_n[1] = 0;
     level_start(r.xpass ? 1 : 0);
     t0 = tframe + r.nblk;
@@ -4783,14 +4816,159 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const S64 base = A ? A - 1 : 0;
     return checked(base + B::code_diff(f, X, ENC ? v - base : 0, base, 0, max - 1, none), 0, max - 1);
   }
+  // (since format 176) scale_val() for an unbound channel's first scale factor, with every
+  // decision's outside prediction by a logistic distribution about mu, of scale 1 / is, over the
+  // values 0..max-1 (sfl_q()): the first (whether it is p, else the last one A - 1), its difference's
+  // magnitude's (code()'s nodes 0-2 and the length 1-7 of the magnitude less 2) and its sign's, each
+  // by the distribution's shares of the values left
+  template <class F, class V>
+  S64 scale_val_n(F& f, V& D, S64 v, int p, S32 A, int max, double mu, double is) {
+    tcx X;
+    f.make(D, X);
+    f.select(X);
+    // (the mass of the values to k, all of it from max - 1)
+    auto C = [&](int k) {
+      if (k < 0) return 0.0;
+      if (k >= max - 1) return 1.0;
+      const double z = ((double)k + 0.5 - mu) * is;
+      return z >= 0.0 ? 1.0 - nw_tail(z) : nw_tail(-z);
+    };
+    const int c1 = p >= 0 ? p : A - 1, nd = p >= 0 ? CN_HIT : CN_SAME;
+    // (C at c1 less 1, 2, 3, 4, 6, 10, .. 130, the lengths' lower edges, and at c1 plus 0, 1, 2, 3, 5,
+    // 9, .. 129, their upper edges)
+    static const int OL[10] = {1, 2, 3, 4, 6, 10, 18, 34, 66, 130}, OU[10] = {0, 1, 2, 3, 5, 9, 17, 33, 65, 129};
+    double cl[10], cu[10];
+    for (int k = 0; k < 10; k++) cl[k] = C(c1 - OL[k]), cu[k] = C(c1 + OU[k]);
+    int pa[CN_N];
+    for (int k = 0; k < CN_N; k++) pa[k] = -1;
+    const double pc = cu[0] - cl[0];
+    pa[nd] = B::q_op(pc, 1.0);
+    f.prpa = pa;
+    S64 out = c1;
+    if (!f.bit(nd, ENC && v == c1)) {
+      double r = 1.0 - pc;
+      const double w[TC_SMALL] = {0.0, (cl[0] - cl[1]) + (cu[1] - cu[0]), (cl[1] - cl[2]) + (cu[2] - cu[1])};
+      for (int j = 0; j < TC_SMALL; j++) pa[j] = B::q_op(w[j], r), r -= w[j];
+      for (int j = 0; j < 7; j++) {  // (the length: magnitudes 2^j + 2 .. 2^(j+1) + 1)
+        const double g = (cl[2 + j] - cl[3 + j]) + (cu[3 + j] - cu[2 + j]);
+        pa[tc_node_len(j)] = B::q_op(g, r), r -= g;
+      }
+      const S64 d = ENC ? v - c1 : 0, m = f.code(X, d < 0 ? -d : d);
+      if (m) {
+        const S64 vn = c1 - m, vp = c1 + m;
+        const bool cn = vn >= 0, cp = vp < max;
+        if (cn != cp) out = cp ? vp : vn;
+        else {
+          const double qn = C((int)vn) - C((int)vn - 1), qp = C((int)vp) - C((int)vp - 1);
+          pa[CN_SIGN] = B::q_op(qn, qn + qp);
+          out = f.bit(CN_SIGN, ENC && d < 0) ? vn : vp;
+        }
+      }
+    }
+    f.prpa = nullptr;
+    return checked(out, 0, max - 1);
+  }
+  // (since format 176) an unbound channel's first scale factor's things, sfl's, in scale factors:
+  // how the channel before moved at the subband, the one before that, the channel before at the
+  // subbands either side, the subband below and the one below that, this subframe; the running
+  // mean's distance from the last one A - 1; the subband below's value this subframe and the one
+  // above's last, against A - 1; whether the subband below has moved and the channel before; 1; the
+  // channel before's value at the subband this subframe and the one before that's, against A - 1;
+  // how the last one moved; how the subbands below moved this subframe, on average, and the channel
+  // before's; 0s to SFL_N
+  void sfl_x(const CoreRec& r, int ch, int b, int A, double* x) {
+    const int c1 = ch - 1 >= r.ch0() && r.shuff[ch - 1] == r.shuff[ch] ? ch - 1 : -1;
+    const int c2 = ch - 2 >= r.ch0() && r.shuff[ch - 2] == r.shuff[ch] ? ch - 2 : -1;
+    auto ok = [&](int c, int k) { return c >= 0 && k >= 0 && k < NSUB && nw_e0[c][k] && hist.scale[c][k]; };
+    auto mv = [&](int c, int k) { return ok(c, k) ? (double)(nw_e0[c][k] - hist.scale[c][k]) : 0.0; };
+    x[0] = mv(c1, b), x[1] = mv(c2, b), x[2] = mv(c1, b - 1), x[3] = mv(c1, b + 1);
+    x[4] = mv(ch, b - 1), x[5] = mv(ch, b - 2);
+    x[6] = nw_sn[ch][b] ? nw_sm[ch][b] - (double)(A - 1) : 0.0;
+    x[7] = b && nw_e0[ch][b - 1] ? (double)(nw_e0[ch][b - 1] - A) : 0.0;
+    x[8] = b + 1 < NSUB && hist.scale[ch][b + 1] ? (double)(hist.scale[ch][b + 1] - A) : 0.0;
+    x[9] = ok(ch, b - 1), x[10] = ok(c1, b), x[11] = 1.0;
+    x[12] = c1 >= 0 && nw_e0[c1][b] ? (double)(nw_e0[c1][b] - A) : 0.0;
+    x[13] = c2 >= 0 && nw_e0[c2][b] ? (double)(nw_e0[c2][b] - A) : 0.0;
+    x[14] = sfl_p[ch][b] ? (double)(A - sfl_p[ch][b]) : 0.0;
+    if (!sfl_cv[ch]) {  // (the channel before's whole is coded before this one's first)
+      double s1 = 0.0, n1 = 0.0;
+      for (int k = 0; k < NSUB; k++)
+        if (ok(c1, k)) s1 += mv(c1, k), n1 += 1.0;
+      sfl_c1[ch] = n1 > 0.0 ? s1 / n1 : 0.0, sfl_cv[ch] = 1;
+      sfl_s0[ch] = sfl_n0[ch] = 0.0, sfl_k0[ch] = 0;
+    }
+    for (int k = sfl_k0[ch]; k < b; k++)  // (the subbands below b are coded, in order)
+      if (ok(ch, k)) sfl_s0[ch] += mv(ch, k), sfl_n0[ch] += 1.0;
+    if (sfl_k0[ch] < b) sfl_k0[ch] = b;
+    x[15] = sfl_n0[ch] > 0.0 ? sfl_s0[ch] / sfl_n0[ch] : 0.0, x[16] = sfl_c1[ch];
+    for (int k = SFL_X; k < SFL_N; k++) x[k] = 0.0;
+  }
+  // (the fit's value, A - 1 and the move it makes, within the table; its logistic's scale's inverse, *is)
+  double sfl_q(int ch, int b, int A, int max, const double* x, double* is) const {
+    const int g = sfl_g(b);
+    const double* w = sfl_f[ch][sfl_n[ch][g] >= SFL_GN ? g : SFL_G].w;
+    double mu = (double)(A - 1);
+    for (int k = 0; k < SFL_X; k++) mu += w[k] * x[k];
+    mu = mu < 0.0 ? 0.0 : mu > (double)(max - 1) ? (double)(max - 1) : mu;
+    const double s = sfl_m[ch][b] ? (SFL_S * sfl_e[ch][b] > SFL_S0 ? SFL_S * sfl_e[ch][b] : SFL_S0) : SFL_S1;
+    *is = 1.0 / s;
+    return mu;
+  }
+  // (x and the move y into the fits of the subband's group and the channel's whole)
+  void sfl_learn(int ch, int b, const double* x, double y) {
+    const int g = sfl_g(b);
+    if (!sfl_all[ch]) {
+      sfl_fit(sfl_f[ch][SFL_G], x, y);
+      if (sfl_n[ch][g] < SFL_GN && ++sfl_n[ch][g] == SFL_GN) {
+        int k = 0;
+        while (k < SFL_G && sfl_n[ch][k] >= SFL_GN) k++;
+        sfl_all[ch] = k == SFL_G;
+      }
+    }
+    sfl_fit(sfl_f[ch][g], x, y);
+  }
+  // (into the sums; every SFL_K, the sums decayed by SFL_LK and refitted: Cholesky, of R's first
+  // SFL_X and a ridge of SFL_RIDGE times their mean diagonal, the fit as it was where that fails)
+  static void sfl_fit(NwFitT<SFL_N>& f, const double* x, double y) {
+    nw_add(f, x, y);
+    if (++f.n < SFL_K) return;
+    f.n = 0;
+    for (double& a : f.R) a *= SFL_LK;
+    for (double& a : f.c) a *= SFL_LK;
+    double L[SFL_X][SFL_X], d = 0.0;
+    for (int i = 0; i < SFL_X; i++) d += f.R[nw_ro(i) + i];
+    d = d / SFL_X * SFL_RIDGE + 1e-9;
+    for (int i = 0; i < SFL_X; i++)
+      for (int k = 0; k <= i; k++) {
+        double a = f.R[nw_ro(i) + k] + (i == k ? d : 0.0);
+        for (int j = 0; j < k; j++) a -= L[i][j] * L[k][j];
+        if (i == k) {
+          if (!(a > 1e-12)) return;
+          L[i][i] = sqrt(a);
+        } else
+          L[i][k] = a / L[k][k];
+      }
+    double z[SFL_X];
+    for (int i = 0; i < SFL_X; i++) {
+      double a = f.c[i];
+      for (int j = 0; j < i; j++) a -= L[i][j] * z[j];
+      z[i] = a / L[i][i];
+    }
+    for (int i = SFL_X - 1; i >= 0; i--) {
+      double a = z[i];
+      for (int j = i + 1; j < SFL_X; j++) a -= L[j][i] * f.w[j];
+      f.w[i] = a / L[i][i];
+    }
+  }
   // (scl's, or scd's where the scale factor search shows the WAV decoded: ss_rule())
   S64 scale(M_scl_v& D, S64 v, int p, S32 A, int max, int spu = 0, int sg = 0, const int* spc = nullptr,
-            const double* spp = nullptr, int spk = 0, bool nw = false) {
+            const double* spp = nullptr, int spk = 0, bool nw = false, double smu = -1.0, double sis = 0.0) {
     if (nw) {  // (since format 166 a channel the WAV doesn't bind: a family of its own)
       M_scn_v E;
 #define M_COPY(f) E.f = D.f;
       M_scl_VARS(M_COPY)
 #undef M_COPY
+      if (smu >= 0.0) return scale_val_n(f_scn, E, v, p, A, max, smu, sis);
       return scale_val(f_scn, E, v, p, A, max, spu, sg, spc, spp, spk);
     }
     if (!ss_rule()) return scale_val(f_scl, D, v, p, A, max, spu, sg, spc, spp, spk);
@@ -5051,7 +5229,29 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (p < 0 && sm_s) p = (int)clip(A - 1 + sm_s, 0, max - 1), D.pk = 1;
     }
     const int spu = spk && p >= 0 && p == pr;
-    v = scale(D, v, p, A, max, spu && p == p0, sg, spc, spp, spk, !bound[ch]);
+    // (since format 176 an unbound channel's first, where it has a last one: by sfl's fit, its first
+    // guess the fit's value rounded where that has been right more often, sfl_t)
+    double sfx[SFL_N], smu = -1.0, sis = 0.0;
+    const bool sfu = early && A;
+    const int pold = p >= 0 ? p : A - 1;
+    int pfit = -1;
+    if (sfu) {
+      sfl_x(r, ch, b, A, sfx), smu = sfl_q(ch, b, A, max, sfx, &sis), pfit = (int)floor(smu + 0.5);
+      const U32* const tl = sfl_t[ch];
+      if (tl[1] > tl[0] + SFL_TA + (tl[0] >> 2)) p = pfit;
+    }
+    v = scale(D, v, p, A, max, spu && p == p0, sg, spc, spp, spk, !bound[ch], smu, sis);
+    if (sfu) {
+      if (pfit != pold) {
+        U32* const tl = sfl_t[ch];
+        tl[0] += v == pold, tl[1] += v == pfit;
+        if (tl[0] + tl[1] >= SFL_TL) tl[0] >>= 1, tl[1] >>= 1;
+      }
+      const double e = (double)v - smu, ae = e < 0 ? -e : e;
+      sfl_e[ch][b] = sfl_m[ch][b] ? sfl_e[ch][b] + (ae - sfl_e[ch][b]) / 16.0 : ae, sfl_m[ch][b] = 1;
+      sfl_learn(ch, b, sfx, (double)(v - (A - 1)));
+      sfl_p[ch][b] = (S16)A;
+    }
     if (!bound[ch] && !j) nw_sm[ch][b] = nw_sn[ch][b] ? nw_sm[ch][b] + ((double)v - nw_sm[ch][b]) / 8 : (double)v, nw_sn[ch][b] = 1;
     if (pf >= 0) {
       U32* const n = sfx_n[ch];

@@ -9,7 +9,7 @@ to code is where the encoder chose otherwise. Decompression, with the same WAV, 
 stream byte for byte.
 
 The core of `s.2.dts` (4 minutes 25 seconds of 5.1 at 1509 kbps; 50008260 bytes) compresses to
-76356 bytes (0.15%); without its audio, dtsdpack's model gets 62.60% and `xz -9e` 88.21%.
+76356 bytes (0.15%); without its audio, dtsdpack's model gets 62.50% and `xz -9e` 88.21%.
 
 The core substream's extensions are coded too: XCH (6.1's back centre) and XXCH (7.1's other
 channels) as more channels, X96 (DTS 96/24's 24-48 kHz band and the core's residuals) as subbands
@@ -104,7 +104,7 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76356 (0.15%) | 62.60% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76356 (0.15%) | 62.50% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3470 (0.27%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 4615 (0.43%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2585 (0.11%) | | |
@@ -1180,6 +1180,63 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   340 decompressing (again 341 to 346 and 328 to 329), the XCH sample 236 to 242 and 259 to 261
   (again 301 to 282 and 248 to 238), and with its WAV 212 to 253 and 278 to 285 (again 253 to 229
   and 271 to 257).
+  Since format 176 an unbound channel's first scale factor of a subband, coded before its ABITS
+  where it had one the last subframe, has every decision's outside prediction by a least squares fit
+  of its move from that one (`model_smp.inc`'s sfl_x(), sfl_q() and scale_val_n()), of 17 things:
+  this subframe's first scale factors' moves at the subband of the two channels before it on its
+  table, the channel before's at the subbands either side and its own at the two below, and whether
+  there are the channel before's at the subband and its own below; the running mean's distance from
+  the last one; the subband below's value now, the subband above's last one and the two channels
+  before's values at the subband, each against the last one; the last one's move from the one before
+  it; the mean move of its own subbands below and of the channel before's all; and 1. A channel has
+  a fit for each of six groups of its subbands (0-1, 2-3, 4-7, 8-11, 12-19 and 20-31) and one of its
+  whole, the whole's taken where the group's has had fewer than 256 scale factors; their sums decay
+  by 0.999 a scale factor and are refitted every 32 (by Cholesky, ridged by a thousandth of the mean
+  diagonal). The outside predictions are a logistic distribution's about the fit's value, of scale
+  0.85 of the subband's mean distance from it (each scale factor a 16th; at least 0.3, and 2 before
+  there is one): the first decision's (the value the first guess) its share, the magnitude's
+  (code()'s nodes 0-2 and the length 1-7 of the magnitude less 2) and the sign's each the share of
+  the values left in range. And the fit's value rounded is the first guess where it has been the
+  scale factor more often than the first guess as before (the last one, the channel before's move or
+  the running mean's), by 64 and a fourth, where the two differ (counted by channel, halved at
+  1024). Without their WAVs, `s.2.dts`'s whole core 31305427 bytes to 31256652 (62.60% of it to
+  62.50%), the 55 streams of the check lists 122815211 to 122526588 (0.235%: `dtswavsample16.wav`
+  0.41%, `chs/n.dtsc` 0.36%, `Fire__VooDoo_Studio_30_sec.wav` and its two packings 0.32%,
+  `chs/m.dtsc` and `96-24.dts` and its packings 0.31%, `dts_es.dtsc` 0.27%, FATE's short samples up
+  to 0.27% (`dx4/cs.dtsc` 0.07%), `lfe/l0.dtsc` 0.20%, `ES_6.1_16bit.dtsc` and its packing 0.18%,
+  `pc/p1.dtsc` 0.17%, `open_bitrate.dtsc` 0.16%, `s2h.dtsc` and its packings, `mid.dtsc`, FFmpeg's
+  `f3.dts`, `dtswavsample14.wav` and the two `sil` streams 0.12-0.13%, the rest 0.01-0.08%,
+  `pk145/f1c.dts.be14` the least; three the same, none bigger). With their WAVs the sizes are format
+  175's (the check lists' 67 runs 1447527 bytes, `s.2.dts`'s whole core with its WAV 76356, the
+  Cymatics core 60631). On 12 of the streams (as for format 175) 57116414 bytes to 56943680
+  (0.302%): the outside predictions alone, the first guess as before, 0.270%; the fit's value the
+  first guess always 0.302% too, but FFmpeg's `f1.dts` and `f3.dts` 644 and 515 bytes bigger (by the
+  counts 503 and 514 smaller); by 32 and a fourth 0.304%, but `f1c.dts`'s packing 42 bytes bigger (6
+  smaller by 64), and kept to where it last was by a margin either way, or counted for the whole
+  stream (`f1.dts` 210 smaller), or by the decisions' costs rather than hits, less; as a second
+  guess after the first as before missed, less again (`dts_es.dtsc` 695 bytes smaller where the
+  predictions alone make it 918). The fit grew in steps: of the first 12 things alone (one fit a
+  channel), 0.196% (of scale 0.6 or 1.0, 0.190% and 0.196%; forgetting by 0.998 or 0.9995, 0.196%
+  and 0.194%); the 3 more (the two channels before's values, the last move) 0.237%; the fit's value
+  the first guess too 0.269% (the mean distance an 8th or a 32nd a scale factor, 0.267% and 0.270%);
+  the two mean moves 0.279%; groups of subbands, 3, 4, 6 or 32 of them, 0.298%, 0.297%, 0.301% and
+  0.280%; the whole's fit where the group's has had fewer than 32, 64, 128 or 256 (or 512 or 1024)
+  scale factors, 0.301%, 0.302%, 0.302% and 0.302% (0.301% without). Offline, at the first half's
+  least squares weights by channel, such a logistic's own cost on the second half against scn's:
+  `chs/m.dtsc`'s first scale factors 3.28 bits each against 3.31, `mid.dtsc`'s 3.07 against 3.06,
+  Fire's 3.60 against 2.98: in the family's decisions, not in their place. Tried on top of it and
+  dropped: the last subframe's residuals' energy, all of it and its last 8's, against the last one,
+  as two more things, 13-43 bytes smaller on `mid.dtsc`, `s2h.dtsc` and Fire, a byte bigger on
+  `dts_es.dtsc`; the ADPCM predictors' LPC from the last 64 values less their quantizer's noise in
+  the lag 0 correlation, 0-39 bytes bigger, or weighed toward the newest by 0.99 a value, 36 and 50
+  bytes smaller on `mid.dtsc` and `s2h.dtsc`. For 0.69% more instructions without the WAV
+  (`mid.dtsc`'s, compressing, 23876 million to 24042, and 0.70% decompressing, 23634 million to
+  23799; FATE's 7-frame XCH sample 0.72% more, with its WAV 0.10%) and 0.4-0.6 MB more memory at the
+  peak (`mid.dtsc` without its WAV 27.7 MB to 28.3, `s2h.dtsc` with its WAV 23.7 to 24.1: the fits'
+  sums zeroed at every stream's start, and a bigger binary): the medians of 15 runs interleaved with
+  format 175's build on this host, `mid.dtsc` without its WAV 345 KB/s to 344 compressing and 329 to
+  336 decompressing, the XCH sample 260 to 257 and 231 to 263, and with its WAV 242 to 218 and 281
+  to 309 (the host's noise more than the change).
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first
@@ -2317,7 +2374,8 @@ and only where both signs could be the value (a sign counter of its own before, 
   decision's, above).
 - **scl**: the scale factors, against the RMS's (the LFE's too).
 - **scd**: a decoded WAV's (as the scale factor search shows it; scl's until format 118, below).
-- **scn**: a channel's the WAV doesn't bind (scl's until format 166, above).
+- **scn**: a channel's the WAV doesn't bind (scl's until format 166, above; since format 176 its
+  first scale factors' outside predictions by a least squares fit of their move, above).
 - **hit**: whether an index that isn't the audio's is the other side's, and an LFE sample's whether
   it is the audio's.
 - **hid**: a decoded WAV's (as for sdd; hit's until format 132, below).
