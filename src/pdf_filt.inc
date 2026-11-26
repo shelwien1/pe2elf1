@@ -173,7 +173,7 @@ static bool flateDecode(const CodecCtx& ctx, const Bytes& in, Bytes& out, Bytes&
   }
   if (in.size() <= off) return false;
   out.clear();
-  std::vector<byte> diff;
+  lib::vector<byte> diff;
   uint64_t dsize = 0;
   bool terminated = false;  // synthetic final block appended (stream ends after a sync flush)
   double t0 = nowSec();
@@ -263,7 +263,7 @@ static bool flateEncode(const CodecCtx& ctx, const Bytes& recon, const Bytes& in
   Bytes diffB;
   r.bytes(r.len(), diffB);
   if (!r.ok()) return false;
-  std::vector<byte> diff(diffB.begin(), diffB.end());
+  lib::vector<byte> diff(diffB.begin(), diffB.end());
   VecOut vo(out);
   SpanIn ui(in.data(), in.size());
   tPreflateStop = false;

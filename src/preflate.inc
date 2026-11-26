@@ -1,17 +1,9 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-#include <memory.h>
-
-#include <algorithm>
-#include <condition_variable>
-#include <cstdint>
-#include <functional>
-#include <future>
-#include <mutex>
-#include <queue>
-#include <thread>
-#include <vector>
+// pdfdump: no C++ library headers. Containers and helpers are lib:: (base.inc, included before
+// this file). preflate's task pool is gone: it never had worker threads here, so every meta
+// block was processed synchronously already; that path is the only one left.
 
 // pdfdump: no exceptions. Corrupt correction data (and an output over the caller's cap) set this
 // flag of the calling thread; the decode loops stop on it, and the pdfdump wrappers clear it
@@ -52,7 +44,7 @@ struct PreflateConstants {
 };
 class PreflateInput {
 public:
-PreflateInput(const std::vector<byte> &v) : _data(v.size()>0 ? &v[0] : nullptr), _size(v.size()), _pos(0) {
+PreflateInput(const lib::vector<byte> &v) : _data(v.size()>0 ? &v[0] : nullptr), _size(v.size()), _pos(0) {
 }
 
 const uint pos() const {
@@ -130,7 +122,7 @@ struct PreflateHashChainExt {
   byte hashBits, hashShift;
   uint16_t runningHash, hashMask;
   uint totalShift;
-  PreflateHashChainExt(const std::vector<byte> &input_, const byte memLevel);
+  PreflateHashChainExt(const lib::vector<byte> &input_, const byte memLevel);
   ~PreflateHashChainExt();
   uint nextHash(const byte b) const {
     return ((runningHash<<hashShift)^b);
@@ -214,8 +206,8 @@ struct PreflateTokenBlock {
   int32_t contextLen;
   uint16_t nlen, ndist, ncode;
   uint8_t paddingBitCount, paddingBits;
-  std::vector<byte> treecodes;
-  std::vector<PreflateToken> tokens;
+  lib::vector<byte> treecodes;
+  lib::vector<PreflateToken> tokens;
   PreflateTokenBlock() : type(STORED), uncompressedLen(0) {
   }
 
@@ -288,7 +280,7 @@ size_t peek(const uint n) {
 }
 
 void skip(const uint n) {
-  _bitsRemaining -= std::min(n, _bitsRemaining);
+  _bitsRemaining -= lib::min(n, _bitsRemaining);
   _bits >>= n;
   _totalBitPos += n;
 }
@@ -404,10 +396,10 @@ void _constructErrorTable();
 private:
 struct Table {
   byte peekBits;
-  std::vector<int16_t> lookup;
+  lib::vector<int16_t> lookup;
 };
 Table _table0;
-std::vector<Table> _tables;
+lib::vector<Table> _tables;
 bool _error;
 };
 class OutputCacheStream : public OutputStream {
@@ -422,7 +414,7 @@ size_t write(const byte* buffer, const size_t size) {
 void reserve(const size_t len) {
   size_t cap = _cache.capacity();
   if( _cache.size()+len>cap ) {
-    _cache.reserve(cap+std::max(cap>>1, len));
+    _cache.reserve(cap+lib::max(cap>>1, len));
   }
 }
 
@@ -440,7 +432,7 @@ uint64_t cacheEndPos() const {
 }
 
 const byte*cacheData(const uint64_t pos) const {
-  return _cache.data()+(std::ptrdiff_t)(pos-_cacheStartPos);
+  return _cache.data()+(ptrdiff_t)(pos-_cacheStartPos);
 }
 
 const byte*cacheEnd() const {
@@ -453,7 +445,7 @@ const size_t cacheSize() const {
 
 private:
 OutputStream &_os;
-std::vector<byte> _cache;
+lib::vector<byte> _cache;
 uint64_t _cacheStartPos;
 };
 class PreflateBlockDecoder {
@@ -526,7 +518,7 @@ bool _constructTables(const byte* symbolBitLengths, const uint symbolCount, cons
 void _constructErrorTable(const uint symbolCount);
 
 private:
-std::vector<uint> _lookup;
+lib::vector<uint> _lookup;
 bool _error;
 };
 struct PreflateBlockTrees {
@@ -608,7 +600,7 @@ bool PreflateBlockDecoder::readBlock(PreflateTokenBlock &block, bool &last) {
         }
         _writeReference(dist, len);
         block.tokens.push_back(PreflateToken(PreflateToken::REFERENCE, len, dist, irregular258));
-        earliest_reference = std::min(earliest_reference, curPos-(int32_t)dist);
+        earliest_reference = lib::min(earliest_reference, curPos-(int32_t)dist);
         curPos += len;
       }
     }
@@ -702,7 +694,7 @@ enum ErrorCode {
   BAD_CODE_TREE,
   BAD_LD_TREE,
 };
-PreflateBlockReencoder(BitOutputStream &bos, const std::vector<byte> &uncompressedData, const size_t uncompressedOffset);
+PreflateBlockReencoder(BitOutputStream &bos, const lib::vector<byte> &uncompressedData, const size_t uncompressedOffset);
 bool writeBlock(const PreflateTokenBlock &, const bool last);
 void flush();
 ErrorCode status() const {
@@ -713,9 +705,9 @@ private:
 bool _error(const ErrorCode);
 void _setupStaticTables();
 bool _buildAndWriteDynamicTables(const PreflateTokenBlock &);
-bool _writeTokens(const std::vector<PreflateToken> &tokens);
+bool _writeTokens(const lib::vector<PreflateToken> &tokens);
 BitOutputStream &_output;
-const std::vector<byte> &_uncompressedData;
+const lib::vector<byte> &_uncompressedData;
 size_t _uncompressedDataPos;
 ErrorCode _errorCode;
 const HuffmanEncoder* _litLenEncoder;
@@ -723,7 +715,7 @@ const HuffmanEncoder* _distEncoder;
 HuffmanEncoder _dynamicLitLenEncoder;
 HuffmanEncoder _dynamicDistEncoder;
 };
-PreflateBlockReencoder::PreflateBlockReencoder(BitOutputStream &bos, const std::vector<byte> &uncompressedData, const size_t uncompressedOffset) : _output(bos), _uncompressedData(uncompressedData), _uncompressedDataPos(uncompressedOffset), _errorCode(OK), _dynamicLitLenEncoder(nullptr, 0, false), _dynamicDistEncoder(nullptr, 0, false) {
+PreflateBlockReencoder::PreflateBlockReencoder(BitOutputStream &bos, const lib::vector<byte> &uncompressedData, const size_t uncompressedOffset) : _output(bos), _uncompressedData(uncompressedData), _uncompressedDataPos(uncompressedOffset), _errorCode(OK), _dynamicLitLenEncoder(nullptr, 0, false), _dynamicDistEncoder(nullptr, 0, false) {
 }
 
 bool PreflateBlockReencoder::_error(const ErrorCode code) {
@@ -803,7 +795,7 @@ bool PreflateBlockReencoder::_buildAndWriteDynamicTables(const PreflateTokenBloc
   return true;
 }
 
-bool PreflateBlockReencoder::_writeTokens(const std::vector<PreflateToken> &tokens) {
+bool PreflateBlockReencoder::_writeTokens(const lib::vector<PreflateToken> &tokens) {
   for( size_t i = 0; i<tokens.size(); ++i ) {
     PreflateToken token = tokens[i];
     if( token.len==1 ) {
@@ -887,14 +879,14 @@ static HuffmanDecoder* staticDistDecoder;
 static HuffmanEncoder* staticLitLenEncoder;
 static HuffmanEncoder* staticDistEncoder;
 static void setLitLenBitLengths(byte (&a)[288]) {
-  std::fill(a+0, a+144, 8);
-  std::fill(a+144, a+256, 9);
-  std::fill(a+256, a+280, 7);
-  std::fill(a+280, a+288, 8);
+  lib::fill(a+0, a+144, 8);
+  lib::fill(a+144, a+256, 9);
+  lib::fill(a+256, a+280, 7);
+  lib::fill(a+280, a+288, 8);
 }
 
 static void setDistBitLengths(byte (&a)[32]) {
-  std::fill(a, a+32, 5);
+  lib::fill(a, a+32, 5);
 }
 
 const HuffmanDecoder*PreflateBlockTrees::staticLitLenTreeDecoder() {
@@ -979,7 +971,7 @@ struct PreflateSeqChain {
   uint totalShift;
   uint curPos;
   uint16_t heads[256];
-  PreflateSeqChain(const std::vector<byte> &input_);
+  PreflateSeqChain(const lib::vector<byte> &input_);
   ~PreflateSeqChain();
   bool valid(const uint refPos) const {
     return prev[refPos-totalShift].distToNext!=0xffff;
@@ -1133,11 +1125,11 @@ struct PreflateCompLevelEstimatorState {
   PreflateHashChainExt fastL1Hash;
   PreflateHashChainExt fastL2Hash;
   PreflateHashChainExt fastL3Hash;
-  const std::vector<PreflateTokenBlock> &blocks;
+  const lib::vector<PreflateTokenBlock> &blocks;
   PreflateCompLevelInfo info;
   uint16_t wsize;
   size_t off0;
-  PreflateCompLevelEstimatorState(const int wbits, const int mbits, const std::vector<byte> &unpacked_output, const size_t off0, const std::vector<PreflateTokenBlock> &blocks);
+  PreflateCompLevelEstimatorState(const int wbits, const int mbits, const lib::vector<byte> &unpacked_output, const size_t off0, const lib::vector<PreflateTokenBlock> &blocks);
   void updateHash(const uint len);
   void updateOrSkipHash(const uint len);
   void checkMatch(const PreflateToken &token);
@@ -1152,8 +1144,8 @@ private:
     return wsize;
   }
 };
-PreflateCompLevelInfo estimatePreflateCompLevel(const int wbits, const int mbits, const std::vector<byte> &unpacked_output, const size_t off0, const std::vector<PreflateTokenBlock> &blocks, const bool early_out);
-PreflateCompLevelEstimatorState::PreflateCompLevelEstimatorState(const int wbits, const int mbits, const std::vector<byte> &unpacked_output_, const size_t off0_, const std::vector<PreflateTokenBlock> &blocks_) : slowHash(unpacked_output_, mbits), fastL1Hash(unpacked_output_, mbits), fastL2Hash(unpacked_output_, mbits), fastL3Hash(unpacked_output_, mbits), blocks(blocks_), wsize(1<<wbits), off0(off0_) {
+PreflateCompLevelInfo estimatePreflateCompLevel(const int wbits, const int mbits, const lib::vector<byte> &unpacked_output, const size_t off0, const lib::vector<PreflateTokenBlock> &blocks, const bool early_out);
+PreflateCompLevelEstimatorState::PreflateCompLevelEstimatorState(const int wbits, const int mbits, const lib::vector<byte> &unpacked_output_, const size_t off0_, const lib::vector<PreflateTokenBlock> &blocks_) : slowHash(unpacked_output_, mbits), fastL1Hash(unpacked_output_, mbits), fastL2Hash(unpacked_output_, mbits), fastL3Hash(unpacked_output_, mbits), blocks(blocks_), wsize(1<<wbits), off0(off0_) {
   memset(&info, 0, sizeof(info));
   info.possibleCompressionLevels = (1<<10)-(1<<1);
   updateHash(off0);
@@ -1195,14 +1187,14 @@ void PreflateCompLevelEstimatorState::updateOrSkipHash(const uint len) {
 
 uint16_t PreflateCompLevelEstimatorState::matchDepth(const uint hashHead, const PreflateToken &targetReference, const PreflateHashChainExt &hash) {
   uint curPos = hash.input().pos();
-  uint curMaxDist = std::min(curPos, windowSize());
+  uint curMaxDist = lib::min(curPos, windowSize());
   uint startDepth = hash.getNodeDepth(hashHead);
   PreflateHashIterator chainIt = hash.iterateFromPos(curPos-targetReference.dist, curPos, curMaxDist);
   if( !chainIt.curPos||targetReference.dist>curMaxDist ) {
     return 0xffffu;
   }
   uint endDepth = chainIt.depth();
-  return std::min(startDepth-endDepth, 0xffffu);
+  return lib::min(startDepth-endDepth, 0xffffu);
 }
 
 bool PreflateCompLevelEstimatorState::checkMatchSingleFastHash(const PreflateToken &token, const PreflateHashChainExt &hash, const PreflateParserConfig &config, const uint hashHead) {
@@ -1238,18 +1230,18 @@ void PreflateCompLevelEstimatorState::checkMatch(const PreflateToken &token) {
     if( mdepth>=0x8001 ) {
       info.unfoundReferences++;
     } else {
-      info.maxChainDepth = std::max(info.maxChainDepth, mdepth);
+      info.maxChainDepth = lib::max(info.maxChainDepth, mdepth);
     }
     if( token.dist==slowHash.input().pos() ) {
       info.matchToStart = true;
     }
     if( mdepth==0 ) {
-      info.longestDistAtHop0 = std::max(info.longestDistAtHop0, token.dist);
+      info.longestDistAtHop0 = lib::max(info.longestDistAtHop0, token.dist);
     } else {
-      info.longestDistAtHop1Plus = std::max(info.longestDistAtHop1Plus, token.dist);
+      info.longestDistAtHop1Plus = lib::max(info.longestDistAtHop1Plus, token.dist);
     }
     if( token.len==3 ) {
-      info.longestLen3Dist = std::max(info.longestLen3Dist, token.dist);
+      info.longestLen3Dist = lib::max(info.longestLen3Dist, token.dist);
     }
     if( info.possibleCompressionLevels&((1<<10)-(1<<4)) ) {
       for( uint i = 0; i<6; ++i ) {
@@ -1313,7 +1305,7 @@ void PreflateCompLevelEstimatorState::recommend() {
   }
 }
 
-PreflateCompLevelInfo estimatePreflateCompLevel(const int wbits, const int mbits, const std::vector<byte> &unpacked_output, const size_t off0, const std::vector<PreflateTokenBlock> &blocks, const bool early_out) {
+PreflateCompLevelInfo estimatePreflateCompLevel(const int wbits, const int mbits, const lib::vector<byte> &unpacked_output, const size_t off0, const lib::vector<PreflateTokenBlock> &blocks, const bool early_out) {
   PreflateCompLevelEstimatorState state(wbits, mbits, unpacked_output, off0, blocks);
   state.checkDump(early_out);
   state.recommend();
@@ -1666,27 +1658,27 @@ template <uint N> struct ACFixedScaleModel : public ACModelBase<N> {
 class MemStream : public SeekableInputOutputStream {
 public:
 MemStream();
-MemStream(const std::vector<uint8_t> &content);
-MemStream(const std::vector<uint8_t> &content, const size_t off, const size_t sz);
+MemStream(const lib::vector<uint8_t> &content);
+MemStream(const lib::vector<uint8_t> &content, const size_t off, const size_t sz);
 virtual bool eof() const;
 virtual size_t read(byte* buffer, const size_t size);
 virtual size_t write(const byte* buffer, const size_t size);
 virtual uint64_t tell() const;
 virtual uint64_t seek(const uint64_t newPos);
-void replaceData(const std::vector<uint8_t> &content) {
+void replaceData(const lib::vector<uint8_t> &content) {
   _data = content;
 }
 
-const std::vector<uint8_t> &data() const {
+const lib::vector<uint8_t> &data() const {
   return _data;
 }
 
-std::vector<uint8_t> extractData() {
-  return std::move(_data);
+lib::vector<uint8_t> extractData() {
+  return lib::move(_data);
 }
 
 private:
-std::vector<uint8_t> _data;
+lib::vector<uint8_t> _data;
 size_t _pos;
 };
 struct PreflateStreamInfo {
@@ -1701,7 +1693,7 @@ struct PreflateStreamInfo {
   uint countRLEBlocks;
   uint countStaticHuffTreeBlocks;
 };
-PreflateStreamInfo extractPreflateInfo(const std::vector<PreflateTokenBlock> &blocks);
+PreflateStreamInfo extractPreflateInfo(const lib::vector<PreflateTokenBlock> &blocks);
 enum PreflateStrategy { PREFLATE_DEFAULT, PREFLATE_RLE_ONLY, PREFLATE_HUFF_ONLY, PREFLATE_STORE };
 enum PreflateHuffStrategy {
   PREFLATE_HUFF_DYNAMIC,
@@ -1735,7 +1727,7 @@ byte estimatePreflateMemLevel(const uint maxBlockSize);
 PreflateStrategy estimatePreflateStrategy(const PreflateStreamInfo &);
 PreflateHuffStrategy estimatePreflateHuffStrategy(const PreflateStreamInfo &);
 byte estimatePreflateWindowBits(const uint maxDist);
-PreflateParameters estimatePreflateParameters(const std::vector<byte> &unpacked_output, const size_t off0, const std::vector<PreflateTokenBlock> &blocks);
+PreflateParameters estimatePreflateParameters(const lib::vector<byte> &unpacked_output, const size_t off0, const lib::vector<PreflateTokenBlock> &blocks);
 struct PreflateStatisticsCounter {
   struct BlockPrediction {
 public:
@@ -1771,7 +1763,7 @@ public:
     }
 
     void incTreeCodeLengthDiffToPrediction(const int len_diff) {
-      TCBitlengthCorrection[std::max(std::min(len_diff, 3), -3)+3]++;
+      TCBitlengthCorrection[lib::max(lib::min(len_diff, 3), -3)+3]++;
     }
 
     void incLiteralCountPredictionWrong(const bool mispredicted) {
@@ -1791,11 +1783,11 @@ public:
     }
 
     void incLDCodeRepeatDiffToPrediction(const int len_diff) {
-      LDRepeatCountCorrection[std::max(std::min(len_diff, 1), -1)+1]++;
+      LDRepeatCountCorrection[lib::max(lib::min(len_diff, 1), -1)+1]++;
     }
 
     void incLDCodeLengthDiffToPrediction(const int len_diff) {
-      LDBitlengthCorrection[std::max(std::min(len_diff, 4), -4)+4]++;
+      LDBitlengthCorrection[lib::max(lib::min(len_diff, 4), -4)+4]++;
     }
 
     static uint totalModels() {
@@ -1827,7 +1819,7 @@ public:
     }
 
     void incLengthDiffToPrediction(const int len_diff) {
-      LENCorrection[std::max(std::min(len_diff, 6), -6)+6]++;
+      LENCorrection[lib::max(lib::min(len_diff, 6), -6)+6]++;
     }
 
     void incIrregularLength258Encoding(const bool irregular) {
@@ -1835,11 +1827,11 @@ public:
     }
 
     void incDistanceDiffToPredictionAfterIncorrectLengthPrediction(const int len_diff) {
-      DISTAfterLenCorrection[std::min(len_diff, 3)]++;
+      DISTAfterLenCorrection[lib::min(len_diff, 3)]++;
     }
 
     void incDistanceDiffToPredictionAfterCorrectLengthPrediction(const int len_diff) {
-      DISTOnlyCorrection[std::min(len_diff, 3)]++;
+      DISTOnlyCorrection[lib::min(len_diff, 3)]++;
     }
 
     static uint totalModels() {
@@ -2255,7 +2247,7 @@ protected:
 struct PreflatePredictionEncoder : public PreflatePredictionModel {
   PreflatePredictionEncoder();
   void start(const PreflatePredictionModel &, const PreflateParameters &, const uint modelId);
-  std::vector<uint8_t> end();
+  lib::vector<uint8_t> end();
   void encodeValue(const uint value, const uint maxBits) {
     encoder->encodeBits(value, maxBits);
   }
@@ -2341,7 +2333,7 @@ private:
 };
 struct PreflatePredictionDecoder : public PreflatePredictionModel {
   PreflatePredictionDecoder();
-  void start(const PreflatePredictionModel &, const PreflateParameters &, const std::vector<uint8_t> &, size_t off0, size_t size);
+  void start(const PreflatePredictionModel &, const PreflateParameters &, const lib::vector<uint8_t> &, size_t off0, size_t size);
   void end();
   uint decodeValue(const uint maxBits) {
     return decoder->decodeBits(maxBits);
@@ -2427,7 +2419,7 @@ struct PreflateMetaEncoder {
   uint addModel(const PreflateStatisticsCounter &, const PreflateParameters &);
   bool beginMetaBlockWithModel(PreflatePredictionEncoder &, const uint modelId);
   bool endMetaBlock(PreflatePredictionEncoder &, const size_t uncompressed);
-  std::vector<byte> finish();
+  lib::vector<byte> finish();
 
 private:
   struct modelType {
@@ -2443,12 +2435,12 @@ private:
     size_t uncompressedSize;
   };
   bool inError;
-  std::vector<modelType> modelList;
-  std::vector<metaBlockInfo> blockList;
-  std::vector<uint8_t> reconData;
+  lib::vector<modelType> modelList;
+  lib::vector<metaBlockInfo> blockList;
+  lib::vector<uint8_t> reconData;
 };
 struct PreflateMetaDecoder {
-  PreflateMetaDecoder(const std::vector<uint8_t> &reconData, const uint64_t uncompressedSize);
+  PreflateMetaDecoder(const lib::vector<uint8_t> &reconData, const uint64_t uncompressedSize);
   ~PreflateMetaDecoder();
   bool error() const {
     return inError;
@@ -2484,48 +2476,13 @@ private:
     uint64_t uncompressedSize;
   };
   bool inError;
-  const std::vector<uint8_t> &reconData;
+  const lib::vector<uint8_t> &reconData;
   const uint64_t uncompressedSize;
-  std::vector<modelType> modelList;
-  std::vector<metaBlockInfo> blockList;
+  lib::vector<modelType> modelList;
+  lib::vector<metaBlockInfo> blockList;
 };
 bool isEqual(const PreflatePredictionModel &, const PreflatePredictionModel &);
-class TaskPool {
-public:
-TaskPool();
-~TaskPool();
-template <class F, class ... Args> auto addTask(F &&f, Args &&... args) -> std::future<typename std::result_of<F (Args...)>::type> {
-  using R = typename std::result_of<F (Args...)>::type;
-  auto task = std::make_shared<std::packaged_task<R()> >(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
-  if( _state==INIT ) {
-    _init();
-  }
-  std::future<R> res = task->get_future();
-  {
-    std::unique_lock<std::mutex> lock(_mutex);
-    _tasks.emplace([task]() {
-        (*task)();
-      });
-  }
-  _condition.notify_one();
-  return res;
-}
 
-size_t extraThreadCount() const {
-  return _threadLimit;
-}
-
-private:
-enum State { INIT, RUN, FINISH };
-void _init();
-State _state;
-size_t _threadLimit;
-std::vector<std::thread> _workers;
-std::mutex _mutex;
-std::condition_variable _condition;
-std::queue<std::function<void()> > _tasks;
-};
-extern TaskPool globalTaskPool;
 struct PreflateTokenPredictor;
 struct PreflateTreePredictor;
 class PreflateDecoderTask {
@@ -2540,7 +2497,7 @@ virtual bool beginEncoding(const uint32_t metaBlockId, PreflatePredictionEncoder
 virtual bool endEncoding(const uint32_t metaBlockId, PreflatePredictionEncoder &, const size_t uncompressedSize) = 0;
 virtual void markProgress() = 0;
 };
-PreflateDecoderTask(Handler &handler, const uint32_t metaBlockId, std::vector<PreflateTokenBlock> &&tokenData, std::vector<uint8_t> &&uncompressedData, const size_t uncompressedOffset, const bool lastMetaBlock, const uint32_t paddingBits);
+PreflateDecoderTask(Handler &handler, const uint32_t metaBlockId, lib::vector<PreflateTokenBlock> &&tokenData, lib::vector<uint8_t> &&uncompressedData, const size_t uncompressedOffset, const bool lastMetaBlock, const uint32_t paddingBits);
 bool analyze();
 bool encode();
 uint32_t id() {
@@ -2550,19 +2507,19 @@ uint32_t id() {
 private:
 Handler &handler;
 uint32_t metaBlockId;
-std::vector<PreflateTokenBlock> tokenData;
-std::vector<uint8_t> uncompressedData;
+lib::vector<PreflateTokenBlock> tokenData;
+lib::vector<uint8_t> uncompressedData;
 size_t uncompressedOffset;
 bool lastMetaBlock;
 uint32_t paddingBits;
 PreflateParameters params;
 PreflateStatisticsCounter counter;
-std::unique_ptr<PreflateTokenPredictor> tokenPredictor;
-std::unique_ptr<PreflateTreePredictor> treePredictor;
+lib::unique_ptr<PreflateTokenPredictor> tokenPredictor;
+lib::unique_ptr<PreflateTreePredictor> treePredictor;
 };
-bool preflate_decode(OutputStream &unpacked_output, std::vector<byte> &preflate_diff, uint64_t &deflate_size, InputStream &deflate_raw, std::function<void(void)> block_callback, const size_t min_deflate_size, const size_t metaBlockSize = INT32_MAX);
-bool preflate_decode(std::vector<byte> &unpacked_output, std::vector<byte> &preflate_diff, const std::vector<byte> &deflate_raw, const size_t metaBlockSize = INT32_MAX);
-bool preflate_decode(std::vector<byte> &unpacked_output, std::vector<byte> &preflate_diff, uint64_t &deflate_size, InputStream &deflate_raw, std::function<void(void)> block_callback, const size_t min_deflate_size, const size_t metaBlockSize = INT32_MAX);
+bool preflate_decode(OutputStream &unpacked_output, lib::vector<byte> &preflate_diff, uint64_t &deflate_size, InputStream &deflate_raw, lib::function<void(void)> block_callback, const size_t min_deflate_size, const size_t metaBlockSize = INT32_MAX);
+bool preflate_decode(lib::vector<byte> &unpacked_output, lib::vector<byte> &preflate_diff, const lib::vector<byte> &deflate_raw, const size_t metaBlockSize = INT32_MAX);
+bool preflate_decode(lib::vector<byte> &unpacked_output, lib::vector<byte> &preflate_diff, uint64_t &deflate_size, InputStream &deflate_raw, lib::function<void(void)> block_callback, const size_t min_deflate_size, const size_t metaBlockSize = INT32_MAX);
 struct PreflateStatisticalModel;
 struct PreflateStatisticalCodec;
 struct PreflateTokenPredictor {
@@ -2583,11 +2540,11 @@ struct PreflateTokenPredictor {
     bool inputEOF;
     bool lastBlock;
     uint8_t paddingBits, paddingCounts;
-    std::vector<byte> tokenInfo;
-    std::vector<int32_t> correctives;
+    lib::vector<byte> tokenInfo;
+    lib::vector<int32_t> correctives;
   };
-  std::vector<BlockAnalysisResult> analysisResults;
-  PreflateTokenPredictor(const PreflateParameters &params, const std::vector<byte> &uncompressed, const size_t offset);
+  lib::vector<BlockAnalysisResult> analysisResults;
+  PreflateTokenPredictor(const PreflateParameters &params, const lib::vector<byte> &uncompressed, const size_t offset);
   void analyzeBlock(const uint blockno, const PreflateTokenBlock &block);
   void updateCounters(PreflateStatisticsCounter*, const uint blockno);
   void encodeBlock(PreflatePredictionEncoder*, const uint blockno);
@@ -2611,10 +2568,10 @@ struct PreflateTreePredictor {
   bool predictionFailure;
   struct BlockAnalysisResult {
     PreflateTokenBlock::Type blockType;
-    std::vector<byte> tokenInfo;
-    std::vector<int32_t> correctives;
+    lib::vector<byte> tokenInfo;
+    lib::vector<int32_t> correctives;
   };
-  std::vector<BlockAnalysisResult> analysisResults;
+  lib::vector<BlockAnalysisResult> analysisResults;
   void collectTokenStatistics(uint LcodeFrequencies[], uint DcodeFrequencies[], uint &Lcount, uint &Dcount, const PreflateTokenBlock &block);
   uint buildLBitlenghs(byte bitLengths[], uint Lcodes[]);
   uint buildDBitlenghs(byte bitLengths[], uint Dcodes[]);
@@ -2624,7 +2581,7 @@ struct PreflateTreePredictor {
   byte predictCodeData(const byte* symBitLen, const TreeCodeType type, const uint symCount, const bool first);
   void predictLDTrees(BlockAnalysisResult &analysis, uint* frequencies, const byte* symBitLen, const uint symLCount, const uint symDCount, const byte* targetCodes, const uint targetCodeSize);
   uint reconstructLDTrees(PreflatePredictionDecoder* codec, uint* frequencies, byte* targetCodes, uint targetCodeSize, const byte* symBitLen, const uint symLCount, const uint symDCount);
-  PreflateTreePredictor(const std::vector<byte> &dump, const size_t offset);
+  PreflateTreePredictor(const lib::vector<byte> &dump, const size_t offset);
   void analyzeBlock(const uint blockno, const PreflateTokenBlock &block);
   void updateCounters(PreflateStatisticsCounter*, const uint blockno);
   void encodeBlock(PreflatePredictionEncoder*, const uint blockno);
@@ -2632,10 +2589,10 @@ struct PreflateTreePredictor {
 };
 class PreflateDecoderHandler : public PreflateDecoderTask::Handler {
 public:
-PreflateDecoderHandler(std::function<void(void)> progressCallback_) : progressCallback(progressCallback_) {
+PreflateDecoderHandler(lib::function<void(void)> progressCallback_) : progressCallback(progressCallback_) {
 }
 
-bool finish(std::vector<uint8_t> &reconstructionData) {
+bool finish(lib::vector<uint8_t> &reconstructionData) {
   reconstructionData = encoder.finish();
   return !encoder.error();
 }
@@ -2657,16 +2614,14 @@ virtual bool endEncoding(const uint32_t metaBlockId, PreflatePredictionEncoder &
 }
 
 virtual void markProgress() {
-  std::unique_lock<std::mutex> lock(this->_mutex);
   progressCallback();
 }
 
 private:
 PreflateMetaEncoder encoder;
-std::function<void(void)> progressCallback;
-std::mutex _mutex;
+lib::function<void(void)> progressCallback;
 };
-PreflateDecoderTask::PreflateDecoderTask(PreflateDecoderTask::Handler &handler_, const uint32_t metaBlockId_, std::vector<PreflateTokenBlock> &&tokenData_, std::vector<uint8_t> &&uncompressedData_, const size_t uncompressedOffset_, const bool lastMetaBlock_, const uint32_t paddingBits_) : handler(handler_), metaBlockId(metaBlockId_), tokenData(tokenData_), uncompressedData(uncompressedData_), uncompressedOffset(uncompressedOffset_), lastMetaBlock(lastMetaBlock_), paddingBits(paddingBits_) {
+PreflateDecoderTask::PreflateDecoderTask(PreflateDecoderTask::Handler &handler_, const uint32_t metaBlockId_, lib::vector<PreflateTokenBlock> &&tokenData_, lib::vector<uint8_t> &&uncompressedData_, const size_t uncompressedOffset_, const bool lastMetaBlock_, const uint32_t paddingBits_) : handler(handler_), metaBlockId(metaBlockId_), tokenData(tokenData_), uncompressedData(uncompressedData_), uncompressedOffset(uncompressedOffset_), lastMetaBlock(lastMetaBlock_), paddingBits(paddingBits_) {
 }
 
 bool PreflateDecoderTask::analyze() {
@@ -2717,7 +2672,7 @@ bool PreflateDecoderTask::encode() {
   return handler.endEncoding(metaBlockId, pcodec, uncompressedData.size()-uncompressedOffset);
 }
 
-bool preflate_decode(OutputStream &unpacked_output, std::vector<byte> &preflate_diff, uint64_t &deflate_size, InputStream &deflate_raw, std::function<void(void)> block_callback, const size_t min_deflate_size, const size_t metaBlockSize) {
+bool preflate_decode(OutputStream &unpacked_output, lib::vector<byte> &preflate_diff, uint64_t &deflate_size, InputStream &deflate_raw, lib::function<void(void)> block_callback, const size_t min_deflate_size, const size_t metaBlockSize) {
   deflate_size = 0;
   uint64_t deflate_bits = 0;
   size_t prevBitPos = 0;
@@ -2729,17 +2684,15 @@ bool preflate_decode(OutputStream &unpacked_output, std::vector<byte> &preflate_
   }
   bool last;
   uint i = 0;
-  std::vector<PreflateTokenBlock> blocks;
-  std::vector<uint32_t> blockSizes;
+  lib::vector<PreflateTokenBlock> blocks;
+  lib::vector<uint32_t> blockSizes;
   uint64_t sumBlockSizes = 0;
   uint64_t lastEndPos = 0;
   uint64_t uncompressedMetaStart = 0;
-  size_t MBSize = std::min<size_t>(std::max<size_t>(metaBlockSize, 1u<<18), (1u<<31)-1);
+  size_t MBSize = lib::min<size_t>(lib::max<size_t>(metaBlockSize, 1u<<18), (1u<<31)-1);
   size_t MBThreshold = (MBSize*3)>>1;
   PreflateDecoderHandler encoder(block_callback);
   size_t MBcount = 0;
-  std::queue<std::future<std::shared_ptr<PreflateDecoderTask> > > futureQueue;
-  size_t queueLimit = std::min(2*globalTaskPool.extraThreadCount(), (1<<26)/MBThreshold);
   bool fail = false;
   do {
     PreflateTokenBlock newBlock;
@@ -2777,15 +2730,15 @@ bool preflate_decode(OutputStream &unpacked_output, std::vector<byte> &preflate_
           }
         }
       }
-      std::vector<PreflateTokenBlock> blocksForMeta;
+      lib::vector<PreflateTokenBlock> blocksForMeta;
       for( size_t j = 0; j<blockCount; ++j ) {
-        blocksForMeta.push_back(std::move(blocks[j]));
+        blocksForMeta.push_back(lib::move(blocks[j]));
       }
       blocks.erase(blocks.begin(), blocks.begin()+blockCount);
       blockSizes.erase(blockSizes.begin(), blockSizes.begin()+blockCount);
       sumBlockSizes -= blockSizeSum;
       size_t uncompressedOffset = MBcount==0 ? 0 : 1<<15;
-      std::vector<uint8_t> uncompressedDataForMeta(decOutCache.cacheData(uncompressedMetaStart-uncompressedOffset), decOutCache.cacheData(uncompressedMetaStart-uncompressedOffset)+blockSizeSum+uncompressedOffset);
+      lib::vector<uint8_t> uncompressedDataForMeta(decOutCache.cacheData(uncompressedMetaStart-uncompressedOffset), decOutCache.cacheData(uncompressedMetaStart-uncompressedOffset)+blockSizeSum+uncompressedOffset);
       uncompressedMetaStart += blockSizeSum;
       size_t paddingBits = 0;
       if( last ) {
@@ -2794,31 +2747,12 @@ bool preflate_decode(OutputStream &unpacked_output, std::vector<byte> &preflate_
         deflate_bits += decInBits.bitPos()-prevBitPos;
         prevBitPos = decInBits.bitPos();
       }
-      if( futureQueue.empty()&&(queueLimit==0||last) ) {
-        PreflateDecoderTask task(encoder, MBcount, std::move(blocksForMeta), std::move(uncompressedDataForMeta), uncompressedOffset, last, paddingBits);
+      {
+        PreflateDecoderTask task(encoder, MBcount, lib::move(blocksForMeta), lib::move(uncompressedDataForMeta), uncompressedOffset, last, paddingBits);
         if( !task.analyze()||!task.encode() ) {
           fail = true;
           break;
         }
-      } else {
-        if( futureQueue.size()>=queueLimit ) {
-          std::future<std::shared_ptr<PreflateDecoderTask> > first = std::move(futureQueue.front());
-          futureQueue.pop();
-          std::shared_ptr<PreflateDecoderTask> data = first.get();
-          if( !data||!data->encode() ) {
-            fail = true;
-            break;
-          }
-        }
-        std::shared_ptr<PreflateDecoderTask> ptask;
-        ptask.reset(new PreflateDecoderTask(encoder, MBcount, std::move(blocksForMeta), std::move(uncompressedDataForMeta), uncompressedOffset, last, paddingBits));
-        futureQueue.push(globalTaskPool.addTask([ptask, &fail]() {
-          if( !fail&&ptask->analyze() ) {
-            return ptask;
-          } else {
-            return std::shared_ptr<PreflateDecoderTask>();
-          }
-        }));
       }
       if( !last ) {
         decOutCache.flushUpTo(uncompressedMetaStart-(1<<15));
@@ -2826,14 +2760,6 @@ bool preflate_decode(OutputStream &unpacked_output, std::vector<byte> &preflate_
       MBcount++;
     }
   } while( !fail&&!last );
-  while( !futureQueue.empty() ) {
-    std::future<std::shared_ptr<PreflateDecoderTask> > first = std::move(futureQueue.front());
-    futureQueue.pop();
-    std::shared_ptr<PreflateDecoderTask> data = first.get();
-    if( fail||!data||!data->encode() ) {
-      fail = true;
-    }
-  }
   decOutCache.flush();
   deflate_size = (deflate_bits+7)>>3;
   if( deflate_size<min_deflate_size ) {
@@ -2842,21 +2768,21 @@ bool preflate_decode(OutputStream &unpacked_output, std::vector<byte> &preflate_
   return !fail&&encoder.finish(preflate_diff);
 }
 
-bool preflate_decode(std::vector<byte> &unpacked_output, std::vector<byte> &preflate_diff, uint64_t &deflate_size, InputStream &deflate_raw, std::function<void(void)> block_callback, const size_t min_deflate_size, const size_t metaBlockSize) {
+bool preflate_decode(lib::vector<byte> &unpacked_output, lib::vector<byte> &preflate_diff, uint64_t &deflate_size, InputStream &deflate_raw, lib::function<void(void)> block_callback, const size_t min_deflate_size, const size_t metaBlockSize) {
   MemStream uncompressedOutput;
   bool result = preflate_decode(uncompressedOutput, preflate_diff, deflate_size, deflate_raw, block_callback, min_deflate_size, metaBlockSize);
   unpacked_output = uncompressedOutput.extractData();
   return result;
 }
 
-bool preflate_decode(std::vector<byte> &unpacked_output, std::vector<byte> &preflate_diff, const std::vector<byte> &deflate_raw, const size_t metaBlockSize) {
+bool preflate_decode(lib::vector<byte> &unpacked_output, lib::vector<byte> &preflate_diff, const lib::vector<byte> &deflate_raw, const size_t metaBlockSize) {
   MemStream mem(deflate_raw);
   uint64_t raw_size;
   return preflate_decode(unpacked_output, preflate_diff, raw_size, mem, [] {
   }, 0, metaBlockSize)&&raw_size==deflate_raw.size();
 }
 
-PreflateHashChainExt::PreflateHashChainExt(const std::vector<byte> &input_, const byte memLevel) : _input(input_), totalShift(-8) {
+PreflateHashChainExt::PreflateHashChainExt(const lib::vector<byte> &input_, const byte memLevel) : _input(input_), totalShift(-8) {
   hashBits = memLevel+7;
   hashShift = (hashBits+PreflateConstants::MIN_MATCH-1)/PreflateConstants::MIN_MATCH;
   hashMask = (1<<hashBits)-1;
@@ -2883,7 +2809,7 @@ void PreflateHashChainExt::updateHash(const uint l) {
   if( l>0x180 ) {
     uint l_ = l;
     while( l_>0 ) {
-      uint blk = std::min(l_, 0x180u);
+      uint blk = lib::min(l_, 0x180u);
       updateHash(blk);
       l_ -= blk;
     }
@@ -2894,7 +2820,7 @@ void PreflateHashChainExt::updateHash(const uint l) {
   if( pos-totalShift>=0xfe08 ) {
     reshift();
   }
-  for( uint i = 2; i<std::min(l+2, _input.remaining()); ++i ) {
+  for( uint i = 2; i<lib::min(l+2, _input.remaining()); ++i ) {
     updateRunningHash(b[i]);
     uint h = runningHash&hashMask;
     uint p = (pos+i-2)-totalShift;
@@ -2936,16 +2862,16 @@ void PreflateHashChainExt::skipHash(const uint l) {
 void PreflateHashChainExt::reshift() {
   const uint16_t delta = 0x7e00;
   for( uint i = 0, n = hashMask+1; i<n; ++i ) {
-    head[i] = std::max(head[i], delta)-delta;
+    head[i] = lib::max(head[i], delta)-delta;
   }
   for( uint i = delta+8, n = 1<<16; i<n; ++i ) {
-    prev[i-delta] = std::max(prev[i], delta)-delta;
+    prev[i-delta] = lib::max(prev[i], delta)-delta;
   }
   memmove(chainDepth+8, chainDepth+8+delta, (0x10000-8-delta)*sizeof(chainDepth[0]));
   totalShift += delta;
 }
 
-PreflateStreamInfo extractPreflateInfo(const std::vector<PreflateTokenBlock> &blocks) {
+PreflateStreamInfo extractPreflateInfo(const lib::vector<PreflateTokenBlock> &blocks) {
   PreflateStreamInfo result;
   memset(&result, 0, sizeof(result));
   result.countBlocks = blocks.size();
@@ -2959,7 +2885,7 @@ PreflateStreamInfo extractPreflateInfo(const std::vector<PreflateTokenBlock> &bl
       result.countStaticHuffTreeBlocks++;
     }
     result.tokenCount += b.tokens.size();
-    result.maxTokensPerBlock = std::max(result.maxTokensPerBlock, (uint)b.tokens.size());
+    result.maxTokensPerBlock = lib::max(result.maxTokensPerBlock, (uint)b.tokens.size());
     uint blockMaxDist = 0;
     for( uint j = 0, m = b.tokens.size(); j<m; ++j ) {
       const PreflateToken &t = b.tokens[j];
@@ -2967,10 +2893,10 @@ PreflateStreamInfo extractPreflateInfo(const std::vector<PreflateTokenBlock> &bl
         result.literalCount++;
       } else {
         result.referenceCount++;
-        blockMaxDist = std::max(blockMaxDist, (uint)t.dist);
+        blockMaxDist = lib::max(blockMaxDist, (uint)t.dist);
       }
     }
-    result.maxDist = std::max(result.maxDist, blockMaxDist);
+    result.maxDist = lib::max(result.maxDist, blockMaxDist);
     if( blockMaxDist==0 ) {
       result.countHuffBlocks++;
     } else if( blockMaxDist==1 ) {
@@ -2987,7 +2913,7 @@ byte estimatePreflateMemLevel(const uint maxBlockSize_) {
     ++mbits;
     maxBlockSize >>= 1;
   }
-  mbits = std::min(std::max(mbits, 7u), 15u);
+  mbits = lib::min(lib::max(mbits, 7u), 15u);
   return mbits-6;
 }
 
@@ -2995,7 +2921,7 @@ byte estimatePreflateWindowBits(const uint maxDist_) {
   uint maxDist = maxDist_;
   maxDist += PreflateConstants::MIN_LOOKAHEAD;
   uint wbits = bitLength(maxDist-1);
-  wbits = std::min(std::max(wbits, 9u), 15u);
+  wbits = lib::min(lib::max(wbits, 9u), 15u);
   return wbits;
 }
 
@@ -3022,7 +2948,7 @@ PreflateHuffStrategy estimatePreflateHuffStrategy(const PreflateStreamInfo &info
   return PREFLATE_HUFF_MIXED;
 }
 
-PreflateParameters estimatePreflateParameters(const std::vector<byte> &unpacked_output, const size_t off0, const std::vector<PreflateTokenBlock> &blocks) {
+PreflateParameters estimatePreflateParameters(const lib::vector<byte> &unpacked_output, const size_t off0, const lib::vector<PreflateTokenBlock> &blocks) {
   PreflateStreamInfo info = extractPreflateInfo(blocks);
   PreflateParameters result;
   result.windowBits = estimatePreflateWindowBits(info.maxDist);
@@ -3091,25 +3017,25 @@ uint PreflatePredictorState::suffixCompare(const byte* s1, const byte* s2, const
 }
 
 bool PreflatePredictorState::createMatchHelper(MatchHelper &helper, const uint prevLen, const uint startPos, const bool veryFarMatches, const bool matchesToStart, const uint maxDepth) {
-  helper.maxLen = std::min(totalInputSize()-startPos, (uint)PreflateConstants::MAX_MATCH);
-  if( helper.maxLen<std::max<uint32_t>(prevLen+1, PreflateConstants::MIN_MATCH) ) {
+  helper.maxLen = lib::min(totalInputSize()-startPos, (uint)PreflateConstants::MAX_MATCH);
+  if( helper.maxLen<lib::max<uint32_t>(prevLen+1, PreflateConstants::MIN_MATCH) ) {
     return false;
   }
   helper.startPos = startPos;
   uint maxDistToStart = startPos-(matchesToStart ? 0 : 1);
   if( veryFarMatches ) {
-    helper.curMaxDistHop1Plus = helper.curMaxDistHop0 = std::min(maxDistToStart, windowSize());
+    helper.curMaxDistHop1Plus = helper.curMaxDistHop0 = lib::min(maxDistToStart, windowSize());
   } else {
     uint maxDist = windowSize()-PreflateConstants::MIN_LOOKAHEAD;
-    helper.curMaxDistHop0 = std::min(maxDistToStart, maxDist);
-    helper.curMaxDistHop1Plus = std::min(maxDistToStart, maxDist-1);
+    helper.curMaxDistHop0 = lib::min(maxDistToStart, maxDist);
+    helper.curMaxDistHop1Plus = lib::min(maxDistToStart, maxDist-1);
   }
   if( maxDepth>0 ) {
     helper.maxChain = maxDepth;
     helper.niceLen = helper.maxLen;
   } else {
     helper.maxChain = maxChainLength();
-    helper.niceLen = std::min(niceMatchLength(), helper.maxLen);
+    helper.niceLen = lib::min(niceMatchLength(), helper.maxLen);
     if( prevLen>=goodMatchLength() ) {
       helper.maxChain >>= 2;
     }
@@ -3165,11 +3091,11 @@ PreflateToken PreflatePredictorState::seqMatch(const uint startPos, const uint h
   if( !chainIt ) {
     return bestMatch;
   }
-  uint curSeqLen = std::min<uint32_t>(seq.len(startPos), h.maxLen);
+  uint curSeqLen = lib::min<uint32_t>(seq.len(startPos), h.maxLen);
   uint curMaxDist = h.curMaxDistHop1Plus;
   uint bestLen = prevLen;
   if( curSeqLen<PreflateConstants::MIN_MATCH ) {
-    curSeqLen = std::min(chainIt.len()-chainIt.dist(), h.maxLen);
+    curSeqLen = lib::min(chainIt.len()-chainIt.dist(), h.maxLen);
     if( curSeqLen>prevLen&&1<=h.curMaxDistHop0 ) {
       bestLen = curSeqLen;
       bestMatch = PreflateToken(PreflateToken::REFERENCE, curSeqLen, 1);
@@ -3194,13 +3120,13 @@ PreflateToken PreflatePredictorState::seqMatch(const uint startPos, const uint h
     }
   }
   const byte* input = inputCursor()+startPos-currentInputPos();
-  uint bestSeqLen = std::min(curSeqLen, bestLen);
+  uint bestSeqLen = lib::min(curSeqLen, bestLen);
   do {
     if( chainIt.len()<bestSeqLen ) {
       continue;
     }
     uint oldBestSeqLen = bestSeqLen;
-    bestSeqLen = std::min<uint32_t>(std::min<uint32_t>(curSeqLen, chainIt.len()), h.niceLen);
+    bestSeqLen = lib::min<uint32_t>(lib::min<uint32_t>(curSeqLen, chainIt.len()), h.niceLen);
     uint bestDist = chainIt.dist()-chainIt.len()+bestSeqLen;
     uint error = 0;
     if( bestDist>curMaxDist ) {
@@ -3217,7 +3143,7 @@ PreflateToken PreflatePredictorState::seqMatch(const uint startPos, const uint h
       }
     }
     if( error ) {
-      if( bestSeqLen>std::max<uint32_t>(oldBestSeqLen, PreflateConstants::MIN_MATCH-1)+error ) {
+      if( bestSeqLen>lib::max<uint32_t>(oldBestSeqLen, PreflateConstants::MIN_MATCH-1)+error ) {
         bestMatch = PreflateToken(PreflateToken::REFERENCE, bestSeqLen-error, bestDist-error);
       }
       break;
@@ -3227,7 +3153,7 @@ PreflateToken PreflatePredictorState::seqMatch(const uint startPos, const uint h
       break;
     } else {
       const byte* match = input-bestDist;
-      uint matchLength = bestSeqLen+suffixCompare(match+bestSeqLen, input+bestSeqLen, std::max(bestLen, bestSeqLen)-bestSeqLen, h.maxLen-bestSeqLen);
+      uint matchLength = bestSeqLen+suffixCompare(match+bestSeqLen, input+bestSeqLen, lib::max(bestLen, bestSeqLen)-bestSeqLen, h.maxLen-bestSeqLen);
       if( matchLength>bestLen ) {
         bestLen = matchLength;
         bestMatch = PreflateToken(PreflateToken::REFERENCE, matchLength, bestDist);
@@ -3246,14 +3172,14 @@ PreflateNextMatchInfo PreflatePredictorState::nextMatchInfo(const uint hashHead,
   result.nextChainDepth = (uint16_t)~0u;
   result.nextLen = 0;
   result.nextDist = 0xffff;
-  uint maxLen = std::min(availableInputSize(), (uint)PreflateConstants::MAX_MATCH);
+  uint maxLen = lib::min(availableInputSize(), (uint)PreflateConstants::MAX_MATCH);
   if( maxLen<(uint)PreflateConstants::MIN_MATCH ) {
     return result;
   }
   uint maxDist = windowSize()-PreflateConstants::MIN_LOOKAHEAD-1;
   uint curPos = currentInputPos();
-  uint curMaxDist = std::min(curPos-1, maxDist);
-  uint curMaxDistAlt = std::min(curPos-1, windowSize()-PreflateConstants::MIN_LOOKAHEAD);
+  uint curMaxDist = lib::min(curPos-1, maxDist);
+  uint curMaxDistAlt = lib::min(curPos-1, windowSize()-PreflateConstants::MIN_LOOKAHEAD);
   const byte* input = inputCursor();
   uint startDepth = hash.getNodeDepth(hashHead);
   uint maxChainOrg = maxChainLength();
@@ -3262,7 +3188,7 @@ PreflateNextMatchInfo PreflatePredictorState::nextMatchInfo(const uint hashHead,
     return result;
   }
   uint endDepth = chainIt.depth();
-  uint maxChain = maxChainOrg-std::min(startDepth-endDepth, 0xffffu);
+  uint maxChain = maxChainOrg-lib::min(startDepth-endDepth, 0xffffu);
   uint bestLen = targetReference.len;
   while( maxChain>0 ) {
     if( !chainIt.next() ) {
@@ -3286,13 +3212,13 @@ PreflateRematchInfo PreflatePredictorState::rematchInfo(const uint hashHead, con
   result.firstMatchDepth = 0xffff;
   result.requestedMatchDepth = 0xffff;
   result.condensedHops = 0;
-  uint maxLen = std::min(availableInputSize(), (uint)PreflateConstants::MAX_MATCH);
+  uint maxLen = lib::min(availableInputSize(), (uint)PreflateConstants::MAX_MATCH);
   if( maxLen<targetReference.len ) {
     return result;
   }
   uint maxDist = windowSize();
   uint curPos = currentInputPos();
-  uint curMaxDist = std::min(curPos, maxDist);
+  uint curMaxDist = lib::min(curPos, maxDist);
   PreflateHashIterator chainIt = hash.iterateFromNode(hashHead, curPos, curMaxDist);
   if( !chainIt ) {
     return result;
@@ -3305,7 +3231,7 @@ PreflateRematchInfo PreflatePredictorState::rematchInfo(const uint hashHead, con
     const byte* match = input-chainIt.dist();
     uint matchLength = prefixCompare(match, input, bestLen-1, bestLen);
     if( matchLength>=bestLen ) {
-      result.firstMatchDepth = std::min((uint)result.firstMatchDepth, maxChainOrg-maxChain);
+      result.firstMatchDepth = lib::min((uint)result.firstMatchDepth, maxChainOrg-maxChain);
       result.condensedHops++;
     }
     if( chainIt.dist()>=targetReference.dist ) {
@@ -3320,12 +3246,12 @@ PreflateRematchInfo PreflatePredictorState::rematchInfo(const uint hashHead, con
 }
 
 uint PreflatePredictorState::firstMatch(const uint len) {
-  uint maxLen = std::min(availableInputSize(), (uint)PreflateConstants::MAX_MATCH);
-  if( maxLen<std::max(len, (uint)PreflateConstants::MIN_MATCH) ) {
+  uint maxLen = lib::min(availableInputSize(), (uint)PreflateConstants::MAX_MATCH);
+  if( maxLen<lib::max(len, (uint)PreflateConstants::MIN_MATCH) ) {
     return 0;
   }
   uint curPos = currentInputPos();
-  uint curMaxDist = std::min(curPos, windowSize());
+  uint curMaxDist = lib::min(curPos, windowSize());
   uint hash = calculateHash();
   PreflateHashIterator chainIt = iterateFromHead(hash, curPos, curMaxDist);
   if( !chainIt ) {
@@ -3348,12 +3274,12 @@ uint PreflatePredictorState::hopMatch(const PreflateToken &targetReference, cons
   }
   uint curPos = currentInputPos();
   uint errorDist = 0;
-  uint maxLen = std::min(availableInputSize(), (uint)PreflateConstants::MAX_MATCH);
+  uint maxLen = lib::min(availableInputSize(), (uint)PreflateConstants::MAX_MATCH);
   if( maxLen<targetReference.len ) {
     return errorDist;
   }
   uint maxDist = windowSize();
-  uint curMaxDist = std::min(curPos, maxDist);
+  uint curMaxDist = lib::min(curPos, maxDist);
   PreflateHashIterator chainIt = iterateFromDist(targetReference.dist, curPos, curMaxDist);
   if( !chainIt ) {
     return 0;
@@ -3383,10 +3309,10 @@ virtual ~Handler() {
 }
 
 virtual bool beginDecoding(const uint32_t metaBlockId, PreflatePredictionDecoder &, PreflateParameters &) = 0;
-virtual bool endDecoding(const uint32_t metaBlockId, PreflatePredictionDecoder &, std::vector<PreflateTokenBlock> &&tokenData, std::vector<uint8_t> &&uncompressedData, const size_t uncompressedOffset, const size_t paddingBitCount, const size_t paddingValue) = 0;
+virtual bool endDecoding(const uint32_t metaBlockId, PreflatePredictionDecoder &, lib::vector<PreflateTokenBlock> &&tokenData, lib::vector<uint8_t> &&uncompressedData, const size_t uncompressedOffset, const size_t paddingBitCount, const size_t paddingValue) = 0;
 virtual void markProgress() = 0;
 };
-PreflateReencoderTask(Handler &handler, const uint32_t metaBlockId, std::vector<uint8_t> &&uncompressedData, const size_t uncompressedOffset, const bool lastMetaBlock);
+PreflateReencoderTask(Handler &handler, const uint32_t metaBlockId, lib::vector<uint8_t> &&uncompressedData, const size_t uncompressedOffset, const bool lastMetaBlock);
 bool decodeAndRepredict();
 bool reencode();
 uint32_t id() {
@@ -3396,20 +3322,20 @@ uint32_t id() {
 private:
 Handler &handler;
 uint32_t metaBlockId;
-std::vector<uint8_t> uncompressedData;
+lib::vector<uint8_t> uncompressedData;
 size_t uncompressedOffset;
 bool lastMetaBlock;
-std::vector<PreflateTokenBlock> tokenData;
+lib::vector<PreflateTokenBlock> tokenData;
 PreflatePredictionDecoder pcodec;
 size_t paddingBitCount;
 size_t paddingBits;
 };
-bool preflate_reencode(std::vector<byte> &deflate_raw, const std::vector<byte> &preflate_diff, const std::vector<byte> &unpacked_input);
-bool preflate_reencode(OutputStream &os, const std::vector<byte> &preflate_diff, InputStream &unpacked_input, const uint64_t unpacked_size, std::function<void(void)> block_callback);
-bool preflate_reencode(OutputStream &os, const std::vector<byte> &preflate_diff, const std::vector<byte> &unpacked_input, std::function<void(void)> block_callback);
+bool preflate_reencode(lib::vector<byte> &deflate_raw, const lib::vector<byte> &preflate_diff, const lib::vector<byte> &unpacked_input);
+bool preflate_reencode(OutputStream &os, const lib::vector<byte> &preflate_diff, InputStream &unpacked_input, const uint64_t unpacked_size, lib::function<void(void)> block_callback);
+bool preflate_reencode(OutputStream &os, const lib::vector<byte> &preflate_diff, const lib::vector<byte> &unpacked_input, lib::function<void(void)> block_callback);
 class PreflateReencoderHandler : public PreflateReencoderTask::Handler {
 public:
-PreflateReencoderHandler(BitOutputStream &bos_, const std::vector<uint8_t> &reconData, const size_t uncompressedSize, std::function<void(void)> progressCallback_) : decoder(reconData, uncompressedSize), progressCallback(progressCallback_), bos(bos_) {
+PreflateReencoderHandler(BitOutputStream &bos_, const lib::vector<uint8_t> &reconData, const size_t uncompressedSize, lib::function<void(void)> progressCallback_) : decoder(reconData, uncompressedSize), progressCallback(progressCallback_), bos(bos_) {
 }
 
 size_t metaBlockCount() const {
@@ -3433,7 +3359,7 @@ virtual bool beginDecoding(const uint32_t metaBlockId, PreflatePredictionDecoder
   return decoder.beginMetaBlock(codec, params, metaBlockId);
 }
 
-virtual bool endDecoding(const uint32_t metaBlockId, PreflatePredictionDecoder &codec, std::vector<PreflateTokenBlock> &&tokenData, std::vector<uint8_t> &&uncompressedData, const size_t uncompressedOffset, const size_t paddingBitCount, const size_t paddingValue) {
+virtual bool endDecoding(const uint32_t metaBlockId, PreflatePredictionDecoder &codec, lib::vector<PreflateTokenBlock> &&tokenData, lib::vector<uint8_t> &&uncompressedData, const size_t uncompressedOffset, const size_t paddingBitCount, const size_t paddingValue) {
   if( !decoder.endMetaBlock(codec) ) {
     return false;
   }
@@ -3447,17 +3373,15 @@ virtual bool endDecoding(const uint32_t metaBlockId, PreflatePredictionDecoder &
 }
 
 virtual void markProgress() {
-  std::unique_lock<std::mutex> lock(this->_mutex);
   progressCallback();
 }
 
 private:
 PreflateMetaDecoder decoder;
-std::function<void(void)> progressCallback;
+lib::function<void(void)> progressCallback;
 BitOutputStream &bos;
-std::mutex _mutex;
 };
-PreflateReencoderTask::PreflateReencoderTask(PreflateReencoderHandler::Handler &handler_, const uint32_t metaBlockId_, std::vector<uint8_t> &&uncompressedData_, const size_t uncompressedOffset_, const bool lastMetaBlock_) : handler(handler_), metaBlockId(metaBlockId_), uncompressedData(uncompressedData_), uncompressedOffset(uncompressedOffset_), lastMetaBlock(lastMetaBlock_) {
+PreflateReencoderTask::PreflateReencoderTask(PreflateReencoderHandler::Handler &handler_, const uint32_t metaBlockId_, lib::vector<uint8_t> &&uncompressedData_, const size_t uncompressedOffset_, const bool lastMetaBlock_) : handler(handler_), metaBlockId(metaBlockId_), uncompressedData(uncompressedData_), uncompressedOffset(uncompressedOffset_), lastMetaBlock(lastMetaBlock_) {
 }
 
 bool PreflateReencoderTask::decodeAndRepredict() {
@@ -3479,7 +3403,7 @@ bool PreflateReencoderTask::decodeAndRepredict() {
     if( tokenPredictor.predictionFailure||treePredictor.predictionFailure ) {
       return false;
     }
-    tokenData.push_back(std::move(block));
+    tokenData.push_back(lib::move(block));
     // pdfdump: corrupt correction data can describe empty blocks without end
     if( tokenData.size()>uncompressedData.size()+(1u<<20) ) {
       tPreflateStop = true;
@@ -3509,22 +3433,16 @@ bool PreflateReencoderTask::decodeAndRepredict() {
 }
 
 bool PreflateReencoderTask::reencode() {
-  return handler.endDecoding(metaBlockId, pcodec, std::move(tokenData), std::move(uncompressedData), uncompressedOffset, paddingBitCount, paddingBits);
+  return handler.endDecoding(metaBlockId, pcodec, lib::move(tokenData), lib::move(uncompressedData), uncompressedOffset, paddingBitCount, paddingBits);
 }
 
-bool preflate_reencode(OutputStream &os, const std::vector<byte> &preflate_diff, InputStream &is, const uint64_t unpacked_size, std::function<void(void)> block_callback) {
+bool preflate_reencode(OutputStream &os, const lib::vector<byte> &preflate_diff, InputStream &is, const uint64_t unpacked_size, lib::function<void(void)> block_callback) {
   BitOutputStream bos(os);
   PreflateReencoderHandler decoder(bos, preflate_diff, unpacked_size, block_callback);
   if( decoder.error() ) {
     return false;
   }
-  std::vector<uint8_t> uncompressedData;
-  std::queue<std::future<std::shared_ptr<PreflateReencoderTask> > > futureQueue;
-  size_t maxMetaBlockSize = 1;
-  for( size_t j = 0, n = decoder.metaBlockCount(); j<n; ++j ) {
-    maxMetaBlockSize = std::max(maxMetaBlockSize, decoder.metaBlockUncompressedSize(j));
-  }
-  size_t queueLimit = std::min(2*globalTaskPool.extraThreadCount(), (1<<26)/maxMetaBlockSize);
+  lib::vector<uint8_t> uncompressedData;
   bool fail = false;
   for( size_t j = 0, n = decoder.metaBlockCount(); j<n; ++j ) {
     size_t curUncSize = uncompressedData.size();
@@ -3533,52 +3451,26 @@ bool preflate_reencode(OutputStream &os, const std::vector<byte> &preflate_diff,
     if( is.read(uncompressedData.data()+curUncSize, newSize)!=newSize ) {
       return false;
     }
-    if( futureQueue.empty()&&(queueLimit==0||j+1==n) ) {
-      PreflateReencoderTask task(decoder, j, std::vector<uint8_t>(uncompressedData), curUncSize, j+1==n);
+    {
+      PreflateReencoderTask task(decoder, j, lib::vector<uint8_t>(uncompressedData), curUncSize, j+1==n);
       if( !task.decodeAndRepredict()||!task.reencode() ) {
         return false;
       }
-    } else {
-      if( futureQueue.size()>=queueLimit ) {
-        std::future<std::shared_ptr<PreflateReencoderTask> > first = std::move(futureQueue.front());
-        futureQueue.pop();
-        std::shared_ptr<PreflateReencoderTask> data = first.get();
-        if( fail||!data||!data->reencode() ) {
-          fail = true;
-        }
-      }
-      std::shared_ptr<PreflateReencoderTask> ptask;
-      ptask.reset(new PreflateReencoderTask(decoder, j, std::vector<uint8_t>(uncompressedData), curUncSize, j+1==n));
-      futureQueue.push(globalTaskPool.addTask([ptask, &fail]() {
-        if( !fail&&ptask->decodeAndRepredict() ) {
-          return ptask;
-        } else {
-          return std::shared_ptr<PreflateReencoderTask>();
-        }
-      }));
     }
     if( j+1<n ) {
-      uncompressedData.erase(uncompressedData.begin(), uncompressedData.begin()+std::max<size_t>(uncompressedData.size(), 1<<15)-(1<<15));
-    }
-  }
-  while( !futureQueue.empty() ) {
-    std::future<std::shared_ptr<PreflateReencoderTask> > first = std::move(futureQueue.front());
-    futureQueue.pop();
-    std::shared_ptr<PreflateReencoderTask> data = first.get();
-    if( fail||!data||!data->reencode() ) {
-      fail = true;
+      uncompressedData.erase(uncompressedData.begin(), uncompressedData.begin()+lib::max<size_t>(uncompressedData.size(), 1<<15)-(1<<15));
     }
   }
   bos.flush();
   return !fail&&!decoder.error();
 }
 
-bool preflate_reencode(OutputStream &os, const std::vector<byte> &preflate_diff, const std::vector<byte> &unpacked_input, std::function<void(void)> block_callback) {
+bool preflate_reencode(OutputStream &os, const lib::vector<byte> &preflate_diff, const lib::vector<byte> &unpacked_input, lib::function<void(void)> block_callback) {
   MemStream is(unpacked_input);
   return preflate_reencode(os, preflate_diff, is, unpacked_input.size(), block_callback);
 }
 
-bool preflate_reencode(std::vector<byte> &deflate_raw, const std::vector<byte> &preflate_diff, const std::vector<byte> &unpacked_input) {
+bool preflate_reencode(lib::vector<byte> &deflate_raw, const lib::vector<byte> &preflate_diff, const lib::vector<byte> &unpacked_input) {
   MemStream mem;
   bool result = preflate_reencode(mem, preflate_diff, unpacked_input, [] {
   });
@@ -3586,10 +3478,10 @@ bool preflate_reencode(std::vector<byte> &deflate_raw, const std::vector<byte> &
   return result;
 }
 
-PreflateSeqChain::PreflateSeqChain(const std::vector<byte> &input_) : _input(input_), totalShift(-8), curPos(0) {
+PreflateSeqChain::PreflateSeqChain(const lib::vector<byte> &input_) : _input(input_), totalShift(-8), curPos(0) {
   prev = new SeqChainEntry[1<<16];
   memset(heads, 0x00, sizeof(heads));
-  _build(8, std::min<uint32_t>((1<<16)-8, _input.remaining()));
+  _build(8, lib::min<uint32_t>((1<<16)-8, _input.remaining()));
 }
 
 PreflateSeqChain::~PreflateSeqChain() {
@@ -3619,11 +3511,11 @@ void PreflateSeqChain::_reshift() {
     }
   }
   for( uint i = 0; i<256; ++i ) {
-    heads[i] = std::max(heads[i], delta)-delta;
+    heads[i] = lib::max(heads[i], delta)-delta;
   }
   memmove(prev+8, prev+(delta+8), sizeof(SeqChainEntry)*remaining);
   totalShift += delta;
-  _build(8+remaining, std::min<uint32_t>(delta, _input.remaining()));
+  _build(8+remaining, lib::min<uint32_t>(delta, _input.remaining()));
 }
 
 void PreflateSeqChain::_build(const uint off0, const uint size) {
@@ -3705,7 +3597,7 @@ template <uint N> void PreflateSubModel<N>::build_impl(const uint* arr, const ui
   for( uint i = 0; i<N; ++i ) {
     ids[i] = i;
   }
-  std::sort(ids, ids+N, [=](uint i1, uint i2) {
+  lib::sort(ids, ids+N, [=](uint i1, uint i2) {
     if( arr[i1]!=arr[i2] ) {
       return arr[i1]<arr[i2];
     }
@@ -4170,13 +4062,13 @@ void PreflatePredictionEncoder::start(const PreflatePredictionModel &model_, con
   setEncoderStream(encoder);
 }
 
-std::vector<uint8_t> PreflatePredictionEncoder::end() {
+lib::vector<uint8_t> PreflatePredictionEncoder::end() {
   setEncoderStream(nullptr);
   encoder->flush();
   delete encoder;
   bos->flush();
   delete bos;
-  std::vector<byte> result = storage->extractData();
+  lib::vector<byte> result = storage->extractData();
   delete storage;
   return result;
 }
@@ -4184,7 +4076,7 @@ std::vector<uint8_t> PreflatePredictionEncoder::end() {
 PreflatePredictionDecoder::PreflatePredictionDecoder() : storage(nullptr), bis(nullptr), decoder(nullptr) {
 }
 
-void PreflatePredictionDecoder::start(const PreflatePredictionModel &model_, const PreflateParameters &params_, const std::vector<uint8_t> &storage_, size_t off0, size_t size) {
+void PreflatePredictionDecoder::start(const PreflatePredictionModel &model_, const PreflateParameters &params_, const lib::vector<uint8_t> &storage_, size_t off0, size_t size) {
   PreflatePredictionModel::operator=(model_);
   params = params_;
   storage = new MemStream(storage_, off0, size);
@@ -4234,7 +4126,7 @@ bool PreflateMetaEncoder::endMetaBlock(PreflatePredictionEncoder &encoder, const
     return false;
   }
   metaBlockInfo m;
-  std::vector<uint8_t> result = encoder.end();
+  lib::vector<uint8_t> result = encoder.end();
   m.modelId = encoder.modelId();
   m.reconSize = result.size();
   m.uncompressedSize = uncompressed;
@@ -4243,7 +4135,7 @@ bool PreflateMetaEncoder::endMetaBlock(PreflatePredictionEncoder &encoder, const
   return true;
 }
 
-std::vector<byte> PreflateMetaEncoder::finish() {
+lib::vector<byte> PreflateMetaEncoder::finish() {
   MemStream mem;
   BitOutputStream bos(mem);
   bos.put(0, 1);
@@ -4284,7 +4176,7 @@ std::vector<byte> PreflateMetaEncoder::finish() {
           tmp_codec.flush();
           tmp_bos.flush();
         }
-        std::vector<uint8_t> tmp_res = tmp_data.extractData();
+        lib::vector<uint8_t> tmp_res = tmp_data.extractData();
         bos.putVLI(tmp_res.size());
         bos.putBytes(tmp_res.data(), tmp_res.size());
       }
@@ -4297,12 +4189,12 @@ std::vector<byte> PreflateMetaEncoder::finish() {
     }
   }
   bos.flush();
-  std::vector<uint8_t> result = mem.extractData();
+  lib::vector<uint8_t> result = mem.extractData();
   result.insert(result.end(), reconData.begin(), reconData.end());
   return result;
 }
 
-PreflateMetaDecoder::PreflateMetaDecoder(const std::vector<uint8_t> &reconData_, const uint64_t uncompressedSize_) : inError(false), reconData(reconData_), uncompressedSize(uncompressedSize_) {
+PreflateMetaDecoder::PreflateMetaDecoder(const lib::vector<uint8_t> &reconData_, const uint64_t uncompressedSize_) : inError(false), reconData(reconData_), uncompressedSize(uncompressedSize_) {
   if( reconData.size()==0 ) {
     inError = true;
     return;
@@ -4480,7 +4372,7 @@ bool isEqual(const PreflateTokenBlock &b1, const PreflateTokenBlock &b2) {
   return true;
 }
 
-PreflateTokenPredictor::PreflateTokenPredictor(const PreflateParameters &params_, const std::vector<byte> &dump, const size_t offset) : state(hash, seq, params_.config(), params_.windowBits, params_.memLevel), hash(dump, params_.memLevel), seq(dump), params(params_), predictionFailure(false), fast(params_.isFastCompressor()), prevLen(0), pendingToken(PreflateToken::NONE), emptyBlockAtEnd(false) {
+PreflateTokenPredictor::PreflateTokenPredictor(const PreflateParameters &params_, const lib::vector<byte> &dump, const size_t offset) : state(hash, seq, params_.config(), params_.windowBits, params_.memLevel), hash(dump, params_.memLevel), seq(dump), params(params_), predictionFailure(false), fast(params_.isFastCompressor()), prevLen(0), pendingToken(PreflateToken::NONE), emptyBlockAtEnd(false) {
   if( state.availableInputSize()>=2 ) {
     hash.updateRunningHash(state.inputCursor()[0]);
     hash.updateRunningHash(state.inputCursor()[1]);
@@ -4545,7 +4437,7 @@ PreflateToken PreflateTokenPredictor::predictToken() {
     } else {
       matchNext = state.match(headNext, match.len, 1, params.veryFarMatchesDetected, params.matchesToStartDetected, params.zlibCompatible ? 0 : (2<<params.log2OfMaxChainDepthM1));
       if( ((hashNext^hash)&this->hash.hashMask)==0 ) {
-        uint maxSize = std::min(state.availableInputSize()-1, (uint)PreflateConstants::MAX_MATCH);
+        uint maxSize = lib::min(state.availableInputSize()-1, (uint)PreflateConstants::MAX_MATCH);
         uint rle = 0;
         const byte* c = state.inputCursor();
         byte b = c[0];
@@ -4920,7 +4812,7 @@ bool PreflateTokenPredictor::inputEOF() {
   return state.availableInputSize()==0;
 }
 
-PreflateTreePredictor::PreflateTreePredictor(const std::vector<byte> &dump, const size_t off) : input(dump), predictionFailure(false) {
+PreflateTreePredictor::PreflateTreePredictor(const lib::vector<byte> &dump, const size_t off) : input(dump), predictionFailure(false) {
   input.advance(off);
 }
 
@@ -4983,7 +4875,7 @@ uint PreflateTreePredictor::calcBitLengths(byte* symBitLen, const uint* symFreq,
     memset(symBitLen, 0, symCount);
     symBitLen[maxCode] = 1;
     symBitLen[maxCode<2 ? ++maxCode : 0] = 1;
-    return std::max(minMaxCode, maxCode+1);
+    return lib::max(minMaxCode, maxCode+1);
   }
   pq_makeheap(toSort, len, nodeDepth);
   while( len>1 ) {
@@ -4992,7 +4884,7 @@ uint PreflateTreePredictor::calcBitLengths(byte* symBitLen, const uint* symFreq,
     toSort[0] = FreqIdxPair{least1.freq+least2.freq, nodeId};
     nodes[nodeCount++] = TreeNode{nodeId, least1.idx};
     nodes[nodeCount++] = TreeNode{nodeId, least2.idx};
-    nodeDepth[nodeId] = std::max(nodeDepth[least1.idx], nodeDepth[least2.idx])+1;
+    nodeDepth[nodeId] = lib::max(nodeDepth[least1.idx], nodeDepth[least2.idx])+1;
     pq_downheap(toSort, 0, len, nodeDepth);
     nodeId++;
   }
@@ -5036,14 +4928,14 @@ uint PreflateTreePredictor::calcBitLengths(byte* symBitLen, const uint* symFreq,
     }
   }
   memcpy(symBitLen, nodeBitLen, symCount);
-  return std::max(minMaxCode, maxCode+1);
+  return lib::max(minMaxCode, maxCode+1);
 }
 
 TreeCodeType PreflateTreePredictor::predictCodeType(const byte* symBitLen, const uint symCount, const bool first) {
   byte code = symBitLen[0];
   if( code==0 ) {
     byte curlen = 1;
-    byte maxCurLen = std::min(symCount, 11u);
+    byte maxCurLen = lib::min(symCount, 11u);
     while( curlen<maxCurLen&&symBitLen[curlen]==0 ) {
       ++curlen;
     }
@@ -5057,7 +4949,7 @@ TreeCodeType PreflateTreePredictor::predictCodeType(const byte* symBitLen, const
   }
   if( !first&&code==symBitLen[-1] ) {
     byte curlen = 1;
-    byte maxCurLen = std::min(symCount, 3u);
+    byte maxCurLen = lib::min(symCount, 3u);
     while( curlen<maxCurLen&&symBitLen[curlen]==code ) {
       ++curlen;
     }
@@ -5076,7 +4968,7 @@ byte PreflateTreePredictor::predictCodeData(const byte* symBitLen, const TreeCod
     return code;
   case TCT_REP: {
     byte curlen = 3;
-    byte maxCurLen = std::min(symCount, 6u);
+    byte maxCurLen = lib::min(symCount, 6u);
     while( curlen<maxCurLen&&symBitLen[curlen]==code ) {
       ++curlen;
     }
@@ -5085,7 +4977,7 @@ byte PreflateTreePredictor::predictCodeData(const byte* symBitLen, const TreeCod
   case TCT_REPZS:
   case TCT_REPZL: {
     byte curlen = type==TCT_REPZS ? 3 : 11;
-    byte maxCurLen = std::min(symCount, type==TCT_REPZS ? 10u : 138u);
+    byte maxCurLen = lib::min(symCount, type==TCT_REPZS ? 10u : 138u);
     while( curlen<maxCurLen&&symBitLen[curlen]==0 ) {
       ++curlen;
     }
@@ -5484,7 +5376,7 @@ ArithmeticEncoder::ArithmeticEncoder(BitOutputStream &bos) : _bos(bos), _e3cnt(0
 
 void ArithmeticEncoder::_writeE3(const uint w) {
   while( _e3cnt>0 ) {
-    uint32_t todo = std::min(_e3cnt, 16u);
+    uint32_t todo = lib::min(_e3cnt, 16u);
     _bos.put(w, todo);
     _e3cnt -= todo;
   }
@@ -5591,7 +5483,7 @@ void modelSortBounds(uint bounds[], uint16_t ids[], uint16_t rids[], uint backup
     ids[i] = i;
     backup[i] = bounds[i];
   }
-  std::sort(ids, ids+N, [=](uint i1, uint i2) {
+  lib::sort(ids, ids+N, [=](uint i1, uint i2) {
     if( backup[i1]!=backup[i2] ) {
       return backup[i1]<backup[i2];
     }
@@ -5643,8 +5535,8 @@ void ACFixedScaleBinaryModel::build() {
   ids[0] = 0;
   ids[1] = 1;
   if( bounds[1]<bounds[0] ) {
-    std::swap(ids[0], ids[1]);
-    std::swap(bounds[0], bounds[1]);
+    lib::swap(ids[0], ids[1]);
+    lib::swap(bounds[0], bounds[1]);
   }
   rids[ids[0]] = 0;
   rids[ids[1]] = 1;
@@ -5729,7 +5621,7 @@ void BitInputStream::_fillBytes() {
       memcpy(_buffer+PRE_BUF_EXTRA-remaining, _buffer+_bufPos, remaining);
       _bufPos = PRE_BUF_EXTRA-remaining;
       _bufSize = PRE_BUF_EXTRA+_input.read(_buffer+PRE_BUF_EXTRA, BUF_SIZE);
-      _bufFastLimit = std::max(_bufPos, _bufSize-PRE_BUF_EXTRA);
+      _bufFastLimit = lib::max(_bufPos, _bufSize-PRE_BUF_EXTRA);
       _eof = _bufSize!=PRE_BUF_EXTRA+BUF_SIZE;
     }
   }
@@ -5769,7 +5661,7 @@ size_t BitInputStream::copyBytesTo(OutputStream &output, const size_t len) {
     return w;
   }
   while( l<len ) {
-    uint todo = std::min(len-l, (size_t)(_bufSize-_bufPos));
+    uint todo = lib::min(len-l, (size_t)(_bufSize-_bufPos));
     w = output.write(_buffer+_bufPos, todo);
     _totalBitPos += 8*w;
     _bufPos += w;
@@ -5793,7 +5685,7 @@ size_t BitInputStream::getBytes(uint8_t* data, const size_t size_) {
     size--;
   }
   while( size>0 ) {
-    uint todo = std::min(size, (size_t)(_bufSize-_bufPos));
+    uint todo = lib::min(size, (size_t)(_bufSize-_bufPos));
     memcpy(data, _buffer+_bufPos, todo);
     data += todo;
     _totalBitPos += 8*todo;
@@ -6000,9 +5892,9 @@ bool HuffmanDecoder::_constructTables(const byte* symbolBitLengths, const size_t
   if( !HuffmanHelper::countSymbols(nextCode, minLength, maxLength, symbolBitLengths, symbolCount, disableZeroBitSymbols) ) {
     return false;
   }
-  _table0.peekBits = std::min((byte)(maxLength-1), maxBitsPerTable);
+  _table0.peekBits = lib::min((byte)(maxLength-1), maxBitsPerTable);
   _table0.lookup.resize(1<<_table0.peekBits);
-  std::fill(_table0.lookup.begin(), _table0.lookup.end(), 0);
+  lib::fill(_table0.lookup.begin(), _table0.lookup.end(), 0);
   byte minL = disableZeroBitSymbols ? 2 : 1;
   for( uint i = 0; i<symbolCount; ++i ) {
     byte l = (byte)(symbolBitLengths[i]+1);
@@ -6023,9 +5915,9 @@ bool HuffmanDecoder::_constructTables(const byte* symbolBitLengths, const size_t
         t->lookup[subbits] = ~newTableId;
         _tables.push_back(Table());
         t = &_tables[newTableId];
-        t->peekBits = std::min(maxK, maxBitsPerTable);
+        t->peekBits = lib::min(maxK, maxBitsPerTable);
         t->lookup.resize(1<<t->peekBits);
-        std::fill(t->lookup.begin(), t->lookup.end(), 0);
+        lib::fill(t->lookup.begin(), t->lookup.end(), 0);
       } else {
         t = &_tables[~v];
       }
@@ -6075,7 +5967,7 @@ bool HuffmanEncoder::_constructTables(const byte* symbolBitLengths, const uint s
 void HuffmanEncoder::_constructErrorTable(const uint symbolCount) {
   _error = true;
   _lookup.resize(symbolCount);
-  std::fill(_lookup.begin(), _lookup.end(), 0);
+  lib::fill(_lookup.begin(), _lookup.end(), 0);
 }
 
 bool HuffmanHelper::countSymbols(uint (&nextCode)[MAX_BL+2], byte &minLength, byte &maxLength, const byte* symbolBitLengths, const uint symbolCount, const bool disableZeroBitSymbols) {
@@ -6122,10 +6014,10 @@ bool HuffmanHelper::countSymbols(uint (&nextCode)[MAX_BL+2], byte &minLength, by
 MemStream::MemStream() : _pos(0) {
 }
 
-MemStream::MemStream(const std::vector<uint8_t> &content) : _data(content), _pos(0) {
+MemStream::MemStream(const lib::vector<uint8_t> &content) : _data(content), _pos(0) {
 }
 
-MemStream::MemStream(const std::vector<uint8_t> &content, const size_t off, const size_t sz) : _data(std::max(std::min(content.size(), off+sz), off)-off), _pos(0) {
+MemStream::MemStream(const lib::vector<uint8_t> &content, const size_t off, const size_t sz) : _data(lib::max(lib::min(content.size(), off+sz), off)-off), _pos(0) {
   if( !_data.empty() ) {  // pdfdump: no memcpy on null pointers of empty vectors
     memcpy(_data.data(), content.data()+off, _data.size());
   }
@@ -6136,7 +6028,7 @@ bool MemStream::eof() const {
 }
 
 size_t MemStream::read(byte* buffer, const size_t size) {
-  size_t toCopy = std::min(size, _data.size()-_pos);
+  size_t toCopy = lib::min(size, _data.size()-_pos);
   if( toCopy ) {  // pdfdump: see above
     memcpy(buffer, _data.data()+_pos, toCopy);
   }
@@ -6162,7 +6054,7 @@ uint64_t MemStream::tell() const {
 
 uint64_t MemStream::seek(const uint64_t newPos) {
   size_t oldPos = _pos;
-  _pos = std::min(newPos, (uint64_t)_data.size());
+  _pos = lib::min(newPos, (uint64_t)_data.size());
   return oldPos;
 }
 
@@ -6173,19 +6065,10 @@ OutputCacheStream::~OutputCacheStream() {
 }
 
 void OutputCacheStream::flushUpTo(const uint64_t newStartPos) {
-  size_t toWrite = std::min(newStartPos-_cacheStartPos, (uint64_t)_cache.size());
+  size_t toWrite = lib::min(newStartPos-_cacheStartPos, (uint64_t)_cache.size());
   size_t written = _os.write(_cache.data(), toWrite);
   _cacheStartPos += written;
   _cache.erase(_cache.begin(), _cache.begin()+written);
 }
 
-TaskPool globalTaskPool;
-TaskPool::TaskPool() : _state(INIT), _threadLimit(0) {
-}
 
-void TaskPool::_init() {
-  _state = RUN;
-}
-
-TaskPool::~TaskPool() {
-}

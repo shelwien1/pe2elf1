@@ -89,10 +89,9 @@ struct CcittTables {
     }
   }
 };
-static const CcittTables& ccittTables() {
-  static CcittTables t;
-  return t;
-}
+// built at program start, before any thread (no lazy, guarded initialization)
+static const CcittTables gCcittTables;
+static const CcittTables& ccittTables() { return gCcittTables; }
 
 struct BitReader {
   const uint8_t* p;

@@ -205,10 +205,7 @@ static void rc4(const uint8_t* key, size_t klen, const uint8_t* in, size_t n, ui
 // ---- AES -------------------------------------------------------------------------------------
 struct Aes {
   static uint8_t sbox[256], inv[256];
-  static void init() {
-    static const bool once = build();  // thread-safe one-time initialization
-    (void)once;
-  }
+  static void init() {}  // (the tables are built at program start: gAesBuilt below)
   static bool build() {
     uint8_t p = 1, q = 1;
     do {
@@ -302,6 +299,7 @@ struct Aes {
     memcpy(out, s, 16);
   }
 };
+static const bool gAesBuilt = Aes::build();  // before main, before any thread
 uint8_t Aes::sbox[256];
 uint8_t Aes::inv[256];
 

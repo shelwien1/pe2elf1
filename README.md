@@ -50,7 +50,14 @@ measurement behind each.
 ## Build
 
 Single translation unit: `src/pdfdump.cpp` includes the `src/*.inc` modules. `src/preflate.inc`
-(from ziprec) is the only code that isn't ours. It carries two speed-only edits, each marked
+(from ziprec) is the only code that isn't ours. No C++ library header is included anywhere, nor
+any C++ library used: `src/base.inc` holds the part of one the code needs (`lib::vector`,
+`string`, `unordered_map`/`unordered_set`, `function`, `unique_ptr`, `pair`, `array`, `thread`,
+`mutex`, an atomic counter, a stable sort, `lower_bound`/`upper_bound`/`find`/`search`/`fill`, a
+monotonic clock), on the C library and pthreads or Win32 only. The binary needs libc and libm and
+nothing from libstdc++/libc++ (`gcc -pthread -o pdfdump pdfdump.o -lm` links it; `g++` drops
+the unused libstdc++). preflate uses `lib::` too; its task pool, which never had worker threads
+here (every meta block was processed in the calling thread already), is gone. It carries two speed-only edits, each marked
 `pdfdump:` (an 8-bytes-at-a-time match compare, and the hash-chain walk rejecting a candidate on
 bytes `bestLen-1..bestLen` before calling the compare); match lengths, and so every dump, are
 unchanged (checked byte for byte on the test set). It also carries guards, marked the same way,
@@ -60,7 +67,7 @@ trip and robustness").
     make                      # g++ -std=c++17 -O3 -fno-exceptions -fno-rtti -pthread -o pdfdump src/pdfdump.cpp
     make pdfdump-asan         # ASan + UBSan build, same flags
     clang++ -std=c++17 -O3 -fno-exceptions -fno-rtti -pthread -o pdfdump src/pdfdump.cpp
-    x86_64-w64-mingw32-g++-posix -std=c++17 -O3 -fno-exceptions -fno-rtti -static -o pdfdump.exe src/pdfdump.cpp
+    x86_64-w64-mingw32-g++ -std=c++17 -O3 -fno-exceptions -fno-rtti -static -o pdfdump.exe src/pdfdump.cpp
     cl /O2 /std:c++17 /EHs-c- /GR- /D_HAS_EXCEPTIONS=0 src\pdfdump.cpp   (MSVC, untested)
 
 The code uses no exceptions and no RTTI (it also builds with them). Errors are bool returns:
@@ -71,12 +78,13 @@ worker thread's included, falls back to stored mode as before; attempts that may
 that stays encoded, a lift that is skipped) run through `softly()`, which keeps a handled
 failure from leaking into the caller's error state. In `d` and on the command line, an error
 ends the program with its message (`die()`). An allocation that cannot be met ends the program
-too, in `c` as well (`std::set_new_handler`: a message instead of an abort); without exceptions
-`c` no longer falls back to stored mode on it.
+too, in `c` as well (the global `operator new` in `base.inc`: a message instead of an abort);
+without exceptions `c` no longer falls back to stored mode on it.
 
 Tested with g++ 13.3 and clang 18 on Linux x86-64; the thread pool is also clean under
-ThreadSanitizer (`-fsanitize=thread`). MinGW needs the posix thread model (`-posix` driver) for
-`std::thread`; the Windows build compiles but has not been run.
+ThreadSanitizer (`-fsanitize=thread`). On Windows the threads, mutex and clock are Win32 calls
+(no thread model needed from MinGW); the MinGW build compiles to a static executable that imports
+KERNEL32 and msvcrt only, and has not been run.
 
 ### Fixed-capacity storage
 
@@ -371,6 +379,7 @@ local pointer now.
 ## Source layout
 
     src/pdfdump.cpp     CLI, encoder pipeline, info report, self-test
+    src/base.inc        the C++ library subset in use (lib::), on the C library and the OS
     src/chan.inc        channel writer/reader, channel->file map, header, varints, CRC-32;
                         error state, fixed-capacity types (FixedVec, FixedStr, KeyBuf, NameTable)
     src/pdf_lex.inc     lexer and read-only object parser

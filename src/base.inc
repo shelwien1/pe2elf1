@@ -11,6 +11,12 @@
 #include <stdlib.h>
 #include <string.h>
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX  // (no min/max macros: lib::min, lib::max)
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #else
 #include <pthread.h>
@@ -354,6 +360,15 @@ class vector {
     size_t off = (size_t)(pos - p_), k = (size_t)(b - a);
     if (k == 0) return p_ + off;
     if (aliases(a)) {
+      if (off == n_ && is_same<T, U>::v) {
+        // an append of our own elements (an LZ77 copy): the source keeps its offset across a
+        // reallocation, and lies below the new elements
+        size_t src = (size_t)((const T*)(const void*)a - p_);
+        if (n_ + k > cap_) setCap(newCap(n_ + k));
+        construct(p_ + n_, (const U*)(const void*)(p_ + src), k);
+        n_ += k;
+        return p_ + off;
+      }
       vector t(a, b);
       return insert(p_ + off, t.p_, t.p_ + k);
     }
@@ -409,9 +424,9 @@ class vector {
   size_t n_ = 0, cap_ = 0;
 
   template <class U>
-  bool aliases(const U* a) const {
+  bool aliases(const U* a) const {  // a points at one of our elements
     const void* q = (const void*)a;
-    return p_ && q >= (const void*)p_ && q < (const void*)(p_ + cap_);
+    return p_ && q >= (const void*)p_ && q < (const void*)(p_ + n_);
   }
   // doubling, from at least 64 bytes' worth (large elements: from one)
   static constexpr size_t kMinCap = sizeof(T) >= 64 ? 1 : 64 / sizeof(T);
