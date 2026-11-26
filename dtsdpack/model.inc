@@ -292,15 +292,19 @@ struct Model : ModelX96<f_DEC, LV> {
           // (since format 161 a channel the WAV doesn't bind, by its subband's last 64 decoded values
           // (nw_lpc()): their correlation with those one before, their LPC's gain in quarters of
           // halvings and that less 2, 0-8: without their WAVs the 12 streams 4536 bytes smaller, 0.03%)
+          // (and since format 180 by the channel before's PMODE at the subband this subframe, 1 + it, in
+          // tr's place, which had none: without their WAVs six streams 392 bytes smaller, Fire 342)
           int gq = !bound[ch] ? 9 : b >= r.nvqsub[ch] || B::pm_quiet(ch, b) ? 0 : B::pmode_gain(ch, b), ua = 8, ug = 0;
+          int ct = tr;
           if (!bound[ch]) {
             S64 al[4];
             int g, g4;
             B::nw_lpc(ch, b, al, &g, &g4, &ua);
             ug = imin(g4, 27), gq = clip(g4 - 2, 0, 8);
+            if (ch - 1 >= r.ch0() && b < r.nsubs[ch - 1]) ct = 1 + s.pmode[ch - 1][b];
           }
           v = side_code(SF_PMODE, ch, b, v, 0, 1, 1, hist.pmode[ch][b], b ? s.pmode[ch][b - 1] + 1 : 0,
-                        bound[ch] ? ac[ch][b] : ua, bound[ch] ? imin(B::lpg4[ch][b], 27) : ug, gq, tr, !bound[ch]);
+                        bound[ch] ? ac[ch][b] : ua, bound[ch] ? imin(B::lpg4[ch][b], 27) : ug, gq, ct, !bound[ch]);
         }
         break;
       }
@@ -339,11 +343,13 @@ struct Model : ModelX96<f_DEC, LV> {
           B::pv_nofit();
         } else if (bound[ch] && !(lw && B::jx_more(B::jx_pr[b], 0, 0))) {
           v = B::code_pvq(r, s, ch, b, v);
-        } else if (!bound[ch]) {  // (since format 161 by the LPC of its last 64 decoded values: code_pvq_nw())
+        } else if (!bound[ch]) {  // (since format 161 by the LPC of its last 64 decoded values: code_pvq_nw();
+                                  // since format 180 the channel before's predictor first)
           S64 al[4];
           int g, g4;
           B::nw_lpc(ch, b, al, &g, &g4);
-          v = B::code_pvq_nw(al, hist.pvq[ch][b] - 1, (int)v, ch, b, g, B::lrank[ch][b][VK_PVQ], B::lrank[ch][b][VK_PVE]);
+          const int c = ch - 1, c1 = c >= r.ch0() && b < r.nvqsub[c] && s.pmode[c][b] ? (int)s.pvq[c][b] : -1;
+          v = B::code_pvq_nw(al, hist.pvq[ch][b] - 1, c1, (int)v, ch, b, g, B::lrank[ch][b][VK_PVQ], B::lrank[ch][b][VK_PVE]);
         } else {
           if (bound[ch] && B::ss_rule()) B::pv_nofit();
           v = side_index(SF_PVQ, ch, b, v, 12, hist.pvq[ch][b], 8, 0);
@@ -693,8 +699,16 @@ struct Model : ModelX96<f_DEC, LV> {
           }
           v = side_code(SF_TMODE, ch, b, v, lo, hi, 0, 1 + (tc >= 3 ? tg : 0), hist.tmode[ch][b], tc,
                         1 + imin(s.abits[ch][b], 26), ec[ch][b], s.pmode[ch][b] ? 0 : B::pm_rise(s, ch, b));
-        } else
-          v = side_code(SF_TMODE, ch, b, v, lo, hi, 0, hist.tmode[ch][b], 0, 8, 1 + imin(s.abits[ch][b], 26), 9, 0, true);
+        } else {  // (a channel the WAV doesn't bind: since format 180 against the TMODEs of the subband
+                  // below in the channel and of the channel before in the subband, each 1 + it, 0 none
+                  // coded, as tr, the one below's + 5 the other's, which had nothing there: without their
+                  // WAVs six streams 2279 bytes smaller, Fire 2147; the channel before's in P's place, P - 1
+                  // the prediction where the subband has no last TMODE, `dtswavsample14.wav` 2441 bigger)
+          const int c = ch - 1;
+          const int tp = c >= r.ch0() && b < r.nvqsub[c] && s.abits[c][b] ? 1 + s.tmode[c][b] : 0;
+          const int tb = b && s.abits[ch][b - 1] ? 1 + s.tmode[ch][b - 1] : 0;
+          v = side_code(SF_TMODE, ch, b, v, lo, hi, 0, hist.tmode[ch][b], 0, 8, 1 + imin(s.abits[ch][b], 26), 9, tb + 5 * tp, true);
+        }
         break;
       }
       case F_SCALES: {  // (where X96 codes the subband too and the core has little of the decode's

@@ -1379,6 +1379,36 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   medians of 15 runs interleaved with format 178's build on this host, `mid.dtsc` without its WAV
   334 KB/s to 334 compressing and 330 to 335 decompressing, the XCH sample 209 to 186 and 256 to
   268, and with its WAV 232 to 236 and 262 to 261 (the host's noise more than the change).
+  Since format 180 an unbound channel's ADPCM predictor has the channel before's at the subband this
+  subframe, where that one predicts there, as the first candidate of both stages, and the last
+  predictor second (`model_smp.inc`'s code_pvq_nw()); its PMODE is coded against the channel
+  before's at the subband, and its TMODE against the subband below's and the channel before's at the
+  subband, both in a place of sdn's contexts that had nothing there for them (tr). Without their
+  WAVs, `s.2.dts`'s whole core 31231375 bytes to 31230804 (62.45% of it, as before), the 55 streams
+  of the check lists 122096503 to 122071417 (0.021%: Fire and its two packings 0.216%, `96-24.dts`
+  and its packings 0.033%, `dtswavsample16.wav` 0.019%, `dtswavsample14.wav` 0.007%, the two `sil`
+  streams 0.005%, `chs/m.dtsc` and `chs/n.dtsc` 0.004-0.005%, `dts_es.dtsc`, `lfe/l0.dtsc`,
+  `mid.dtsc`, `s2h.dtsc` and its packings and `padded.dts` 0.002-0.004%, the rest 0.0002-0.003%;
+  FATE's short samples from 3 bytes smaller to a byte bigger, FFmpeg's encodes the same or a byte
+  bigger, `sur/s.dts`, the DTS:X 7.1.4 core and the 14-bit packing of `f1c.dts` the same; `3-1.dtsc`
+  8 bytes bigger, `ES_6.1_16bit.dtsc` and its packing 50). With their WAVs the sizes are format
+  179's (the check lists' 67 runs 1447527 bytes, `s.2.dts`'s whole core with its WAV 76356, the
+  Cymatics core 60631). On 12 of the streams (as for format 179) 56618870 bytes to 56606797
+  (0.021%): the predictors alone 0.015% (`dtswavsample16.wav` 4854 bytes smaller, Fire 2961). On six
+  (`chs/m.dtsc`, Fire, `dts_es.dtsc`, `open_bitrate.dtsc`, `mid.dtsc` and `s2h.dtsc`, 14543247
+  bytes): the predictors 3225 bytes smaller (the last one first and the channel before's second,
+  3111); then the PMODEs 392 more; then the TMODEs by the subband below's 294, by the channel
+  before's 1628, by both 2279 (each only as whether it is a transient, 1143; the channel before's
+  where coded, else the subband below's, 1642). Tried and dropped: the channel before's TMODE in the
+  place of the value before in the subframe (P), which is the value's prediction where the subband
+  has no last one: 937 bytes smaller on the six, but `dtswavsample14.wav` 2441 bigger. For 0.03%
+  more instructions without the WAV (`mid.dtsc`'s, compressing, 24126 million to 24133, and
+  decompressing, 23882 million to 23889; FATE's 7-frame XCH sample 0.02% more, with its WAV 0.03%
+  fewer) and the same memory (`mid.dtsc` without its WAV 24.3 MB to 24.4 at the peak, 19 more page
+  faults; `s2h.dtsc` with its WAV 19.9-20.3 MB): the medians of 15 runs interleaved with format
+  179's build on this host, `mid.dtsc` without its WAV 349 KB/s to 344 compressing and 337 to 336
+  decompressing, the XCH sample 271 to 276 and 277 to 273, and with its WAV 275 to 255 and 297 to
+  292 (the host's noise more than the change).
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first
@@ -2504,8 +2534,9 @@ and only where both signs could be the value (a sign counter of its own before, 
 - **sdd**: a decoded WAV's (as the scale factor or the bit allocation search shows it, as for abd,
   or at -9 where under 90% of its indexes have been the audio's; sid's until format 132, below).
 - **sdn**: a channel's the WAV doesn't bind, and the LFE's where it isn't bound (sid's, then sdd's,
-  until format 167, above); since format 173 of its HF VQ vectors only whether each is the
-  subband's last one.
+  until format 167, above); since format 173 of its HF VQ vectors only whether each is the subband's
+  last one; since format 180 its PMODEs against the channel before's, its TMODEs against the subband
+  below's and the channel before's, above.
 - **jsc**: the joint scale factors (the core's and X96's), against the source channel's audio or
   their running mean (sid's until format 116, below).
 - **abt**: the bit allocations.
@@ -2534,7 +2565,8 @@ and only where both signs could be the value (a sign counter of its own before, 
 - **vqp**: the ranks of the predictors (their blocks', then theirs in the block; vqr's until format
   116, below).
 - **vpd**: a decoded WAV's (as for sdd; vqp's until format 132, below).
-- **vpn**: a channel's the WAV doesn't bind (vqp's, then vpd's, until format 167, above).
+- **vpn**: a channel's the WAV doesn't bind (vqp's, then vpd's, until format 167, above; since
+  format 180 the channel before's predictor at the subband first, above).
 - **raw**: bytes kept as bytes, the bits after the subframes, those before the extension's sync word,
   and XXCH's other bits.
 

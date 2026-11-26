@@ -3461,13 +3461,18 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // 7.1 24bit` 0.37%, `s.2.dts`'s first 3 MB 0.28%; their predictors 18-20% smaller). Against
   // it: the LPC of the last 16 values, 5896 bytes bigger, 32's 1333, 128's 445; the groups by
   // their nearest entries, the same, all 4096 distances; the last one not first, 1273 bigger;
-  // vqp's ranks rather than vpd's, 471 bigger
-  int code_pvq_nw(const S64* alpha, int fit, int v, int ch, int b, int gn, U8& lb, U8& le) {
+  // vqp's ranks rather than vpd's, 471 bigger. Since format 180 the channel before's predictor at
+  // the subband this subframe (c1, -1 none: it predicts there) first in both, and the last one
+  // second: without their WAVs the 12 streams 8479 bytes smaller (0.015%: `dtswavsample16.wav` 4854,
+  // Fire 2961; the last one first and it second, on six of them 114 fewer)
+  int code_pvq_nw(const S64* alpha, int fit, int c1, int v, int ch, int b, int gn, U8& lb, U8& le) {
     for (int k = 0; k < 64; k++) cand[k].k = pvq_block_dist(k, alpha), cand[k].i = k;
     if (fit >= 0) cand[fit >> 6].k = -1;
+    if (c1 >= 0 && (fit < 0 || c1 >> 6 != fit >> 6)) cand[c1 >> 6].k = -2;
     const int g = code_cand(64, 6, ENC ? v >> 6 : 0, VK_PVQ, ch, b, gn, lb, 0, 0, nullptr, nullptr, true);
     for (int i = 0; i < 64; i++) cand[i].k = pvq_dist(g * 64 + i, alpha), cand[i].i = i;
     if (fit >= 0 && fit >> 6 == g) cand[fit & 63].k = -1;
+    if (c1 >= 0 && c1 >> 6 == g && c1 != fit) cand[c1 & 63].k = -2;
     return g * 64 + code_cand(64, 6, ENC ? v & 63 : 0, VK_PVE, ch, b, gn, le, 0, 0, nullptr, nullptr, true);
   }
   // Whether channel ch's subband b is quiet as the encoders seen take it, where they make no
