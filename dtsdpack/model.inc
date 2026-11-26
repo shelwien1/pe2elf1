@@ -563,10 +563,15 @@ struct Model : ModelX96<f_DEC, LV> {
         // `dtswavsample16.wav`'s 6.56 million ABITS the subband below's unchanged leaves this one
         // so 88.6% of the time, its moving down by one 47.6%, it moving too 29.0%; by such counts
         // 0.68 bits an ABITS, abn's 0.81; since format 175 every decision past those two by the
-        // same counts too, nq: model_side.inc's abits_val_n())
+        // same counts too, nq: model_side.inc's abits_val_n(); since format 177 those counts mixed
+        // with the ABITS counted at the first scale factor less the subband's offset and the
+        // subframe's level, model_smp.inc's am_mix(): without their WAVs, on 12 streams 0.48%
+        // smaller, `dtswavsample16.wav` 0.82%, its ABITS 484 KB to 242)
         const int nwl = clip(hist.abits[ch][b], 0, 27);
         double nq[27];
         const double* nqp = nullptr;
+        typename B::AmUse amu;
+        bool amd = false;
         if (!bound[ch] && !zk) {
           const S32 A0 = hist.abits[ch][b], Al = alt >= lo && alt <= hi ? alt + 1 : 0, Bw = b ? s.abits[ch][b - 1] + 1 : 0;
           const S32 c1 = Sn ? Sn : A0, c2 = Al ? Al : Sn ? A0 : Bw;
@@ -574,12 +579,24 @@ struct Model : ModelX96<f_DEC, LV> {
           const double t = (double)B::nwa_t[nwl][de][lbd], al = B::NWA_A;
           for (int k = 0; k < 27; k++) nq[k] = (double)n[k] + al;
           nqp = nq;
+          amd = e > 0 && B::am_mix(ch, b, e, nq, t + 27.0 * al, amu);
           if (c1 >= 1 && c1 <= 27) {
-            const double p1 = ((double)n[c1 - 1] + al) / (t + 27.0 * al);
-            pq1 = clip((int)(4096.0 * (1.0 - p1) + 0.5), 64, 4096 - 64);
-            if (c2 >= 1 && c2 <= 27 && c2 != c1) {
-              const double p2 = ((double)n[c2 - 1] + al) / (t - (double)n[c1 - 1] + 26.0 * al);
-              pq2 = clip((int)(4096.0 * (1.0 - p2) + 0.5), 64, 4096 - 64);
+            if (amd) {  // (the mixture's shares; the second none where the counts' would be none)
+              double z = 0.0;
+              for (int k = 0; k < 27; k++) z += nq[k];
+              const double p1 = nq[c1 - 1] / z;
+              pq1 = clip((int)(4096.0 * (1.0 - p1) + 0.5), 64, 4096 - 64), pq2 = -1;
+              if (c2 >= 1 && c2 <= 27 && c2 != c1) {
+                const double p2 = nq[c2 - 1] / (z - nq[c1 - 1]);
+                pq2 = clip((int)(4096.0 * (1.0 - p2) + 0.5), 64, 4096 - 64);
+              }
+            } else {
+              const double p1 = ((double)n[c1 - 1] + al) / (t + 27.0 * al);
+              pq1 = clip((int)(4096.0 * (1.0 - p1) + 0.5), 64, 4096 - 64);
+              if (c2 >= 1 && c2 <= 27 && c2 != c1) {
+                const double p2 = ((double)n[c2 - 1] + al) / (t - (double)n[c1 - 1] + 26.0 * al);
+                pq2 = clip((int)(4096.0 * (1.0 - p2) + 0.5), 64, 4096 - 64);
+              }
             }
           }
         }
@@ -590,6 +607,7 @@ struct Model : ModelX96<f_DEC, LV> {
                          alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag, (fs && ut) || nws ? sx : 0, pq1, pq2, B::ss_rule() || B::ab_rule(), !bound[ch], nqp);
         v = checked(v, lo, hi);
         if (nws) B::nwd_n[0] += v > nws - 1, B::nwd_n[1] += v < nws - 1;
+        if (!bound[ch] && !zk && e > 0 && v >= 0 && v <= 26) B::am_learn(ch, b, e, (int)v, amd, amu);
         if (!bound[ch] && !zk && v >= 0 && v <= 26) {
           U16* const n = B::nwa_n[nwl][de][lbd];
           U32& t = B::nwa_t[nwl][de][lbd];
