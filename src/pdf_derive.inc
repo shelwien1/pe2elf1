@@ -288,26 +288,28 @@ static bool lengthRefOf(const uint8_t* p, size_t n, uint32_t& num) {
   return false;
 }
 
-static std::string decStr(uint64_t v) {
-  char b[24];
-  snprintf(b, sizeof(b), "%llu", (unsigned long long)v);
-  return b;
+static ValStr decStr(uint64_t v) {
+  ValStr r;
+  r.format("%llu", (unsigned long long)v);
+  return r;
 }
 
-static std::string md5Hex(const uint8_t m[16], bool lower) {
+static ValStr md5Hex(const uint8_t m[16], bool lower) {
   static const char* U = "0123456789ABCDEF";
   static const char* L = "0123456789abcdef";
   const char* hx = lower ? L : U;  // (a local: GCC 13 UBSan builds miscompile "(c ? L : U)[i]")
-  std::string s;
+  char b[32];
   for (int k = 0; k < 16; k++) {
-    s += hx[m[k] >> 4];
-    s += hx[m[k] & 15];
+    b[2 * k] = hx[m[k] >> 4];
+    b[2 * k + 1] = hx[m[k] & 15];
   }
+  ValStr s;
+  s.set(b, 32);
   return s;
 }
 
 // value a code stands for; false if not available
-static bool derivValue(uint8_t code, const StreamFacts& f, const DeriveState& ds, uint32_t objNum, std::string& v) {
+static bool derivValue(uint8_t code, const StreamFacts& f, const DeriveState& ds, uint32_t objNum, ValStr& v) {
   switch (code) {
     case 'L': if (!f.payloadKnown) return false; v = decStr(f.payloadLen); return true;
     case 'D': if (!f.decodedKnown) return false; v = decStr(f.decodedLen); return true;
@@ -923,7 +925,7 @@ static void structAddKids(const uint8_t* p, size_t n, uint32_t num, uint32_t gen
   else add(*k);
 }
 
-static std::string refStr(std::pair<uint32_t, uint32_t> r);
+static ValStr refStr(std::pair<uint32_t, uint32_t> r);
 
 // Walks the /Nums array of a number tree leaf: key, value, key, value, ...; a value is "N G R",
 // null, or an array of those. Encoder and decoder feed it the same tokens.
@@ -1010,7 +1012,7 @@ static size_t numsChoose(const uint8_t* v, size_t n, size_t a, size_t base, cons
     } else {
       bool endRef = j - i == 1 && v[i] == 'R' && w.refPart == 2;
       w.word(v + i, j - i);
-      if (endRef && havePred && refStr(pred) == std::string((const char*)v + refStart, j - refStart))
+      if (endRef && havePred && refStr(pred).eq((const char*)v + refStart, j - refStart))
         ed.push_back({base + refStart, base + j, Bytes{kDerivEsc, 'r'}});
       if (endRef) havePred = false;
     }
@@ -1018,8 +1020,14 @@ static size_t numsChoose(const uint8_t* v, size_t n, size_t a, size_t base, cons
   }
   if (!w.done || w.bad || ed.size() < 2) return 0;
   Bytes rep{kDerivEsc, (uint8_t)(key < 0 ? 'n' : after ? 'Q' : 'q')};
-  std::string f = key < 0 ? (member >= 0 ? " " : "") : " " + decStr((uint64_t)key) + " ";
-  if (member >= 0) f += decStr((uint64_t)member) + " ";
+  FixedStr<63> f;  // " <key> <member> "
+  if (key >= 0) f.format(" %llu ", (unsigned long long)key);
+  else if (member >= 0) f.set(" ");
+  if (member >= 0) {
+    ValStr m = decStr((uint64_t)member);
+    f.append(m.data(), m.size());
+    f.append(" ", 1);
+  }
   rep.insert(rep.end(), f.begin(), f.end());
   if (after) edits.push_back({base + a + 1, base + a + 1, rep});
   else edits.push_back({base + a, base + a + 1, rep});
@@ -1045,8 +1053,10 @@ static bool refAt(const uint8_t* p, size_t n, size_t a, uint64_t& num, uint64_t&
   return true;
 }
 
-static std::string refStr(std::pair<uint32_t, uint32_t> r) {
-  return decStr(r.first) + " " + decStr(r.second) + " R";
+static ValStr refStr(std::pair<uint32_t, uint32_t> r) {
+  ValStr s;
+  s.format("%u %u R", r.first, r.second);
+  return s;
 }
 
 // encoder: placeholder for /P of object `num` when the map predicts it; v = value text (no
@@ -1057,11 +1067,12 @@ static bool structChoose(const uint8_t* v, size_t n, size_t base, uint32_t num, 
   if (f == sm.parent.end()) return false;
   size_t a = topKeyValue(v, n, "/P"), e;
   uint64_t pn, pg;
-  if (a == SIZE_MAX || !refAt(v, n, a, pn, pg, e) || refStr(f->second) != std::string((const char*)v + a, e - a))
+  if (a == SIZE_MAX || !refAt(v, n, a, pn, pg, e) || !refStr(f->second).eq((const char*)v + a, e - a))
     return false;
   Bytes rep{kDerivEsc, (uint8_t)(member < 0 ? 'k' : 'K')};
   if (member >= 0) {
-    std::string m = " " + decStr((uint64_t)member) + " ";
+    ValStr m;
+    m.format(" %llu ", (unsigned long long)member);
     rep.insert(rep.end(), m.begin(), m.end());
   }
   edits.push_back({base + a, base + e, rep});
@@ -1156,7 +1167,7 @@ static size_t widthsChoose(const uint8_t* p, size_t n, size_t a, int kind, const
     ww.cid = kind == WK_CID2 || kind == WK_CID2M || kind == WK_CID0;
     ww.first = first;
     size_t hits = 0;
-    std::string s;
+    WidthStr s;
     for (size_t t = 0; t < tk.size() && !ww.bad; t++) {
       const WidthTok& w = tk[t];
       if (w.t == '[') ww.open();
@@ -1225,7 +1236,7 @@ static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const 
       }
       auto f = ex->sm->parent.find(child);
       if (f == ex->sm->parent.end()) return false;
-      std::string v = refStr(f->second);
+      ValStr v = refStr(f->second);
       out.insert(out.end(), v.begin(), v.end());
       continue;
     }
@@ -1272,7 +1283,7 @@ static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const 
         else if (c == kDerivEsc && i + 1 < n && p[i + 1] == 'r') {
           StructMap::Ref r;
           if (!w.atElement() || !ex->sm->parentTreeRef(w.depth == 2, w.key, w.idx, r)) return false;
-          std::string v = refStr(r);
+          ValStr v = refStr(r);
           out.insert(out.end(), v.begin(), v.end());
           w.elementDone();
           i += 2;
@@ -1322,7 +1333,7 @@ static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const 
       ww.first = (uint32_t)first;
       ww.open();
       if (!after) out.push_back('[');
-      std::string s;
+      WidthStr s;
       while (!ww.done) {
         if (i >= n || ww.bad) return false;
         uint8_t c = p[i];
@@ -1442,7 +1453,7 @@ static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const 
       i += r.p;
       continue;
     }
-    std::string v;
+    ValStr v;
     if (!derivValue(p[i], f, ds, objNum, v)) return false;
     out.insert(out.end(), v.begin(), v.end());
   }
@@ -1527,11 +1538,10 @@ static void derivChoose(const uint8_t* p, size_t n, int kind, uint8_t cls, const
                         uint32_t objNum, std::vector<DerivEdit>& edits) {
   std::vector<DerivTok> toks;
   derivWalk(p, n, toks);
-  auto tokStr = [&](const DerivTok& t) { return std::string((const char*)p + t.a, t.b - t.a); };
   auto tryCodes = [&](const DerivTok& t, std::initializer_list<uint8_t> codes) {
-    std::string s = tokStr(t), v;
+    ValStr v;
     for (uint8_t c : codes)
-      if (derivValue(c, f, ds, objNum, v) && v == s) {
+      if (derivValue(c, f, ds, objNum, v) && v.eq((const char*)p + t.a, t.b - t.a)) {
         edits.push_back({t.a, t.b, Bytes{kDerivEsc, c}});
         return;
       }

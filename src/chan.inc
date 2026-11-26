@@ -154,6 +154,8 @@ struct FixedStr {
   }
   const char* c_str() const { return s; }
   const char* data() const { return s; }
+  const char* begin() const { return s; }
+  const char* end() const { return s + n; }
   size_t size() const { return n; }
   bool empty() const { return n == 0; }
   bool eq(const char* p, size_t len) const { return n == len && memcmp(s, p, len) == 0; }
@@ -167,6 +169,8 @@ typedef FixedStr<15> ShortName;
 typedef FixedStr<127> PdfName;
 // messages: an error (fail(), at most 1023 bytes) with a short prefix
 typedef FixedStr<1279> Message;
+// short values in text: a decimal uint64 (20), an MD5 in hex (32), "N G R" (23)
+typedef FixedStr<39> ValStr;
 // file names: at most 4095 bytes (PATH_MAX)
 typedef FixedStr<4095> Path;
 // passwords: the handlers read at most the first 127 bytes (R6; R2-R4 read 32)

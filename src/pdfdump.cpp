@@ -1181,13 +1181,13 @@ class Encoder {
     if (s.desc.storage == ST_FILE || s.desc.storage == ST_DUP) {
       uint32_t ord = s.desc.storage == ST_DUP ? s.desc.ordinal : ownOrd_[sf->second];
       if (ord >= ordExt_.size()) return false;
-      src = "o" + decStr(ord) + "." + ordExt_[ord].c_str();
+      src = std::string("o") + decStr(ord).c_str() + "." + ordExt_[ord].c_str();
       data = !s.data.empty() ? &s.data : ord < dump.ownData.size() ? &dump.ownData[ord] : nullptr;
       return data != nullptr;
     }
     auto f = inlineSeen_.find(num);
     if (!inlineSourceOk(s.desc, s.data.size()) || f == inlineSeen_.end() || f->second != sf->second) return false;
-    src = "s" + decStr(num);
+    src = std::string("s") + decStr(num).c_str();
     data = &s.data;
     return true;
   }
@@ -1249,7 +1249,7 @@ class Encoder {
       fm->setCidMap(mapData->data(), mapData->size());
     if (!fm->ok) return false;
     wf.m = fm;
-    wf.fields = " " + src + " " + decStr(wf.first) + " ";
+    wf.fields = " " + src + " " + decStr(wf.first).c_str() + " ";
     if (wf.kind == WK_T1) wf.fields += t1hex + " ";
     if (wf.kind == WK_CID2M) wf.fields += mapSrc + " ";
     return true;

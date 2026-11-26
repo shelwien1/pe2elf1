@@ -199,17 +199,18 @@ static bool cffDict(const uint8_t* p, size_t a, size_t b, F op) {
       st.push_back((int32_t)((uint32_t)p[i + 1] << 24 | (uint32_t)p[i + 2] << 16 | (uint32_t)p[i + 3] << 8 | p[i + 4]));
       i += 5;
     } else if (c == 30) {
-      std::string s;
+      FixedStr<71> s;  // stops past 63 characters; one nibble adds at most 2
       i++;
       bool end = false;
       while (i < b && !end && s.size() < 64) {
         for (int h = 0; h < 2 && !end; h++) {
           int nib = h ? p[i] & 15 : p[i] >> 4;
-          if (nib <= 9) s += (char)('0' + nib);
-          else if (nib == 10) s += '.';
-          else if (nib == 11) s += 'E';
-          else if (nib == 12) s += "E-";
-          else if (nib == 14) s += '-';
+          char d = (char)('0' + nib);
+          if (nib <= 9) s.append(&d, 1);
+          else if (nib == 10) s.append(".", 1);
+          else if (nib == 11) s.append("E", 1);
+          else if (nib == 12) s.append("E-", 2);
+          else if (nib == 14) s.append("-", 1);
           else if (nib == 15) end = true;
           else return false;
         }
@@ -490,16 +491,17 @@ static const char* const kStdEncHi =
     "- AE - ordfeminine - - - - Lslash Oslash OE ordmasculine - - - - - ae - - - dotlessi - - lslash oslash oe "
     "germandbls - - - -";
 
-// StandardEncoding glyph name of a code, "" if none
-static std::string t1StdName(int code) {
+// StandardEncoding glyph name of a code (in the table, len bytes); false if none
+static bool t1StdName(int code, const char*& name, size_t& len) {
   const char* t = code >= 32 && code <= 126 ? kStdEncLo : code >= 161 && code <= 255 ? kStdEncHi : nullptr;
-  if (!t) return "";
+  if (!t) return false;
   int k = code >= 161 ? code - 161 : code - 32;
   const char* q = t;
   for (; k > 0; k--) q = strchr(q, ' ') + 1;
   const char* e = strchr(q, ' ');
-  std::string nm = e ? std::string(q, e - q) : std::string(q);
-  return nm == "-" ? "" : nm;
+  name = q;
+  len = e ? (size_t)(e - q) : strlen(q);
+  return !(len == 1 && q[0] == '-');
 }
 
 // width of a decrypted Type 1 charstring (lead bytes skipped): "sbx wx hsbw" or "sbx sby wx wy
@@ -604,8 +606,9 @@ static bool parseType1(const Bytes& stored, const Bytes& recon, FontMetrics& m) 
   if (m.nglyphs == 0) return false;
   m.hasDen = true;
   for (int c = 0; c < 256; c++) {
-    std::string nm = t1StdName(c);
-    if (!nm.empty()) m.stdEnc[c] = byName.get((const uint8_t*)nm.data(), nm.size());
+    const char* nm;
+    size_t nl;
+    if (t1StdName(c, nm, nl) && nl) m.stdEnc[c] = byName.get((const uint8_t*)nm, nl);
   }
   const uint8_t* e = memfind(p, s, "/Encoding", 9);
   if (e) {
@@ -645,7 +648,9 @@ enum { WK_TT, WK_CFF, WK_CID2, WK_T1, WK_CID0, WK_CID2M, WK_COUNT };
 static const int kWidthMaps = 4, kWidthRules = 6;
 static int widthMaps(int kind) { return kind == WK_TT ? 4 : kind == WK_T1 ? 2 : 1; }
 
-static bool widthPredict(const FontMetrics& m, int kind, int map, int rule, uint32_t code, std::string& s) {
+// a predicted width as written: an integer or up to 3 decimals
+typedef FixedStr<47> WidthStr;
+static bool widthPredict(const FontMetrics& m, int kind, int map, int rule, uint32_t code, WidthStr& s) {
   if (!m.ok || rule < 0 || rule >= kWidthRules) return false;
   int64_t adv = 0;
   uint64_t den = 1;
@@ -702,7 +707,7 @@ static bool widthPredict(const FontMetrics& m, int kind, int map, int rule, uint
       while (l > 0 && buf[l - 1] == '0') buf[--l] = 0;
     }
   }
-  s = buf;
+  s.set(buf);
   return true;
 }
 
