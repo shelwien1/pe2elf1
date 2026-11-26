@@ -74,11 +74,12 @@ static void failClear() {
 template <class F>
 static bool softly(F&& f) {
   bool was = tFailed;
-  std::string msg = was ? std::string(tFailMsg) : std::string();
+  char msg[sizeof(tFailMsg)];
+  memcpy(msg, tFailMsg, sizeof(msg));
   tFailed = false;
   bool ok = f() && !tFailed;
   tFailed = was;
-  if (was) snprintf(tFailMsg, sizeof(tFailMsg), "%s", msg.c_str());
+  if (was) memcpy(tFailMsg, msg, sizeof(msg));
   else tFailMsg[0] = 0;
   return ok;
 }

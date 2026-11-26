@@ -1172,7 +1172,7 @@ class Encoder {
 
   // a stream as a width source: its own file ("o<ord>.<ext>") or, stored inline in an item
   // already written, "s<num>"; data = its stored form
-  bool streamSource(uint32_t num, std::string& src, const Bytes*& data, const StreamRec*& rec) {
+  bool streamSource(uint32_t num, ValStr& src, const Bytes*& data, const StreamRec*& rec) {
     auto sf = streamByNum_.find(num);
     if (sf == streamByNum_.end()) return false;
     const StreamRec& s = streams[sf->second];
@@ -1181,13 +1181,13 @@ class Encoder {
     if (s.desc.storage == ST_FILE || s.desc.storage == ST_DUP) {
       uint32_t ord = s.desc.storage == ST_DUP ? s.desc.ordinal : ownOrd_[sf->second];
       if (ord >= ordExt_.size()) return false;
-      src = std::string("o") + decStr(ord).c_str() + "." + ordExt_[ord].c_str();
+      src.format("o%u.%s", ord, ordExt_[ord].c_str());  // <= 1 + 10 + 1 + 15
       data = !s.data.empty() ? &s.data : ord < dump.ownData.size() ? &dump.ownData[ord] : nullptr;
       return data != nullptr;
     }
     auto f = inlineSeen_.find(num);
     if (!inlineSourceOk(s.desc, s.data.size()) || f == inlineSeen_.end() || f->second != sf->second) return false;
-    src = std::string("s") + decStr(num).c_str();
+    src.format("s%u", num);
     data = &s.data;
     return true;
   }
@@ -1214,7 +1214,8 @@ class Encoder {
     else return false;
     const Obj* ff = fd->get(ffKey);
     if (!ff || ff->t != Obj::REF) return false;
-    std::string src, mapSrc, t1hex;
+    ValStr src, mapSrc;
+    std::string t1hex;  // the Type 1 recon in hex: any length
     const Bytes* data;
     const Bytes* mapData = nullptr;
     const StreamRec* rec;
@@ -1242,16 +1243,16 @@ class Encoder {
       if (!fc || fc->t != Obj::INT || fc->i < 0 || fc->i > 0xFFFF) return false;
       wf.first = (uint32_t)fc->i;
     }
-    std::string key = std::string(1, (char)('a' + wf.kind)) + " " + src + " " + t1hex + " " + mapSrc;
+    std::string key = std::string(1, (char)('a' + wf.kind)) + " " + src.c_str() + " " + t1hex + " " + mapSrc.c_str();
     bool found;
     FontMetrics* fm = fontCache_.get(key, found);  // valid until the next get
     if (!found && parseFontOf(wf.kind, *data, recon, *fm) && wf.kind == WK_CID2M)
       fm->setCidMap(mapData->data(), mapData->size());
     if (!fm->ok) return false;
     wf.m = fm;
-    wf.fields = " " + src + " " + decStr(wf.first).c_str() + " ";
+    wf.fields = std::string(" ") + src.c_str() + " " + decStr(wf.first).c_str() + " ";
     if (wf.kind == WK_T1) wf.fields += t1hex + " ";
-    if (wf.kind == WK_CID2M) wf.fields += mapSrc + " ";
+    if (wf.kind == WK_CID2M) wf.fields += std::string(mapSrc.c_str()) + " ";
     return true;
   }
 

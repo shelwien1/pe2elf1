@@ -77,6 +77,44 @@ Tested with g++ 13.3 and clang 18 on Linux x86-64; the thread pool is also clean
 ThreadSanitizer (`-fsanitize=thread`). MinGW needs the posix thread model (`-posix` driver) for
 `std::thread`; the Windows build compiles but has not been run.
 
+### Fixed-capacity storage
+
+Containers whose size has a bound (at most 100 MB at the bound, per array) are arrays of that
+size, not STL containers: `FixedVec<T,N>` (in place, `push_back`/`resize` return false when
+full), `FixedStr<N>` (in place, NUL-terminated: `ShortName` 15 bytes, `ValStr` 39, `PdfName`
+127, `Password` 127, `Message` 1279, `Path` 4095), `KeyBuf` (64 bytes of key material) and
+`NameTable` (report counters, 64 keys) in `src/chan.inc`. Blocks over about 256 KB go on the heap
+at their full size (`unique_ptr`), so that worker threads (1 MB default stack on Windows) stay
+safe.
+
+| What | Bound | Past the bound |
+|---|---|---|
+| filter layers per stream | 16 (12 filters, room for a predictor and pseudo layers) | the stream stays encoded from that filter on; `d` rejects a descriptor with more |
+| `/Filter` array | 32 entries | entries past 31 read as one unknown filter `?`: undoing stops there |
+| PDF names (filters, crypt filters, `/StmF` `/StrF` `/EFF`) | 127 bytes (ISO 32000-1 Annex C) | a filter name keeps its first 127 bytes (still unknown); a crypt filter name is not kept (reads as Identity) |
+| crypt filters (`/CF`) | 32 | further entries ignored |
+| key material (`/O /U /OE /UE`, file and object keys, hashes) | 64 bytes | first 64 bytes kept (handlers read at most 48) |
+| `-P` password | 127 bytes | first 127 kept (R6 reads 127, R2-R4 read 32) |
+| file extensions | 15 characters (written: at most 8) | `d` rejects a longer one |
+| image palettes | 256 entries | (bpc <= 8 by construction) |
+| font tables (`FontMetrics`, about 1 MB, 8 cached at a time) | 65535 glyphs (a u16 in TrueType / CFF); cmap subtables 64 KB (formats 0/4/6: a u16 length); 65536 CIDs | a CFF font with more glyphs is not used for widths; Type 1 glyphs past 65535 are not; CIDs past 65535 predict nothing |
+| CFF FDs / operand stack | 256 (a u8 FD index) / 48 (the CFF limit) | operands past 48 dropped |
+| Type 1 RD token names | 255 (a u8 in the recon) | charstrings named by further tokens stay as they are |
+| CCITT row | 65540 changes (65536 columns) | layer not applied |
+| LZW tables, zlib header counts, lifter entropy counters | 4096 codes; 65536 headers; 65536 pairs | (exact) |
+| decode threads (`-j`, default one per CPU) | 256 | capped |
+
+None of the bounds is reached on the test set (dumps are byte-identical to the build before
+the change); a PDF beyond one still round-trips, with less undone or derived (a width
+prediction is only used where it reproduces the file).
+
+Still dynamic, because their size follows the input: byte buffers (`Bytes`: the file, streams,
+channels, recon data), parsed objects and their strings, per-item / per-object / per-stream
+tables (segmenter items, xref entries, the object index, stream records, own files), the
+lifter's values, groups, events and their hash tables, derived-field tokens and key paths,
+CMap entries, Type 1 / CFF charstring lists, ObjStm and xref stream tables, font cache keys
+(they carry the Type 1 recon in hex), and preflate's internals (third-party).
+
 ## Options
 
 | Option | Meaning | Default |
@@ -332,7 +370,8 @@ local pointer now.
 ## Source layout
 
     src/pdfdump.cpp     CLI, encoder pipeline, info report, self-test
-    src/chan.inc        channel writer/reader, channel->file map, header, varints, CRC-32
+    src/chan.inc        channel writer/reader, channel->file map, header, varints, CRC-32;
+                        error state, fixed-capacity types (FixedVec, FixedStr, KeyBuf, NameTable)
     src/pdf_lex.inc     lexer and read-only object parser
     src/pdf_seg.inc     segmenter: items, stream extents, raw regions, xref sections, trailers;
                         item length predictor
