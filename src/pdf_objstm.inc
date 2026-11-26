@@ -128,7 +128,7 @@ static bool objstmEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out) {
 //
 // Recon: u8 W0 W1 W2, var number of /Index ranges, (start, count) pairs, var tail length + tail.
 
-static bool xrefRowsGeometry(const std::vector<uint64_t>& w) {
+static bool xrefRowsGeometry(const FixedVec<uint64_t, 3>& w) {
   return w.size() == 3 && w[0] <= 1 && w[1] <= 8 && w[2] <= 8 && w[0] + w[1] + w[2] > 0;
 }
 
@@ -147,7 +147,7 @@ static void xrefRowsPredict(const ObjPositions* op, uint64_t num, uint64_t type,
   }
 }
 
-static bool xrefRowsDecodeLayer(const CodecCtx& ctx, const Bytes& in, const std::vector<uint64_t>& W,
+static bool xrefRowsDecodeLayer(const CodecCtx& ctx, const Bytes& in, const FixedVec<uint64_t, 3>& W,
                                 const std::vector<std::pair<uint64_t, uint64_t>>& index, Bytes& out, Bytes& recon) {
   if (!xrefRowsGeometry(W)) return false;
   size_t rl = (size_t)(W[0] + W[1] + W[2]);
@@ -187,7 +187,8 @@ static bool xrefRowsDecodeLayer(const CodecCtx& ctx, const Bytes& in, const std:
 
 static bool xrefRowsEncodeLayer(const CodecCtx& ctx, const Bytes& recon, const Bytes& in, Bytes& out) {
   RBuf r(recon);
-  std::vector<uint64_t> W(3);
+  FixedVec<uint64_t, 3> W;
+  W.resize(3);
   for (auto& w : W) w = r.u8();
   if (!xrefRowsGeometry(W)) return false;
   size_t ni = r.len();

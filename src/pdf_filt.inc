@@ -12,6 +12,10 @@ struct Layer {
   uint8_t type = L_NONE;
   Bytes recon;
 };
+// layers per stream (filters, predictors and pseudo layers): a stream that would need more keeps
+// its remaining filters
+static const size_t kMaxLayers = 16;
+typedef FixedVec<Layer, kMaxLayers> Layers;
 
 struct ObjPositions;
 struct CodecCtx {
@@ -29,7 +33,7 @@ struct FilterParams {
   int64_t objstmN = 0, objstmFirst = 0;  // L_OBJSTM: /N and /First
   int ccittK = 0, ccittCols = 1728, ccittRows = 0;  // L_CCITT
   bool ccittEol = false, ccittAlign = false, ccittEob = true, ccittBlack1 = false;
-  std::vector<uint64_t> xrefW;                     // L_XREFROWS: /W
+  FixedVec<uint64_t, 3> xrefW;                     // L_XREFROWS: /W
   std::vector<std::pair<uint64_t, uint64_t>> xrefIndex;  // L_XREFROWS: /Index ranges
 };
 
@@ -766,7 +770,7 @@ static bool rlEncode(const Bytes& recon, const Bytes& in, Bytes& out) {
 static bool lzwDecode(const FilterParams& fp, const Bytes& in, Bytes& out, Bytes& recon) {
   int early = fp.earlyChange ? 1 : 0;
   out.clear();
-  std::vector<uint32_t> estart(4096), elen(4096);
+  uint32_t estart[4096] = {}, elen[4096] = {};  // the LZW table at its 12-bit maximum
   std::vector<uint64_t> clears;
   size_t bitpos = 0, nbits = in.size() * 8;
   int width = 9, next = 258, prev = -1;
@@ -974,7 +978,7 @@ static bool xmpEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out);  //
 static bool iccRefEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out);  // pdf_icc.inc
 struct CcittParams;
 static bool ccittDecodeFP(const FilterParams& fp, const Bytes& in, Bytes& out, Bytes& recon);
-static bool xrefRowsDecodeLayer(const CodecCtx& ctx, const Bytes& in, const std::vector<uint64_t>& W,
+static bool xrefRowsDecodeLayer(const CodecCtx& ctx, const Bytes& in, const FixedVec<uint64_t, 3>& W,
                                 const std::vector<std::pair<uint64_t, uint64_t>>& index, Bytes& out, Bytes& recon);
 
 static bool layerEncode(const CodecCtx& ctx, uint8_t type, const Bytes& recon, const Bytes& in, Bytes& out) {

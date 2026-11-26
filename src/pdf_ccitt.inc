@@ -52,11 +52,18 @@ static const char* const kExtMakeup[13] = {"00000001000",  "00000001100",  "0000
                                            "000000010111", "000000011100", "000000011101", "000000011110",
                                            "000000011111"};
 
+// changing elements of one row: at most cols + 1 for a valid row, cols at most 65536 (256 KB: on
+// the heap, swapped by pointer)
+static const size_t kCcittMaxChanges = (1 << 16) + 4;
+typedef FixedVec<int, kCcittMaxChanges> CcittRow;
+
 struct CcittTables {
-  // decode: map (len, code) -> run length; built once
-  std::map<std::pair<int, int>, int> white, black;
+  // decode: run length by [code length][code] (codes are at most 13 bits), -1 none; built once
+  int16_t white[14][1 << 13], black[14][1 << 13];
   CcittCode wt[64], bt[64], wm[40], bm[40];  // makeup index k = run / 64 - 1 (0..39)
   CcittTables() {
+    for (auto& l : white) for (auto& v : l) v = -1;
+    for (auto& l : black) for (auto& v : l) v = -1;
     auto cc = [](const char* s) {
       CcittCode c{0, (uint8_t)strlen(s)};
       for (const char* p = s; *p; p++) c.code = (uint16_t)(c.code << 1 | (*p - '0'));
@@ -65,20 +72,20 @@ struct CcittTables {
     for (int i = 0; i < 64; i++) {
       wt[i] = cc(kWhiteTerm[i]);
       bt[i] = cc(kBlackTerm[i]);
-      white[{wt[i].len, wt[i].code}] = i;
-      black[{bt[i].len, bt[i].code}] = i;
+      white[wt[i].len][wt[i].code] = i;
+      black[bt[i].len][bt[i].code] = i;
     }
     for (int i = 0; i < 27; i++) {
       wm[i] = cc(kWhiteMakeup[i]);
       bm[i] = cc(kBlackMakeup[i]);
-      white[{wm[i].len, wm[i].code}] = 64 * (i + 1);
-      black[{bm[i].len, bm[i].code}] = 64 * (i + 1);
+      white[wm[i].len][wm[i].code] = 64 * (i + 1);
+      black[bm[i].len][bm[i].code] = 64 * (i + 1);
     }
     for (int i = 0; i < 13; i++) {
       CcittCode c = cc(kExtMakeup[i]);
       wm[27 + i] = bm[27 + i] = c;
-      white[{c.len, c.code}] = 1792 + 64 * i;
-      black[{c.len, c.code}] = 1792 + 64 * i;
+      white[c.len][c.code] = 1792 + 64 * i;
+      black[c.len][c.code] = 1792 + 64 * i;
     }
   }
 };
@@ -123,7 +130,7 @@ static const uint32_t kEOL = 1;  // 000000000001, 12 bits
 
 // one run (makeup codes + terminating code); -1 on error
 static int ccittReadRun(BitReader& br, bool black) {
-  const auto& map = black ? ccittTables().black : ccittTables().white;
+  const auto& map = black ? ccittTables().black : ccittTables().white;  // int16_t[14][8192]
   int total = 0;
   for (;;) {
     int code = 0, len = 0, run = -1;
@@ -132,8 +139,7 @@ static int ccittReadRun(BitReader& br, bool black) {
       if (b < 0) return -1;
       code = code << 1 | b;
       len++;
-      auto it = map.find({len, code});
-      if (it != map.end()) { run = it->second; break; }
+      if (map[len][code] >= 0) { run = map[len][code]; break; }
     }
     if (run < 0) return -1;
     total += run;
@@ -152,15 +158,8 @@ static void ccittWriteRun(BitWriter& bw, int run, bool black) {
   bw.code(black ? t.bt[run] : t.wt[run]);
 }
 
-// changing elements of a row of pixels (1 = black)
-static void ccittChanges(const std::vector<uint8_t>& px, std::vector<int>& ch) {
-  ch.clear();
-  uint8_t c = 0;
-  for (size_t i = 0; i < px.size(); i++)
-    if (px[i] != c) { ch.push_back((int)i); c = px[i]; }
-}
 
-static void ccittB1B2(const std::vector<int>& ref, int a0, int color, int cols, int& b1, int& b2) {
+static void ccittB1B2(const CcittRow& ref, int a0, int color, int cols, int& b1, int& b2) {
   // b1: first change on the reference line right of a0 into the colour opposite to `color`
   // (changes into black have even index); a0 = -1 at the start of a row
   size_t i = color ? 1 : 0;
@@ -170,7 +169,7 @@ static void ccittB1B2(const std::vector<int>& ref, int a0, int color, int cols, 
 }
 
 // decode one 2D row given the reference changes; fills cur changes. false on error.
-static bool ccittDecode2D(BitReader& br, const std::vector<int>& ref, std::vector<int>& cur, int cols) {
+static bool ccittDecode2D(BitReader& br, const CcittRow& ref, CcittRow& cur, int cols) {
   cur.clear();
   int a0 = -1, color = 0;
   while (a0 < cols) {
@@ -181,7 +180,7 @@ static bool ccittDecode2D(BitReader& br, const std::vector<int>& ref, std::vecto
     if (b < 0) return false;
     if (b == 1) {  // V0
       if (b1 > cols) return false;
-      cur.push_back(b1);
+      if (!cur.push_back(b1)) return false;
       a0 = b1;
       color ^= 1;
       continue;
@@ -191,7 +190,7 @@ static bool ccittDecode2D(BitReader& br, const std::vector<int>& ref, std::vecto
     if (b2b == 1) {  // 01x: VR1 (011) / VL1 (010)
       int a1 = b3 ? b1 + 1 : b1 - 1;
       if (a1 < 0 || a1 > cols || a1 < a0) return false;
-      cur.push_back(a1);
+      if (!cur.push_back(a1)) return false;
       a0 = a1;
       color ^= 1;
       continue;
@@ -202,8 +201,7 @@ static bool ccittDecode2D(BitReader& br, const std::vector<int>& ref, std::vecto
       int s = a0 < 0 ? 0 : a0;
       int a1 = s + r1, a2 = a1 + r2;
       if (a2 > cols) return false;
-      cur.push_back(a1);
-      cur.push_back(a2);
+      if (!cur.push_back(a1) || !cur.push_back(a2)) return false;
       a0 = a2;
       continue;
     }
@@ -219,7 +217,7 @@ static bool ccittDecode2D(BitReader& br, const std::vector<int>& ref, std::vecto
     if (b5 == 1) {  // 00001x: VR2 (000011) / VL2 (000010)
       int a1 = b6 ? b1 + 2 : b1 - 2;
       if (a1 < 0 || a1 > cols || a1 < a0) return false;
-      cur.push_back(a1);
+      if (!cur.push_back(a1)) return false;
       a0 = a1;
       color ^= 1;
       continue;
@@ -229,7 +227,7 @@ static bool ccittDecode2D(BitReader& br, const std::vector<int>& ref, std::vecto
       if (b7 < 0) return false;
       int a1 = b7 ? b1 + 3 : b1 - 3;
       if (a1 < 0 || a1 > cols || a1 < a0) return false;
-      cur.push_back(a1);
+      if (!cur.push_back(a1)) return false;
       a0 = a1;
       color ^= 1;
       continue;
@@ -239,7 +237,7 @@ static bool ccittDecode2D(BitReader& br, const std::vector<int>& ref, std::vecto
   return true;
 }
 
-static void ccittEncode2D(BitWriter& bw, const std::vector<int>& ref, const std::vector<int>& cur, int cols) {
+static void ccittEncode2D(BitWriter& bw, const CcittRow& ref, const CcittRow& cur, int cols) {
   int a0 = -1, color = 0;
   size_t ci = 0;
   while (a0 < cols) {
@@ -270,20 +268,20 @@ static void ccittEncode2D(BitWriter& bw, const std::vector<int>& ref, const std:
   }
 }
 
-static bool ccittDecode1D(BitReader& br, std::vector<int>& cur, int cols) {
+static bool ccittDecode1D(BitReader& br, CcittRow& cur, int cols) {
   cur.clear();
   int a = 0, color = 0;
   while (a < cols) {
     int r = ccittReadRun(br, color);
     if (r < 0 || a + r > cols) return false;
     a += r;
-    if (a < cols) cur.push_back(a);
+    if (a < cols && !cur.push_back(a)) return false;
     color ^= 1;
   }
   return true;
 }
 
-static void ccittEncode1D(BitWriter& bw, const std::vector<int>& cur, int cols) {
+static void ccittEncode1D(BitWriter& bw, const CcittRow& cur, int cols) {
   int a = 0, color = 0;
   size_t i = 0;
   while (a < cols) {
@@ -300,7 +298,7 @@ struct CcittParams {
   bool eol = false, align = false, eob = true, black1 = false;
 };
 
-static void ccittRowBits(const std::vector<int>& ch, int cols, bool black1, uint8_t* dst) {
+static void ccittRowBits(const CcittRow& ch, int cols, bool black1, uint8_t* dst) {
   size_t rb = ((size_t)cols + 7) / 8;
   memset(dst, black1 ? 0x00 : 0xFF, rb);  // white everywhere
   int color = 0, a = 0;
@@ -316,7 +314,7 @@ static void ccittRowBits(const std::vector<int>& ch, int cols, bool black1, uint
   }
 }
 
-static void ccittRowChanges(const uint8_t* row, int cols, bool black1, std::vector<int>& ch) {
+static void ccittRowChanges(const uint8_t* row, int cols, bool black1, CcittRow& ch) {
   ch.clear();
   int c = 0;
   for (int x = 0; x < cols; x++) {
@@ -329,11 +327,14 @@ static void ccittRowChanges(const uint8_t* row, int cols, bool black1, std::vect
 // encode rows + options -> bytes (shared by verify and restore)
 static bool ccittEncodeAll(const CcittParams& p, bool g4, const Bytes& rows, int nrows, int padCount, int padVal,
                            Bytes& out) {
+  if (p.cols < 1 || p.cols > 1 << 16) return false;  // a row's changes fit a CcittRow
   size_t rb = ((size_t)p.cols + 7) / 8;
   if (rows.size() != rb * (size_t)nrows) return false;
   out.clear();
   BitWriter bw(out);
-  std::vector<int> ref, cur;
+  std::unique_ptr<CcittRow> rowA(new CcittRow()), rowB(new CcittRow());
+  CcittRow* ref = rowA.get();
+  CcittRow* cur = rowB.get();
   for (int r = 0; r < nrows; r++) {
     if (p.align && bw.n) bw.put(0, bw.fill());
     if (p.eol) {
@@ -344,10 +345,10 @@ static bool ccittEncodeAll(const CcittParams& p, bool g4, const Bytes& rows, int
       }
       bw.put(kEOL, 12);
     }
-    ccittRowChanges(rows.data() + rb * r, p.cols, p.black1, cur);
-    if (g4) ccittEncode2D(bw, ref, cur, p.cols);
-    else ccittEncode1D(bw, cur, p.cols);
-    ref.swap(cur);
+    ccittRowChanges(rows.data() + rb * r, p.cols, p.black1, *cur);
+    if (g4) ccittEncode2D(bw, *ref, *cur, p.cols);
+    else ccittEncode1D(bw, *cur, p.cols);
+    std::swap(ref, cur);
   }
   if (p.eob) {
     if (g4) { bw.put(kEOL, 12); bw.put(kEOL, 12); }
@@ -363,7 +364,9 @@ static bool ccittDecodeLayer(const CcittParams& p0, const Bytes& in, Bytes& out,
   bool g4 = p.k < 0;
   size_t rb = ((size_t)p.cols + 7) / 8;
   BitReader br(in.data(), in.size());
-  std::vector<int> ref, cur;
+  std::unique_ptr<CcittRow> rowA(new CcittRow()), rowB(new CcittRow());
+  CcittRow* ref = rowA.get();
+  CcittRow* cur = rowB.get();
   out.clear();
   int nrows = 0;
   bool eob = false, sawEol = false;
@@ -385,11 +388,11 @@ static bool ccittDecodeLayer(const CcittParams& p0, const Bytes& in, Bytes& out,
     }
     if (br.pos >= br.nbits) break;
     size_t rowStart = br.pos;
-    bool ok = g4 ? ccittDecode2D(br, ref, cur, p.cols) : ccittDecode1D(br, cur, p.cols);
+    bool ok = g4 ? ccittDecode2D(br, *ref, *cur, p.cols) : ccittDecode1D(br, *cur, p.cols);
     if (!ok) { br.pos = rowStart; break; }
     out.resize(out.size() + rb);
-    ccittRowBits(cur, p.cols, p.black1, out.data() + out.size() - rb);
-    ref.swap(cur);
+    ccittRowBits(*cur, p.cols, p.black1, out.data() + out.size() - rb);
+    std::swap(ref, cur);
     nrows++;
     if (out.size() > kMaxDecoded) return false;
   }

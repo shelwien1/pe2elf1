@@ -193,7 +193,7 @@ class Encoder {
   void writeFiles(const std::string& prefix) {
     // record which files exist, so that d ignores stale files of an earlier dump with this prefix
     dump.hdr.present = 1;
-    for (size_t f = 1; f < dump.chan.size(); f++)
+    for (size_t f = 1; f < dump.hdr.map.nfiles; f++)
       if (!dump.chan[f].empty()) dump.hdr.present |= (uint64_t)1 << f;
     for (int c = 0; c < CF_COUNT; c++)
       if (!dump.classFile[c].empty()) dump.hdr.present |= (uint64_t)1 << (kPresentClass + c);
@@ -214,9 +214,10 @@ class Encoder {
     meta.insert(meta.end(), dump.chan[0].begin(), dump.chan[0].end());
     for (int a = 0; a < AX_COUNT; a++)
       if (dump.hdr.inlineAux >> a & 1) meta.insert(meta.end(), dump.aux[a].begin(), dump.aux[a].end());
-    writeFile(prefix + "." + dump.hdr.map.suffix[0], meta.data(), meta.size());
-    for (size_t f = 1; f < dump.chan.size(); f++)
-      if (!dump.chan[f].empty()) writeFile(prefix + "." + dump.hdr.map.suffix[f], dump.chan[f].data(), dump.chan[f].size());
+    writeFile(prefix + "." + dump.hdr.map.suffix[0].c_str(), meta.data(), meta.size());
+    for (size_t f = 1; f < dump.hdr.map.nfiles; f++)
+      if (!dump.chan[f].empty())
+        writeFile(prefix + "." + dump.hdr.map.suffix[f].c_str(), dump.chan[f].data(), dump.chan[f].size());
     for (int c = 0; c < CF_COUNT; c++)
       if (!dump.classFile[c].empty())
         writeFile(prefix + "." + kClassFileSuffix[c], dump.classFile[c].data(), dump.classFile[c].size());
@@ -251,7 +252,7 @@ class Encoder {
   std::unordered_map<int, int> streamOfItem_;
   std::vector<uint32_t> ownOrd_;                     // stream -> own-file ordinal (ST_FILE)
   std::unordered_map<uint32_t, size_t> streamByNum_;  // object number -> stream
-  std::map<std::string, std::unique_ptr<FontMetrics>> fontCache_;  // by source
+  FontCache fontCache_;                               // metrics of recent font programs
   std::vector<std::string> ordExt_;                      // own-file ordinal -> extension
   std::unordered_map<uint32_t, const Obj*> widthArrays_;  // array object -> font dictionary naming it
   std::unordered_map<uint32_t, uint32_t> numsArrays_;     // array object -> its /Nums key
@@ -414,7 +415,7 @@ class Encoder {
     for (auto& a : dump.aux) a.clear();
     dump.blobData.clear();
     dump.blobExt.clear();
-    dump.chan.assign(dump.hdr.map.suffix.size(), Bytes());
+    for (auto& c : dump.chan) c.clear();
     for (auto& c : dump.classFile) c.clear();
     dump.ownData.clear();
     dump.ownExt.clear();
@@ -532,11 +533,11 @@ class Encoder {
       } else if (sec.key.empty()) {
         continue;
       } else if (ci == CI_RC4) {
-        Bytes k2 = objectKey(sec.key, it.num, it.gen, false);
+        KeyBuf k2 = objectKey(sec.key, it.num, it.gen, false);
         rc4(k2.data(), k2.size(), p, 2, h);
       } else {
         if (n < 32) continue;
-        Bytes k2 = ci == CI_AES128 ? objectKey(sec.key, it.num, it.gen, true) : sec.key;
+        KeyBuf k2 = ci == CI_AES128 ? objectKey(sec.key, it.num, it.gen, true) : sec.key;
         if (k2.size() != (ci == CI_AES128 ? 16u : 32u)) continue;
         uint8_t blk[16];
         aesCbcDecrypt(k2.data(), k2.size(), p, p + 16, 16, blk);
@@ -711,8 +712,7 @@ class Encoder {
         if (f.name == "CCITTFaxDecode" && opt_.ccitt) {
           FilterParams fp = ccittParams(f.parms);
           Bytes out, recon;
-          if (layerDecode(ctx_, L_CCITT, fp, cur, out, recon)) {
-            s.desc.layers.push_back({L_CCITT, std::move(recon)});
+          if (layerDecode(ctx_, L_CCITT, fp, cur, out, recon) && s.desc.layers.push_back({L_CCITT, std::move(recon)})) {
             cur.swap(out);
             continue;
           }
@@ -722,13 +722,20 @@ class Encoder {
         if (!lt) { s.remain = R_ENCODED; s.stop = f.name; break; }
         FilterParams fp = params(f.parms);
         Bytes out, recon;
-        if (!layerDecode(ctx_, lt, fp, cur, out, recon)) { s.remain = R_ENCODED; s.stop = f.name; break; }
-        s.desc.layers.push_back({lt, std::move(recon)});
+        if (s.desc.layers.size() + 4 > kMaxLayers ||  // room for a predictor and pseudo layers
+            !layerDecode(ctx_, lt, fp, cur, out, recon) || !s.desc.layers.push_back({lt, std::move(recon)})) {
+          s.remain = R_ENCODED;
+          s.stop = f.name;
+          break;
+        }
         cur.swap(out);
         if ((lt == L_FLATE || lt == L_LZW) && fp.predictor > 1) {
           uint8_t pl = fp.predictor == 2 ? L_TIFF : fp.predictor >= 10 ? L_PNG : L_NONE;
-          if (!pl || !layerDecode(ctx_, pl, fp, cur, out, recon)) { s.remain = R_ENCODED; s.stop = "Predictor"; break; }
-          s.desc.layers.push_back({pl, std::move(recon)});
+          if (!pl || !layerDecode(ctx_, pl, fp, cur, out, recon) || !s.desc.layers.push_back({pl, std::move(recon)})) {
+            s.remain = R_ENCODED;
+            s.stop = "Predictor";
+            break;
+          }
           cur.swap(out);
         }
       }
@@ -847,7 +854,7 @@ class Encoder {
       Bytes bmp, recon, back;
       if (!bmpWrap(sp, s.data, bmp, recon)) continue;
       if (!layerEncode(ctx_, L_BMP, recon, bmp, back) || back != s.data) continue;
-      s.desc.layers.push_back({L_BMP, std::move(recon)});
+      if (!s.desc.layers.push_back({L_BMP, std::move(recon)})) continue;
       s.data.swap(bmp);
       s.bmp = true;
     }
@@ -932,7 +939,7 @@ class Encoder {
       Bytes tif, back;
       if (!tiffWrap(t, s.data, tif)) continue;
       if (!layerEncode(ctx_, L_TIFW, Bytes(), tif, back) || back != s.data) continue;
-      s.desc.layers.push_back({L_TIFW, Bytes()});
+      if (!s.desc.layers.push_back({L_TIFW, Bytes()})) continue;
       s.data.swap(tif);
       s.tif = true;
     }
@@ -949,7 +956,7 @@ class Encoder {
         ok = layerDecode(ctx_, L_T1, fp, s.data, out, recon);
       }
       if (!ok) continue;
-      s.desc.layers.push_back({L_T1, std::move(recon)});
+      if (!s.desc.layers.push_back({L_T1, std::move(recon)})) continue;
       s.data.swap(out);
       s.t1 = true;
     }
@@ -964,7 +971,7 @@ class Encoder {
       Bytes jpeg, recon, back;
       if (!xmpThumbSplit(s.data, jpeg, recon)) continue;
       if (!layerEncode(ctx_, L_XMPJPG, recon, jpeg, back) || back != s.data) continue;
-      s.desc.layers.push_back({L_XMPJPG, std::move(recon)});
+      if (!s.desc.layers.push_back({L_XMPJPG, std::move(recon)})) continue;
       s.data.swap(jpeg);
       st.xmpThumbs++;
     }
@@ -975,7 +982,7 @@ class Encoder {
       if (k < 0) continue;
       Bytes recon{(uint8_t)k}, back;
       if (!layerEncode(ctx_, L_ICCREF, recon, Bytes(), back) || back != s.data) continue;
-      s.desc.layers.push_back({L_ICCREF, std::move(recon)});
+      if (!s.desc.layers.push_back({L_ICCREF, std::move(recon)})) continue;
       s.data.clear();
       st.iccRefs++;
     }
@@ -991,7 +998,7 @@ class Encoder {
       fp.objstmFirst = F->i;
       Bytes out, recon;
       if (!layerDecode(ctx_, L_OBJSTM, fp, s.data, out, recon)) continue;
-      s.desc.layers.push_back({L_OBJSTM, std::move(recon)});
+      if (!s.desc.layers.push_back({L_OBJSTM, std::move(recon)})) continue;
       s.data.swap(out);
     }
     // XRef streams: rows predicted from object positions known to the decoder at that point
@@ -1061,7 +1068,7 @@ class Encoder {
         }
       }
       if (!done) continue;
-      s.desc.layers.push_back({L_XREFROWS, std::move(recon)});
+      if (!s.desc.layers.push_back({L_XREFROWS, std::move(recon)})) continue;
       s.data.swap(out);
     }
     // extension and storage
@@ -1224,13 +1231,12 @@ class Encoder {
       wf.first = (uint32_t)fc->i;
     }
     std::string key = std::string(1, (char)('a' + wf.kind)) + " " + src + " " + t1hex + " " + mapSrc;
-    auto& fm = fontCache_[key];
-    if (!fm) {
-      fm.reset(new FontMetrics());
-      if (parseFontOf(wf.kind, *data, recon, *fm) && wf.kind == WK_CID2M) fm->cidMap = *mapData;
-    }
+    bool found;
+    FontMetrics* fm = fontCache_.get(key, found);  // valid until the next get
+    if (!found && parseFontOf(wf.kind, *data, recon, *fm) && wf.kind == WK_CID2M)
+      fm->setCidMap(mapData->data(), mapData->size());
     if (!fm->ok) return false;
-    wf.m = fm.get();
+    wf.m = fm;
     wf.fields = " " + src + " " + decStr(wf.first) + " ";
     if (wf.kind == WK_T1) wf.fields += t1hex + " ";
     if (wf.kind == WK_CID2M) wf.fields += mapSrc + " ";
@@ -1606,7 +1612,7 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
   if (st.stringsDecrypted) printf("strings stored decrypted: %llu\n", (unsigned long long)st.stringsDecrypted);
   printf("dump:");
   uint64_t total = 0;
-  for (size_t f = 0; f < E.dump.chan.size(); f++) {
+  for (size_t f = 0; f < E.dump.hdr.map.nfiles; f++) {
     uint64_t sz = E.chanFileSize(f);
     total += sz;
     printf("  .%s %s", E.dump.hdr.map.suffix[f].c_str(), human(sz).c_str());
@@ -1680,12 +1686,13 @@ static int selfTest() {
   };
   uint8_t m[16];
   md5((const uint8_t*)"abc", 3, m);
+  auto keyBytes = [](const KeyBuf& k) { return Bytes(k.begin(), k.end()); };
   check("md5(abc)", hex(Bytes(m, m + 16)), "900150983cd24fb0d6963f7d28e17f72");
-  check("sha256(abc)", hex(sha256((const uint8_t*)"abc", 3)),
+  check("sha256(abc)", hex(keyBytes(sha256((const uint8_t*)"abc", 3))),
         "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
-  check("sha384(abc)", hex(sha512x((const uint8_t*)"abc", 3, true)),
+  check("sha384(abc)", hex(keyBytes(sha512x((const uint8_t*)"abc", 3, true))),
         "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7");
-  check("sha512(abc)", hex(sha512x((const uint8_t*)"abc", 3, false)),
+  check("sha512(abc)", hex(keyBytes(sha512x((const uint8_t*)"abc", 3, false))),
         "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f");
   {
     Bytes key(16), pt(16), ct(16);
@@ -1866,13 +1873,13 @@ static int realMain(int argc, char** argv) {
     if (opt.verbose) printInfo(pos[0].c_str(), in, E, opt);
     else if (!opt.quiet) {
       uint64_t total = 0;
-      for (size_t f = 0; f < E.dump.chan.size(); f++) total += E.chanFileSize(f);
+      for (size_t f = 0; f < E.dump.hdr.map.nfiles; f++) total += E.chanFileSize(f);
       for (auto& c : E.dump.classFile) total += c.size();
       for (auto& a : E.dump.aux) total += a.size();
       for (auto& b : E.dump.ownData) total += b.size();
       for (auto& b : E.dump.blobData) total += b.size();
       fprintf(stderr, "%s: %llu -> %llu bytes in %zu files%s\n", pos[0].c_str(), (unsigned long long)in.size(),
-              (unsigned long long)total, E.dump.ownData.size() + E.dump.blobData.size() + E.dump.chan.size(),
+              (unsigned long long)total, E.dump.ownData.size() + E.dump.blobData.size() + E.dump.hdr.map.nfiles,
               E.stored ? (" (stored: " + E.storedReason + ")").c_str() : "");
     }
     return 0;
@@ -1898,13 +1905,12 @@ static int realMain(int argc, char** argv) {
     }
     meta.resize(meta.size() - (size_t)tot);
   }
-  d.chan.resize(d.hdr.map.suffix.size());
   d.chan[0].swap(meta);
   auto need = [&](const std::string& name, int bit, Bytes& out) {
     if (!(d.hdr.present >> bit & 1)) return;
     if (!readFile(name, out)) die("cannot read %s", name.c_str());
   };
-  for (size_t f = 1; f < d.chan.size(); f++) need(prefix + "." + d.hdr.map.suffix[f], (int)f, d.chan[f]);
+  for (size_t f = 1; f < d.hdr.map.nfiles; f++) need(prefix + "." + d.hdr.map.suffix[f].c_str(), (int)f, d.chan[f]);
   for (int c = 0; c < CF_COUNT; c++) need(prefix + "." + kClassFileSuffix[c], kPresentClass + c, d.classFile[c]);
   for (int a = 0; a < AX_COUNT; a++) need(prefix + "." + kAuxSuffix[a], kPresentAux + a, d.aux[a]);
   Bytes out;

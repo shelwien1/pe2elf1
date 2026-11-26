@@ -27,10 +27,13 @@ static void t1Encrypt(uint8_t* p, size_t n, uint16_t r) {
   }
 }
 
+// RD token names: at most 255 (a u8 in the recon), each at most 15 characters.
+typedef FixedVec<ShortName, 255> RdNames;
+
 // Charstring blobs "<len> <rd> <binary>" in the decrypted private part. Only bytes outside
 // recognized blobs are examined, so the scan gives the same result on either side as long as
 // every blob header is recognized; layerDecode verifies that through t1EncodeLayer.
-static void t1FindBlobs(const uint8_t* p, size_t n, const std::vector<std::string>& rd,
+static void t1FindBlobs(const uint8_t* p, size_t n, const RdNames& rd,
                         std::vector<std::pair<size_t, size_t>>& blobs, bool bodies = true) {
   blobs.clear();
   size_t i = 0;
@@ -45,7 +48,7 @@ static void t1FindBlobs(const uint8_t* p, size_t n, const std::vector<std::strin
     if (te >= n || p[te] != ' ' || te == t) { i = j; continue; }
     bool ok = false;
     for (auto& r : rd)
-      if (r.size() == te - t && memcmp(p + t, r.data(), r.size()) == 0) ok = true;
+      if (r.size() == te - t && memcmp(p + t, r.c_str(), r.size()) == 0) ok = true;
     if (!ok || (bodies && te + 1 + L > n)) { i = j; continue; }
     blobs.push_back({te + 1, (size_t)L});
     i = te + 1 + (bodies ? (size_t)L : 0);
@@ -120,6 +123,10 @@ static bool t1CsSplit(const uint8_t* c, size_t n, size_t lenIV, Bytes& iv, Bytes
 // count), groups in key order, each in charstring order (slots stay interleaved). The key of
 // every operand comes from the operator pool, which the decoder reads first. xz of the .t1d files
 // of the 120-file set: -1.09%; with the slot in the key +1.02%, by operator alone -0.96%.
+// operator pool -> the group index of every operand. Groups are (operator, operand count) in
+// ascending (op, op2, count) order: operators 0..11, 12 with its second byte, 13..31, then 255
+// (the end of a charstring) as 288 slots, times 256 counts.
+static const size_t kT1Groups = 288 * 256;
 static bool t1OperandKeys(const Bytes& ops, std::vector<uint32_t>& keys) {
   keys.clear();
   size_t i = 0;
@@ -131,32 +138,35 @@ static bool t1OperandKeys(const Bytes& ops, std::vector<uint32_t>& keys) {
     }
     if (i >= ops.size()) return false;
     uint32_t cnt = ops[i++];
-    for (uint32_t k = 0; k < cnt; k++) keys.push_back((op * 256 + op2) * 256 + cnt);
+    uint32_t slot = op < 12 ? op : op == 12 ? 12 + op2 : op < 32 ? op + 255 : op == 255 ? 287 : 288;
+    if (slot >= 288) return false;
+    for (uint32_t k = 0; k < cnt; k++) keys.push_back(slot * 256 + cnt);
   }
   return true;
 }
 
 static bool t1GroupOperands(const Bytes& ops, const Bytes& seq, Bytes& out, bool group) {
-  std::vector<uint32_t> keys;
+  std::vector<uint32_t> keys;  // one per operand: as many as the font has
   if (!t1OperandKeys(ops, keys)) return false;
+  // group sizes and starts: fixed arrays over all groups (576 KB, on the heap)
+  std::unique_ptr<uint32_t[]> cntP(new uint32_t[kT1Groups]()), atP(new uint32_t[kT1Groups]());
+  uint32_t* cnt = cntP.get();
+  uint32_t* at = atP.get();
+  for (uint32_t k : keys) cnt[k]++;
+  uint32_t sum = 0;
+  for (size_t g = 0; g < kT1Groups; g++) {
+    at[g] = sum;
+    sum += cnt[g];
+  }
   RBuf r(seq);
   std::vector<uint64_t> v(keys.size());
-  std::map<uint32_t, std::vector<uint64_t>> g;
   out.clear();
-  if (group) {
-    for (size_t k = 0; k < keys.size(); k++) g[keys[k]].push_back(r.var());
-    for (auto& e : g)
-      for (uint64_t x : e.second) putVarTo(out, x);
-  } else {  // ungroup: seq holds the groups
-    std::map<uint32_t, size_t> cnt;
-    for (uint32_t k : keys) cnt[k]++;
-    std::map<uint32_t, size_t> at;
-    for (auto& e : cnt) {
-      auto& vec = g[e.first];
-      for (size_t k = 0; k < e.second; k++) vec.push_back(r.var());
-      at[e.first] = 0;
-    }
-    for (uint32_t k : keys) putVarTo(out, g[k][at[k]++]);
+  if (group) {  // operands in charstring order -> each to its group's next place
+    for (uint32_t k : keys) v[at[k]++] = r.var();
+    for (uint64_t x : v) putVarTo(out, x);
+  } else {  // seq holds the groups in order: read them, then deal them out in charstring order
+    for (uint64_t& x : v) x = r.var();
+    for (uint32_t k : keys) putVarTo(out, v[at[k]++]);
   }
   return r.ok() && r.p == seq.size();
 }
@@ -184,17 +194,17 @@ static bool t1CsJoin(RBuf& iv, RBuf& ops, RBuf& nums, size_t lenIV, size_t len, 
 // stored form -> the font with the eexec part and (flags bit0) the charstrings still decrypted;
 // s, n: the private part. Shared by the layer and the width derivation (pdf_font.inc).
 static bool t1Plain(const Bytes& recon, const Bytes& in, Bytes& out, size_t& s, size_t& n, uint8_t& flags,
-                    std::vector<std::string>& rd, size_t& lenIVout) {
+                    RdNames& rd, size_t& lenIVout) {
   RBuf r(recon);
   s = (size_t)r.var();
   n = (size_t)r.var();
   flags = r.u8();
-  rd.assign(r.u8(), std::string());
+  rd.resize(r.u8());  // a u8: never more than the capacity
   lenIVout = 4;
   for (auto& x : rd) {
     Bytes b;
     r.bytes(r.len(), b);
-    x.assign(b.begin(), b.end());
+    if (!x.set((const char*)b.data(), b.size())) return false;
   }
   Bytes joined;
   const Bytes* src = &in;
@@ -242,7 +252,7 @@ static bool t1Plain(const Bytes& recon, const Bytes& in, Bytes& out, size_t& s, 
 static bool t1EncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out) {
   size_t s, n, lenIV;
   uint8_t flags;
-  std::vector<std::string> rd;
+  RdNames rd;
   if (!t1Plain(recon, in, out, s, n, flags, rd, lenIV)) return false;
   uint8_t* p = out.data() + s;
   if (flags & 1) {
@@ -279,7 +289,10 @@ static bool t1DecodeLayer(const Bytes& in, Bytes& out, Bytes& recon, bool charst
   size_t len = j - s;
   t1Decrypt(p, len, 55665);
   // RD token names: RD, -| and any name bound to {string currentfile exch readstring pop}
-  std::vector<std::string> rd = {"RD", "-|"};
+  RdNames rd;
+  rd.resize(2);
+  rd[0].set("RD");
+  rd[1].set("-|");
   for (const uint8_t* q = p; (q = memfind(q, p + len - q, "readstring", 10)); q += 10) {
     const uint8_t* b = q;
     int back = 0;
@@ -287,8 +300,9 @@ static bool t1DecodeLayer(const Bytes& in, Bytes& out, Bytes& recon, bool charst
     if (*b != '/') continue;
     const uint8_t* ne = b + 1;
     while (ne < q && isRegular(*ne) && *ne != '{') ne++;
-    std::string name((const char*)b + 1, ne - b - 1);
-    if (!name.empty() && name.size() < 16 && std::find(rd.begin(), rd.end(), name) == rd.end()) rd.push_back(name);
+    ShortName name;
+    if (ne == b + 1 || !name.set((const char*)b + 1, ne - b - 1)) continue;  // 1..15 characters
+    if (std::find(rd.begin(), rd.end(), name) == rd.end()) rd.push_back(name);  // full: not added
   }
   bool csDecrypt = charstrings;
   if (const uint8_t* li = memfind(p, len, "/lenIV", 6)) {
@@ -335,7 +349,7 @@ static bool t1DecodeLayer(const Bytes& in, Bytes& out, Bytes& recon, bool charst
   putVarTo(recon, len);
   recon.push_back((uint8_t)((csDecrypt ? 1 : 0) | (split ? 2 : 0) | (grouped ? 4 : 0)));
   recon.push_back((uint8_t)rd.size());
-  for (auto& x : rd) putLenBytesTo(recon, (const uint8_t*)x.data(), x.size());
+  for (auto& x : rd) putLenBytesTo(recon, (const uint8_t*)x.c_str(), x.size());
   if (split) {
     size_t tail = out.size() - (s + len);
     putVarTo(recon, lenIV);

@@ -16,7 +16,7 @@ struct StreamDesc {
   uint8_t cipher = CI_NONE;
   uint32_t num = 0, gen = 0;
   uint8_t iv[16] = {};
-  std::vector<Layer> layers;  // undo order: outermost filter first
+  Layers layers;              // undo order: outermost filter first
   bool deferred = false;      // restored after the last item (forward-dependent XRef stream)
   bool membersDerived = false;  // ObjStm: member text stored with derived-field placeholders
   uint64_t payloadLen = 0;    // deferred: payload size (space reserved when the item is written)
@@ -167,7 +167,7 @@ static bool readStreamDesc(ChanReader& r, ReadState& st, StreamDesc& sd, Bytes& 
   sd.membersDerived = (flags & 2) != 0;
   if (sd.deferred) sd.payloadLen = r.len(CH_N);
   size_t nl = r.u8(CH_S);
-  sd.layers.resize(nl);
+  if (!sd.layers.resize(nl)) return fail("too many layers in stream descriptor");
   for (auto& l : sd.layers) {
     l.type = r.u8(CH_S);
     if (!r.ok()) return false;
@@ -202,7 +202,7 @@ static bool readStreamDesc(ChanReader& r, ReadState& st, StreamDesc& sd, Bytes& 
 }
 
 // stored bytes -> PDF payload bytes: filter layers innermost first, then the cipher
-static bool restorePayload(const CodecCtx& ctx, const Bytes& fileKey, const StreamDesc& sd, Bytes& data) {
+static bool restorePayload(const CodecCtx& ctx, const KeyBuf& fileKey, const StreamDesc& sd, Bytes& data) {
   for (size_t k = sd.layers.size(); k-- > 0;) {
     Bytes out;
     if (!layerEncode(ctx, sd.layers[k].type, sd.layers[k].recon, data, out) || failed())
@@ -246,7 +246,7 @@ static bool decodeDumpImpl(const DumpFiles& d, size_t meta0, ChanReader::OwnLoad
   const DumpFiles* use = &d;
   if (d.hdr.flags & (kFlagLiftT | kFlagLiftCS | kFlagCmap)) {
     tmp.hdr = d.hdr;
-    tmp.chan = d.chan;
+    for (int f = 0; f < CH_COUNT; f++) tmp.chan[f] = d.chan[f];
     for (int c = 0; c < CF_COUNT; c++) tmp.classFile[c] = d.classFile[c];
     if (d.hdr.flags & kFlagLiftT) {
       int f = d.hdr.map.fileOf[CH_T];

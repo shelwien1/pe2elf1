@@ -77,7 +77,7 @@ static void md5(const uint8_t* p, size_t n, uint8_t out[16]) {
 }
 
 // ---- SHA-256 / SHA-384 / SHA-512 ------------------------------------------------------------
-static Bytes sha256(const uint8_t* p, size_t n) {
+static KeyBuf sha256(const uint8_t* p, size_t n) {
   static const uint32_t K[64] = {
     0x428a2f98u, 0x71374491u, 0xb5c0fbcfu, 0xe9b5dba5u, 0x3956c25bu, 0x59f111f1u, 0x923f82a4u, 0xab1c5ed5u,
     0xd807aa98u, 0x12835b01u, 0x243185beu, 0x550c7dc3u, 0x72be5d74u, 0x80deb1feu, 0x9bdc06a7u, 0xc19bf174u,
@@ -115,13 +115,14 @@ static Bytes sha256(const uint8_t* p, size_t n) {
     }
     h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
   }
-  Bytes out(32);
+  KeyBuf out;
+  out.resize(32);
   for (int i = 0; i < 8; i++)
     for (int k = 0; k < 4; k++) out[4 * i + k] = (uint8_t)(h[i] >> (24 - 8 * k));
   return out;
 }
 
-static Bytes sha512x(const uint8_t* p, size_t n, bool is384) {
+static KeyBuf sha512x(const uint8_t* p, size_t n, bool is384) {
   static const uint64_t K[80] = {
     0x428a2f98d728ae22ull, 0x7137449123ef65cdull, 0xb5c0fbcfec4d3b2full, 0xe9b5dba58189dbbcull,
     0x3956c25bf348b538ull, 0x59f111f1b605d019ull, 0x923f82a4af194f9bull, 0xab1c5ed5da6d8118ull,
@@ -178,7 +179,8 @@ static Bytes sha512x(const uint8_t* p, size_t n, bool is384) {
     }
     h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
   }
-  Bytes out(is384 ? 48 : 64);
+  KeyBuf out;
+  out.resize(is384 ? 48 : 64);
   for (size_t i = 0; i < out.size(); i++) out[i] = (uint8_t)(h[i / 8] >> (56 - 8 * (i % 8)));
   return out;
 }
@@ -336,7 +338,7 @@ static const uint8_t kPwPad[32] = {0x28, 0xBF, 0x4E, 0x5E, 0x4E, 0x75, 0x8A, 0x4
                                    0x3E, 0x80, 0x2F, 0x0C, 0xA9, 0xFE, 0x64, 0x53, 0x69, 0x7A};
 
 // Per-object key for V < 5 (Algorithm 1); V5 uses the file key directly.
-static Bytes objectKey(const Bytes& fileKey, uint32_t num, uint32_t gen, bool aes) {
+static KeyBuf objectKey(const KeyBuf& fileKey, uint32_t num, uint32_t gen, bool aes) {
   Md5 m;
   m.update(fileKey.data(), fileKey.size());
   uint8_t b[5] = {(uint8_t)num, (uint8_t)(num >> 8), (uint8_t)(num >> 16), (uint8_t)gen, (uint8_t)(gen >> 8)};
@@ -344,22 +346,22 @@ static Bytes objectKey(const Bytes& fileKey, uint32_t num, uint32_t gen, bool ae
   if (aes) m.update("sAlT", 4);
   uint8_t h[16];
   m.final(h);
-  return Bytes(h, h + std::min<size_t>(fileKey.size() + 5, 16));
+  return KeyBuf(h, std::min<size_t>(fileKey.size() + 5, 16));
 }
 
 // Decrypts one stream/string. Returns false when the unit cannot round-trip (AES: bad length or
 // non-canonical padding); then the caller keeps the ciphertext.
-static bool cipherDecrypt(uint8_t ci, const Bytes& fileKey, uint32_t num, uint32_t gen, const uint8_t* in, size_t n,
+static bool cipherDecrypt(uint8_t ci, const KeyBuf& fileKey, uint32_t num, uint32_t gen, const uint8_t* in, size_t n,
                           Bytes& out, uint8_t iv[16]) {
   if (ci == CI_RC4) {
-    Bytes k = objectKey(fileKey, num, gen, false);
+    KeyBuf k = objectKey(fileKey, num, gen, false);
     out.resize(n);
     if (n) rc4(k.data(), k.size(), in, n, out.data());
     return true;
   }
   if (ci == CI_AES128 || ci == CI_AES256) {
     if (n < 32 || n % 16) return false;
-    Bytes k = ci == CI_AES128 ? objectKey(fileKey, num, gen, true) : fileKey;
+    KeyBuf k = ci == CI_AES128 ? objectKey(fileKey, num, gen, true) : fileKey;
     if (k.size() != (ci == CI_AES128 ? 16u : 32u)) return false;
     memcpy(iv, in, 16);
     out.resize(n - 16);
@@ -375,15 +377,15 @@ static bool cipherDecrypt(uint8_t ci, const Bytes& fileKey, uint32_t num, uint32
 }
 
 // false (out empty) if the file key has the wrong length for the cipher
-static bool cipherEncrypt(uint8_t ci, const Bytes& fileKey, uint32_t num, uint32_t gen, const uint8_t iv[16],
+static bool cipherEncrypt(uint8_t ci, const KeyBuf& fileKey, uint32_t num, uint32_t gen, const uint8_t iv[16],
                           const Bytes& in, Bytes& out) {
   if (ci == CI_RC4) {
-    Bytes k = objectKey(fileKey, num, gen, false);
+    KeyBuf k = objectKey(fileKey, num, gen, false);
     out.resize(in.size());
     if (!in.empty()) rc4(k.data(), k.size(), in.data(), in.size(), out.data());
     return true;
   }
-  Bytes k = ci == CI_AES128 ? objectKey(fileKey, num, gen, true) : fileKey;
+  KeyBuf k = ci == CI_AES128 ? objectKey(fileKey, num, gen, true) : fileKey;
   if (k.size() != (ci == CI_AES128 ? 16u : 32u)) {
     out.clear();
     return false;
@@ -402,17 +404,22 @@ struct Security {
   bool standard = false;  // /Filter /Standard
   uint32_t encNum = 0;    // object number of the /Encrypt dictionary (0: direct)
   int V = 0, R = 0, lengthBits = 0;
-  Bytes O, U, OE, UE, ID0;
+  KeyBuf O, U, OE, UE;  // 32 or 48 bytes each (the first 64 of a longer string are kept)
+  Bytes ID0;            // any length: all of it goes into the key hash
   int32_t P = 0;
   bool encryptMetadata = true;
   std::string stmF = "Identity", strF = "Identity", eff;
   std::map<std::string, uint8_t> cfm;
-  Bytes key;
+  KeyBuf key;
   std::string keySource;  // "empty user password", "user password", "owner password"
 
   static Bytes strBytes(const Obj* o) {
     if (!o || o->t != Obj::STR) return Bytes();
     return Bytes(o->s.begin(), o->s.end());
+  }
+  static KeyBuf strKey(const Obj* o) {
+    if (!o || o->t != Obj::STR) return KeyBuf();
+    return KeyBuf((const uint8_t*)o->s.data(), o->s.size());
   }
 
   void load(const Obj& enc, const Obj* id) {
@@ -424,10 +431,10 @@ struct Security {
     if (const Obj* v = enc.get("Length")) lengthBits = v->t == Obj::INT ? (int)v->i : 0;
     if (const Obj* v = enc.get("P")) P = v->t == Obj::INT ? (int32_t)(uint32_t)v->i : 0;
     if (const Obj* v = enc.get("EncryptMetadata")) encryptMetadata = !(v->t == Obj::BOOL && !v->i);
-    O = strBytes(enc.get("O"));
-    U = strBytes(enc.get("U"));
-    OE = strBytes(enc.get("OE"));
-    UE = strBytes(enc.get("UE"));
+    O = strKey(enc.get("O"));
+    U = strKey(enc.get("U"));
+    OE = strKey(enc.get("OE"));
+    UE = strKey(enc.get("UE"));
     if (id && id->t == Obj::ARR && !id->a.empty()) ID0 = strBytes(&id->a[0]);
     if (V >= 4) {
       if (const Obj* cf = enc.get("CF")) {
@@ -472,15 +479,16 @@ struct Security {
   }
   size_t keyLen() const { return klen; }
 
-  static Bytes pad(const std::string& pw) {
-    Bytes r(32);
+  static KeyBuf pad(const std::string& pw) {
+    KeyBuf r;
+    r.resize(32);
     size_t n = std::min<size_t>(32, pw.size());
     memcpy(r.data(), pw.data(), n);
     memcpy(r.data() + n, kPwPad, 32 - n);
     return r;
   }
 
-  Bytes computeKey(const Bytes& padded) const {
+  KeyBuf computeKey(const KeyBuf& padded) const {
     Md5 m;
     m.update(padded.data(), 32);
     m.update(O.data(), std::min<size_t>(32, O.size()));
@@ -493,10 +501,10 @@ struct Security {
     size_t n = keyLen();
     if (R >= 3)
       for (int i = 0; i < 50; i++) md5(h, n, h);
-    return Bytes(h, h + n);
+    return KeyBuf(h, n);
   }
 
-  bool checkUserKey(const Bytes& k) const {
+  bool checkUserKey(const KeyBuf& k) const {
     if (R == 2) {
       uint8_t u[32];
       rc4(k.data(), k.size(), kPwPad, 32, u);
@@ -508,7 +516,7 @@ struct Security {
     uint8_t x[16];
     m.final(x);
     rc4(k.data(), k.size(), x, 16, x);
-    Bytes kk(k);
+    KeyBuf kk(k);
     for (int i = 1; i <= 19; i++) {
       for (size_t j = 0; j < k.size(); j++) kk[j] = (uint8_t)(k[j] ^ i);
       rc4(kk.data(), kk.size(), x, 16, x);
@@ -516,8 +524,8 @@ struct Security {
     return U.size() >= 16 && memcmp(x, U.data(), 16) == 0;
   }
 
-  bool tryUserR4(const Bytes& padded) {
-    Bytes k = computeKey(padded);
+  bool tryUserR4(const KeyBuf& padded) {
+    KeyBuf k = computeKey(padded);
     if (!checkUserKey(k)) return false;
     key = k;
     return true;
@@ -526,12 +534,12 @@ struct Security {
   bool tryOwnerR4(const std::string& pw) {
     if (O.size() < 32) return false;
     uint8_t h[16];
-    Bytes p = pad(pw);
+    KeyBuf p = pad(pw);
     md5(p.data(), 32, h);
     if (R >= 3)
       for (int i = 0; i < 50; i++) md5(h, 16, h);
     size_t n = keyLen();
-    Bytes x(O.begin(), O.begin() + 32);
+    KeyBuf x(O.data(), 32);
     if (R == 2) {
       rc4(h, n, x.data(), 32, x.data());
     } else {
@@ -544,29 +552,38 @@ struct Security {
     return tryUserR4(x);
   }
 
-  static Bytes hash2B(const std::string& pw, const uint8_t* salt, const uint8_t* udata, size_t ulen, bool r6) {
-    Bytes in(pw.begin(), pw.end());
-    in.insert(in.end(), salt, salt + 8);
-    in.insert(in.end(), udata, udata + ulen);
-    Bytes k = sha256(in.data(), in.size());
+  // Algorithm 2.B. Buffers at their maximum: password at most 127 bytes, salt 8, user data 48,
+  // hash 64; K1 is 64 repeats of password + hash + user data (15 KB).
+  static KeyBuf hash2B(const std::string& pw, const uint8_t* salt, const uint8_t* udata, size_t ulen, bool r6) {
+    static const size_t kPw = 127, kU = 48, kK1 = 64 * (kPw + 64 + kU);
+    size_t pl = std::min(pw.size(), kPw);
+    ulen = std::min(ulen, kU);
+    uint8_t in[kPw + 8 + kU];
+    memcpy(in, pw.data(), pl);
+    memcpy(in + pl, salt, 8);
+    if (ulen) memcpy(in + pl + 8, udata, ulen);
+    KeyBuf k = sha256(in, pl + 8 + ulen);
     if (!r6) return k;
+    uint8_t k1[kK1], e[kK1];
     for (int round = 0;; round++) {
-      Bytes k1;
+      size_t n1 = 0;
       for (int i = 0; i < 64; i++) {
-        k1.insert(k1.end(), pw.begin(), pw.end());
-        k1.insert(k1.end(), k.begin(), k.end());
-        k1.insert(k1.end(), udata, udata + ulen);
+        memcpy(k1 + n1, pw.data(), pl);
+        n1 += pl;
+        memcpy(k1 + n1, k.data(), k.size());
+        n1 += k.size();
+        if (ulen) memcpy(k1 + n1, udata, ulen);
+        n1 += ulen;
       }
-      Bytes e(k1.size());
-      aesCbcEncrypt(k.data(), 16, k.data() + 16, k1.data(), k1.size(), e.data());
+      aesCbcEncrypt(k.data(), 16, k.data() + 16, k1, n1, e);
       unsigned sum = 0;
       for (int i = 0; i < 16; i++) sum += e[i];
       switch (sum % 3) {
-        case 0: k = sha256(e.data(), e.size()); break;
-        case 1: k = sha512x(e.data(), e.size(), true); break;
-        default: k = sha512x(e.data(), e.size(), false); break;
+        case 0: k = sha256(e, n1); break;
+        case 1: k = sha512x(e, n1, true); break;
+        default: k = sha512x(e, n1, false); break;
       }
-      if (round >= 63 && e.back() <= round + 1 - 32) break;
+      if (round >= 63 && e[n1 - 1] <= round + 1 - 32) break;
     }
     k.resize(32);
     return k;
@@ -576,14 +593,14 @@ struct Security {
     std::string pw = pw0.substr(0, 127);
     bool r6 = R >= 6;
     if (U.size() < 48 || (owner && O.size() < 48)) return false;
-    const Bytes& X = owner ? O : U;
-    const Bytes& XE = owner ? OE : UE;
+    const KeyBuf& X = owner ? O : U;
+    const KeyBuf& XE = owner ? OE : UE;
     const uint8_t* ud = owner ? U.data() : nullptr;
     size_t ul = owner ? 48 : 0;
-    Bytes h = hash2B(pw, X.data() + 32, ud, ul, r6);
+    KeyBuf h = hash2B(pw, X.data() + 32, ud, ul, r6);
     if (memcmp(h.data(), X.data(), 32) != 0) return false;
     if (XE.size() < 32) return false;
-    Bytes ik = hash2B(pw, X.data() + 40, ud, ul, r6);
+    KeyBuf ik = hash2B(pw, X.data() + 40, ud, ul, r6);
     uint8_t iv[16] = {0};
     key.resize(32);
     aesCbcDecrypt(ik.data(), 32, iv, XE.data(), 32, key.data());

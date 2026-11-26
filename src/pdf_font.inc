@@ -9,17 +9,39 @@
 
 static const int32_t kNoAdv = INT32_MIN;  // advance not known (the glyph gets no prediction)
 
+// Everything at its maximum size: glyph ids, CIDs and cmap subtable lengths are 16-bit, a
+// CIDToGIDMap covers 65536 CIDs. About 1 MB: allocate on the heap (the caches hold a few).
+static const size_t kMaxGlyphs = 65536;
+static const uint32_t kNoGlyph = 0xFFFFFFFFu;
 struct FontMetrics {
   bool ok = false;
   bool cff = false;
   uint32_t upem = 1000;
-  std::vector<int32_t> adv;   // per glyph id
-  std::vector<uint16_t> den;  // per glyph divisor of adv (Type 1 "div"); empty: all 1
-  Bytes cmap[3];              // TrueType: raw (3,0), (1,0), (3,1) subtables
+  uint32_t nglyphs = 0;
+  int32_t adv[kMaxGlyphs];    // per glyph id
+  uint16_t den[kMaxGlyphs];   // per glyph divisor of adv (Type 1 "div"), with hasDen
+  bool hasDen = false;
+  uint8_t cmap[3][65536];     // TrueType: raw (3,0), (1,0), (3,1) subtables
+  uint32_t cmapLen[3] = {};
   int32_t enc[256];           // CFF, Type 1: code -> glyph id, -1 none
   int32_t stdEnc[256];        // Type 1: StandardEncoding code -> glyph id
-  std::unordered_map<uint32_t, uint32_t> cidGid;  // CID-keyed CFF: CID -> glyph id
-  Bytes cidMap;               // CIDFontType2 with a CIDToGIDMap stream: its bytes
+  bool cidKeyed = false;      // CID-keyed CFF: cidGid holds CID -> glyph id (kNoGlyph none)
+  uint32_t cidGid[65536];
+  uint8_t cidMap[131072];     // CIDFontType2 with a CIDToGIDMap stream: its first 65536 entries
+  uint32_t cidMapLen = 0;
+  void reset() {
+    ok = cff = hasDen = cidKeyed = false;
+    upem = 1000;
+    nglyphs = 0;
+    for (auto& l : cmapLen) l = 0;
+    cidMapLen = 0;
+    for (auto& e : enc) e = -1;
+    for (auto& e : stdEnc) e = -1;
+  }
+  void setCidMap(const uint8_t* p, size_t n) {
+    cidMapLen = (uint32_t)std::min(n, sizeof(cidMap));
+    memcpy(cidMap, p, cidMapLen);
+  }
 };
 
 static inline uint32_t fntU16(const uint8_t* p, size_t n, size_t o, bool& ok) {
@@ -32,9 +54,7 @@ static inline uint32_t fntU32(const uint8_t* p, size_t n, size_t o, bool& ok) {
 }
 
 // glyph id for code c in a raw cmap subtable; 0 = none
-static uint32_t ttCmapLookup(const Bytes& t, uint32_t c) {
-  const uint8_t* p = t.data();
-  size_t n = t.size();
+static uint32_t ttCmapLookup(const uint8_t* p, size_t n, uint32_t c) {
   bool ok = true;
   uint32_t fmt = fntU16(p, n, 0, ok);
   if (!ok) return 0;
@@ -66,7 +86,7 @@ static uint32_t ttCmapLookup(const Bytes& t, uint32_t c) {
 }
 
 static bool parseTrueType(const uint8_t* p, size_t n, FontMetrics& m) {
-  m = FontMetrics();
+  m.reset();
   bool ok = true;
   uint32_t ver = fntU32(p, n, 0, ok), nt = fntU16(p, n, 4, ok);
   if (!ok || (ver != 0x00010000 && ver != 0x74727565) || nt == 0 || nt > 512) return false;
@@ -88,7 +108,7 @@ static bool parseTrueType(const uint8_t* p, size_t n, FontMetrics& m) {
   if (!ok || m.upem < 16 || m.upem > 16384 || ng == 0 || nh == 0) return false;
   nh = std::min(nh, ng);
   if (hmtxLen < 4 * (size_t)nh) return false;
-  m.adv.resize(ng);
+  m.nglyphs = ng;  // a u16: at most kMaxGlyphs - 1
   for (uint32_t g = 0; g < ng; g++) m.adv[g] = (int32_t)fntU16(p, n, hmtx + 4 * (size_t)std::min(g, nh - 1), ok);
   if (!ok) return false;
   if (cmap) {
@@ -99,13 +119,15 @@ static bool parseTrueType(const uint8_t* p, size_t n, FontMetrics& m) {
       uint32_t pid = fntU16(c, cn, 4 + 8 * (size_t)k, ok), eid = fntU16(c, cn, 6 + 8 * (size_t)k, ok),
                off = fntU32(c, cn, 8 + 8 * (size_t)k, ok);
       int slot = pid == 3 && eid == 0 ? 0 : pid == 1 && eid == 0 ? 1 : pid == 3 && eid == 1 ? 2 : -1;
-      if (!ok || slot < 0 || !m.cmap[slot].empty() || off >= cn) continue;
+      if (!ok || slot < 0 || m.cmapLen[slot] || off >= cn) continue;
       bool ok2 = true;
       uint32_t fmt = fntU16(c, cn, off, ok2);
       size_t len = fmt == 0 ? 262 : fntU16(c, cn, off + 2, ok2);
       if (!ok2 || (fmt != 0 && fmt != 4 && fmt != 6)) continue;
       len = std::min(len, cn - off);
-      m.cmap[slot].assign(c + off, c + off + len);
+      len = std::min(len, sizeof(m.cmap[slot]));  // format 0: 262 bytes; 4 and 6: a u16 length
+      memcpy(m.cmap[slot], c + off, len);
+      m.cmapLen[slot] = (uint32_t)len;
     }
     ok = true;
   }
@@ -146,10 +168,12 @@ struct CffIndex {
   }
 };
 
-// DICT operands as doubles (reals parsed from their nibbles); calls op(code, operands) per operator
+// DICT operands as doubles (reals parsed from their nibbles); calls op(code, operands) per operator.
+// The operand stack holds at most 48 (Type 2 limit; a DICT needs far fewer).
+typedef FixedVec<double, 48> CffStack;
 template <class F>
 static bool cffDict(const uint8_t* p, size_t a, size_t b, F op) {
-  std::vector<double> st;
+  CffStack st;
   size_t i = a;
   while (i < b) {
     uint8_t c = p[i];
@@ -257,9 +281,8 @@ static uint16_t cffStdSid(int code) {
 }
 
 static bool parseCff(const uint8_t* p, size_t n, FontMetrics& m) {
-  m = FontMetrics();
+  m.reset();
   m.cff = true;
-  for (auto& e : m.enc) e = -1;
   if (n < 4 || p[0] != 1) return false;
   CffIndex names, tops, strs, gsubrs;
   if (!names.read(p, n, p[2]) || !tops.read(p, n, names.end) || !strs.read(p, n, tops.end) || !gsubrs.read(p, n, strs.end))
@@ -268,7 +291,7 @@ static bool parseCff(const uint8_t* p, size_t n, FontMetrics& m) {
   if (!tops.item(p, 0, ta, tb)) return false;
   double charsetOff = 0, encOff = 0, csOff = -1, privSize = -1, privOff = -1, fm = 0.001, fdArr = -1, fdSel = -1;
   bool cid = false, topFm = false;
-  if (!cffDict(p, ta, tb, [&](int op, const std::vector<double>& s) {
+  if (!cffDict(p, ta, tb, [&](int op, const CffStack& s) {
         if (op == 15 && s.size() == 1) charsetOff = s[0];
         else if (op == 16 && s.size() == 1) encOff = s[0];
         else if (op == 17 && s.size() == 1) csOff = s[0];
@@ -286,7 +309,7 @@ static bool parseCff(const uint8_t* p, size_t n, FontMetrics& m) {
     dflt = 0;
     nominal = 0;
     if (off < 0 || size <= 0 || off >= n || size > n - off) return true;
-    return cffDict(p, (size_t)off, (size_t)(off + size), [&](int op, const std::vector<double>& s) {
+    return cffDict(p, (size_t)off, (size_t)(off + size), [&](int op, const CffStack& s) {
              if (op == 20 && s.size() == 1) dflt = s[0];
              else if (op == 21 && s.size() == 1) nominal = s[0];
              return true;
@@ -296,8 +319,10 @@ static bool parseCff(const uint8_t* p, size_t n, FontMetrics& m) {
   CffIndex cs;
   if (!cs.read(p, n, (size_t)csOff) || cs.count == 0) return false;
   size_t ng = cs.count;
-  std::vector<double> fdDflt, fdNom;
-  std::vector<uint8_t> fdOf(ng, 0);
+  double fdDflt[256], fdNom[256];  // per font DICT (at most 255)
+  size_t nfd = 0;
+  std::unique_ptr<uint8_t[]> fdOfP(new uint8_t[kMaxGlyphs]());  // per glyph (ng is a u16)
+  uint8_t* fdOf = fdOfP.get();
   if (cid) {
     // CID-keyed: a Private DICT per font DICT of the FDArray, FDSelect picks one per glyph; the
     // scale is the Top DICT's FontMatrix times the font DICT's (one of them when only one is given)
@@ -307,7 +332,7 @@ static bool parseCff(const uint8_t* p, size_t n, FontMetrics& m) {
     for (size_t k = 0; k < fds.count; k++) {
       size_t fa, fb;
       double ps = -1, po = -1, f = -1, dd, nn;
-      if (!fds.item(p, k, fa, fb) || !cffDict(p, fa, fb, [&](int op, const std::vector<double>& s) {
+      if (!fds.item(p, k, fa, fb) || !cffDict(p, fa, fb, [&](int op, const CffStack& s) {
             if (op == 18 && s.size() == 2) { ps = s[0]; po = s[1]; }
             else if (op == 1207 && s.size() == 6) f = s[0];
             return true;
@@ -316,8 +341,8 @@ static bool parseCff(const uint8_t* p, size_t n, FontMetrics& m) {
       if (k == 0) fdFm = f;
       else if (f != fdFm) return false;  // one scale for the whole font
       if (!privWidths(ps, po, dd, nn)) return false;
-      fdDflt.push_back(dd);
-      fdNom.push_back(nn);
+      fdDflt[nfd] = dd;
+      fdNom[nfd++] = nn;
     }
     if (fdFm > 0) fm = topFm ? fm * fdFm : fdFm;
     if (fds.count > 1) {
@@ -340,26 +365,28 @@ static bool parseCff(const uint8_t* p, size_t n, FontMetrics& m) {
       } else {
         return false;
       }
-      for (uint8_t f : fdOf)
-        if (f >= fds.count) return false;
+      for (size_t g = 0; g < ng; g++)
+        if (fdOf[g] >= fds.count) return false;
     }
   } else {
     double dd, nn;
     if (!privWidths(privSize, privOff, dd, nn)) return false;
-    fdDflt.push_back(dd);
-    fdNom.push_back(nn);
+    fdDflt[nfd] = dd;
+    fdNom[nfd++] = nn;
   }
   double up = std::floor(1.0 / fm + 0.5);
   if (up < 16 || up > 16384 || std::fabs(up * fm - 1.0) > 1e-9) return false;
   m.upem = (uint32_t)up;
-  m.adv.resize(ng);
+  if (ng >= kMaxGlyphs) return false;
+  m.nglyphs = (uint32_t)ng;
   for (size_t g = 0; g < ng; g++) {
     size_t a, b;
     if (!cs.item(p, g, a, b)) return false;
     m.adv[g] = t2Width(p + a, b - a, (int32_t)fdDflt[fdOf[g]], (int32_t)fdNom[fdOf[g]]);
   }
   // charset: glyph id -> SID
-  std::vector<uint32_t> sid(ng, 0);
+  std::unique_ptr<uint32_t[]> sidP(new uint32_t[kMaxGlyphs]());
+  uint32_t* sid = sidP.get();
   bool ok = true;
   if (charsetOff == 0) {
     for (size_t g = 0; g < ng; g++) sid[g] = g <= 228 ? (uint32_t)g : 0;
@@ -384,7 +411,10 @@ static bool parseCff(const uint8_t* p, size_t n, FontMetrics& m) {
     return false;  // expert charsets
   }
   if (cid) {  // the charset holds CIDs
-    for (size_t g = ng; g-- > 0;) m.cidGid[sid[g]] = (uint32_t)g;
+    for (auto& c : m.cidGid) c = kNoGlyph;
+    for (size_t g = ng; g-- > 0;)
+      if (sid[g] < 65536) m.cidGid[sid[g]] = (uint32_t)g;
+    m.cidKeyed = true;
     m.ok = true;
     return true;
   }
@@ -395,11 +425,13 @@ static bool parseCff(const uint8_t* p, size_t n, FontMetrics& m) {
     return -1;
   };
   if (encOff == 0) {
-    std::unordered_map<uint32_t, int32_t> bySid;
-    for (size_t g = ng; g-- > 1;) bySid[sid[g]] = (int32_t)g;
+    int32_t bySid[150];  // StandardEncoding names have SIDs 1..149: first glyph of each
+    for (auto& b : bySid) b = -1;
+    for (size_t g = ng; g-- > 1;)
+      if (sid[g] < 150) bySid[sid[g]] = (int32_t)g;
     for (int c = 0; c < 256; c++) {
-      auto f = bySid.find(cffStdSid(c));
-      m.enc[c] = cffStdSid(c) && f != bySid.end() ? f->second : -1;
+      uint16_t sc = cffStdSid(c);
+      m.enc[c] = sc ? bySid[sc] : -1;
     }
   } else if (encOff >= 2 && encOff < n) {
     size_t o = (size_t)encOff;
@@ -500,14 +532,36 @@ static bool t1Width(const uint8_t* c, size_t n, int64_t& num, uint32_t& den) {
   return false;
 }
 
+// glyph name -> glyph index: open addressing at twice the glyph maximum, names pointing into the
+// font text (1.5 MB, on the heap)
+struct T1NameTable {
+  struct Slot {
+    const uint8_t* p;
+    uint32_t n;
+    int32_t idx;
+  };
+  static const size_t kSlots = 2 * kMaxGlyphs;
+  std::unique_ptr<Slot[]> tab{new Slot[kSlots]()};
+  size_t count = 0;
+  Slot& find(const uint8_t* q, size_t n) {
+    uint64_t h = 1469598103934665603ull;
+    for (size_t i = 0; i < n; i++) h = (h ^ q[i]) * 1099511628211ull;
+    size_t i = (size_t)(h ^ (h >> 29)) & (kSlots - 1);
+    while (tab[i].p && !(tab[i].n == n && memcmp(tab[i].p, q, n) == 0)) i = (i + 1) & (kSlots - 1);
+    return tab[i];
+  }
+  int32_t get(const uint8_t* q, size_t n) {
+    Slot& s = find(q, n);
+    return s.p ? s.idx : -1;
+  }
+};
+
 static bool parseType1(const Bytes& stored, const Bytes& recon, FontMetrics& m) {
-  m = FontMetrics();
-  for (auto& e : m.enc) e = -1;
-  for (auto& e : m.stdEnc) e = -1;
+  m.reset();
   Bytes t;
   size_t s, n, lenIV;
   uint8_t flags;
-  std::vector<std::string> rd;
+  RdNames rd;
   if (!softly([&] { return t1Plain(recon, stored, t, s, n, flags, rd, lenIV); }) || !(flags & 1)) return false;
   const uint8_t* p = t.data();
   // FontMatrix and Encoding in the cleartext part
@@ -524,7 +578,7 @@ static bool parseType1(const Bytes& stored, const Bytes& recon, FontMetrics& m) 
   // charstrings: "/name len RD <body>"
   std::vector<std::pair<size_t, size_t>> blobs;
   t1FindBlobs(p + s, n, rd, blobs);
-  std::unordered_map<std::string, int32_t> byName;
+  T1NameTable byName;
   for (auto& b : blobs) {
     size_t h = b.first;  // back over "RD ", the length and the name
     size_t q = h;
@@ -532,22 +586,26 @@ static bool parseType1(const Bytes& stored, const Bytes& recon, FontMetrics& m) 
     if (q == 0 || p[s + q - 1] != '/') continue;
     size_t ne = q;
     while (ne < h && isRegular(p[s + ne])) ne++;
-    std::string name((const char*)p + s + q, ne - q);
+    const uint8_t* name = p + s + q;
+    size_t nameLen = ne - q;
     int64_t w;
     uint32_t d;
     if (b.second < lenIV || !t1Width(p + s + b.first + lenIV, b.second - lenIV, w, d)) {
       w = kNoAdv;
       d = 1;
     }
-    if (byName.count(name)) continue;
-    byName[name] = (int32_t)m.adv.size();
-    m.adv.push_back(w == kNoAdv || w < INT32_MIN + 1 || w > INT32_MAX ? kNoAdv : (int32_t)w);
-    m.den.push_back((uint16_t)std::min<uint32_t>(d, 65535));
+    T1NameTable::Slot& sl = byName.find(name, nameLen);
+    if (sl.p) continue;  // a name defined twice: the first counts
+    if (m.nglyphs == kMaxGlyphs - 1) break;  // (as CFF and TrueType: 65535 glyphs at most)
+    sl = {name, (uint32_t)nameLen, (int32_t)m.nglyphs};
+    m.adv[m.nglyphs] = w == kNoAdv || w < INT32_MIN + 1 || w > INT32_MAX ? kNoAdv : (int32_t)w;
+    m.den[m.nglyphs++] = (uint16_t)std::min<uint32_t>(d, 65535);
   }
-  if (m.adv.empty()) return false;
+  if (m.nglyphs == 0) return false;
+  m.hasDen = true;
   for (int c = 0; c < 256; c++) {
-    auto f = byName.find(t1StdName(c));
-    if (f != byName.end() && !t1StdName(c).empty()) m.stdEnc[c] = f->second;
+    std::string nm = t1StdName(c);
+    if (!nm.empty()) m.stdEnc[c] = byName.get((const uint8_t*)nm.data(), nm.size());
   }
   const uint8_t* e = memfind(p, s, "/Encoding", 9);
   if (e) {
@@ -567,8 +625,8 @@ static bool parseType1(const Bytes& stored, const Bytes& recon, FontMetrics& m) 
         if (k == d0 || code > 255 || k >= lim || p[k] != ' ' || k + 1 >= lim || p[k + 1] != '/') continue;
         size_t nb = k + 2, ne = nb;
         while (ne < lim && isRegular(p[ne])) ne++;
-        auto f = byName.find(std::string((const char*)p + nb, ne - nb));
-        if (f != byName.end()) m.enc[code] = f->second;
+        int32_t g = byName.get(p + nb, ne - nb);
+        if (g >= 0) m.enc[code] = g;
       }
     }
   }
@@ -591,14 +649,14 @@ static bool widthPredict(const FontMetrics& m, int kind, int map, int rule, uint
   if (!m.ok || rule < 0 || rule >= kWidthRules) return false;
   int64_t adv = 0;
   uint64_t den = 1;
-  uint32_t ng = (uint32_t)m.adv.size();
+  uint32_t ng = m.nglyphs;
   if (kind == WK_TT) {
     uint32_t g = 0;
     if (map == 0) {
-      g = code <= 0xFF ? ttCmapLookup(m.cmap[0], 0xF000 + code) : 0;
-      if (!g) g = ttCmapLookup(m.cmap[0], code);
-    } else if (map == 1) g = ttCmapLookup(m.cmap[1], code);
-    else if (map == 2) g = ttCmapLookup(m.cmap[2], code);
+      g = code <= 0xFF ? ttCmapLookup(m.cmap[0], m.cmapLen[0], 0xF000 + code) : 0;
+      if (!g) g = ttCmapLookup(m.cmap[0], m.cmapLen[0], code);
+    } else if (map == 1) g = ttCmapLookup(m.cmap[1], m.cmapLen[1], code);
+    else if (map == 2) g = ttCmapLookup(m.cmap[2], m.cmapLen[2], code);
     else if (map == 3) g = code;
     else return false;
     if (g && g < ng) adv = m.adv[g];
@@ -611,19 +669,19 @@ static bool widthPredict(const FontMetrics& m, int kind, int map, int rule, uint
     if (code < ng) adv = m.adv[code];
   } else if (kind == WK_CID2M) {
     if (map != 0) return false;
-    uint32_t g = 2 * (size_t)code + 1 < m.cidMap.size() ? (uint32_t)m.cidMap[2 * code] << 8 | m.cidMap[2 * code + 1] : 0;
+    uint32_t g = 2 * (size_t)code + 1 < m.cidMapLen ? (uint32_t)m.cidMap[2 * code] << 8 | m.cidMap[2 * code + 1] : 0;
     if (g && g < ng) adv = m.adv[g];
   } else if (kind == WK_T1) {
     if (map > 1) return false;
     int32_t g = code < 256 ? (map ? m.stdEnc[code] : m.enc[code]) : -1;
     if (g >= 0 && (uint32_t)g < ng) {
       adv = m.adv[g];
-      den = m.den.empty() ? 1 : m.den[g];
+      den = m.hasDen ? m.den[g] : 1;
     }
   } else if (kind == WK_CID0) {
     if (map != 0) return false;
-    auto f = m.cidGid.find(code);
-    if (f != m.cidGid.end() && f->second < ng) adv = m.adv[f->second];
+    uint32_t g = m.cidKeyed && code < 65536 ? m.cidGid[code] : kNoGlyph;
+    if (g < ng) adv = m.adv[g];
   } else {
     return false;
   }
@@ -696,3 +754,31 @@ struct WidthsWalk {
 };
 
 static inline bool widthNumStart(uint8_t c) { return (c >= '0' && c <= '9') || c == '-' || c == '+' || c == '.'; }
+
+// Metrics of the last few font programs, by source key: a fixed set of slots (about 1 MB each,
+// allocated on first use), reused round robin. What the widths come out as does not depend on
+// what the cache holds, so the encoder and the decoder may hold different fonts.
+struct FontCache {
+  static const int kSlots = 8;
+  struct Slot {
+    std::string key;
+    std::unique_ptr<FontMetrics> m;
+  };
+  Slot slot[kSlots];
+  int next = 0;
+  // the metrics for key; found = false: a reset slot for the caller to fill
+  FontMetrics* get(const std::string& key, bool& found) {
+    for (auto& s : slot)
+      if (s.m && s.key == key) {
+        found = true;
+        return s.m.get();
+      }
+    Slot& s = slot[next];
+    next = (next + 1) % kSlots;
+    if (!s.m) s.m.reset(new FontMetrics());
+    s.key = key;
+    s.m->reset();
+    found = false;
+    return s.m.get();
+  }
+};

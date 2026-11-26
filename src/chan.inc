@@ -6,6 +6,44 @@
 
 typedef std::vector<uint8_t> Bytes;
 
+// A variable-size array with its storage at the maximum size, in place (no heap allocation).
+// push_back and resize return false when the array would outgrow N; callers that can meet more
+// than N items check it.
+template <class T, size_t N>
+struct FixedVec {
+  T a[N];
+  size_t n = 0;
+  size_t size() const { return n; }
+  bool empty() const { return n == 0; }
+  bool full() const { return n == N; }
+  static constexpr size_t capacity() { return N; }
+  T& operator[](size_t i) { return a[i]; }
+  const T& operator[](size_t i) const { return a[i]; }
+  T& back() { return a[n - 1]; }
+  const T& back() const { return a[n - 1]; }
+  T* begin() { return a; }
+  T* end() { return a + n; }
+  const T* begin() const { return a; }
+  const T* end() const { return a + n; }
+  bool push_back(const T& v) {
+    if (n == N) return false;
+    a[n++] = v;
+    return true;
+  }
+  bool push_back(T&& v) {
+    if (n == N) return false;
+    a[n++] = std::move(v);
+    return true;
+  }
+  bool resize(size_t m) {
+    if (m > N) return false;
+    for (size_t i = m; i < n; i++) a[i] = T();
+    n = m;
+    return true;
+  }
+  void clear() { resize(0); }
+};
+
 // Errors. pdfdump builds with -fno-exceptions -fno-rtti: fail() records the first error of the
 // calling thread and returns false, and every function that can fail returns bool (or leaves a
 // sticky error in its reader) for its caller to pass on. The readers (ChanReader, RBuf) return
@@ -78,41 +116,100 @@ static const size_t kAuxInlineMax = 65536;
 // header flags
 static const uint64_t kFlagStored = 1, kFlagLiftT = 2, kFlagLiftCS = 4, kFlagCmap = 8;
 
+// A short name kept in place (file suffixes, extensions): at most 15 characters.
+struct ShortName {
+  char s[16] = {};
+  uint8_t n = 0;
+  bool set(const char* p, size_t len) {
+    if (len > 15) return false;
+    memcpy(s, p, len);
+    s[len] = 0;
+    n = (uint8_t)len;
+    return true;
+  }
+  bool set(const char* p) { return set(p, strlen(p)); }
+  const char* c_str() const { return s; }
+  size_t size() const { return n; }
+  bool operator==(const ShortName& o) const { return n == o.n && memcmp(s, o.s, n) == 0; }
+  bool operator!=(const ShortName& o) const { return !(*this == o); }
+};
+
+// Key material (hashes, file and object keys, /O /U /OE /UE): at most 64 bytes, kept in place.
+// assign() keeps the first 64 bytes of a longer input (the handlers read at most 48 of any).
+struct KeyBuf {
+  uint8_t b[64];
+  size_t n = 0;
+  KeyBuf() {}
+  KeyBuf(const uint8_t* p, size_t len) { assign(p, len); }
+  void assign(const uint8_t* p, size_t len) {
+    n = std::min(len, sizeof(b));
+    if (n) memcpy(b, p, n);
+  }
+  void resize(size_t m) {
+    if (m > sizeof(b)) m = sizeof(b);
+    if (m > n) memset(b + n, 0, m - n);
+    n = m;
+  }
+  void clear() { n = 0; }
+  const uint8_t* data() const { return b; }
+  uint8_t* data() { return b; }
+  size_t size() const { return n; }
+  bool empty() const { return n == 0; }
+  uint8_t& operator[](size_t i) { return b[i]; }
+  uint8_t operator[](size_t i) const { return b[i]; }
+  uint8_t back() const { return b[n - 1]; }
+  const uint8_t* begin() const { return b; }
+  const uint8_t* end() const { return b + n; }
+  bool operator==(const KeyBuf& o) const { return n == o.n && memcmp(b, o.b, n) == 0; }
+  bool operator!=(const KeyBuf& o) const { return !(*this == o); }
+};
+
 struct ChanMap {
   int fileOf[CH_COUNT];
-  std::vector<std::string> suffix;  // per physical file; file 0 is always "meta" (holds S)
+  ShortName suffix[CH_COUNT];  // per physical file; file 0 is always "meta" (holds S)
+  size_t nfiles = 0;
 
   // spec: comma-separated groups of channel letters, every channel exactly once, e.g. "SN,TX,O,F,R,B".
+  // Every group holds at least one of the CH_COUNT channels, so there are at most CH_COUNT.
   bool parse(const char* spec, std::string& err) {
     for (int c = 0; c < CH_COUNT; c++) fileOf[c] = -1;
-    std::vector<std::string> groups;
-    std::string cur;
+    char groups[CH_COUNT][CH_COUNT + 1];
+    size_t ng = 0, len = 0;
     for (const char* p = spec;; p++) {
       if (*p == ',' || *p == 0) {
-        if (cur.empty()) { err = "empty channel group"; return false; }
-        groups.push_back(cur);
-        cur.clear();
+        if (len == 0) { err = "empty channel group"; return false; }
+        if (ng == CH_COUNT) { err = "more channel groups than channels"; return false; }
+        groups[ng][len] = 0;
+        ng++;
+        len = 0;
         if (*p == 0) break;
       } else {
-        cur += (char)toupper((unsigned char)*p);
+        if (len == CH_COUNT || ng == CH_COUNT) { err = "channel given twice"; return false; }
+        groups[ng][len++] = (char)toupper((unsigned char)*p);
       }
     }
     // the group holding S becomes file 0
-    std::stable_sort(groups.begin(), groups.end(), [](const std::string& a, const std::string& b) {
-      return (a.find('S') != std::string::npos) > (b.find('S') != std::string::npos);
-    });
-    suffix.clear();
-    for (size_t g = 0; g < groups.size(); g++) {
+    for (size_t g = 1; g < ng; g++)
+      if (strchr(groups[g], 'S')) {
+        char t[CH_COUNT + 1];
+        memcpy(t, groups[g], sizeof(t));
+        memmove(groups[1], groups[0], g * sizeof(groups[0]));
+        memcpy(groups[0], t, sizeof(t));
+        break;
+      }
+    nfiles = 0;
+    for (size_t g = 0; g < ng; g++) {
       int first = CH_COUNT;
-      for (char ch : groups[g]) {
+      for (const char* q0 = groups[g]; *q0; q0++) {
+        char ch = *q0;
         const char* q = strchr(kChanLetters, ch);
-        if (!q || !ch) { err = std::string("unknown channel letter '") + ch + "'"; return false; }
+        if (!q) { err = std::string("unknown channel letter '") + ch + "'"; return false; }
         int c = (int)(q - kChanLetters);
         if (fileOf[c] >= 0) { err = std::string("channel '") + ch + "' given twice"; return false; }
         fileOf[c] = (int)g;
         first = std::min(first, c);
       }
-      suffix.push_back(kChanSuffix[first]);
+      suffix[nfiles++].set(kChanSuffix[first]);
     }
     for (int c = 0; c < CH_COUNT; c++)
       if (fileOf[c] < 0) { err = std::string("channel '") + kChanLetters[c] + "' missing"; return false; }
@@ -138,7 +235,7 @@ struct DumpHeader {
   uint64_t flags = 0;          // bit0: stored mode
   uint64_t origSize = 0;
   uint32_t origCrc = 0;
-  Bytes fileKey;               // recovered file encryption key (empty: none)
+  KeyBuf fileKey;              // recovered file encryption key (empty: none)
   uint8_t zlibHdr[2] = {0x78, 0x9C};  // most common zlib header in the file
   uint8_t syntaxLevel = 1, filterLevel = 1;
   uint64_t offsetBias = 0;  // file offsets in xref data are counted from here (junk before %PDF-)
@@ -152,7 +249,7 @@ static const int kPresentClass = 8, kPresentAux = 16;
 // In-memory image of a complete dump.
 struct DumpFiles {
   DumpHeader hdr;
-  std::vector<Bytes> chan;           // physical channel files (channel data only, header excluded)
+  Bytes chan[CH_COUNT];              // physical channel files (hdr.map.nfiles; data only, no header)
   Bytes classFile[CF_COUNT];
   std::vector<std::string> ownExt;   // own files by ordinal
   std::vector<Bytes> ownData;
@@ -167,9 +264,13 @@ static void serializeHeader(const DumpHeader& h, Bytes& out) {
   putVarTo(b, h.flags);
   putVarTo(b, h.origSize);
   for (int i = 0; i < 4; i++) b.push_back((uint8_t)(h.origCrc >> (8 * i)));
-  b.push_back((uint8_t)h.map.suffix.size());
+  b.push_back((uint8_t)h.map.nfiles);
   for (int c = 0; c < CH_COUNT; c++) b.push_back((uint8_t)h.map.fileOf[c]);
-  for (auto& s : h.map.suffix) { b.push_back((uint8_t)s.size()); b.insert(b.end(), s.begin(), s.end()); }
+  for (size_t f = 0; f < h.map.nfiles; f++) {
+    const ShortName& s = h.map.suffix[f];
+    b.push_back((uint8_t)s.size());
+    b.insert(b.end(), s.s, s.s + s.n);
+  }
   b.push_back((uint8_t)h.fileKey.size());
   b.insert(b.end(), h.fileKey.begin(), h.fileKey.end());
   b.push_back(h.zlibHdr[0]);
@@ -227,21 +328,21 @@ static bool parseHeader(const Bytes& meta, DumpHeader& h, size_t& meta0) {
     h.map.fileOf[c] = meta[p++];
     if (h.map.fileOf[c] >= (int)nfiles) return fail("bad channel map");
   }
-  h.map.suffix.clear();
+  h.map.nfiles = nfiles;
   for (size_t i = 0; i < nfiles; i++) {
     if (!need(1)) return false;
     size_t n = meta[p++];
     if (!need(n)) return false;
-    std::string s((const char*)&meta[p], n);
-    for (char ch : s)
-      if (!isalnum((unsigned char)ch)) return fail("bad channel file suffix");
-    h.map.suffix.push_back(s);
+    for (size_t k = 0; k < n; k++)
+      if (!isalnum(meta[p + k])) return fail("bad channel file suffix");
+    if (!h.map.suffix[i].set((const char*)&meta[p], n)) return fail("channel file suffix too long");
     p += n;
   }
   if (!need(1)) return false;
   size_t kl = meta[p++];
   if (!need(kl)) return false;
-  h.fileKey.assign(meta.begin() + p, meta.begin() + p + kl);
+  if (kl > sizeof(h.fileKey.b)) return fail("file key too long");
+  h.fileKey.assign(&meta[p], kl);
   p += kl;
   if (!need(4)) return false;
   h.zlibHdr[0] = meta[p++];
@@ -263,7 +364,9 @@ static bool parseHeader(const Bytes& meta, DumpHeader& h, size_t& meta0) {
 
 class ChanWriter {
  public:
-  explicit ChanWriter(DumpFiles& d) : d_(d) { d_.chan.assign(d_.hdr.map.suffix.size(), Bytes()); }
+  explicit ChanWriter(DumpFiles& d) : d_(d) {
+    for (auto& c : d_.chan) c.clear();
+  }
   void put(int ch, const void* p, size_t n) {
     Bytes& b = d_.chan[d_.hdr.map.fileOf[ch]];
     b.insert(b.end(), (const uint8_t*)p, (const uint8_t*)p + n);
@@ -300,8 +403,8 @@ class ChanReader {
   typedef std::function<Bytes(uint32_t, const std::string&)> OwnLoader;
   ChanReader(const DumpFiles& d, size_t meta0, OwnLoader loader, const std::vector<Bytes>* ownData = nullptr)
       : d_(d), loader_(std::move(loader)), ownData_(ownData ? ownData : &d.ownData) {
-    pos_.assign(d.chan.size(), 0);
-    if (!pos_.empty()) pos_[0] = meta0;
+    for (auto& p : pos_) p = 0;
+    pos_[0] = meta0;
     for (int i = 0; i < CF_COUNT; i++) cfPos_[i] = 0;
   }
   // n bytes of channel ch; nullptr (and the reader stays failed) if there are fewer
@@ -381,7 +484,7 @@ class ChanReader {
   bool ok() const { return !bad_; }
   bool allConsumed() const {
     if (bad_) return false;
-    for (size_t f = 0; f < pos_.size(); f++)
+    for (size_t f = 0; f < d_.hdr.map.nfiles; f++)
       if (pos_[f] != d_.chan[f].size()) return false;
     for (int i = 0; i < CF_COUNT; i++)
       if (cfPos_[i] != d_.classFile[i].size()) return false;
@@ -392,7 +495,7 @@ class ChanReader {
   const DumpFiles& d_;
   OwnLoader loader_;
   const std::vector<Bytes>* ownData_;
-  std::vector<size_t> pos_;
+  size_t pos_[CH_COUNT];
   size_t cfPos_[CF_COUNT];
   bool bad_ = false;
 };

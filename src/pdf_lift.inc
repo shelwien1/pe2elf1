@@ -451,22 +451,30 @@ static void liftEncodeInts(const std::vector<int64_t>& v, uint8_t mode, Bytes& o
   }
 }
 
+// Fixed arrays at their maximum: 65536 byte pairs, each touched at most once per call (640 KB,
+// so the estimator lives on the heap: LiftEntropy is allocated once per lift).
 struct LiftEntropy {
-  std::vector<uint32_t> pair, ctx;
-  std::vector<uint32_t> touched;
-  LiftEntropy() : pair(65536, 0), ctx(256, 0) {}
+  uint32_t pair[65536] = {}, ctx[256] = {};
+  uint32_t touched[65536];
+  uint32_t ntouched = 0;
   // order-1 entropy estimate of b, in bits
   double bits(const Bytes& b) {
     if (b.size() < 2) return 8.0 * b.size();
     for (size_t i = 1; i < b.size(); i++) {
       uint32_t k = (uint32_t)b[i - 1] << 8 | b[i];
-      if (!pair[k]++) touched.push_back(k);
+      if (!pair[k]++) touched[ntouched++] = k;
       ctx[b[i - 1]]++;
     }
     double h = 0;
-    for (uint32_t k : touched) h -= pair[k] * std::log2((double)pair[k] / ctx[k >> 8]);
-    for (uint32_t k : touched) { pair[k] = 0; ctx[k >> 8] = 0; }
-    touched.clear();
+    for (uint32_t t = 0; t < ntouched; t++) {
+      uint32_t k = touched[t];
+      h -= pair[k] * std::log2((double)pair[k] / ctx[k >> 8]);
+    }
+    for (uint32_t t = 0; t < ntouched; t++) {
+      pair[touched[t]] = 0;
+      ctx[touched[t] >> 8] = 0;
+    }
+    ntouched = 0;
     return h + 8;
   }
 };
@@ -617,17 +625,17 @@ static bool liftInlineImage(const CodecCtx& ctx, const uint8_t* dict, size_t dn,
     if (k.s == "F" || k.s == "Filter") filt = v;
     else if (k.s == "DP" || k.s == "DecodeParms") parms = v;
   }
-  std::vector<std::pair<std::string, const Obj*>> fl;
+  FixedVec<std::pair<std::string, const Obj*>, kMaxLayers> fl;  // more filters than layers: not lifted
   if (filt.t == Obj::NAME) fl.push_back({normFilter(filt.s), parms.t == Obj::DICT ? &parms : nullptr});
   else if (filt.t == Obj::ARR)
     for (size_t k = 0; k < filt.a.size(); k++) {
       if (filt.a[k].t != Obj::NAME) return false;
       const Obj* pp = parms.t == Obj::ARR && k < parms.a.size() && parms.a[k].t == Obj::DICT ? &parms.a[k] : nullptr;
-      fl.push_back({normFilter(filt.a[k].s), pp});
+      if (!fl.push_back({normFilter(filt.a[k].s), pp})) return false;
     }
   if (fl.empty()) return false;
   Bytes cur(data, data + len), out, recon;
-  std::vector<Layer> layers;
+  Layers layers;
   for (auto& f : fl) {
     uint8_t lt = layerOfFilter(f.first);
     if (!lt) return false;
@@ -643,13 +651,11 @@ static bool liftInlineImage(const CodecCtx& ctx, const uint8_t* dict, size_t dn,
       geti("Columns", fp.columns);
       geti("EarlyChange", fp.earlyChange);
     }
-    if (!layerDecode(ctx, lt, fp, cur, out, recon)) return false;
-    layers.push_back({lt, recon});
+    if (!layerDecode(ctx, lt, fp, cur, out, recon) || !layers.push_back({lt, recon})) return false;
     cur.swap(out);
     if ((lt == L_FLATE || lt == L_LZW) && fp.predictor > 1) {
       uint8_t pl = fp.predictor == 2 ? L_TIFF : fp.predictor >= 10 ? L_PNG : L_NONE;
-      if (!pl || !layerDecode(ctx, pl, fp, cur, out, recon)) return false;
-      layers.push_back({pl, recon});
+      if (!pl || !layerDecode(ctx, pl, fp, cur, out, recon) || !layers.push_back({pl, recon})) return false;
       cur.swap(out);
     }
   }
@@ -665,7 +671,8 @@ static bool liftInlineImage(const CodecCtx& ctx, const uint8_t* dict, size_t dn,
 
 static bool liftInlineRestore(const CodecCtx& ctx, RBuf& r, Bytes& out) {
   size_t nl = r.u8();
-  std::vector<Layer> layers(nl);
+  Layers layers;
+  if (!layers.resize(nl)) return false;
   for (auto& l : layers) {
     l.type = r.u8();
     if (l.type == L_NONE || l.type >= L_COUNT || isPseudoLayerType(l.type)) return false;
@@ -858,7 +865,8 @@ static void liftForward(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums
   std::vector<std::vector<uint32_t>> members(g.count);
   for (size_t k = 0; k < vals.size(); k++) members[g.ofMarker[k]].push_back((uint32_t)k);
   Bytes head, data;
-  LiftEntropy est;
+  std::unique_ptr<LiftEntropy> estp(new LiftEntropy());  // 512 KB: not on a thread's stack
+  LiftEntropy& est = *estp;
   for (auto& mem : members) {
     std::vector<LiftNum> gv;
     for (uint32_t k : mem) gv.push_back(vals[k]);

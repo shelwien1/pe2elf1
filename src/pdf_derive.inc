@@ -382,7 +382,7 @@ static void derivEncode(const uint8_t* p, size_t n, std::vector<DerivEdit> edits
 // 3 every byte < 32 or >= 127 as 3-digit octal.
 
 struct DerivCrypt {
-  const Bytes* fileKey = nullptr;
+  const KeyBuf* fileKey = nullptr;
   uint32_t num = 0, gen = 0;
 };
 
@@ -720,8 +720,8 @@ static bool inlineSourceOk(const StreamDesc& sd, size_t size) {
 static bool parseFontOf(int kind, const Bytes& b, const Bytes& t1recon, FontMetrics& m) {
   switch (kind) {
     case WK_TT: case WK_CID2: case WK_CID2M: return parseTrueType(b.data(), b.size(), m);
-    case WK_CFF: return parseCff(b.data(), b.size(), m) && m.cidGid.empty();
-    case WK_CID0: return parseCff(b.data(), b.size(), m) && !m.cidGid.empty();
+    case WK_CFF: return parseCff(b.data(), b.size(), m) && !m.cidKeyed;
+    case WK_CID0: return parseCff(b.data(), b.size(), m) && m.cidKeyed;
     case WK_T1: return parseType1(b, t1recon, m);
   }
   return false;
@@ -731,7 +731,7 @@ static bool parseFontOf(int kind, const Bytes& b, const Bytes& t1recon, FontMetr
 struct DerivFonts {
   std::function<Bytes(uint32_t, const std::string&)> load;  // own file by ordinal and extension
   std::unordered_map<uint32_t, Bytes> inl;                   // inline streams seen so far
-  std::map<std::string, std::unique_ptr<FontMetrics>> cache;
+  FontCache cache;
   bool source(const std::string& src, Bytes& out) {
     if (src.size() < 2) return false;
     if (src[0] == 's') {
@@ -762,9 +762,9 @@ struct DerivFonts {
   }
   const FontMetrics* get(int kind, const std::string& font, const std::string& t1hex, const std::string& map) {
     std::string key = std::string(1, (char)('a' + kind)) + " " + font + " " + t1hex + " " + map;
-    auto& e = cache[key];
-    if (!e) {
-      e.reset(new FontMetrics());
+    bool found;
+    FontMetrics* e = cache.get(key, found);
+    if (!found) {
       Bytes b, rec;
       if (kind == WK_T1) {
         if (t1hex.size() < 3 || t1hex[0] != 'h' || t1hex.size() % 2 == 0) return nullptr;
@@ -777,10 +777,10 @@ struct DerivFonts {
       if (source(font, b) && parseFontOf(kind, b, rec, *e) && kind == WK_CID2M) {
         Bytes mb;
         if (!source(map, mb)) e->ok = false;
-        else e->cidMap.swap(mb);
+        else e->setCidMap(mb.data(), mb.size());
       }
     }
-    return e->ok ? e.get() : nullptr;
+    return e->ok ? e : nullptr;
   }
 };
 
