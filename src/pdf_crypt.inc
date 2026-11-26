@@ -205,7 +205,7 @@ static void rc4(const uint8_t* key, size_t klen, const uint8_t* in, size_t n, ui
 // ---- AES -------------------------------------------------------------------------------------
 struct Aes {
   static uint8_t sbox[256], inv[256];
-  static void init() {}  // (the tables are built at program start: gAesBuilt below)
+  // (the tables are built at program start: gAesBuilt below)
   static bool build() {
     uint8_t p = 1, q = 1;
     do {
@@ -235,7 +235,6 @@ struct Aes {
   uint8_t rk[240];
   int nr = 0;
   Aes(const uint8_t* key, size_t klen) {
-    init();
     int nk = (int)klen / 4;
     nr = nk + 6;
     memcpy(rk, key, klen);

@@ -644,12 +644,12 @@ class Encoder {
     };
     unsigned nt = opt_.threads ? opt_.threads : lib::max(1u, lib::thread::hardware_concurrency());
     nt = (unsigned)lib::min<size_t>(lib::min(nt, kMaxThreads), work.size());
-    // tables that preflate and the AES code build lazily on first use: build them before the pool
+    // tables that preflate builds lazily on first use: build them before the pool (the AES and
+    // CCITT tables are built at program start)
     PreflateBlockTrees::staticLitLenTreeDecoder();
     PreflateBlockTrees::staticDistTreeDecoder();
     PreflateBlockTrees::staticLitLenTreeEncoder();
     PreflateBlockTrees::staticDistTreeEncoder();
-    Aes::init();
     if (nt <= 1) {
       worker();
     } else {
