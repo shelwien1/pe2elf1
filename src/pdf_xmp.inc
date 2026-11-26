@@ -14,7 +14,7 @@ static void xmpWrap(const Bytes& jpeg, size_t L, const Bytes& sep, uint8_t flags
   b64Encode(jpeg.data(), jpeg.size(), (flags & 1) != 0, b64);
   for (size_t i = 0; i < b64.size(); i += L) {
     if (i) out.insert(out.end(), sep.begin(), sep.end());
-    out.insert(out.end(), b64.begin() + i, b64.begin() + std::min(b64.size(), i + L));
+    out.insert(out.end(), b64.begin() + i, b64.begin() + lib::min(b64.size(), i + L));
   }
   if (flags & 2) out.insert(out.end(), sep.begin(), sep.end());
 }

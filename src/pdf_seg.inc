@@ -39,7 +39,7 @@ class Segmenter {
 
   void run() {
     s_.isPdf = false;
-    size_t lim = std::min<size_t>(n_, 1024 + 5);
+    size_t lim = lib::min<size_t>(n_, 1024 + 5);
     const uint8_t* h = memfind(d_, lim, "%PDF-", 5);
     if (!h) return;
     s_.isPdf = true;
@@ -54,7 +54,7 @@ class Segmenter {
       if (parseObjectAt(s_.cands[ci].off, it, v)) {
         addRegion(textStart, it.start, false);
         it.obj = (int)s_.objs.size();
-        s_.objs.push_back(std::move(v));
+        s_.objs.push_back(lib::move(v));
         s_.items.push_back(it);
         pos = textStart = it.end;
       } else {
@@ -129,7 +129,7 @@ class Segmenter {
           it.start = at;
           it.end = x.end;
           it.xref = (int)s_.xrefs.size();
-          s_.xrefs.push_back(std::move(x));
+          s_.xrefs.push_back(lib::move(x));
           s_.items.push_back(it);
           a = it.end;
           p = d_ + a;
@@ -158,7 +158,7 @@ class Segmenter {
       if (at > 0 && isRegular(d_[at - 1])) continue;
       Lexer lx(d_, n_, at + 7);
       Obj t;
-      if (lx.parse(t) && t.t == Obj::DICT) s_.trailers.push_back(std::move(t));
+      if (lx.parse(t) && t.t == Obj::DICT) s_.trailers.push_back(lib::move(t));
     }
   }
 
@@ -251,7 +251,7 @@ class Segmenter {
       lx.pos = it.dataEnd;
       if (lx.eatKeyword("endstream")) lx.eatKeyword("endobj");
       else lx.eatKeyword("endobj");
-      it.end = skipTrailingWS(std::max(lx.pos, it.dataEnd));
+      it.end = skipTrailingWS(lib::max(lx.pos, it.dataEnd));
       return true;
     }
     // no endobj: object ends after its value

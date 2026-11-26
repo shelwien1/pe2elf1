@@ -56,7 +56,7 @@ static bool bmpWrap(const BmpSpec& sp, const Bytes& raw, Bytes& bmp, Bytes& reco
     size_t st = bmp.size();
     bmp.insert(bmp.end(), src, src + prow);
     if (sp.bpp == 24)
-      for (size_t x = 0; x + 2 < prow; x += 3) std::swap(bmp[st + x], bmp[st + x + 2]);
+      for (size_t x = 0; x + 2 < prow; x += 3) lib::swap(bmp[st + x], bmp[st + x + 2]);
     bmp.insert(bmp.end(), brow - prow, 0);
   }
   recon.clear();
@@ -82,7 +82,7 @@ static bool bmpEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out) {
     size_t st = out.size();
     out.insert(out.end(), src, src + prow);
     if (bpp == 24)
-      for (size_t x = 0; x + 2 < prow; x += 3) std::swap(out[st + x], out[st + x + 2]);
+      for (size_t x = 0; x + 2 < prow; x += 3) lib::swap(out[st + x], out[st + x + 2]);
   }
   RBuf r(recon);
   r.appendTo(r.len(), out);

@@ -78,13 +78,13 @@ struct ObjIndex {
 };
 
 // ObjStm members: (objnum, value)
-static bool expandObjStm(const Obj& dict, const Bytes& data, std::vector<std::pair<uint32_t, Obj>>& out) {
+static bool expandObjStm(const Obj& dict, const Bytes& data, std::vector<lib::pair<uint32_t, Obj>>& out) {
   const Obj* N = dict.get("N");
   const Obj* F = dict.get("First");
   if (!N || !F || N->t != Obj::INT || F->t != Obj::INT || N->i < 0 || F->i < 0 || (size_t)F->i > data.size())
     return false;
   Lexer lx(data.data(), data.size(), 0);
-  std::vector<std::pair<uint64_t, uint64_t>> hdr;
+  std::vector<lib::pair<uint64_t, uint64_t>> hdr;
   for (int64_t k = 0; k < N->i; k++) {
     uint64_t num, off;
     if (!lx.parseUInt(num) || !lx.parseUInt(off)) break;
@@ -95,7 +95,7 @@ static bool expandObjStm(const Obj& dict, const Bytes& data, std::vector<std::pa
     if (at >= data.size() || h.first > 0xFFFFFFFFull) continue;
     Lexer ml(data.data(), data.size(), at);
     Obj o;
-    if (ml.parse(o)) out.push_back({(uint32_t)h.first, std::move(o)});
+    if (ml.parse(o)) out.push_back({(uint32_t)h.first, lib::move(o)});
   }
   return !out.empty();
 }
@@ -241,7 +241,7 @@ struct ImgColor {
   Palette palette;                      // Indexed over gray / RGB: 2^bpc entries
 };
 
-static bool imageColor(const ObjIndex& idx, const Obj& d, const std::function<const Bytes*(const Obj*)>& streamData,
+static bool imageColor(const ObjIndex& idx, const Obj& d, const lib::function<const Bytes*(const Obj*)>& streamData,
                        ImgColor& g) {
   auto num = [&](const char* k, const char* ab) -> int64_t {
     const Obj* o = idx.resolve(d.get2(k, ab));
@@ -263,7 +263,7 @@ static bool imageColor(const ObjIndex& idx, const Obj& d, const std::function<co
   const Obj* indexedBase = nullptr;
   const Obj* lookup = nullptr;
   int64_t hival = -1;
-  std::function<int(const Obj*, int)> compsOf = [&](const Obj* c, int depth) -> int {
+  lib::function<int(const Obj*, int)> compsOf = [&](const Obj* c, int depth) -> int {
     c = idx.resolve(c);
     if (!c || depth > 8) return 0;
     if (c->t == Obj::NAME) {
@@ -330,7 +330,7 @@ static void grayRamp(Palette& pal, int bits, bool inv) {
   }
 }
 
-static bool imageBmpSpec(const ObjIndex& idx, const Obj& d, const std::function<const Bytes*(const Obj*)>& streamData,
+static bool imageBmpSpec(const ObjIndex& idx, const Obj& d, const lib::function<const Bytes*(const Obj*)>& streamData,
                          BmpSpec& sp) {
   ImgColor g;
   if (!imageColor(idx, d, streamData, g)) return false;
@@ -360,7 +360,7 @@ static bool imageBmpSpec(const ObjIndex& idx, const Obj& d, const std::function<
 }
 
 // uncompressed-TIFF layout of the samples: gray / palette 1-16 bits, RGB and CMYK 8 or 16 bits
-static bool imageTiffSpec(const ObjIndex& idx, const Obj& d, const std::function<const Bytes*(const Obj*)>& streamData,
+static bool imageTiffSpec(const ObjIndex& idx, const Obj& d, const lib::function<const Bytes*(const Obj*)>& streamData,
                           TiffSpec& t) {
   ImgColor g;
   if (!imageColor(idx, d, streamData, g)) return false;

@@ -22,7 +22,7 @@ struct XrefSection {
   uint8_t sep = ' ';          // between subsection start and count
   std::vector<Bytes> eol2;    // after each subsection count
   uint8_t eole[2] = {' ', '\n'};
-  std::vector<std::pair<uint64_t, uint64_t>> subs;
+  std::vector<lib::pair<uint64_t, uint64_t>> subs;
   std::vector<XrefEntry> entries;
 };
 
@@ -85,7 +85,7 @@ static bool parseXrefAt(const uint8_t* d, size_t n, size_t pos, XrefSection& x) 
 
 // Object positions known to both sides: latest definition of each object number so far.
 struct ObjPositions {
-  std::unordered_map<uint32_t, std::pair<uint64_t, uint32_t>> pos;  // num -> (offset, gen)
+  std::unordered_map<uint32_t, lib::pair<uint64_t, uint32_t>> pos;  // num -> (offset, gen)
   void add(uint32_t num, uint32_t gen, uint64_t off) { pos[num] = {off, gen}; }
   bool get(uint64_t num, uint64_t& off, uint32_t& gen) const {
     auto it = pos.find((uint32_t)num);
@@ -107,7 +107,7 @@ static bool objHeaderOf(const uint8_t* p, size_t n, uint32_t& num, uint32_t& gen
 }
 
 // next free object number after entry i (0 after the last), over the whole section
-static std::vector<uint64_t> xrefNextFree(const std::vector<std::pair<uint64_t, uint64_t>>& subs,
+static std::vector<uint64_t> xrefNextFree(const std::vector<lib::pair<uint64_t, uint64_t>>& subs,
                                           const std::vector<char>& types) {
   std::vector<uint64_t> nums;
   for (auto& sb : subs)
@@ -125,7 +125,7 @@ static std::vector<uint64_t> xrefNextFree(const std::vector<std::pair<uint64_t, 
 // 2 free, offset = next free object, gen 65535; 3 free + offset + gen; 4 free, offset 0, gen 65535
 // kind 5: in use, pointing forward at item `target` (delta-coded against the previous one), gen
 static void writeXref(ChanWriter& w, const XrefSection& x, const ObjPositions& op,
-                      const std::function<int64_t(uint64_t)>* itemAt = nullptr) {
+                      const lib::function<int64_t(uint64_t)>* itemAt = nullptr) {
   int64_t prevTarget = -1;
   w.lenBytes(CH_N, CH_T, x.eol1);
   w.u8(CH_S, x.sep);
@@ -173,15 +173,15 @@ static void writeXref(ChanWriter& w, const XrefSection& x, const ObjPositions& o
     }
 }
 
-static int64_t xrefEnd(const std::vector<std::pair<uint64_t, uint64_t>>& subs) {
+static int64_t xrefEnd(const std::vector<lib::pair<uint64_t, uint64_t>>& subs) {
   int64_t e = -1;
-  for (auto& s : subs) e = std::max<int64_t>(e, (int64_t)(s.first + s.second));
+  for (auto& s : subs) e = lib::max<int64_t>(e, (int64_t)(s.first + s.second));
   return e;
 }
 
 // false on bad data (error recorded)
 static bool readXref(ChanReader& r, const ObjPositions& op, Bytes& out, int64_t* endOut = nullptr,
-                     std::vector<std::pair<uint64_t, int64_t>>* fwd = nullptr) {
+                     std::vector<lib::pair<uint64_t, int64_t>>* fwd = nullptr) {
   int64_t prevTarget = -1;
   std::vector<int64_t> targets;
   out.insert(out.end(), {'x', 'r', 'e', 'f'});
@@ -189,8 +189,8 @@ static bool readXref(ChanReader& r, const ObjPositions& op, Bytes& out, int64_t*
   r.lenBytes(CH_N, CH_T, t);
   out.insert(out.end(), t.begin(), t.end());
   uint8_t sep = r.u8(CH_S), e0 = r.u8(CH_S), e1 = r.u8(CH_S);
-  size_t ns = r.len(CH_N, std::min<size_t>(1 << 30, r.remaining(CH_N)));  // each needs a byte
-  std::vector<std::pair<uint64_t, uint64_t>> subs(ns);
+  size_t ns = r.len(CH_N, lib::min<size_t>(1 << 30, r.remaining(CH_N)));  // each needs a byte
+  std::vector<lib::pair<uint64_t, uint64_t>> subs(ns);
   std::vector<Bytes> eol2(ns);
   uint64_t prevEnd = 0, total = 0;
   for (size_t s = 0; s < ns; s++) {

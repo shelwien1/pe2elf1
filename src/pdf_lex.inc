@@ -142,8 +142,8 @@ class Lexer {
           } else if (!parse(v, depth + 1)) {
             return false;
           }
-          o.a.push_back(std::move(k));
-          o.a.push_back(std::move(v));
+          o.a.push_back(lib::move(k));
+          o.a.push_back(lib::move(v));
         }
       }
       return parseHex(o);
@@ -161,7 +161,7 @@ class Lexer {
         }
         Obj v;
         if (!parse(v, depth + 1)) return false;
-        o.a.push_back(std::move(v));
+        o.a.push_back(lib::move(v));
       }
     }
     if (c == ')' || c == '>' || c == ']' || c == '{' || c == '}') {

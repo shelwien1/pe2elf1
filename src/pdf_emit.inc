@@ -119,7 +119,7 @@ static void writeStreamDesc(ChanWriter& w, EmitState& st, StreamDesc& sd, Bytes&
     case ST_BIN: w.put(CH_B, stored); break;
     case ST_TXT: w.put(CH_T, stored); break;
     case ST_CLASS: w.classPut(sd.classFile, stored.data(), stored.size()); break;
-    case ST_FILE: sd.ordinal = w.ownAdd(sd.ext, std::move(stored)); break;
+    case ST_FILE: sd.ordinal = w.ownAdd(sd.ext, lib::move(stored)); break;
     case ST_DUP: break;
   }
 }
@@ -222,7 +222,7 @@ static bool restorePayload(const CodecCtx& ctx, const KeyBuf& fileKey, const Str
 // Optional shortcut for the encoder's own verify: given the k-th stream's descriptor and stored
 // bytes as read back from the dump, supply the payload if they are identical to what the
 // encoder already verified layer by layer (so re-running the layer encoders cannot differ).
-typedef std::function<bool(size_t, const StreamDesc&, const Bytes&, Bytes&)> FastRestore;
+typedef lib::function<bool(size_t, const StreamDesc&, const Bytes&, Bytes&)> FastRestore;
 
 // The whole decoder: false, with the error recorded (failMessage()), on bad dump data.
 static bool decodeDumpImpl(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader loader, const FastRestore* fast,
@@ -231,7 +231,7 @@ static bool decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader l
                        const FastRestore* fast = nullptr, const std::vector<Bytes>* blobFast = nullptr) {
   failClear();
   out.clear();
-  bool ok = decodeDumpImpl(d, meta0, std::move(loader), fast, blobFast, out) && !failed();
+  bool ok = decodeDumpImpl(d, meta0, lib::move(loader), fast, blobFast, out) && !failed();
   if (!ok && !failed()) fail("bad dump data");
   return ok;
 }
@@ -264,7 +264,7 @@ static bool decodeDumpImpl(const DumpFiles& d, size_t meta0, ChanReader::OwnLoad
     use = &tmp;
   }
   ChanReader::OwnLoader blobLoader = loader;
-  ChanReader r(*use, meta0, std::move(loader), &d.ownData);
+  ChanReader r(*use, meta0, lib::move(loader), &d.ownData);
   DerivFonts fonts;
   fonts.load = [&](uint32_t ord, const char* ext) { return r.own(ord, ext); };
   StructMap sm;
@@ -330,7 +330,7 @@ static bool decodeDumpImpl(const DumpFiles& d, size_t meta0, ChanReader::OwnLoad
   };
   size_t streamNo = 0;
   // (origSize is the dump's own claim: reserve no more than the dump could plausibly hold)
-  out.reserve((size_t)std::min<uint64_t>(d.hdr.origSize, (uint64_t)1 << 28));
+  out.reserve((size_t)lib::min<uint64_t>(d.hdr.origSize, (uint64_t)1 << 28));
   for (;;) {
     uint8_t tag = r.u8(CH_S);
     if (!r.ok() || failed()) return false;
@@ -359,7 +359,7 @@ static bool decodeDumpImpl(const DumpFiles& d, size_t meta0, ChanReader::OwnLoad
       }
       case I_XREF: {
         ds.xrefPos.push_back(out.size() - bias);
-        std::vector<std::pair<uint64_t, int64_t>> xf;
+        std::vector<lib::pair<uint64_t, int64_t>> xf;
         if (!readXref(r, objPos, out, &ds.lastXrefEnd, &xf)) return false;
         for (auto& x : xf) fwd.push_back({x.first, 10, 2, (uint64_t)x.second + 1, 0});
         break;
@@ -423,7 +423,7 @@ static bool decodeDumpImpl(const DumpFiles& d, size_t meta0, ChanReader::OwnLoad
           return fail("bad derived field in stream dictionary");
         rebase(out.size());
         out.insert(out.end(), txt.begin(), txt.end());
-        if (defer) deferred.push_back({out.size(), sd, std::move(data), streamNo});
+        if (defer) deferred.push_back({out.size(), sd, lib::move(data), streamNo});
         out.insert(out.end(), payload.begin(), payload.end());
         uint32_t lr;
         if (lengthRefOf(txt.data(), txt.size(), lr)) ds.lenRef[lr] = payload.size();

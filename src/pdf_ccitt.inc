@@ -303,7 +303,7 @@ static void ccittRowBits(const CcittRow& ch, int cols, bool black1, uint8_t* dst
   memset(dst, black1 ? 0x00 : 0xFF, rb);  // white everywhere
   int color = 0, a = 0;
   for (size_t i = 0; i <= ch.size(); i++) {
-    int e = i < ch.size() ? std::min(ch[i], cols) : cols;
+    int e = i < ch.size() ? lib::min(ch[i], cols) : cols;
     if (color)
       for (int x = a; x < e; x++) {
         if (black1) dst[x >> 3] |= (uint8_t)(0x80 >> (x & 7));
@@ -332,7 +332,7 @@ static bool ccittEncodeAll(const CcittParams& p, bool g4, const Bytes& rows, int
   if (rows.size() != rb * (size_t)nrows) return false;
   out.clear();
   BitWriter bw(out);
-  std::unique_ptr<CcittRow> rowA(new CcittRow()), rowB(new CcittRow());
+  lib::unique_ptr<CcittRow> rowA(new CcittRow()), rowB(new CcittRow());
   CcittRow* ref = rowA.get();
   CcittRow* cur = rowB.get();
   for (int r = 0; r < nrows; r++) {
@@ -348,7 +348,7 @@ static bool ccittEncodeAll(const CcittParams& p, bool g4, const Bytes& rows, int
     ccittRowChanges(rows.data() + rb * r, p.cols, p.black1, *cur);
     if (g4) ccittEncode2D(bw, *ref, *cur, p.cols);
     else ccittEncode1D(bw, *cur, p.cols);
-    std::swap(ref, cur);
+    lib::swap(ref, cur);
   }
   if (p.eob) {
     if (g4) { bw.put(kEOL, 12); bw.put(kEOL, 12); }
@@ -364,7 +364,7 @@ static bool ccittDecodeLayer(const CcittParams& p0, const Bytes& in, Bytes& out,
   bool g4 = p.k < 0;
   size_t rb = ((size_t)p.cols + 7) / 8;
   BitReader br(in.data(), in.size());
-  std::unique_ptr<CcittRow> rowA(new CcittRow()), rowB(new CcittRow());
+  lib::unique_ptr<CcittRow> rowA(new CcittRow()), rowB(new CcittRow());
   CcittRow* ref = rowA.get();
   CcittRow* cur = rowB.get();
   out.clear();
@@ -392,7 +392,7 @@ static bool ccittDecodeLayer(const CcittParams& p0, const Bytes& in, Bytes& out,
     if (!ok) { br.pos = rowStart; break; }
     out.resize(out.size() + rb);
     ccittRowBits(*cur, p.cols, p.black1, out.data() + out.size() - rb);
-    std::swap(ref, cur);
+    lib::swap(ref, cur);
     nrows++;
     if (out.size() > kMaxDecoded) return false;
   }

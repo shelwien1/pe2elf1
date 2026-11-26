@@ -17,22 +17,11 @@
 #include <ctype.h>
 #include <math.h>
 
-#include <algorithm>
-#include <array>
-#include <atomic>
-#include <chrono>
-#include <cstdlib>
-#include <deque>
-#include <new>
-#include <functional>
-#include <map>
-#include <memory>
-#include <mutex>
+#include "base.inc"  // the C++ library subset in use (lib::), on the C library and the OS
+
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
-#include <thread>
-#include <utility>
 #include <vector>
 
 #include "preflate.inc"
@@ -135,7 +124,7 @@ class Encoder {
   double tEncode = 0, tVerify = 0, tLift = 0;
 
   void run() {
-    auto t0 = std::chrono::steady_clock::now();
+    double t0 = lib::monoSec();
     if (!dump.hdr.map.parse(opt_.chanMap, err_)) die("bad channel map: %s", err_.c_str());
     dump.hdr.origSize = in_.size();
     dump.hdr.origCrc = crc32_update(0, in_.data(), in_.size());
@@ -152,7 +141,7 @@ class Encoder {
         analyze();
         if (!failed()) emit();
         if (!failed()) itemLengths();
-        auto tl = std::chrono::steady_clock::now();
+        double tl = lib::monoSec();
         if (!failed()) applyLifts(opt_.noVerify);
         tLift = secondsSince(tl);
         if (failed()) {
@@ -168,7 +157,7 @@ class Encoder {
     }
     tEncode = secondsSince(t0);
     if (modelled && !opt_.noVerify) {
-      auto t1 = std::chrono::steady_clock::now();
+      double t1 = lib::monoSec();
       Message why = verifyDump();
       if (!why.empty() && liftsUnchecked_) {
         // a lift that its own check would have refused: redo the lifts with the checks
@@ -246,7 +235,7 @@ class Encoder {
   Message err_;
   ObjIndex idx_;
   CodecCtx ctx_;
-  std::deque<std::vector<std::pair<uint32_t, Obj>>> members_;
+  std::vector<std::vector<lib::pair<uint32_t, Obj>>> members_;  // (elements keep their address: growth moves the inner vectors)
   std::unordered_map<int, int> streamOfItem_;
   std::vector<uint32_t> ownOrd_;                     // stream -> own-file ordinal (ST_FILE)
   std::unordered_map<uint32_t, size_t> streamByNum_;  // object number -> stream
@@ -275,8 +264,8 @@ class Encoder {
     return bad * 50 <= b.size() && hi * 10 <= b.size();
   }
 
-  static double secondsSince(std::chrono::steady_clock::time_point t) {
-    return std::chrono::duration<double>(std::chrono::steady_clock::now() - t).count();
+  static double secondsSince(double t) {
+    return lib::monoSec() - t;
   }
 
   // object and stream item texts: bytes to T, length to .iln after the whole T channel is known
@@ -336,7 +325,8 @@ class Encoder {
     }
     if (dump.hdr.flags & kFlagLiftCS) {
       dump.classFile[CF_CS].swap(preCS_);
-      for (int a : {AX_CSN, AX_CSH, AX_CSS, AX_CSI}) dump.aux[a].clear();
+      static const int kCsAux[] = {AX_CSN, AX_CSH, AX_CSS, AX_CSI};
+      for (int a : kCsAux) dump.aux[a].clear();
     }
     if (dump.hdr.flags & kFlagCmap) {
       dump.classFile[CF_CMAP].swap(preCmap_);
@@ -369,10 +359,10 @@ class Encoder {
              liftApply(LIFT_CS, dump.classFile[CF_CS], cSk, cNu, cHx, cSs, &ctx_, &cInl, check);
       cmOk = !dump.classFile[CF_CMAP].empty() && cmapApply(dump.classFile[CF_CMAP], mSk, mNu);
     };
-    unsigned nt = opt_.threads ? opt_.threads : std::max(1u, std::thread::hardware_concurrency());
+    unsigned nt = opt_.threads ? opt_.threads : lib::max(1u, lib::thread::hardware_concurrency());
     if (nt > 1) {
       Message e1;  // an error the other thread recorded (thread-local), passed on here
-      std::thread th([&] {
+      lib::thread th([&] {
         runObj();
         if (failed()) e1.set(failMessage());
       });
@@ -522,7 +512,7 @@ class Encoder {
 
   // most common zlib header among Flate streams (plaintext)
   void chooseZlibHeader() {
-    std::unique_ptr<uint64_t[]> cnt(new uint64_t[65536]());  // per 16-bit header
+    lib::unique_ptr<uint64_t[]> cnt(new uint64_t[65536]());  // per 16-bit header
     for (auto& it : seg.items) {
       if (it.kind != Item::STREAM || it.dataEnd - it.dataStart < 2) continue;
       const Obj& d = seg.objs[it.obj];
@@ -573,12 +563,12 @@ class Encoder {
       int n = snprintf(b, sizeof(b), "%d/%d/%d/%d/%d;", fp.predictor, fp.colors, fp.bpc, fp.columns, fp.earlyChange);
       k.append(f.name.data(), f.name.size());
       k.append("/", 1);
-      k.append(b, std::min((size_t)n, sizeof(b) - 1));
+      k.append(b, lib::min((size_t)n, sizeof(b) - 1));
       if (f.name == "CCITTFaxDecode") {
         FilterParams cp = ccittParams(f.parms);
         n = snprintf(b, sizeof(b), "K%d/%d/%d/%d%d%d%d;", cp.ccittK, cp.ccittCols, cp.ccittRows, cp.ccittEol, cp.ccittAlign,
                      cp.ccittEob, cp.ccittBlack1);
-        k.append(b, std::min((size_t)n, sizeof(b) - 1));
+        k.append(b, lib::min((size_t)n, sizeof(b) - 1));
       }
     }
     return k;
@@ -642,23 +632,23 @@ class Encoder {
     // largest first, so one big stream does not finish last on its own
     std::stable_sort(work.begin(), work.end(), [&](size_t a, size_t b) { return streams[a].payload > streams[b].payload; });
     // an error a worker records stops nothing else: it is passed on afterwards, first by stream
-    std::mutex errMu;
+    lib::mutex errMu;
     size_t errAt = SIZE_MAX;
     Message err;
-    std::atomic<size_t> next{0};
+    lib::atomic_size next(0);
     auto worker = [&]() {
       for (size_t k; (k = next++) < work.size();) {
         failClear();
         processStream(streams[work[k]]);
         if (failed()) {
-          std::lock_guard<std::mutex> lk(errMu);
+          lib::lock_guard<lib::mutex> lk(errMu);
           if (work[k] < errAt) { errAt = work[k]; err.set(failMessage()); }
         }
         failClear();
       }
     };
-    unsigned nt = opt_.threads ? opt_.threads : std::max(1u, std::thread::hardware_concurrency());
-    nt = (unsigned)std::min<size_t>(std::min(nt, kMaxThreads), work.size());
+    unsigned nt = opt_.threads ? opt_.threads : lib::max(1u, lib::thread::hardware_concurrency());
+    nt = (unsigned)lib::min<size_t>(lib::min(nt, kMaxThreads), work.size());
     // tables that preflate and the AES code build lazily on first use: build them before the pool
     PreflateBlockTrees::staticLitLenTreeDecoder();
     PreflateBlockTrees::staticDistTreeDecoder();
@@ -668,8 +658,8 @@ class Encoder {
     if (nt <= 1) {
       worker();
     } else {
-      std::thread pool[kMaxThreads];
-      for (unsigned t = 0; t < nt; t++) pool[t] = std::thread(worker);
+      lib::thread pool[kMaxThreads];
+      for (unsigned t = 0; t < nt; t++) pool[t] = lib::thread(worker);
       for (unsigned t = 0; t < nt; t++) pool[t].join();
     }
     if (errAt != SIZE_MAX) {
@@ -724,7 +714,7 @@ class Encoder {
         if (f.name == "CCITTFaxDecode" && opt_.ccitt) {
           FilterParams fp = ccittParams(f.parms);
           Bytes out, recon;
-          if (layerDecode(ctx_, L_CCITT, fp, cur, out, recon) && s.desc.layers.push_back({L_CCITT, std::move(recon)})) {
+          if (layerDecode(ctx_, L_CCITT, fp, cur, out, recon) && s.desc.layers.push_back({L_CCITT, lib::move(recon)})) {
             cur.swap(out);
             continue;
           }
@@ -735,7 +725,7 @@ class Encoder {
         FilterParams fp = params(f.parms);
         Bytes out, recon;
         if (s.desc.layers.size() + 4 > kMaxLayers ||  // room for a predictor and pseudo layers
-            !layerDecode(ctx_, lt, fp, cur, out, recon) || !s.desc.layers.push_back({lt, std::move(recon)})) {
+            !layerDecode(ctx_, lt, fp, cur, out, recon) || !s.desc.layers.push_back({lt, lib::move(recon)})) {
           s.remain = R_ENCODED;
           s.stop = f.name;
           break;
@@ -743,7 +733,7 @@ class Encoder {
         cur.swap(out);
         if ((lt == L_FLATE || lt == L_LZW) && fp.predictor > 1) {
           uint8_t pl = fp.predictor == 2 ? L_TIFF : fp.predictor >= 10 ? L_PNG : L_NONE;
-          if (!pl || !layerDecode(ctx_, pl, fp, cur, out, recon) || !s.desc.layers.push_back({pl, std::move(recon)})) {
+          if (!pl || !layerDecode(ctx_, pl, fp, cur, out, recon) || !s.desc.layers.push_back({pl, lib::move(recon)})) {
             s.remain = R_ENCODED;
             s.stop.set("Predictor");
             break;
@@ -761,7 +751,7 @@ class Encoder {
     if (!parms) return fp;
     auto geti = [&](const char* k, int& v) {
       const Obj* o = idx_.resolve(parms->get(k));
-      if (o && o->t == Obj::INT) v = (int)std::max<int64_t>(-1000000, std::min<int64_t>(1000000, o->i));
+      if (o && o->t == Obj::INT) v = (int)lib::max<int64_t>(-1000000, lib::min<int64_t>(1000000, o->i));
     };
     auto getb = [&](const char* k, bool& v) {
       const Obj* o = idx_.resolve(parms->get(k));
@@ -811,7 +801,7 @@ class Encoder {
       s.item = (int)i;
       streamOfItem_[(int)i] = (int)streams.size();
       streamsByNum_[seg.items[i].num].push_back((int)streams.size());
-      streams.push_back(std::move(s));
+      streams.push_back(lib::move(s));
     }
     processAll();
     // read-only ObjStm expansion; rebuild the index in file order with members
@@ -869,7 +859,7 @@ class Encoder {
       Bytes bmp, recon, back;
       if (!bmpWrap(sp, s.data, bmp, recon)) continue;
       if (!layerEncode(ctx_, L_BMP, recon, bmp, back) || back != s.data) continue;
-      if (!s.desc.layers.push_back({L_BMP, std::move(recon)})) continue;
+      if (!s.desc.layers.push_back({L_BMP, lib::move(recon)})) continue;
       s.data.swap(bmp);
       s.bmp = true;
     }
@@ -899,7 +889,7 @@ class Encoder {
         if (!alphaEncodeLayer(c2, arecon, chk) || chk != rawT) continue;
         s.desc.layers.back().type = L_RGBA;
         s.data.swap(rgba);
-        t.desc.layers.back() = {L_ALPHA, std::move(arecon)};
+        t.desc.layers.back() = {L_ALPHA, lib::move(arecon)};
         t.data.clear();
         t.desc.deferred = true;
         t.desc.payloadLen = t.payload;
@@ -971,7 +961,7 @@ class Encoder {
         ok = layerDecode(ctx_, L_T1, fp, s.data, out, recon);
       }
       if (!ok) continue;
-      if (!s.desc.layers.push_back({L_T1, std::move(recon)})) continue;
+      if (!s.desc.layers.push_back({L_T1, lib::move(recon)})) continue;
       s.data.swap(out);
       s.t1 = true;
     }
@@ -986,7 +976,7 @@ class Encoder {
       Bytes jpeg, recon, back;
       if (!xmpThumbSplit(s.data, jpeg, recon)) continue;
       if (!layerEncode(ctx_, L_XMPJPG, recon, jpeg, back) || back != s.data) continue;
-      if (!s.desc.layers.push_back({L_XMPJPG, std::move(recon)})) continue;
+      if (!s.desc.layers.push_back({L_XMPJPG, lib::move(recon)})) continue;
       s.data.swap(jpeg);
       st.xmpThumbs++;
     }
@@ -997,7 +987,7 @@ class Encoder {
       if (k < 0) continue;
       Bytes recon{(uint8_t)k}, back;
       if (!layerEncode(ctx_, L_ICCREF, recon, Bytes(), back) || back != s.data) continue;
-      if (!s.desc.layers.push_back({L_ICCREF, std::move(recon)})) continue;
+      if (!s.desc.layers.push_back({L_ICCREF, lib::move(recon)})) continue;
       s.data.clear();
       st.iccRefs++;
     }
@@ -1013,7 +1003,7 @@ class Encoder {
       fp.objstmFirst = F->i;
       Bytes out, recon;
       if (!layerDecode(ctx_, L_OBJSTM, fp, s.data, out, recon)) continue;
-      if (!s.desc.layers.push_back({L_OBJSTM, std::move(recon)})) continue;
+      if (!s.desc.layers.push_back({L_OBJSTM, lib::move(recon)})) continue;
       s.data.swap(out);
     }
     // XRef streams: rows predicted from object positions known to the decoder at that point
@@ -1083,7 +1073,7 @@ class Encoder {
         }
       }
       if (!done) continue;
-      if (!s.desc.layers.push_back({L_XREFROWS, std::move(recon)})) continue;
+      if (!s.desc.layers.push_back({L_XREFROWS, lib::move(recon)})) continue;
       s.data.swap(out);
     }
     // extension and storage
@@ -1143,7 +1133,8 @@ class Encoder {
           if (nums->a[k].t == Obj::INT && nums->a[k].i >= 0 && nums->a[k].i <= 0xFFFFFFFFll && nums->a[k + 1].t == Obj::REF &&
               nums->a[k + 1].i >= 0 && nums->a[k + 1].i <= 0xFFFFFFFFll)
             numsArrays_[(uint32_t)nums->a[k + 1].i] = (uint32_t)nums->a[k].i;
-      for (const char* k : {"Widths", "W"}) {
+      static const char* const kWidthKeys[] = {"Widths", "W"};
+      for (const char* k : kWidthKeys) {
         const Obj* w = o->get(k);
         if (w && w->t == Obj::REF && w->i >= 0 && w->i <= 0xFFFFFFFFll) widthArrays_[(uint32_t)w->i] = o;
       }
@@ -1358,7 +1349,7 @@ class Encoder {
     fa.fileSize = in_.size();
     fa.bias = bias_;
     dump.hdr.offsetBias = bias_;
-    std::function<int64_t(uint64_t)> itemAt = [&](uint64_t off) -> int64_t {
+    lib::function<int64_t(uint64_t)> itemAt = [&](uint64_t off) -> int64_t {
       off += bias_;
       auto f = std::lower_bound(fa.starts.begin(), fa.starts.end(), off);
       return f != fa.starts.end() && *f == off ? (int64_t)(f - fa.starts.begin()) : -1;
@@ -1861,7 +1852,7 @@ static int realMain(int argc, char** argv) {
       };
       switch (o) {
         case 'P': { const char* v = val(); opt.password.setCut(v, strlen(v)); break; }
-        case 'f': opt.filterLevel = (int)std::min(1LL, num()); break;
+        case 'f': opt.filterLevel = (int)lib::min(1LL, num()); break;
         case 's': {
           long long s = num();
           if (s > kSyntaxLevelMax) {
@@ -1875,7 +1866,7 @@ static int realMain(int argc, char** argv) {
         case 'D': opt.dedup = false; break;
         case 'd': opt.derive = false; break;
         case 'g': opt.ccitt = true; break;
-        case 'j': opt.threads = (unsigned)std::min((long long)kMaxThreads, num()); break;
+        case 'j': opt.threads = (unsigned)lib::min((long long)kMaxThreads, num()); break;
         case 'a': opt.rgba = true; break;
         case 'c': opt.chanMap = val(); break;
         case 'n': opt.noVerify = true; break;
@@ -1965,11 +1956,6 @@ static int realMain(int argc, char** argv) {
 }  // namespace pdd
 
 int main(int argc, char** argv) {
-  // no exceptions: an allocation that cannot be met (a size from a corrupt dump that the checks
-  // let through) ends the program with a message instead of an abort
-  std::set_new_handler([] {
-    fputs("pdfdump: out of memory\n", stderr);
-    std::_Exit(1);
-  });
+  // (an allocation that cannot be met ends the program with a message: operator new, base.inc)
   return pdd::realMain(argc, argv);
 }

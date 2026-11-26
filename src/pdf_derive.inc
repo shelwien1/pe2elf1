@@ -417,7 +417,7 @@ static void strRender(const Bytes& c, int policy, Bytes& out) {
 }
 
 // string token ranges of an object's text
-static void stringTokens(const uint8_t* p, size_t n, std::vector<std::pair<size_t, size_t>>& out) {
+static void stringTokens(const uint8_t* p, size_t n, std::vector<lib::pair<size_t, size_t>>& out) {
   size_t i = 0;
   while (i < n) {
     uint8_t c = p[i];
@@ -447,7 +447,7 @@ static void stringTokens(const uint8_t* p, size_t n, std::vector<std::pair<size_
 
 // encoder: placeholders for the encrypted strings of one object
 static void cryptStrings(const uint8_t* p, size_t n, uint8_t cipher, const DerivCrypt& dc, std::vector<DerivEdit>& edits) {
-  std::vector<std::pair<size_t, size_t>> toks;
+  std::vector<lib::pair<size_t, size_t>> toks;
   stringTokens(p, n, toks);
   size_t taken = edits.size();
   for (auto& t : toks) {
@@ -475,7 +475,7 @@ static void cryptStrings(const uint8_t* p, size_t n, uint8_t cipher, const Deriv
     e.rep.push_back((uint8_t)(policy | (cipher << 4)));
     putLenBytesTo(e.rep, pt.data(), pt.size());
     if (cipher == CI_AES128 || cipher == CI_AES256) e.rep.insert(e.rep.end(), iv, iv + 16);
-    edits.push_back(std::move(e));
+    edits.push_back(lib::move(e));
   }
 }
 
@@ -507,7 +507,7 @@ struct SigBlobs {
 
 // encoder: placeholders for the signature blobs of one object; DER elements appended to p7s
 static void sigStrings(const uint8_t* p, size_t n, std::vector<DerivEdit>& edits, Bytes& p7s) {
-  std::vector<std::pair<size_t, size_t>> toks;
+  std::vector<lib::pair<size_t, size_t>> toks;
   stringTokens(p, n, toks);
   for (auto& t : toks) {
     if (p[t.first] != '<' || t.second - t.first < 2 + 64) continue;
@@ -536,7 +536,7 @@ static void sigStrings(const uint8_t* p, size_t n, std::vector<DerivEdit>& edits
     if (z != v.size()) continue;
     DerivEdit e{t.first, t.second, {kDerivEsc, 'G', (uint8_t)(lower ? 1 : 0)}};
     putVarTo(e.rep, v.size() - der);
-    edits.push_back(std::move(e));
+    edits.push_back(lib::move(e));
     p7s.insert(p7s.end(), v.begin(), v.begin() + der);
   }
 }
@@ -606,7 +606,7 @@ struct B64Blobs {
   size_t dpos = 0, rpos = 0, index = 0;
   const std::vector<Bytes>* fastZ = nullptr;  // encoder verify: the original zlib bytes per blob
   const CodecCtx* ctx = nullptr;
-  std::function<Bytes(uint32_t, const char*)> file;  // blob file k with its extension
+  lib::function<Bytes(uint32_t, const char*)> file;  // blob file k with its extension
   uint32_t nextFile = 0;
 };
 
@@ -624,7 +624,7 @@ static void b64Strings(const CodecCtx& ctx, const uint8_t* p, size_t n, std::vec
       rec.push_back(1);
       putLenBytesTo(rec, (const uint8_t*)ext.data(), ext.size());
       fileExt.push_back(ext);
-      files.push_back(std::move(v));
+      files.push_back(lib::move(v));
     } else {
       rec.push_back(0);
       data.insert(data.end(), v.begin(), v.end());
@@ -660,7 +660,7 @@ static void b64Strings(const CodecCtx& ctx, const uint8_t* p, size_t n, std::vec
       flags |= 1;
       put(out);
       putLenBytesTo(rec, recon.data(), recon.size());
-      if (orig) orig->push_back(std::move(dec));
+      if (orig) orig->push_back(lib::move(dec));
     } else {
       // not a zlib stream: only quoted runs ("...", '...', data:...;base64,...") count as base64;
       // a run of name characters such as a /CharSet string (/A/B/C...) also matches the alphabet
@@ -732,7 +732,7 @@ static bool parseFontOf(int kind, const Bytes& b, const Bytes& t1recon, FontMetr
 
 // Font programs (and CIDToGIDMap streams) by source text; the metrics are parsed once.
 struct DerivFonts {
-  std::function<Bytes(uint32_t, const char*)> load;  // own file by ordinal and extension
+  lib::function<Bytes(uint32_t, const char*)> load;  // own file by ordinal and extension
   std::unordered_map<uint32_t, Bytes> inl;                   // inline streams seen so far
   FontCache cache;
   bool source(const std::string& src, Bytes& out) {
@@ -856,7 +856,7 @@ static size_t topKeyValue(const uint8_t* p, size_t n, const char* key) {
 // reference or the references in a /K array. Both sides add an object's /K after its own /P is
 // done, top-level objects in item order and ObjStm members in member order.
 struct StructMap {
-  typedef std::pair<uint32_t, uint32_t> Ref;
+  typedef lib::pair<uint32_t, uint32_t> Ref;
   std::unordered_map<uint32_t, Ref> parent;
   // for /ParentTree: /StructParents -> page, /StructParent -> object, (page, MCID) -> element,
   // object named by an OBJR -> element
@@ -925,7 +925,7 @@ static void structAddKids(const uint8_t* p, size_t n, uint32_t num, uint32_t gen
   else add(*k);
 }
 
-static ValStr refStr(std::pair<uint32_t, uint32_t> r);
+static ValStr refStr(lib::pair<uint32_t, uint32_t> r);
 
 // Walks the /Nums array of a number tree leaf: key, value, key, value, ...; a value is "N G R",
 // null, or an array of those. Encoder and decoder feed it the same tokens.
@@ -1053,7 +1053,7 @@ static bool refAt(const uint8_t* p, size_t n, size_t a, uint64_t& num, uint64_t&
   return true;
 }
 
-static ValStr refStr(std::pair<uint32_t, uint32_t> r) {
+static ValStr refStr(lib::pair<uint32_t, uint32_t> r) {
   ValStr s;
   s.format("%u %u R", r.first, r.second);
   return s;
@@ -1417,7 +1417,7 @@ static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const 
       if (!sig || !sig->data || i + 1 >= n) return false;
       int lowerCase = p[++i];
       if (lowerCase > 1) return false;
-      Bytes rest(p + i + 1, p + std::min(n, i + 12));
+      Bytes rest(p + i + 1, p + lib::min(n, i + 12));
       RBuf r(rest);
       uint64_t pad = r.var();
       const Bytes& s = *sig->data;
@@ -1538,42 +1538,44 @@ static void derivChoose(const uint8_t* p, size_t n, int kind, uint8_t cls, const
                         uint32_t objNum, std::vector<DerivEdit>& edits) {
   std::vector<DerivTok> toks;
   derivWalk(p, n, toks);
-  auto tryCodes = [&](const DerivTok& t, std::initializer_list<uint8_t> codes) {
+  auto tryCodes = [&](const DerivTok& t, const char* codes) {  // codes tried in order
     ValStr v;
-    for (uint8_t c : codes)
+    for (const char* q = codes; *q; q++) {
+      uint8_t c = (uint8_t)*q;
       if (derivValue(c, f, ds, objNum, v) && v.eq((const char*)p + t.a, t.b - t.a)) {
         edits.push_back({t.a, t.b, Bytes{kDerivEsc, c}});
         return;
       }
+    }
   };
   for (auto& t : toks) {
     if (t.kind == DerivTok::REF) continue;
     if (kind == 2) {
       if (t.kind == DerivTok::INT) {
-        if (t.path == "/Length") tryCodes(t, {'L'});
-        else if (t.path == "/DL") tryCodes(t, {'D'});
-        else if (t.path == "/Length1") tryCodes(t, {'1', 'D'});
-        else if (t.path == "/Length2") tryCodes(t, {'2'});
-        else if (t.path == "/Length3") tryCodes(t, {'3'});
-        else if (t.path == "/N" && cls == SC_OBJSTM) tryCodes(t, {'N'});
-        else if (t.path == "/First" && cls == SC_OBJSTM) tryCodes(t, {'F'});
-        else if (t.path == "/Width") tryCodes(t, {'W'});
-        else if (t.path == "/Height") tryCodes(t, {'H'});
-        else if (t.path == "/DecodeParms/Columns" || t.path == "/DecodeParms[]/Columns") tryCodes(t, {'W'});
-        else if (t.path == "/DecodeParms/Rows" || t.path == "/DecodeParms[]/Rows") tryCodes(t, {'H'});
-        else if (t.path == "/Params/Size") tryCodes(t, {'D'});
-        else if (t.path == "/Prev" && cls == SC_XREF) tryCodes(t, {'p'});
+        if (t.path == "/Length") tryCodes(t, "L");
+        else if (t.path == "/DL") tryCodes(t, "D");
+        else if (t.path == "/Length1") tryCodes(t, "1D");
+        else if (t.path == "/Length2") tryCodes(t, "2");
+        else if (t.path == "/Length3") tryCodes(t, "3");
+        else if (t.path == "/N" && cls == SC_OBJSTM) tryCodes(t, "N");
+        else if (t.path == "/First" && cls == SC_OBJSTM) tryCodes(t, "F");
+        else if (t.path == "/Width") tryCodes(t, "W");
+        else if (t.path == "/Height") tryCodes(t, "H");
+        else if (t.path == "/DecodeParms/Columns" || t.path == "/DecodeParms[]/Columns") tryCodes(t, "W");
+        else if (t.path == "/DecodeParms/Rows" || t.path == "/DecodeParms[]/Rows") tryCodes(t, "H");
+        else if (t.path == "/Params/Size") tryCodes(t, "D");
+        else if (t.path == "/Prev" && cls == SC_XREF) tryCodes(t, "p");
       } else if (t.path == "/Params/CheckSum" && t.b - t.a == 32) {
-        tryCodes(t, {'C', 'c'});
+        tryCodes(t, "Cc");
       }
     } else if (kind == 1) {
-      if (t.kind == DerivTok::INT && t.path == "@") tryCodes(t, {'l'});
+      if (t.kind == DerivTok::INT && t.path == "@") tryCodes(t, "l");
     } else {
       if (t.kind != DerivTok::INT) continue;
-      if (t.path == "startxref") tryCodes(t, {'S'});
-      else if (t.path == "/Prev") tryCodes(t, {'P'});
-      else if (t.path == "/Size") tryCodes(t, {'Z'});
-      else if (t.path == "/XRefStm") tryCodes(t, {'X'});
+      if (t.path == "startxref") tryCodes(t, "S");
+      else if (t.path == "/Prev") tryCodes(t, "P");
+      else if (t.path == "/Size") tryCodes(t, "Z");
+      else if (t.path == "/XRefStm") tryCodes(t, "X");
     }
   }
 }

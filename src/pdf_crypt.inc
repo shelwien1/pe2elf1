@@ -47,7 +47,7 @@ struct Md5 {
     size_t fill = len & 63;
     len += n;
     if (fill) {
-      size_t k = std::min(n, 64 - fill);
+      size_t k = lib::min(n, 64 - fill);
       memcpy(buf + fill, p, k);
       p += k; n -= k; fill += k;
       if (fill < 64) return;
@@ -191,13 +191,13 @@ static void rc4(const uint8_t* key, size_t klen, const uint8_t* in, size_t n, ui
   for (int i = 0; i < 256; i++) S[i] = (uint8_t)i;
   for (int i = 0, j = 0; i < 256; i++) {
     j = (j + S[i] + key[i % klen]) & 255;
-    std::swap(S[i], S[j]);
+    lib::swap(S[i], S[j]);
   }
   int i = 0, j = 0;
   for (size_t k = 0; k < n; k++) {
     i = (i + 1) & 255;
     j = (j + S[i]) & 255;
-    std::swap(S[i], S[j]);
+    lib::swap(S[i], S[j]);
     out[k] = in[k] ^ S[(S[i] + S[j]) & 255];
   }
 }
@@ -346,7 +346,7 @@ static KeyBuf objectKey(const KeyBuf& fileKey, uint32_t num, uint32_t gen, bool 
   if (aes) m.update("sAlT", 4);
   uint8_t h[16];
   m.final(h);
-  return KeyBuf(h, std::min<size_t>(fileKey.size() + 5, 16));
+  return KeyBuf(h, lib::min<size_t>(fileKey.size() + 5, 16));
 }
 
 // Decrypts one stream/string. Returns false when the unit cannot round-trip (AES: bad length or
@@ -496,7 +496,7 @@ struct Security {
   static KeyBuf pad(const Password& pw) {
     KeyBuf r;
     r.resize(32);
-    size_t n = std::min<size_t>(32, pw.size());
+    size_t n = lib::min<size_t>(32, pw.size());
     memcpy(r.data(), pw.data(), n);
     memcpy(r.data() + n, kPwPad, 32 - n);
     return r;
@@ -505,7 +505,7 @@ struct Security {
   KeyBuf computeKey(const KeyBuf& padded) const {
     Md5 m;
     m.update(padded.data(), 32);
-    m.update(O.data(), std::min<size_t>(32, O.size()));
+    m.update(O.data(), lib::min<size_t>(32, O.size()));
     uint8_t p4[4] = {(uint8_t)P, (uint8_t)(P >> 8), (uint8_t)(P >> 16), (uint8_t)(P >> 24)};
     m.update(p4, 4);
     m.update(ID0.data(), ID0.size());
@@ -570,8 +570,8 @@ struct Security {
   // hash 64; K1 is 64 repeats of password + hash + user data (15 KB).
   static KeyBuf hash2B(const Password& pw, const uint8_t* salt, const uint8_t* udata, size_t ulen, bool r6) {
     static const size_t kPw = 127, kU = 48, kK1 = 64 * (kPw + 64 + kU);
-    size_t pl = std::min(pw.size(), kPw);
-    ulen = std::min(ulen, kU);
+    size_t pl = lib::min(pw.size(), kPw);
+    ulen = lib::min(ulen, kU);
     uint8_t in[kPw + 8 + kU];
     memcpy(in, pw.data(), pl);
     memcpy(in + pl, salt, 8);

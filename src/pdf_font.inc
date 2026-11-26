@@ -39,7 +39,7 @@ struct FontMetrics {
     for (auto& e : stdEnc) e = -1;
   }
   void setCidMap(const uint8_t* p, size_t n) {
-    cidMapLen = (uint32_t)std::min(n, sizeof(cidMap));
+    cidMapLen = (uint32_t)lib::min(n, sizeof(cidMap));
     if (cidMapLen) memcpy(cidMap, p, cidMapLen);  // p may be null for an empty map
   }
 };
@@ -106,10 +106,10 @@ static bool parseTrueType(const uint8_t* p, size_t n, FontMetrics& m) {
   m.upem = fntU16(p, n, head + 18, ok);
   uint32_t ng = fntU16(p, n, maxp + 4, ok), nh = fntU16(p, n, hhea + 34, ok);
   if (!ok || m.upem < 16 || m.upem > 16384 || ng == 0 || nh == 0) return false;
-  nh = std::min(nh, ng);
+  nh = lib::min(nh, ng);
   if (hmtxLen < 4 * (size_t)nh) return false;
   m.nglyphs = ng;  // a u16: at most kMaxGlyphs - 1
-  for (uint32_t g = 0; g < ng; g++) m.adv[g] = (int32_t)fntU16(p, n, hmtx + 4 * (size_t)std::min(g, nh - 1), ok);
+  for (uint32_t g = 0; g < ng; g++) m.adv[g] = (int32_t)fntU16(p, n, hmtx + 4 * (size_t)lib::min(g, nh - 1), ok);
   if (!ok) return false;
   if (cmap) {
     const uint8_t* c = p + cmap;
@@ -124,8 +124,8 @@ static bool parseTrueType(const uint8_t* p, size_t n, FontMetrics& m) {
       uint32_t fmt = fntU16(c, cn, off, ok2);
       size_t len = fmt == 0 ? 262 : fntU16(c, cn, off + 2, ok2);
       if (!ok2 || (fmt != 0 && fmt != 4 && fmt != 6)) continue;
-      len = std::min(len, cn - off);
-      len = std::min(len, sizeof(m.cmap[slot]));  // format 0: 262 bytes; 4 and 6: a u16 length
+      len = lib::min(len, cn - off);
+      len = lib::min(len, sizeof(m.cmap[slot]));  // format 0: 262 bytes; 4 and 6: a u16 length
       memcpy(m.cmap[slot], c + off, len);
       m.cmapLen[slot] = (uint32_t)len;
     }
@@ -315,14 +315,14 @@ static bool parseCff(const uint8_t* p, size_t n, FontMetrics& m) {
              else if (op == 21 && s.size() == 1) nominal = s[0];
              return true;
            }) &&
-           dflt == std::floor(dflt) && nominal == std::floor(nominal) && std::fabs(dflt) <= 1e6 && std::fabs(nominal) <= 1e6;
+           dflt == floor(dflt) && nominal == floor(nominal) && fabs(dflt) <= 1e6 && fabs(nominal) <= 1e6;
   };
   CffIndex cs;
   if (!cs.read(p, n, (size_t)csOff) || cs.count == 0) return false;
   size_t ng = cs.count;
   double fdDflt[256], fdNom[256];  // per font DICT (at most 255)
   size_t nfd = 0;
-  std::unique_ptr<uint8_t[]> fdOfP(new uint8_t[kMaxGlyphs]());  // per glyph (ng is a u16)
+  lib::unique_ptr<uint8_t[]> fdOfP(new uint8_t[kMaxGlyphs]());  // per glyph (ng is a u16)
   uint8_t* fdOf = fdOfP.get();
   if (cid) {
     // CID-keyed: a Private DICT per font DICT of the FDArray, FDSelect picks one per glyph; the
@@ -375,8 +375,8 @@ static bool parseCff(const uint8_t* p, size_t n, FontMetrics& m) {
     fdDflt[nfd] = dd;
     fdNom[nfd++] = nn;
   }
-  double up = std::floor(1.0 / fm + 0.5);
-  if (up < 16 || up > 16384 || std::fabs(up * fm - 1.0) > 1e-9) return false;
+  double up = floor(1.0 / fm + 0.5);
+  if (up < 16 || up > 16384 || fabs(up * fm - 1.0) > 1e-9) return false;
   m.upem = (uint32_t)up;
   if (ng >= kMaxGlyphs) return false;
   m.nglyphs = (uint32_t)ng;
@@ -386,7 +386,7 @@ static bool parseCff(const uint8_t* p, size_t n, FontMetrics& m) {
     m.adv[g] = t2Width(p + a, b - a, (int32_t)fdDflt[fdOf[g]], (int32_t)fdNom[fdOf[g]]);
   }
   // charset: glyph id -> SID
-  std::unique_ptr<uint32_t[]> sidP(new uint32_t[kMaxGlyphs]());
+  lib::unique_ptr<uint32_t[]> sidP(new uint32_t[kMaxGlyphs]());
   uint32_t* sid = sidP.get();
   bool ok = true;
   if (charsetOff == 0) {
@@ -543,7 +543,7 @@ struct T1NameTable {
     int32_t idx;
   };
   static const size_t kSlots = 2 * kMaxGlyphs;
-  std::unique_ptr<Slot[]> tab{new Slot[kSlots]()};
+  lib::unique_ptr<Slot[]> tab{new Slot[kSlots]()};
   size_t count = 0;
   Slot& find(const uint8_t* q, size_t n) {
     uint64_t h = 1469598103934665603ull;
@@ -573,12 +573,12 @@ static bool parseType1(const Bytes& stored, const Bytes& recon, FontMetrics& m) 
     if (!lx.parse(a) || a.t != Obj::ARR || a.a.empty()) return false;
     double f = a.a[0].t == Obj::INT ? (double)a.a[0].i : a.a[0].t == Obj::REAL ? a.a[0].r : 0;
     if (f <= 0) return false;
-    double up = std::floor(1.0 / f + 0.5);
-    if (up < 16 || up > 16384 || std::fabs(up * f - 1.0) > 1e-9) return false;
+    double up = floor(1.0 / f + 0.5);
+    if (up < 16 || up > 16384 || fabs(up * f - 1.0) > 1e-9) return false;
     m.upem = (uint32_t)up;
   }
   // charstrings: "/name len RD <body>"
-  std::vector<std::pair<size_t, size_t>> blobs;
+  std::vector<lib::pair<size_t, size_t>> blobs;
   t1FindBlobs(p + s, n, rd, blobs);
   T1NameTable byName;
   for (auto& b : blobs) {
@@ -601,7 +601,7 @@ static bool parseType1(const Bytes& stored, const Bytes& recon, FontMetrics& m) 
     if (m.nglyphs == kMaxGlyphs - 1) break;  // (as CFF and TrueType: 65535 glyphs at most)
     sl = {name, (uint32_t)nameLen, (int32_t)m.nglyphs};
     m.adv[m.nglyphs] = w == kNoAdv || w < INT32_MIN + 1 || w > INT32_MAX ? kNoAdv : (int32_t)w;
-    m.den[m.nglyphs++] = (uint16_t)std::min<uint32_t>(d, 65535);
+    m.den[m.nglyphs++] = (uint16_t)lib::min<uint32_t>(d, 65535);
   }
   if (m.nglyphs == 0) return false;
   m.hasDen = true;
@@ -767,7 +767,7 @@ struct FontCache {
   static const int kSlots = 8;
   struct Slot {
     std::string key;
-    std::unique_ptr<FontMetrics> m;
+    lib::unique_ptr<FontMetrics> m;
   };
   Slot slot[kSlots];
   int next = 0;

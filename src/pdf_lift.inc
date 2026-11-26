@@ -118,7 +118,7 @@ struct LiftGroups {
 };
 
 struct LiftStrings {  // strings by marker order: literal strings (marker 5), hex strings (2, 3)
-  std::vector<std::pair<const uint8_t*, size_t>> lit, hex;
+  std::vector<lib::pair<const uint8_t*, size_t>> lit, hex;
 };
 
 static int liftOpOf(const uint8_t* t, size_t l) {
@@ -209,7 +209,7 @@ static void liftGroup(LiftMode mode, const uint8_t* s, size_t n, LiftGroups& g, 
     pend.clear();
   };
   auto marker = [&]() {
-    uint8_t slot = mode == LIFT_CS ? (uint8_t)(arr ? 7 : std::min(operands, 6)) : (uint8_t)(arr ? 1 : 0);
+    uint8_t slot = mode == LIFT_CS ? (uint8_t)(arr ? 7 : lib::min(operands, 6)) : (uint8_t)(arr ? 1 : 0);
     pend.push_back({markers++, slot});
     if (!arr) operands++;
   };
@@ -229,7 +229,7 @@ static void liftGroup(LiftMode mode, const uint8_t* s, size_t n, LiftGroups& g, 
     if (c == 1) { marker(); i++; continue; }
     if (c == 2 || c == 3 || c == 5) {
       if (!arr) operands++;
-      const std::vector<std::pair<const uint8_t*, size_t>>* v = strs ? (c == 5 ? &strs->lit : &strs->hex) : nullptr;
+      const std::vector<lib::pair<const uint8_t*, size_t>>* v = strs ? (c == 5 ? &strs->lit : &strs->hex) : nullptr;
       size_t& k = c == 5 ? litK : hexK;
       if (v && k < v->size()) addText((*v)[k].first, (*v)[k].second);
       k++;
@@ -241,7 +241,7 @@ static void liftGroup(LiftMode mode, const uint8_t* s, size_t n, LiftGroups& g, 
     if (c == '%') {
       size_t j = i;
       while (j < n && s[j] != '\r' && s[j] != '\n') j += s[j] == 0 ? 2 : 1;
-      skipTo(i, std::min(j, n));
+      skipTo(i, lib::min(j, n));
       continue;
     }
     if (c == '(') {
@@ -254,7 +254,7 @@ static void liftGroup(LiftMode mode, const uint8_t* s, size_t n, LiftGroups& g, 
         else if (s[j] == ')') depth--;
         j++;
       }
-      skipTo(i, std::min(j, n));
+      skipTo(i, lib::min(j, n));
       if (!arr) operands++;
       continue;
     }
@@ -266,7 +266,7 @@ static void liftGroup(LiftMode mode, const uint8_t* s, size_t n, LiftGroups& g, 
       }
       size_t j = i + 1;
       while (j < n && s[j] != '>') j += s[j] == 0 ? 2 : 1;
-      skipTo(i, std::min(j + 1, n));
+      skipTo(i, lib::min(j + 1, n));
       if (!arr) operands++;
       continue;
     }
@@ -284,7 +284,7 @@ static void liftGroup(LiftMode mode, const uint8_t* s, size_t n, LiftGroups& g, 
     }
     if (c == ']') {
       if (mode == LIFT_OBJ) flush(s + i, 1);
-      arr = std::max(0, arr - 1);
+      arr = lib::max(0, arr - 1);
       i++;
       continue;
     }
@@ -322,7 +322,7 @@ static void liftGroup(LiftMode mode, const uint8_t* s, size_t n, LiftGroups& g, 
           while (k + 2 <= n && !(s[k] == 'E' && s[k + 1] == 'I' && isWS(s[k - 1]) && (k + 2 == n || isWS(s[k + 2]))))
             k += s[k] == 0 ? 2 : 1;
           i = j;
-          skipTo(i, std::min(k, n));
+          skipTo(i, lib::min(k, n));
           continue;
         }
       }
@@ -342,7 +342,7 @@ static void liftGroup(LiftMode mode, const uint8_t* s, size_t n, LiftGroups& g, 
 struct LiftWalk {
   int64_t cx = 0, cy = 0, sx = 0, sy = 0;
   bool valid = false;
-  std::vector<std::array<int64_t, 2>> td;
+  std::vector<lib::array<int64_t, 2>> td;
   explicit LiftWalk(uint32_t tdKeys) : td(tdKeys) {}
   // prediction for operand i of event e given the event's earlier operand values
   bool pred(const LiftEvent& e, int i, const int64_t* v, int64_t& p) const {
@@ -468,7 +468,7 @@ struct LiftEntropy {
     double h = 0;
     for (uint32_t t = 0; t < ntouched; t++) {
       uint32_t k = touched[t];
-      h -= pair[k] * std::log2((double)pair[k] / ctx[k >> 8]);
+      h -= pair[k] * log2((double)pair[k] / ctx[k >> 8]);
     }
     for (uint32_t t = 0; t < ntouched; t++) {
       pair[touched[t]] = 0;
@@ -574,7 +574,7 @@ static bool liftUnitOf(const std::vector<LiftNum>& v, LiftUnit& u, std::vector<i
     int sc;
     bool oi;
     if (!liftScale(x, sc, oi) || sc > 6) return false;
-    S = std::max(S, sc);
+    S = lib::max(S, sc);
     uint64_t a = x.m < 0 ? 0 - (uint64_t)x.m : (uint64_t)x.m;
     if (sc > 0 && a < (uint64_t)kPow10[sc]) {
       int l = oi ? 0 : 1;
@@ -702,7 +702,7 @@ static void liftPackStrings(const Bytes& lens, const Bytes& data, Bytes& out) {
   out.insert(out.end(), lens.begin(), lens.end());
   out.insert(out.end(), data.begin(), data.end());
 }
-static bool liftUnpackStrings(const Bytes& in, std::vector<std::pair<const uint8_t*, size_t>>& out) {
+static bool liftUnpackStrings(const Bytes& in, std::vector<lib::pair<const uint8_t*, size_t>>& out) {
   out.clear();
   if (in.empty()) return true;
   RBuf hh(in);
@@ -735,7 +735,7 @@ static void liftForward(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums
   hex.clear();
   str.clear();
   Bytes hexLen, hexData, strLen;  // lengths kept apart from the bytes (xz: about -10% on .csh)
-  std::vector<std::pair<size_t, size_t>> litAt, hexAt;  // (offset, length) in in / hexData
+  std::vector<lib::pair<size_t, size_t>> litAt, hexAt;  // (offset, length) in in / hexData
   skel.reserve(n);
   std::vector<LiftNum> vals;
   size_t biPos = SIZE_MAX;
@@ -770,7 +770,7 @@ static void liftForward(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums
         i = j;
         continue;
       }
-      j = std::min(j, n);
+      j = lib::min(j, n);
       copy(i, j);
       i = j;
       continue;
@@ -796,7 +796,7 @@ static void liftForward(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums
         i = j + 1;
         continue;
       }
-      j = std::min(j + 1, n);
+      j = lib::min(j + 1, n);
       copy(i, j);
       i = j;
       continue;
@@ -823,7 +823,7 @@ static void liftForward(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums
     if (mode == LIFT_CS && j - i == 2 && p[i] == 'I' && p[i + 1] == 'D') {
       size_t k = j + 1;
       while (k + 2 <= n && !(p[k] == 'E' && p[k + 1] == 'I' && isWS(p[k - 1]) && (k + 2 == n || isWS(p[k + 2])))) k++;
-      k = std::min(k, n);
+      k = lib::min(k, n);
       Bytes rec;
       if (ctx && inl && biPos != SIZE_MAX && j < k && isWS(p[j]) && k < n &&
           liftInlineImage(*ctx, p + biPos, i - biPos, p + j + 1, k - (j + 1), rec)) {
@@ -865,7 +865,7 @@ static void liftForward(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums
   std::vector<std::vector<uint32_t>> members(g.count);
   for (size_t k = 0; k < vals.size(); k++) members[g.ofMarker[k]].push_back((uint32_t)k);
   Bytes head, data;
-  std::unique_ptr<LiftEntropy> estp(new LiftEntropy());  // 513 KB: not on a thread's stack
+  lib::unique_ptr<LiftEntropy> estp(new LiftEntropy());  // 513 KB: not on a thread's stack
   LiftEntropy& est = *estp;
   for (auto& mem : members) {
     std::vector<LiftNum> gv;

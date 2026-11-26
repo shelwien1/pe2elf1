@@ -32,7 +32,7 @@ struct FixedVec {
   }
   bool push_back(T&& v) {
     if (n == N) return false;
-    a[n++] = std::move(v);
+    a[n++] = lib::move(v);
     return true;
   }
   bool resize(size_t m) {
@@ -148,7 +148,7 @@ struct FixedStr {
   }
   void clear() { n = 0; s[0] = 0; }
   // the first N bytes of a longer input
-  void setCut(const char* p, size_t len) { set(p, std::min(len, N)); }
+  void setCut(const char* p, size_t len) { set(p, lib::min(len, N)); }
   // printf into the string, cut at N bytes; false if it was cut
   bool format(const char* fmt, ...) {
     va_list ap;
@@ -156,7 +156,7 @@ struct FixedStr {
     int r = vsnprintf(s, N + 1, fmt, ap);
     va_end(ap);
     if (r < 0) { clear(); return false; }
-    n = (uint32_t)std::min<size_t>((size_t)r, N);
+    n = (uint32_t)lib::min<size_t>((size_t)r, N);
     return (size_t)r <= N;
   }
   const char* c_str() const { return s; }
@@ -208,7 +208,7 @@ struct NameTable {
   void sorted(const E** out) const {
     size_t m = e.size();
     for (size_t i = 0; i < m; i++) out[i] = &e[i];
-    std::sort(out, out + m, [](const E* a, const E* b) { return strcmp(a->k.c_str(), b->k.c_str()) < 0; });
+    lib::sort(out, out + m, [](const E* a, const E* b) { return strcmp(a->k.c_str(), b->k.c_str()) < 0; });
   }
 };
 
@@ -220,7 +220,7 @@ struct KeyBuf {
   KeyBuf() {}
   KeyBuf(const uint8_t* p, size_t len) { assign(p, len); }
   void assign(const uint8_t* p, size_t len) {
-    n = std::min(len, sizeof(b));
+    n = lib::min(len, sizeof(b));
     if (n) memcpy(b, p, n);
   }
   void resize(size_t m) {
@@ -273,7 +273,7 @@ struct ChanMap {
             int c = (int)(q - kChanLetters);
             if (fileOf[c] >= 0) { err.format("channel '%c' given twice", ch); return false; }
             fileOf[c] = (int)nfiles;
-            first = std::min(first, c);
+            first = lib::min(first, c);
           }
           suffix[nfiles++].set(kChanSuffix[first]);  // each group a new channel: at most CH_COUNT
         }
@@ -361,7 +361,7 @@ static bool parseHeader(const Bytes& meta, DumpHeader& h, size_t& meta0) {
   size_t p = 0;
   bool ok = true;
   auto need = [&](size_t n) {
-    if (ok && n > meta.size() - std::min(p, meta.size())) ok = fail("dump header truncated");
+    if (ok && n > meta.size() - lib::min(p, meta.size())) ok = fail("dump header truncated");
     return ok;
   };
   auto var = [&]() -> uint64_t {
@@ -457,7 +457,7 @@ class ChanWriter {
   void classPut(int cf, const uint8_t* p, size_t n) { d_.classFile[cf].insert(d_.classFile[cf].end(), p, p + n); }
   uint32_t ownAdd(const ShortName& ext, Bytes&& data) {
     d_.ownExt.push_back(ext);
-    d_.ownData.push_back(std::move(data));
+    d_.ownData.push_back(lib::move(data));
     return (uint32_t)(d_.ownExt.size() - 1);
   }
   uint64_t stat[CH_COUNT] = {};
@@ -469,9 +469,9 @@ class ChanWriter {
 class ChanReader {
  public:
   // ownLoader: fetches own file by (ordinal, ext); used when the dump comes from disk.
-  typedef std::function<Bytes(uint32_t, const char*)> OwnLoader;  // ordinal, extension
+  typedef lib::function<Bytes(uint32_t, const char*)> OwnLoader;  // ordinal, extension
   ChanReader(const DumpFiles& d, size_t meta0, OwnLoader loader, const std::vector<Bytes>* ownData = nullptr)
-      : d_(d), loader_(std::move(loader)), ownData_(ownData ? ownData : &d.ownData) {
+      : d_(d), loader_(lib::move(loader)), ownData_(ownData ? ownData : &d.ownData) {
     for (auto& p : pos_) p = 0;
     pos_[0] = meta0;
     for (int i = 0; i < CF_COUNT; i++) cfPos_[i] = 0;

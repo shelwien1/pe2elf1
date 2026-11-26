@@ -23,7 +23,7 @@ struct CodecCtx {
   const ObjPositions* objPos = nullptr;  // objects written so far (L_XREFROWS predictions)
   bool verify = true;  // encoder: re-encode each Flate layer and compare (off with -n)
   // L_ALPHA: the stored form (32 bpp BMP) of the k-th stream, or null
-  std::function<const Bytes*(uint64_t)> alphaSource;
+  lib::function<const Bytes*(uint64_t)> alphaSource;
 };
 
 // Predictor / filter parameters from /DecodeParms (encoder side only).
@@ -34,7 +34,7 @@ struct FilterParams {
   int ccittK = 0, ccittCols = 1728, ccittRows = 0;  // L_CCITT
   bool ccittEol = false, ccittAlign = false, ccittEob = true, ccittBlack1 = false;
   FixedVec<uint64_t, 3> xrefW;                     // L_XREFROWS: /W
-  std::vector<std::pair<uint64_t, uint64_t>> xrefIndex;  // L_XREFROWS: /Index ranges
+  std::vector<lib::pair<uint64_t, uint64_t>> xrefIndex;  // L_XREFROWS: /Index ranges
 };
 
 // recon record reader. Sticky: after a read past the end it returns zeros and empty strings,
@@ -102,7 +102,7 @@ struct SpanIn : public ::InputStream {
   SpanIn(const uint8_t* p_, size_t n_) : p(p_), n(n_) {}
   bool eof() const override { return pos >= n; }
   size_t read(byte* buf, const size_t sz) override {
-    size_t k = std::min(sz, n - pos);
+    size_t k = lib::min(sz, n - pos);
     if (k) memcpy(buf, p + pos, k);
     pos += k;
     return k;
@@ -117,7 +117,7 @@ struct VecOut : public ::OutputStream {
   size_t limit;
   explicit VecOut(Bytes& v_, size_t lim = SIZE_MAX) : v(v_), limit(lim) {}
   size_t write(const byte* buf, const size_t sz) override {
-    if (sz > limit - std::min(limit, v.size())) {  // over the cap: preflate stops at its next block
+    if (sz > limit - lib::min(limit, v.size())) {  // over the cap: preflate stops at its next block
       tPreflateStop = true;
       return 0;
     }
@@ -135,7 +135,7 @@ struct VecOut : public ::OutputStream {
 static uint32_t adler32(const uint8_t* p, size_t n) {
   uint32_t a = 1, b = 0;
   while (n) {
-    size_t k = std::min<size_t>(n, 5552);
+    size_t k = lib::min<size_t>(n, 5552);
     n -= k;
     while (k--) { a += *p++; b += a; }
     a %= 65521;
@@ -156,9 +156,9 @@ struct FlateProf {
   uint64_t unpacked = 0, streams = 0;
 };
 static FlateProf gFlateProf;
-static std::mutex gFlateProfMu;  // streams are processed on several threads
+static lib::mutex gFlateProfMu;  // streams are processed on several threads
 static double nowSec() {
-  return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+  return lib::monoSec();
 }
 
 static bool flateDecode(const CodecCtx& ctx, const Bytes& in, Bytes& out, Bytes& recon) {
@@ -181,7 +181,7 @@ static bool flateDecode(const CodecCtx& ctx, const Bytes& in, Bytes& out, Bytes&
     double t0;
     Bytes& out;
     ~ProfGuard() {
-      std::lock_guard<std::mutex> lk(gFlateProfMu);
+      lib::lock_guard<lib::mutex> lk(gFlateProfMu);
       gFlateProf.dec += nowSec() - t0;
       gFlateProf.unpacked += out.size();
       gFlateProf.streams++;
@@ -223,7 +223,7 @@ static bool flateDecode(const CodecCtx& ctx, const Bytes& in, Bytes& out, Bytes&
     SpanIn ui(out.data(), out.size());  // not the vector overload: its MemStream memcpy()s from null for empty data
     bool rok = preflate_reencode(ro, diff, ui, out.size(), [] {}) && !tPreflateStop;
     {
-      std::lock_guard<std::mutex> lk(gFlateProfMu);
+      lib::lock_guard<lib::mutex> lk(gFlateProfMu);
       gFlateProf.enc += nowSec() - t1;
       gFlateProf.dec -= nowSec() - t1;
     }
@@ -312,7 +312,7 @@ static void pngFilterRow(int tag, const uint8_t* cur, const uint8_t* prev, size_
 static bool pngGeometry(int colors, int bpc, int columns, size_t& bpp, size_t& rowlen) {
   if (colors < 1 || colors > 256 || columns < 1 || columns > (1 << 28)) return false;
   if (bpc != 1 && bpc != 2 && bpc != 4 && bpc != 8 && bpc != 16) return false;
-  bpp = std::max<size_t>(1, ((size_t)colors * bpc + 7) / 8);
+  bpp = lib::max<size_t>(1, ((size_t)colors * bpc + 7) / 8);
   rowlen = ((size_t)colors * bpc * columns + 7) / 8;
   return true;
 }
@@ -867,7 +867,7 @@ static bool lzwEncode(const Bytes& recon, const Bytes& in, Bytes& out) {
     bitcnt += w;
     while (bitcnt >= 8) { out.push_back((uint8_t)(bitbuf >> (bitcnt - 8))); bitcnt -= 8; }
   };
-  std::unique_ptr<uint16_t[]> child(new uint16_t[(size_t)4096 * 256]());  // (code, byte) -> code, 2 MB
+  lib::unique_ptr<uint16_t[]> child(new uint16_t[(size_t)4096 * 256]());  // (code, byte) -> code, 2 MB
   uint32_t used[4096];  // child entries set since the last clear (at most 4096 - 258)
   size_t nused = 0;
   int encNext = 258, decNext = 258, codesSinceClear = 0;
@@ -999,7 +999,7 @@ static bool iccRefEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out); 
 struct CcittParams;
 static bool ccittDecodeFP(const FilterParams& fp, const Bytes& in, Bytes& out, Bytes& recon);
 static bool xrefRowsDecodeLayer(const CodecCtx& ctx, const Bytes& in, const FixedVec<uint64_t, 3>& W,
-                                const std::vector<std::pair<uint64_t, uint64_t>>& index, Bytes& out, Bytes& recon);
+                                const std::vector<lib::pair<uint64_t, uint64_t>>& index, Bytes& out, Bytes& recon);
 
 static bool layerEncode(const CodecCtx& ctx, uint8_t type, const Bytes& recon, const Bytes& in, Bytes& out) {
   switch (type) {

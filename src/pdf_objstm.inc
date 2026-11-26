@@ -11,7 +11,7 @@
 
 static void objstmPredict(const uint8_t* m, size_t n, size_t k, const std::vector<uint64_t>& offs, uint64_t& pred) {
   if (k == 0) { pred = 0; return; }
-  size_t st = (size_t)std::min<uint64_t>(offs[k - 1], n);
+  size_t st = (size_t)lib::min<uint64_t>(offs[k - 1], n);
   Lexer lx(m, n, st);
   Obj o;
   if (!lx.parse(o)) { pred = st; return; }
@@ -148,7 +148,7 @@ static void xrefRowsPredict(const ObjPositions* op, uint64_t num, uint64_t type,
 }
 
 static bool xrefRowsDecodeLayer(const CodecCtx& ctx, const Bytes& in, const FixedVec<uint64_t, 3>& W,
-                                const std::vector<std::pair<uint64_t, uint64_t>>& index, Bytes& out, Bytes& recon) {
+                                const std::vector<lib::pair<uint64_t, uint64_t>>& index, Bytes& out, Bytes& recon) {
   if (!xrefRowsGeometry(W)) return false;
   size_t rl = (size_t)(W[0] + W[1] + W[2]);
   uint64_t rows = 0;
@@ -192,7 +192,7 @@ static bool xrefRowsEncodeLayer(const CodecCtx& ctx, const Bytes& recon, const B
   for (auto& w : W) w = r.u8();
   if (!xrefRowsGeometry(W)) return false;
   size_t ni = r.len();
-  std::vector<std::pair<uint64_t, uint64_t>> index(ni);
+  std::vector<lib::pair<uint64_t, uint64_t>> index(ni);
   for (auto& x : index) { x.first = r.var(); x.second = r.var(); }
   RBuf q(in);
   out.clear();
