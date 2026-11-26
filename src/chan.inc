@@ -11,7 +11,7 @@ typedef std::vector<uint8_t> Bytes;
 // than N items check it.
 template <class T, size_t N>
 struct FixedVec {
-  T a[N];
+  T a[N]{};  // all N defined (copies copy the whole array; resize() may grow into them)
   size_t n = 0;
   size_t size() const { return n; }
   bool empty() const { return n == 0; }
@@ -121,10 +121,16 @@ static const uint64_t kFlagStored = 1, kFlagLiftT = 2, kFlagLiftCS = 4, kFlagCma
 // set() and append() fail, leaving the string as it was, when the result would not fit.
 template <size_t N>
 struct FixedStr {
-  char s[N + 1] = {};
+  char s[N + 1];  // s[0..n] defined (the NUL included); the rest is never read, not even by a copy
   uint32_t n = 0;
-  FixedStr() {}
-  explicit FixedStr(const char* p) { set(p); }
+  FixedStr() { s[0] = 0; }
+  explicit FixedStr(const char* p) { s[0] = 0; set(p); }
+  FixedStr(const FixedStr& o) : n(o.n) { memcpy(s, o.s, (size_t)o.n + 1); }
+  FixedStr& operator=(const FixedStr& o) {
+    n = o.n;
+    memmove(s, o.s, (size_t)o.n + 1);
+    return *this;
+  }
   bool set(const char* p, size_t len) {
     if (len > N) return false;
     if (len) memcpy(s, p, len);  // p may be null when len is 0
@@ -241,10 +247,9 @@ struct ChanMap {
   ShortName suffix[CH_COUNT];  // per physical file; file 0 is always "meta" (holds S)
   size_t nfiles = 0;
 
-  // spec: comma-separated groups of channel letters, every channel exactly once, e.g. "SN,TX,O,F,R,B".
-  // Every group holds at least one of the CH_COUNT channels, so there are at most CH_COUNT.
-  // spec: groups of channel letters separated by commas; the groups holding S come first (S is
-  // in file 0), each part in spec order. Read in place.
+  // spec: comma-separated groups of channel letters, every channel exactly once, e.g. "SN,TX,O,F,R,B";
+  // so at most CH_COUNT groups. The groups holding S come first (S is in file 0), each part in
+  // spec order. Read in place.
   bool parse(const char* spec, Message& err) {
     for (int c = 0; c < CH_COUNT; c++) fileOf[c] = -1;
     for (const char *p = spec, *g = spec;; p++)
@@ -399,14 +404,14 @@ static bool parseHeader(const Bytes& meta, DumpHeader& h, size_t& meta0) {
     if (!need(n)) return false;
     for (size_t k = 0; k < n; k++)
       if (!isalnum(meta[p + k])) return fail("bad channel file suffix");
-    if (!h.map.suffix[i].set((const char*)&meta[p], n)) return fail("channel file suffix too long");
+    if (!h.map.suffix[i].set((const char*)meta.data() + p, n)) return fail("channel file suffix too long");
     p += n;
   }
   if (!need(1)) return false;
   size_t kl = meta[p++];
   if (!need(kl)) return false;
   if (kl > sizeof(h.fileKey.b)) return fail("file key too long");
-  h.fileKey.assign(&meta[p], kl);
+  h.fileKey.assign(meta.data() + p, kl);
   p += kl;
   if (!need(4)) return false;
   h.zlibHdr[0] = meta[p++];

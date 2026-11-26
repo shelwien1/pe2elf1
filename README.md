@@ -70,8 +70,9 @@ set a thread-local stop flag that its decode loops honour. In `c`, an error in a
 worker thread's included, falls back to stored mode as before; attempts that may fail (a layer
 that stays encoded, a lift that is skipped) run through `softly()`, which keeps a handled
 failure from leaking into the caller's error state. In `d` and on the command line, an error
-ends the program with its message (`die()`); so does an allocation that cannot be met
-(`std::set_new_handler`), instead of an abort.
+ends the program with its message (`die()`). An allocation that cannot be met ends the program
+too, in `c` as well (`std::set_new_handler`: a message instead of an abort); without exceptions
+`c` no longer falls back to stored mode on it.
 
 Tested with g++ 13.3 and clang 18 on Linux x86-64; the thread pool is also clean under
 ThreadSanitizer (`-fsanitize=thread`). MinGW needs the posix thread model (`-posix` driver) for
@@ -89,7 +90,7 @@ safe.
 
 | What | Bound | Past the bound |
 |---|---|---|
-| filter layers per stream | 16 (12 filters, room for a predictor and pseudo layers) | the stream stays encoded from that filter on; `d` rejects a descriptor with more |
+| filter layers per stream | 16 (up to 13 filters, fewer with predictors: room is kept for pseudo layers) | the stream stays encoded from that filter on; `d` rejects a descriptor with more |
 | `/Filter` array | 32 entries | entries past 31 read as one unknown filter `?`: undoing stops there |
 | PDF names (filters, crypt filters, `/StmF` `/StrF` `/EFF`) | 127 bytes (ISO 32000-1 Annex C) | a filter name keeps its first 127 bytes (still unknown); a crypt filter name is not kept (reads as Identity) |
 | crypt filters (`/CF`) | 32 | further entries ignored |
@@ -97,7 +98,7 @@ safe.
 | `-P` password | 127 bytes | first 127 kept (R6 reads 127, R2-R4 read 32) |
 | file extensions | 15 characters (written: at most 8) | `d` rejects a longer one |
 | image palettes | 256 entries | (bpc <= 8 by construction) |
-| font tables (`FontMetrics`, about 1 MB, 8 cached at a time) | 65535 glyphs (a u16 in TrueType / CFF); cmap subtables 64 KB (formats 0/4/6: a u16 length); 65536 CIDs | a CFF font with more glyphs is not used for widths; Type 1 glyphs past 65535 are not; CIDs past 65535 predict nothing |
+| font tables (`FontMetrics`, about 1 MB, 8 cached at a time) | 65535 glyphs (a u16 in TrueType / CFF); cmap subtables 64 KB (formats 0/4/6: a u16 length); 65536 CIDs | Type 1 glyphs past 65535 are not used for widths; CIDs past 65535 predict nothing |
 | CFF FDs / operand stack | 256 (a u8 FD index) / 48 (the CFF limit) | operands past 48 dropped |
 | Type 1 RD token names | 255 (a u8 in the recon) | charstrings named by further tokens stay as they are |
 | CCITT row | 65540 changes (65536 columns) | layer not applied |

@@ -21,9 +21,9 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <deque>
 #include <new>
-#include <unistd.h>
 #include <functional>
 #include <map>
 #include <memory>
@@ -631,6 +631,7 @@ class Encoder {
   // every stream: prep and dedup in file order, the filter work on a thread pool (results do not
   // depend on the thread count), duplicates copied afterwards
   void processAll() {
+    if (failed()) return;  // an earlier phase failed: the worker below must not clear that
     std::vector<int> dupOf(streams.size(), -1);
     std::vector<size_t> work;
     for (size_t i = 0; i < streams.size(); i++) {
@@ -801,6 +802,9 @@ class Encoder {
       if (it.kind == Item::OBJ || it.kind == Item::STREAM) idx_.byNum[it.num] = &seg.objs[it.obj];
     setupEncryption();
     chooseZlibHeader();
+    size_t nstreams = 0;  // records are large (layers in place): no regrowth
+    for (auto& it : seg.items) nstreams += it.kind == Item::STREAM;
+    streams.reserve(nstreams);
     for (size_t i = 0; i < seg.items.size(); i++) {
       if (seg.items[i].kind != Item::STREAM) continue;
       StreamRec s;
@@ -1965,7 +1969,7 @@ int main(int argc, char** argv) {
   // let through) ends the program with a message instead of an abort
   std::set_new_handler([] {
     fputs("pdfdump: out of memory\n", stderr);
-    _exit(1);
+    std::_Exit(1);
   });
   return pdd::realMain(argc, argv);
 }

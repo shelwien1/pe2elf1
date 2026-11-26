@@ -451,7 +451,7 @@ static void liftEncodeInts(const std::vector<int64_t>& v, uint8_t mode, Bytes& o
   }
 }
 
-// Fixed arrays at their maximum: 65536 byte pairs, each touched at most once per call (640 KB,
+// Fixed arrays at their maximum: 65536 byte pairs, each touched at most once per call (513 KB,
 // so the estimator lives on the heap: LiftEntropy is allocated once per lift).
 struct LiftEntropy {
   uint32_t pair[65536] = {}, ctx[256] = {};
@@ -865,7 +865,7 @@ static void liftForward(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums
   std::vector<std::vector<uint32_t>> members(g.count);
   for (size_t k = 0; k < vals.size(); k++) members[g.ofMarker[k]].push_back((uint32_t)k);
   Bytes head, data;
-  std::unique_ptr<LiftEntropy> estp(new LiftEntropy());  // 512 KB: not on a thread's stack
+  std::unique_ptr<LiftEntropy> estp(new LiftEntropy());  // 513 KB: not on a thread's stack
   LiftEntropy& est = *estp;
   for (auto& mem : members) {
     std::vector<LiftNum> gv;
