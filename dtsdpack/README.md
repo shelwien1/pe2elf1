@@ -9,7 +9,7 @@ to code is where the encoder chose otherwise. Decompression, with the same WAV, 
 stream byte for byte.
 
 The core of `s.2.dts` (4 minutes 25 seconds of 5.1 at 1509 kbps; 50008260 bytes) compresses to
-76356 bytes (0.15%); without its audio, dtsdpack's model gets 62.45% and `xz -9e` 88.21%.
+76356 bytes (0.15%); without its audio, dtsdpack's model gets 62.44% and `xz -9e` 88.21%.
 
 The core substream's extensions are coded too: XCH (6.1's back centre) and XXCH (7.1's other
 channels) as more channels, X96 (DTS 96/24's 24-48 kHz band and the core's residuals) as subbands
@@ -104,7 +104,7 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76356 (0.15%) | 62.45% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76356 (0.15%) | 62.44% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3470 (0.27%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 4615 (0.43%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2585 (0.11%) | | |
@@ -1409,6 +1409,42 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   179's build on this host, `mid.dtsc` without its WAV 349 KB/s to 344 compressing and 337 to 336
   decompressing, the XCH sample 271 to 276 and 277 to 273, and with its WAV 275 to 255 and 297 to
   292 (the host's noise more than the change).
+  Since format 181 an unbound LFE's value is coded under a logistic outside prediction about the
+  value of its fit (`model_smp.inc`'s lfe_val_n()), of scale 0.6 of the values' mean distance from
+  the fit's, each value a quarter of the way, and 0.3 at least: whether it is the fit's value
+  rounded, then its distance's magnitude and sign, each by the share of the values left. An unbound
+  channel's ADPCM predictor has the channel two before's at the subband as a candidate too, the
+  three first (the channel before's, the last one, the channel two before's) in the order of how
+  often each has been the predictor in the channel (code_pvq_nw()). And sdn and vpn are retuned on
+  format 181's no-WAV dumps of format 166's set (sdn's 30757 bytes there to 30579, vpn's 61570 to
+  61533). Without their WAVs, `s.2.dts`'s whole core 31230804 bytes to 31223715 (62.45% of it to
+  62.44%: its LFE values 93532 bytes to 91361, its predictors 260379 to 255913), the 55 streams of
+  the check lists 122071417 to 122054023 (0.014%: `dtswavsample16.wav` 0.031%, `96-24.dts` and its
+  packings 0.030%, Fire and its two packings 0.029%, `mid.dtsc` 0.025%, `dtswavsample14.wav` and
+  `padded.dts` 0.014%, `s2h.dtsc`, its packings and `s2h2.dtsc` 0.009-0.010%, the two `sil` streams,
+  `dts_es.dtsc` and `ES_6.1_16bit.dtsc` and its packing 0.007-0.009%, `sur/s.dts` 0.006%, the rest
+  0.0001-0.003%; FATE's short samples from 2 bytes smaller to 3 bigger, three of them bigger,
+  FFmpeg's encodes the same or up to 15 bytes smaller; `z192/z.dtsc` 10 bytes bigger). With their
+  WAVs the check lists' 67 runs 1447527 bytes to 1447535 (`z192/z.dtsc` with its WAV 9 bytes bigger,
+  the 14-bit packing of `f1c.dts` against `s2h.dtsc`'s WAV a byte smaller: channels the WAV doesn't
+  bind), `s.2.dts`'s whole core with its WAV 76356 bytes and the Cymatics core 60631, as before. On
+  12 of the streams (as for format 180) 56606797 bytes to 56594809 (0.021%): the LFE alone 0.0071%
+  (`dtswavsample16.wav` 2567 bytes smaller, `padded.dts` 721, Fire 311), the predictors' order alone
+  0.0021% (`chs/m.dtsc` 17 bytes bigger), the two 0.0094%, with sdn and vpn retuned 0.021%
+  (`dtswavsample16.wav` 9112 bytes smaller, its LFE values 100475 to 97197, its predictors 256842 to
+  252541). On eight (`chs/m.dtsc`, Fire, `dtswavsample14.wav`, `s2h.dtsc`, `mid.dtsc`,
+  `ES_6.1_16bit.dtsc`, `dts_es.dtsc` and `open_bitrate.dtsc`): the LFE's logistic 1268 bytes
+  smaller; of scale 0.7, 0.85 or 1.0 of the distance, each value a 16th of the way, 1097, 1061 and
+  1019; 0.6 of it, an 8th or half of the way, 1212 and 1241; the fit of 12 or 16 values, 811 and
+  228; the scale by the value's size too, 1042 and 876. Tried and dropped: an HF VQ subband's
+  vectors against the transient's envelope (0.06 bits a vector); a flag for an HF VQ vector the
+  subband's last one (nothing). For 0.04% fewer instructions without the WAV (`mid.dtsc`'s,
+  compressing, 24133 million to 24122, and decompressing, 23889 million to 23873; FATE's 7-frame XCH
+  sample 0.03% fewer, with its WAV 0.04% more) and the same memory (`mid.dtsc` without its WAV 24.4
+  MB to 24.3 at the peak, 33 fewer page faults; `s2h.dtsc` with its WAV 20.0-20.3 MB): the medians
+  of 15 runs interleaved with format 180's build on this host, `mid.dtsc` without its WAV 334 KB/s
+  to 337 compressing and 331 to 336 decompressing, the XCH sample 274 to 272 and 259 to 269, and
+  with its WAV 262 to 260 and 299 to 298 (the host's noise more than the change).
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first
@@ -2536,7 +2572,8 @@ and only where both signs could be the value (a sign counter of its own before, 
 - **sdn**: a channel's the WAV doesn't bind, and the LFE's where it isn't bound (sid's, then sdd's,
   until format 167, above); since format 173 of its HF VQ vectors only whether each is the subband's
   last one; since format 180 its PMODEs against the channel before's, its TMODEs against the subband
-  below's and the channel before's, above.
+  below's and the channel before's; since format 181 the LFE's values under a logistic about its
+  fit's, above.
 - **jsc**: the joint scale factors (the core's and X96's), against the source channel's audio or
   their running mean (sid's until format 116, below).
 - **abt**: the bit allocations.
@@ -2566,7 +2603,8 @@ and only where both signs could be the value (a sign counter of its own before, 
   116, below).
 - **vpd**: a decoded WAV's (as for sdd; vqp's until format 132, below).
 - **vpn**: a channel's the WAV doesn't bind (vqp's, then vpd's, until format 167, above; since
-  format 180 the channel before's predictor at the subband first, above).
+  format 180 the channel before's predictor at the subband first, since format 181 the channel two
+  before's too, the three in the order of how often each has been the predictor, above).
 - **raw**: bytes kept as bytes, the bits after the subframes, those before the extension's sync word,
   and XXCH's other bits.
 

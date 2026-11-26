@@ -2,12 +2,13 @@
 static const byte D9_vpn_a_nc[6+1]={ 0,0,1,2,2,3,3 };
 static const byte D9_vpn_a_ml[15+1]={ 0,0,1,2,3,4,5,6,6,7,7,7,7,8,8,9 };
 
-static const byte D9_vpn_b_gn[15+1]={ 0,1,2,2,3,4,4,4,4,4,4,4,4,4,4,4 };
+static const byte D9_vpn_b_gn[15+1]={ 0,1,2,2,3,3,3,4,4,4,4,4,4,4,4,4 };
 
 static const byte D9_vpn_c_bd[31+1]={ 0,0,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,4,4,4,4,4,5,5,6,7 };
 
+static const byte D9_vpn_d_gr[7+1]={ 0,1,2,2,2,3,3,3 };
 
-static const byte D9_vpn_e_bd[31+1]={ 0,1,2,3,4,5,5,5,5,5,6,6,7,7,7,7,7,7,7,7,7,7,8,9,9,9,9,9,9,9,10,11 };
+static const byte D9_vpn_e_bd[31+1]={ 0,1,2,3,4,5,5,6,7,8,8,9,10,10,10,10,10,10,10,10,11,11,12,12,12,12,12,12,12,12,12,13 };
 
 static const byte D9_vpn_f_kd[3+1]={ 0,1,2,3 };
 static const byte D9_vpn_f_nc[6+1]={ 0,1,2,3,4,5,6 };
@@ -16,63 +17,66 @@ static const byte D9_vpn_f_ml[15+1]={ 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
 static const byte D9_vpn_g_kd[3+1]={ 0,1,2,3 };
 
 static const byte D9_vpn_h_kd[3+1]={ 0,1,2,3 };
-static const byte D9_vpn_h_gn[15+1]={ 0,1,2,3,4,4,5,5,5,5,5,5,5,5,5,5 };
+static const byte D9_vpn_h_gn[15+1]={ 0,1,1,2,2,2,3,3,3,3,3,3,3,3,3,3 };
 
+static const byte D9_vpn_i_gn[15+1]={ 0,1,2,2,2,3,3,3,3,3,3,3,3,3,3,3 };
 
 static const byte D9_vpn_j_bd[31+1]={ 0,1,2,3,4,5,6,7,8,9,10,10,10,10,11,12,13,13,14,14,14,14,14,14,14,14,14,14,15,15,16,17 };
 
+static const byte D9_vpn_k_mg[12+1]={ 0,1,1,1,1,1,1,1,1,1,1,2,3 };
 
 static const byte D9_vpn_l_mq[8+1]={ 0,1,1,1,2,2,2,3,3 };
+static const byte D9_vpn_l_gn[15+1]={ 0,1,1,1,1,2,2,3,3,3,3,3,3,3,3,3 };
 
 static const byte D9_vpn_m_mq[8+1]={ 0,1,1,2,3,3,4,4,5 };
 
 static const byte D9_vpn_n_kd[3+1]={ 0,1,2,3 };
 
 static const byte D9_vpn_s_kd[3+1]={ 0,1,2,3 };
-static const byte D9_vpn_s_mg[12+1]={ 0,0,0,0,0,0,0,1,1,2,2,2,3 };
+static const byte D9_vpn_s_mg[12+1]={ 0,0,0,1,1,1,1,2,2,2,2,2,3 };
 
 static const byte D9_vpn_t_kd[3+1]={ 0,1,2,3 };
 
-static const byte D9_vpn_w_mg[12+1]={ 0,0,0,1,2,3,4,4,5,6,6,6,6 };
+static const byte D9_vpn_w_mg[12+1]={ 0,1,1,1,1,2,3,3,4,5,6,7,8 };
 static const byte D9_vpn_w_ml[15+1]={ 0,0,0,0,0,1,2,2,3,3,4,5,5,6,6,6 };
 
 
-static const int D9_vpn_rA = (254+0) * (1);
-static const int D9_vpn_mwA = (111+0) * (1);
+static const int D9_vpn_rA = (242+0) * (1);
+static const int D9_vpn_mwA = (124+0) * (1);
 static const int D9_vpn_rB = (251+0) * (1);
-static const int D9_vpn_mwB = (178+0) * (1);
-static const int D9_vpn_rC = (77+0) * (1);
-static const int D9_vpn_mwC = (255+0) * (1);
-static const int D9_vpn_rD = (255+0) * (1);
+static const int D9_vpn_mwB = (134+0) * (1);
+static const int D9_vpn_rC = (66+0) * (1);
+static const int D9_vpn_mwC = (240+0) * (1);
+static const int D9_vpn_rD = (253+0) * (1);
 static const int D9_vpn_mwD = (126+0) * (1);
 static const int D9_vpn_rE = (64+0) * (1);
-static const int D9_vpn_mwE = (126+0) * (1);
-static const int D9_vpn_rH = (254+0) * (1);
-static const int D9_vpn_mwH = (31+0) * (1);
-static const int D9_vpn_rI = (252+0) * (1);
+static const int D9_vpn_mwE = (16+0) * (1);
+static const int D9_vpn_rH = (253+0) * (1);
+static const int D9_vpn_mwH = (57+0) * (1);
+static const int D9_vpn_rI = (254+0) * (1);
 static const int D9_vpn_mwI = (58+0) * (1);
-static const int D9_vpn_rJ = (128+0) * (1);
-static const int D9_vpn_mwJ = (8+0) * (1);
-static const int D9_vpn_rK = (254+0) * (1);
-static const int D9_vpn_mwK = (255+0) * (1);
-static const int D9_vpn_rL = (253+0) * (1);
-static const int D9_vpn_mwL = (252+0) * (1);
-static const int D9_vpn_lr = (4+0) * (1);
-static const int D9_vpn_mb = (110+0) * (1);
-static const int D9_vpn_wp = (31+0) * (1);
+static const int D9_vpn_rJ = (129+0) * (1);
+static const int D9_vpn_mwJ = (9+0) * (1);
+static const int D9_vpn_rK = (242+0) * (1);
+static const int D9_vpn_mwK = (253+0) * (1);
+static const int D9_vpn_rL = (250+0) * (1);
+static const int D9_vpn_mwL = (248+0) * (1);
+static const int D9_vpn_lr = (5+0) * (1);
+static const int D9_vpn_mb = (231+0) * (1);
+static const int D9_vpn_wp = (30+0) * (1);
 static const int D9_vpn_wq = (4+0) * (1);
 static const int D9_vpn_wo = (77+0) * (1);
-static const int D9_vpn_wa = (0+0) * (1);
+static const int D9_vpn_wa = (1+0) * (1);
 static const int D9_vpn_wf = (87+0) * (1);
-static const int D9_vpn_lf = (0+0) * (1);
+static const int D9_vpn_lf = (8+0) * (1);
 static const int D9_vpn_bf = (0+0) * (1);
 static const int D9_vpn_l2 = (24+0) * (1);
-static const int D9_vpn_l3 = (16+0) * (1);
-static const int D9_vpn_b2 = (0+0) * (1);
-static const int D9_vpn_b3 = (7+0) * (1);
+static const int D9_vpn_l3 = (0+0) * (1);
+static const int D9_vpn_b2 = (1+0) * (1);
+static const int D9_vpn_b3 = (6+0) * (1);
 static const int D9_vpn_rS1 = (8+0) * (1);
 static const int D9_vpn_rS2 = (8+0) * (1);
-static const int D9_vpn_qs = (123+3) * (1);
+static const int D9_vpn_qs = (64+3) * (1);
 static const int D9_vpn_qf = (122+3) * (1);
 static const int D9_vpn_bw = (16+0) * (1);
 static const int D9_vpn_rT = (128+0) * (1);
@@ -102,20 +106,20 @@ static const int D9_vpn_hN = (22+0) * (1);
 static const long long D9_vpn_a_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 2), 4), 10), 3); // 240
 static const long long D9_vpn_b_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 1), 5); // 15
 static const long long D9_vpn_c_Volume = tc_vmul(tc_vmul(tc_vmul(1, 2), 8), 1); // 16
-static const long long D9_vpn_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 1), 3), 2), 3); // 18
-static const long long D9_vpn_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 12); // 72
+static const long long D9_vpn_d_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 3), 2), 4); // 48
+static const long long D9_vpn_e_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 3), 14); // 126
 static const long long D9_vpn_f_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 7), 16); // 448
 static const long long D9_vpn_g_Volume = tc_vmul(1, 4); // 4
-static const long long D9_vpn_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 6), 1); // 24
-static const long long D9_vpn_i_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 1), 3), 3); // 18
+static const long long D9_vpn_h_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 4), 1); // 16
+static const long long D9_vpn_i_Volume = tc_vmul(tc_vmul(tc_vmul(tc_vmul(1, 2), 2), 3), 4); // 48
 static const long long D9_vpn_j_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 18), 1); // 54
-static const long long D9_vpn_k_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 2), 3); // 18
-static const long long D9_vpn_l_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 1), 2); // 8
+static const long long D9_vpn_k_Volume = tc_vmul(tc_vmul(tc_vmul(1, 3), 3), 4); // 36
+static const long long D9_vpn_l_Volume = tc_vmul(tc_vmul(tc_vmul(1, 4), 1), 4); // 16
 static const long long D9_vpn_m_Volume = tc_vmul(tc_vmul(1, 6), 2); // 12
 static const long long D9_vpn_n_Volume = tc_vmul(1, 4); // 4
 static const long long D9_vpn_s_Volume = tc_vmul(tc_vmul(1, 4), 4); // 16
 static const long long D9_vpn_t_Volume = tc_vmul(1, 4); // 4
-static const long long D9_vpn_w_Volume = tc_vmul(tc_vmul(1, 7), 7); // 49
+static const long long D9_vpn_w_Volume = tc_vmul(tc_vmul(1, 9), 7); // 63
 
 #define D9_vpn_USES(X) X(mg) X(nc) X(ml) X(gr) X(kd) X(gn) X(bd) X(lh) X(cc) X(mq)
 

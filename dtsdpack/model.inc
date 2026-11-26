@@ -344,12 +344,13 @@ struct Model : ModelX96<f_DEC, LV> {
         } else if (bound[ch] && !(lw && B::jx_more(B::jx_pr[b], 0, 0))) {
           v = B::code_pvq(r, s, ch, b, v);
         } else if (!bound[ch]) {  // (since format 161 by the LPC of its last 64 decoded values: code_pvq_nw();
-                                  // since format 180 the channel before's predictor first)
+                                  // since format 180 the channel before's predictor first, since 181 by hits)
           S64 al[4];
           int g, g4;
           B::nw_lpc(ch, b, al, &g, &g4);
-          const int c = ch - 1, c1 = c >= r.ch0() && b < r.nvqsub[c] && s.pmode[c][b] ? (int)s.pvq[c][b] : -1;
-          v = B::code_pvq_nw(al, hist.pvq[ch][b] - 1, c1, (int)v, ch, b, g, B::lrank[ch][b][VK_PVQ], B::lrank[ch][b][VK_PVE]);
+          auto pr = [&](int c) { return c >= r.ch0() && b < r.nvqsub[c] && s.pmode[c][b] ? (int)s.pvq[c][b] : -1; };
+          v = B::code_pvq_nw(al, hist.pvq[ch][b] - 1, pr(ch - 1), pr(ch - 2), (int)v, ch, b, g, B::lrank[ch][b][VK_PVQ],
+                             B::lrank[ch][b][VK_PVE]);
         } else {
           if (bound[ch] && B::ss_rule()) B::pv_nofit();
           v = side_index(SF_PVQ, ch, b, v, 12, hist.pvq[ch][b], 8, 0);
@@ -772,12 +773,16 @@ struct Model : ModelX96<f_DEC, LV> {
           B::lfn_scl = (int)checked(hdr_field(F_LFEscaleIndex, 255, ENC ? s.lfescale : 0), 0, 127);
         }
         account(CAT_SIDE);
-        const double st = (double)SF7[B::lfn_scl & 127];
-        const S64 pv = clip((S64)llround(B::lfn_pred() / st), lo, hi);
-        const S64 u = side_code(SF_LFE, 0, 0, v + 128, lo + 128, hi + 128, 0, (S32)(pv + 129),
-                                cur_j ? s.lfe[cur_j - 1] + 129 : hist.lfe, 8, 0, 9, 0, true);
-        v = u - 128;
-        hist.lfe = (S32)u + 1;
+        const double st = (double)SF7[B::lfn_scl & 127], mu = B::lfn_pred() / st;
+        const S64 pv = clip((S64)llround(mu), lo, hi);
+        M_sdn_v D;  // (since format 181 under a logistic about the fit's value: lfe_val_n(); side_code()'s before)
+        D.fld = SF_LFE, D.cc = chan_class(0), D.bd = 0, D.lv = vvar((S32)(pv + 129), kVal);
+        D.pq = vvar(cur_j ? (S32)(s.lfe[cur_j - 1] + 129) : hist.lfe, kVal), D.st = B::sst;
+        D.ac = 8, D.ab = 0, D.ec = 9, D.tr = 0;
+        const S64 u = B::lfe_val_n(B::f_sdn, D, v - lo, (int)(pv - lo), (int)(hi - lo + 1), mu - (double)lo);
+        B::sst = u == pv - lo ? 1 : 2;
+        v = u + lo;
+        hist.lfe = (S32)(v + 129);
         B::lfn_learn((double)v * st);
         break;
       }

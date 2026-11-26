@@ -1045,10 +1045,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // (since format 159 the LFE where it isn't against the audio's: its decoded values, newest first
   // (lfn_y), and a least squares fit of each by the LFN_N before it (lfn_v), forgetting by LFN_LAM
   // a sample, made again every 4th (lfn_learn()); its scale factor coded with its first value,
-  // as against the audio's (lfn_scl, -1 none))
+  // as against the audio's (lfn_scl, -1 none); since format 181 the fit's mean distance from the
+  // value, in steps, from LFN_E0, each value a LFN_RE of the way (lfn_e): lfe_val_n()'s scale)
   static constexpr int LFN_N = 8;
   static constexpr double LFN_LAM = 0.99, LFN_RIDGE = 1e-6;
-  double lfn_y[LFN_N], lfn_R[LFN_N][LFN_N], lfn_c[LFN_N], lfn_v[LFN_N];
+  static constexpr double LFN_E0 = 4.0, LFN_RE = 0.25, LFN_K = 0.6, LFN_S0 = 0.3;
+  double lfn_y[LFN_N], lfn_R[LFN_N][LFN_N], lfn_c[LFN_N], lfn_v[LFN_N], lfn_e;
   U32 lfn_n;
   int lfn_scl;
   // the fit's value of the next LFE sample
@@ -1056,6 +1058,66 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     double p = 0.0;
     for (int k = 0; k < LFN_N; k++) p += lfn_v[k] * lfn_y[k];
     return p;
+  }
+  // Since format 181 such an LFE value v (0..max - 1, 128 up) by sdn's decisions under outside
+  // predictions, as scale_val_n() codes a scale factor: a logistic distribution's about mu (the
+  // fit's value, 128 up, in steps) of scale LFN_K times lfn_e, at least LFN_S0; whether it is c, the
+  // fit's value rounded (it the place before's value, P, as before: 1 + it), then its distance's
+  // magnitude and sign, each the share of the values left. Without their WAVs the 12 streams 4042
+  // bytes smaller (0.0071%: `dtswavsample16.wav` 2567, `padded.dts` 721, Fire 311, `chs/m.dtsc`
+  // 216). On eight (`chs/m.dtsc`, Fire, `dtswavsample14.wav`, `s2h.dtsc`, `mid.dtsc`,
+  // `ES_6.1_16bit.dtsc`, `dts_es.dtsc`, `open_bitrate.dtsc`) 1268 bytes smaller; of scale 0.7, 0.85
+  // or 1.0 of the distance each value a 16th of the way, 1097, 1061 and 1019; 0.6 of it an 8th or
+  // half of the way, 1212 and 1241; the fit of 12 or 16 values, 811 and 228; the scale by the
+  // value's size too (0.02 or, at 0.5, 0.05 of it), 1042 and 876.
+  template <class F, class V>
+  S64 lfe_val_n(F& f, V& D, S64 v, int c, int max, double mu) {
+    tcx X;
+    f.make(D, X);
+    f.select(X);
+    const double s = LFN_K * lfn_e, is = 1.0 / (s > LFN_S0 ? s : LFN_S0);
+    auto C = [&](int k) {  // (the mass of the values to k, all of it from max - 1)
+      if (k < 0) return 0.0;
+      if (k >= max - 1) return 1.0;
+      const double z = ((double)k + 0.5 - mu) * is;
+      return z >= 0.0 ? 1.0 - nw_tail(z) : nw_tail(-z);
+    };
+    // (C at c less 1, 2, 3, 4, 6, 10, .. 258, the lengths' lower edges, and at c plus 0, 1, 2, 3, 5,
+    // 9, .. 257, their upper edges)
+    static const int OL[11] = {1, 2, 3, 4, 6, 10, 18, 34, 66, 130, 258}, OU[11] = {0, 1, 2, 3, 5, 9, 17, 33, 65, 129, 257};
+    double cl[11], cu[11];
+    for (int k = 0; k < 11; k++) cl[k] = C(c - OL[k]), cu[k] = C(c + OU[k]);
+    int pa[SN_N];
+    for (int k = 0; k < SN_N; k++) pa[k] = -1;
+    const double pc = cu[0] - cl[0];
+    pa[HN_SAME] = B::q_op(pc, 1.0);
+    f.prpa = pa;
+    S64 out = c;
+    if (!f.bit(HN_SAME, ENC && v == c)) {
+      double r = 1.0 - pc;
+      const double w[TC_SMALL] = {0.0, (cl[0] - cl[1]) + (cu[1] - cu[0]), (cl[1] - cl[2]) + (cu[2] - cu[1])};
+      for (int j = 0; j < TC_SMALL; j++) pa[j] = B::q_op(w[j], r), r -= w[j];
+      for (int j = 0; j < 8; j++) {  // (the length: magnitudes 2^j + 2 .. 2^(j+1) + 1)
+        const double g = (cl[2 + j] - cl[3 + j]) + (cu[3 + j] - cu[2 + j]);
+        pa[tc_node_len(j)] = B::q_op(g, r), r -= g;
+      }
+      const S64 d = ENC ? v - c : 0, m = f.code(X, d < 0 ? -d : d);
+      if (m) {
+        const S64 vn = c - m, vp = c + m;
+        const bool cn = vn >= 0, cp = vp < max;
+        if (cn != cp) out = cp ? vp : vn;
+        else {
+          const double qn = C((int)vn) - C((int)vn - 1), qp = C((int)vp) - C((int)vp - 1);
+          pa[SN_SIGN] = B::q_op(qn, qn + qp);
+          out = f.bit(SN_SIGN, ENC && d < 0) ? vn : vp;
+        }
+      }
+    }
+    f.prpa = nullptr;
+    out = checked(out, 0, max - 1);
+    const double e = (double)out - mu;
+    lfn_e += ((e < 0.0 ? -e : e) - lfn_e) * LFN_RE;
+    return out;
   }
   // the sample decoded as y into the sums (then the values, by one), the fit again every 4th by
   // Cholesky's factors with a ridge of LFN_RIDGE of the mean diagonal (as it was where a pivot
@@ -1704,7 +1766,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     memset(nw_y, 0, sizeof nw_y), memset(nw_yp, 0, sizeof nw_yp), memset(nw_n, 0, sizeof nw_n), memset(nw_lc, 0, sizeof nw_lc);
     memset(nw_sm, 0, sizeof nw_sm), memset(nw_sn, 0, sizeof nw_sn), memset(nw_am, 0, sizeof nw_am), memset(nw_an, 0, sizeof nw_an);
     memset(lfn_y, 0, sizeof lfn_y), memset(lfn_R, 0, sizeof lfn_R), memset(lfn_c, 0, sizeof lfn_c);
-    memset(lfn_v, 0, sizeof lfn_v), lfn_n = 0, lfn_scl = -1;
+    memset(lfn_v, 0, sizeof lfn_v), lfn_n = 0, lfn_scl = -1, lfn_e = LFN_E0;
+    memset(pvt, 0, sizeof pvt);
     memset(nw_r1, 0, sizeof nw_r1), memset(nw_r2, 0, sizeof nw_r2), memset(nw_qr, 0, sizeof nw_qr);
     memset(nw_el, 0, sizeof nw_el), memset(nw_es, 0, sizeof nw_es);
     memset(nw_hs, 0, sizeof nw_hs), memset(nw_hq, 0, sizeof nw_hq);
@@ -3464,16 +3527,33 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // vqp's ranks rather than vpd's, 471 bigger. Since format 180 the channel before's predictor at
   // the subband this subframe (c1, -1 none: it predicts there) first in both, and the last one
   // second: without their WAVs the 12 streams 8479 bytes smaller (0.015%: `dtswavsample16.wav` 4854,
-  // Fire 2961; the last one first and it second, on six of them 114 fewer)
-  int code_pvq_nw(const S64* alpha, int fit, int c1, int v, int ch, int b, int gn, U8& lb, U8& le) {
+  // Fire 2961; the last one first and it second, on six of them 114 fewer). Since format 181 the
+  // channel two before's too (c2), the three first in the order of how often each has been the
+  // predictor in the channel (pvt: each time 4, halved at 1024 in all), ties c1, the last one, c2:
+  // without their WAVs the 12 streams 1204 bytes smaller (0.0021%: `dtswavsample16.wav` 482, Fire
+  // 267, `padded.dts` 196, `96-24.dts` 157, `mid.dtsc` 118; `chs/m.dtsc` 17 bytes bigger, `3-1.dts`
+  // 6)
+  U32 pvt[NCH][3];
+  int code_pvq_nw(const S64* alpha, int fit, int c1, int c2, int v, int ch, int b, int gn, U8& lb, U8& le) {
+    U32* const t = pvt[ch];
+    const U32 a1 = c1 >= 0 ? t[0] : 0, af = fit >= 0 ? t[1] : 0, a2 = c2 >= 0 ? t[2] : 0;
+    const S128 k1 = -1 - (a1 >= af) - (a1 >= a2), kf = -1 - (af > a1) - (af >= a2), k2 = -1 - (a2 > a1) - (a2 > af);
+    auto put = [&](int i, S128 k) {
+      if (cand[i].k > k) cand[i].k = k;
+    };
     for (int k = 0; k < 64; k++) cand[k].k = pvq_block_dist(k, alpha), cand[k].i = k;
-    if (fit >= 0) cand[fit >> 6].k = -1;
-    if (c1 >= 0 && (fit < 0 || c1 >> 6 != fit >> 6)) cand[c1 >> 6].k = -2;
+    if (fit >= 0) put(fit >> 6, kf);
+    if (c1 >= 0) put(c1 >> 6, k1);
+    if (c2 >= 0) put(c2 >> 6, k2);
     const int g = code_cand(64, 6, ENC ? v >> 6 : 0, VK_PVQ, ch, b, gn, lb, 0, 0, nullptr, nullptr, true);
     for (int i = 0; i < 64; i++) cand[i].k = pvq_dist(g * 64 + i, alpha), cand[i].i = i;
-    if (fit >= 0 && fit >> 6 == g) cand[fit & 63].k = -1;
-    if (c1 >= 0 && c1 >> 6 == g && c1 != fit) cand[c1 & 63].k = -2;
-    return g * 64 + code_cand(64, 6, ENC ? v & 63 : 0, VK_PVE, ch, b, gn, le, 0, 0, nullptr, nullptr, true);
+    if (fit >= 0 && fit >> 6 == g) put(fit & 63, kf);
+    if (c1 >= 0 && c1 >> 6 == g) put(c1 & 63, k1);
+    if (c2 >= 0 && c2 >> 6 == g) put(c2 & 63, k2);
+    const int r = g * 64 + code_cand(64, 6, ENC ? v & 63 : 0, VK_PVE, ch, b, gn, le, 0, 0, nullptr, nullptr, true);
+    t[0] += 4 * (c1 >= 0 && r == c1), t[1] += 4 * (fit >= 0 && r == fit), t[2] += 4 * (c2 >= 0 && r == c2);
+    if (t[0] + t[1] + t[2] >= 1024) t[0] >>= 1, t[1] >>= 1, t[2] >>= 1;
+    return r;
   }
   // Whether channel ch's subband b is quiet as the encoders seen take it, where they make no
   // prediction: its values' RMS over the subframe under 100 (`s.2.dts`'s subbands that would gain
