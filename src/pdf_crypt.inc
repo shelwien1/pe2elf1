@@ -493,7 +493,7 @@ struct Security {
   }
   size_t keyLen() const { return klen; }
 
-  static KeyBuf pad(const std::string& pw) {
+  static KeyBuf pad(const Password& pw) {
     KeyBuf r;
     r.resize(32);
     size_t n = std::min<size_t>(32, pw.size());
@@ -545,7 +545,7 @@ struct Security {
     return true;
   }
 
-  bool tryOwnerR4(const std::string& pw) {
+  bool tryOwnerR4(const Password& pw) {
     if (O.size() < 32) return false;
     uint8_t h[16];
     KeyBuf p = pad(pw);
@@ -568,7 +568,7 @@ struct Security {
 
   // Algorithm 2.B. Buffers at their maximum: password at most 127 bytes, salt 8, user data 48,
   // hash 64; K1 is 64 repeats of password + hash + user data (15 KB).
-  static KeyBuf hash2B(const std::string& pw, const uint8_t* salt, const uint8_t* udata, size_t ulen, bool r6) {
+  static KeyBuf hash2B(const Password& pw, const uint8_t* salt, const uint8_t* udata, size_t ulen, bool r6) {
     static const size_t kPw = 127, kU = 48, kK1 = 64 * (kPw + 64 + kU);
     size_t pl = std::min(pw.size(), kPw);
     ulen = std::min(ulen, kU);
@@ -603,8 +603,7 @@ struct Security {
     return k;
   }
 
-  bool tryR6(const std::string& pw0, bool owner) {
-    std::string pw = pw0.substr(0, 127);
+  bool tryR6(const Password& pw, bool owner) {
     bool r6 = R >= 6;
     if (U.size() < 48 || (owner && O.size() < 48)) return false;
     const KeyBuf& X = owner ? O : U;
@@ -622,10 +621,10 @@ struct Security {
   }
 
   // Recovers the file key: empty user password, then pw as user, then as owner password.
-  bool recover(const std::string& pw) {
+  bool recover(const Password& pw) {
     if (!standard) return false;
     if (R >= 5) {
-      if (tryR6("", false)) { keySource = "empty user password"; return true; }
+      if (tryR6(Password(), false)) { keySource = "empty user password"; return true; }
       if (!pw.empty() && tryR6(pw, false)) { keySource = "user password"; return true; }
       if (!pw.empty() && tryR6(pw, true)) { keySource = "owner password"; return true; }
       return false;
@@ -633,7 +632,7 @@ struct Security {
     if (R < 2) return false;
     for (size_t n : keyLens()) {
       klen = n;
-      if (tryUserR4(pad(""))) { keySource = "empty user password"; return true; }
+      if (tryUserR4(pad(Password()))) { keySource = "empty user password"; return true; }
       if (!pw.empty() && tryUserR4(pad(pw))) { keySource = "user password"; return true; }
       if (tryOwnerR4(pw)) { keySource = pw.empty() ? "empty owner password" : "owner password"; return true; }
     }

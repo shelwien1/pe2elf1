@@ -66,12 +66,12 @@ static const int kSyntaxLevelMax = 3;
 static const unsigned kMaxThreads = 256;  // -j and the default (one per CPU) are capped here
 
 struct Options {
-  std::string password;
+  Password password;  // -P: its first 127 bytes (all that any handler reads)
   int filterLevel = 1;
   int syntaxLevel = kSyntaxLevelMax;
   size_t smallThreshold = 1024;
   bool dedup = true;
-  std::string chanMap = kDefaultChanMap;
+  const char* chanMap = kDefaultChanMap;  // -c (points into argv)
   bool noVerify = false;
   bool derive = true;  // derived fields (-d disables)
   bool ccitt = false;  // decode CCITT fax images to bitmaps (-g)
@@ -136,7 +136,7 @@ class Encoder {
 
   void run() {
     auto t0 = std::chrono::steady_clock::now();
-    if (!dump.hdr.map.parse(opt_.chanMap.c_str(), err_)) die("bad channel map: %s", err_.c_str());
+    if (!dump.hdr.map.parse(opt_.chanMap, err_)) die("bad channel map: %s", err_.c_str());
     dump.hdr.origSize = in_.size();
     dump.hdr.origCrc = crc32_update(0, in_.data(), in_.size());
     dump.hdr.filterLevel = (uint8_t)opt_.filterLevel;
@@ -188,7 +188,7 @@ class Encoder {
     if (!modelled) emitStored();
   }
 
-  void writeFiles(const std::string& prefix) {
+  void writeFiles(const char* prefix) {
     // record which files exist, so that d ignores stale files of an earlier dump with this prefix
     dump.hdr.present = 1;
     for (size_t f = 1; f < dump.hdr.map.nfiles; f++)
@@ -212,22 +212,22 @@ class Encoder {
     meta.insert(meta.end(), dump.chan[0].begin(), dump.chan[0].end());
     for (int a = 0; a < AX_COUNT; a++)
       if (dump.hdr.inlineAux >> a & 1) meta.insert(meta.end(), dump.aux[a].begin(), dump.aux[a].end());
-    writeFile(prefix + "." + dump.hdr.map.suffix[0].c_str(), meta.data(), meta.size());
+    writeFile(dumpFileName(prefix, dump.hdr.map.suffix[0].c_str()).c_str(), meta.data(), meta.size());
     for (size_t f = 1; f < dump.hdr.map.nfiles; f++)
       if (!dump.chan[f].empty())
-        writeFile(prefix + "." + dump.hdr.map.suffix[f].c_str(), dump.chan[f].data(), dump.chan[f].size());
+        writeFile(dumpFileName(prefix, dump.hdr.map.suffix[f].c_str()).c_str(), dump.chan[f].data(), dump.chan[f].size());
     for (int c = 0; c < CF_COUNT; c++)
       if (!dump.classFile[c].empty())
-        writeFile(prefix + "." + kClassFileSuffix[c], dump.classFile[c].data(), dump.classFile[c].size());
+        writeFile(dumpFileName(prefix, kClassFileSuffix[c]).c_str(), dump.classFile[c].data(), dump.classFile[c].size());
     for (int a = 0; a < AX_COUNT; a++)
       if (dump.hdr.present >> (kPresentAux + a) & 1)
-        writeFile(prefix + "." + kAuxSuffix[a], dump.aux[a].data(), dump.aux[a].size());
+        writeFile(dumpFileName(prefix, kAuxSuffix[a]).c_str(), dump.aux[a].data(), dump.aux[a].size());
     for (size_t i = 0; i < dump.ownData.size(); i++) {
       const Bytes& b = dump.ownData[i];
-      writeFile(ownFileName(prefix, (uint32_t)i, dump.ownExt[i].c_str()), b.data(), b.size());
+      writeFile(ownFileName(prefix, (uint32_t)i, dump.ownExt[i].c_str()).c_str(), b.data(), b.size());
     }
     for (size_t i = 0; i < dump.blobData.size(); i++)
-      writeFile(ownFileName(prefix, kBlobFileBit | (uint32_t)i, dump.blobExt[i].c_str()), dump.blobData[i].data(),
+      writeFile(ownFileName(prefix, kBlobFileBit | (uint32_t)i, dump.blobExt[i].c_str()).c_str(), dump.blobData[i].data(),
                 dump.blobData[i].size());
   }
 
@@ -243,7 +243,7 @@ class Encoder {
  private:
   const Bytes& in_;
   Options opt_;
-  std::string err_;
+  Message err_;
   ObjIndex idx_;
   CodecCtx ctx_;
   std::deque<std::vector<std::pair<uint32_t, Obj>>> members_;
@@ -1535,11 +1535,11 @@ class Encoder {
 
 // ---------------------------------------------------------------------------------------------
 
-static std::string human(uint64_t v) {
-  char b[32];
-  if (v < 10000) snprintf(b, sizeof(b), "%llu", (unsigned long long)v);
-  else if (v < 10000000) snprintf(b, sizeof(b), "%.1fK", v / 1024.0);
-  else snprintf(b, sizeof(b), "%.1fM", v / 1048576.0);
+static FixedStr<31> human(uint64_t v) {
+  FixedStr<31> b;
+  if (v < 10000) b.format("%llu", (unsigned long long)v);
+  else if (v < 10000000) b.format("%.1fK", v / 1024.0);
+  else b.format("%.1fM", v / 1048576.0);
   return b;
 }
 static double pct(uint64_t a, uint64_t b) { return b ? 100.0 * a / b : 0.0; }
@@ -1673,11 +1673,17 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
            "payload", "stored", "recon", "store", "ext/layers");
     for (auto& s : E.streams) {
       const Item& it = E.seg.items[s.item];
-      std::string fl;
-      for (auto& f : E.filtersOf(s)) fl += std::string(fl.empty() ? "" : ",") + f.name.c_str();
-      if (fl.empty()) fl = "-";
-      std::string ly;
-      for (auto& l : s.desc.layers) ly += std::string(ly.empty() ? "" : "+") + kLayerName[l.type];
+      FixedStr<kMaxFilters * 128> fl;
+      for (auto& f : E.filtersOf(s)) {
+        if (!fl.empty()) fl.append(",", 1);
+        fl.append(f.name.data(), f.name.size());
+      }
+      if (fl.empty()) fl.set("-");
+      FixedStr<kMaxLayers * 16> ly;
+      for (auto& l : s.desc.layers) {
+        if (!ly.empty()) ly.append("+", 1);
+        ly.append(kLayerName[l.type], strlen(kLayerName[l.type]));
+      }
       char obj[32];
       snprintf(obj, sizeof(obj), "%u %u", it.num, it.gen);
       size_t rc = 0;
@@ -1694,47 +1700,47 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
 static int selfTest() {
   int bad = 0;
   auto hex = [](const Bytes& b) {
-    std::string s;
+    FixedStr<255> s;  // the tests' values are at most 64 bytes
     char t[3];
-    for (uint8_t c : b) { snprintf(t, 3, "%02x", c); s += t; }
+    for (uint8_t c : b) { snprintf(t, 3, "%02x", c); s.append(t, 2); }
     return s;
   };
-  auto check = [&](const char* what, const std::string& got, const char* want) {
-    bool ok = got == want;
-    printf("%-28s %s\n", what, ok ? "ok" : ("FAIL got " + got).c_str());
+  auto check = [&](const char* what, const char* got, const char* want) {
+    bool ok = strcmp(got, want) == 0;
+    printf("%-28s %s%s\n", what, ok ? "ok" : "FAIL got ", ok ? "" : got);
     if (!ok) bad++;
   };
   uint8_t m[16];
   md5((const uint8_t*)"abc", 3, m);
   auto keyBytes = [](const KeyBuf& k) { return Bytes(k.begin(), k.end()); };
-  check("md5(abc)", hex(Bytes(m, m + 16)), "900150983cd24fb0d6963f7d28e17f72");
-  check("sha256(abc)", hex(keyBytes(sha256((const uint8_t*)"abc", 3))),
+  check("md5(abc)", hex(Bytes(m, m + 16)).c_str(), "900150983cd24fb0d6963f7d28e17f72");
+  check("sha256(abc)", hex(keyBytes(sha256((const uint8_t*)"abc", 3))).c_str(),
         "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
-  check("sha384(abc)", hex(keyBytes(sha512x((const uint8_t*)"abc", 3, true))),
+  check("sha384(abc)", hex(keyBytes(sha512x((const uint8_t*)"abc", 3, true))).c_str(),
         "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7");
-  check("sha512(abc)", hex(keyBytes(sha512x((const uint8_t*)"abc", 3, false))),
+  check("sha512(abc)", hex(keyBytes(sha512x((const uint8_t*)"abc", 3, false))).c_str(),
         "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f");
   {
     Bytes key(16), pt(16), ct(16);
     for (int i = 0; i < 16; i++) { key[i] = (uint8_t)i; pt[i] = (uint8_t)(i * 0x11); }
     Aes a(key.data(), 16);
     a.encBlock(pt.data(), ct.data());
-    check("aes128 encrypt", hex(ct), "69c4e0d86a7b0430d8cdb78070b4c55a");
+    check("aes128 encrypt", hex(ct).c_str(), "69c4e0d86a7b0430d8cdb78070b4c55a");
     Bytes back(16);
     a.decBlock(ct.data(), back.data());
-    check("aes128 decrypt", hex(back), hex(pt).c_str());
+    check("aes128 decrypt", hex(back).c_str(), hex(pt).c_str());
     Bytes key2(32);
     for (int i = 0; i < 32; i++) key2[i] = (uint8_t)i;
     Aes b(key2.data(), 32);
     b.encBlock(pt.data(), ct.data());
-    check("aes256 encrypt", hex(ct), "8ea2b7ca516745bfeafc49904b496089");
+    check("aes256 encrypt", hex(ct).c_str(), "8ea2b7ca516745bfeafc49904b496089");
     b.decBlock(ct.data(), back.data());
-    check("aes256 decrypt", hex(back), hex(pt).c_str());
+    check("aes256 decrypt", hex(back).c_str(), hex(pt).c_str());
   }
   {
     uint8_t out[9];
     rc4((const uint8_t*)"Key", 3, (const uint8_t*)"Plaintext", 9, out);
-    check("rc4(Key,Plaintext)", hex(Bytes(out, out + 9)), "bbf316e8d940af0ad3");
+    check("rc4(Key,Plaintext)", hex(Bytes(out, out + 9)).c_str(), "bbf316e8d940af0ad3");
   }
   // filter round trips
   Bytes sample;
@@ -1824,30 +1830,32 @@ static void usage() {
 
 static int realMain(int argc, char** argv) {
   if (argc < 2) { usage(); return 2; }
-  std::string mode = argv[1];
+  const char* mode = argv[1];
   int first = 2;
-  if (mode == "selftest") return selfTest();
-  if (mode != "c" && mode != "d") { mode = "i"; first = 1; }
+  if (strcmp(mode, "selftest") == 0) return selfTest();
+  if (strcmp(mode, "c") != 0 && strcmp(mode, "d") != 0) { mode = "i"; first = 1; }
   Options opt;
-  std::vector<std::string> pos;
+  const char* pos[2] = {nullptr, nullptr};  // positional arguments: input / prefix / output
+  int npos = 0;
   for (int i = first; i < argc; i++) {
-    std::string a = argv[i];
-    if (a.size() >= 2 && a[0] == '-') {
+    const char* a = argv[i];
+    size_t al = strlen(a);
+    if (al >= 2 && a[0] == '-') {
       char o = a[1];
-      auto val = [&]() -> std::string {
-        if (a.size() > 2) return a.substr(2);
+      auto val = [&]() -> const char* {
+        if (al > 2) return a + 2;
         if (i + 1 >= argc) die("option -%c needs a value", o);
         return argv[++i];
       };
       auto num = [&]() -> long long {
-        std::string v = val();
+        const char* v = val();
         char* e;
-        long long r = strtoll(v.c_str(), &e, 10);
-        if (*e || r < 0) die("bad value for -%c: %s", o, v.c_str());
+        long long r = strtoll(v, &e, 10);
+        if (*e || r < 0) die("bad value for -%c: %s", o, v);
         return r;
       };
       switch (o) {
-        case 'P': opt.password = val(); break;
+        case 'P': { const char* v = val(); opt.password.setCut(v, strlen(v)); break; }
         case 'f': opt.filterLevel = (int)std::min(1LL, num()); break;
         case 's': {
           long long s = num();
@@ -1868,29 +1876,30 @@ static int realMain(int argc, char** argv) {
         case 'n': opt.noVerify = true; break;
         case 'v': opt.verbose++; break;
         case 'q': opt.quiet = true; break;
-        default: die("unknown option %s", a.c_str());
+        default: die("unknown option %s", a);
       }
     } else {
-      pos.push_back(a);
+      if (npos < 2) pos[npos] = a;
+      npos++;
     }
   }
-  if (mode == "i") {
-    if (pos.size() != 1) { usage(); return 2; }
+  if (strcmp(mode, "i") == 0) {
+    if (npos != 1) { usage(); return 2; }
     Bytes in;
-    if (!readFile(pos[0], in)) die("cannot read %s", pos[0].c_str());
+    if (!readFile(pos[0], in)) die("cannot read %s", pos[0]);
     Encoder E(in, opt);
     E.run();
-    printInfo(pos[0].c_str(), in, E, opt);
+    printInfo(pos[0], in, E, opt);
     return 0;
   }
-  if (pos.size() != 2) { usage(); return 2; }
-  if (mode == "c") {
+  if (npos != 2) { usage(); return 2; }
+  if (strcmp(mode, "c") == 0) {
     Bytes in;
-    if (!readFile(pos[0], in)) die("cannot read %s", pos[0].c_str());
+    if (!readFile(pos[0], in)) die("cannot read %s", pos[0]);
     Encoder E(in, opt);
     E.run();
     E.writeFiles(pos[1]);
-    if (opt.verbose) printInfo(pos[0].c_str(), in, E, opt);
+    if (opt.verbose) printInfo(pos[0], in, E, opt);
     else if (!opt.quiet) {
       uint64_t total = 0;
       for (size_t f = 0; f < E.dump.hdr.map.nfiles; f++) total += E.chanFileSize(f);
@@ -1898,17 +1907,17 @@ static int realMain(int argc, char** argv) {
       for (auto& a : E.dump.aux) total += a.size();
       for (auto& b : E.dump.ownData) total += b.size();
       for (auto& b : E.dump.blobData) total += b.size();
-      fprintf(stderr, "%s: %llu -> %llu bytes in %zu files%s%s%s\n", pos[0].c_str(), (unsigned long long)in.size(),
+      fprintf(stderr, "%s: %llu -> %llu bytes in %zu files%s%s%s\n", pos[0], (unsigned long long)in.size(),
               (unsigned long long)total, E.dump.ownData.size() + E.dump.blobData.size() + E.dump.hdr.map.nfiles,
               E.stored ? " (stored: " : "", E.stored ? E.storedReason.c_str() : "", E.stored ? ")" : "");
     }
     return 0;
   }
   // d
-  const std::string& prefix = pos[0];
+  const char* prefix = pos[0];
   DumpFiles d;
   Bytes meta;
-  if (!readFile(prefix + ".meta", meta)) die("cannot read %s.meta", prefix.c_str());
+  if (!readFile(dumpFileName(prefix, "meta").c_str(), meta)) die("cannot read %s.meta", prefix);
   size_t meta0 = 0;
   if (!parseHeader(meta, d.hdr, meta0)) die("%s", failMessage());
   {
@@ -1926,18 +1935,19 @@ static int realMain(int argc, char** argv) {
     meta.resize(meta.size() - (size_t)tot);
   }
   d.chan[0].swap(meta);
-  auto need = [&](const std::string& name, int bit, Bytes& out) {
+  auto need = [&](const char* suffix, int bit, Bytes& out) {
     if (!(d.hdr.present >> bit & 1)) return;
-    if (!readFile(name, out)) die("cannot read %s", name.c_str());
+    Path name = dumpFileName(prefix, suffix);
+    if (!readFile(name.c_str(), out)) die("cannot read %s", name.c_str());
   };
-  for (size_t f = 1; f < d.hdr.map.nfiles; f++) need(prefix + "." + d.hdr.map.suffix[f].c_str(), (int)f, d.chan[f]);
-  for (int c = 0; c < CF_COUNT; c++) need(prefix + "." + kClassFileSuffix[c], kPresentClass + c, d.classFile[c]);
-  for (int a = 0; a < AX_COUNT; a++) need(prefix + "." + kAuxSuffix[a], kPresentAux + a, d.aux[a]);
+  for (size_t f = 1; f < d.hdr.map.nfiles; f++) need(d.hdr.map.suffix[f].c_str(), (int)f, d.chan[f]);
+  for (int c = 0; c < CF_COUNT; c++) need(kClassFileSuffix[c], kPresentClass + c, d.classFile[c]);
+  for (int a = 0; a < AX_COUNT; a++) need(kAuxSuffix[a], kPresentAux + a, d.aux[a]);
   Bytes out;
   bool ok = decodeDump(d, meta0, [&](uint32_t ord, const char* ext) {
     Bytes b;
-    std::string name = ownFileName(prefix, ord, ext);
-    if (!readFile(name, b)) fail("cannot read %s", name.c_str());  // the decoder stops on it
+    Path name = ownFileName(prefix, ord, ext);
+    if (!readFile(name.c_str(), b)) fail("cannot read %s", name.c_str());  // the decoder stops on it
     return b;
   }, out);
   if (!ok) die("%s", failMessage());

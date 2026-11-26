@@ -167,6 +167,10 @@ typedef FixedStr<15> ShortName;
 typedef FixedStr<127> PdfName;
 // messages: an error (fail(), at most 1023 bytes) with a short prefix
 typedef FixedStr<1279> Message;
+// file names: at most 4095 bytes (PATH_MAX)
+typedef FixedStr<4095> Path;
+// passwords: the handlers read at most the first 127 bytes (R6; R2-R4 read 32)
+typedef FixedStr<127> Password;
 
 // Counters keyed by a short string (report tables): at most N keys. Once N - 1 keys are in, any
 // other key counts under "(other)".
@@ -234,53 +238,45 @@ struct ChanMap {
 
   // spec: comma-separated groups of channel letters, every channel exactly once, e.g. "SN,TX,O,F,R,B".
   // Every group holds at least one of the CH_COUNT channels, so there are at most CH_COUNT.
-  bool parse(const char* spec, std::string& err) {
+  // spec: groups of channel letters separated by commas; the groups holding S come first (S is
+  // in file 0), each part in spec order. Read in place.
+  bool parse(const char* spec, Message& err) {
     for (int c = 0; c < CH_COUNT; c++) fileOf[c] = -1;
-    char groups[CH_COUNT][CH_COUNT + 1];
-    size_t ng = 0, len = 0;
-    for (const char* p = spec;; p++) {
+    for (const char *p = spec, *g = spec;; p++)
       if (*p == ',' || *p == 0) {
-        if (len == 0) { err = "empty channel group"; return false; }
-        if (ng == CH_COUNT) { err = "more channel groups than channels"; return false; }
-        groups[ng][len] = 0;
-        ng++;
-        len = 0;
+        if (p == g) { err.set("empty channel group"); return false; }
         if (*p == 0) break;
-      } else {
-        if (len == CH_COUNT || ng == CH_COUNT) { err = "channel given twice"; return false; }
-        groups[ng][len++] = (char)toupper((unsigned char)*p);
-      }
-    }
-    // the group holding S becomes file 0
-    for (size_t g = 1; g < ng; g++)
-      if (strchr(groups[g], 'S')) {
-        char t[CH_COUNT + 1];
-        memcpy(t, groups[g], sizeof(t));
-        memmove(groups[1], groups[0], g * sizeof(groups[0]));
-        memcpy(groups[0], t, sizeof(t));
-        break;
+        g = p + 1;
       }
     nfiles = 0;
-    for (size_t g = 0; g < ng; g++) {
-      int first = CH_COUNT;
-      for (const char* q0 = groups[g]; *q0; q0++) {
-        char ch = *q0;
-        const char* q = strchr(kChanLetters, ch);
-        if (!q) { err = std::string("unknown channel letter '") + ch + "'"; return false; }
-        int c = (int)(q - kChanLetters);
-        if (fileOf[c] >= 0) { err = std::string("channel '") + ch + "' given twice"; return false; }
-        fileOf[c] = (int)g;
-        first = std::min(first, c);
+    for (int pass = 0; pass < 2; pass++)
+      for (const char* g = spec;;) {
+        const char* e = g;
+        bool hasS = false;
+        for (; *e && *e != ','; e++) hasS |= toupper((unsigned char)*e) == 'S';
+        if (hasS == (pass == 0)) {
+          int first = CH_COUNT;
+          for (const char* q0 = g; q0 < e; q0++) {
+            char ch = (char)toupper((unsigned char)*q0);
+            const char* q = strchr(kChanLetters, ch);
+            if (!q) { err.format("unknown channel letter '%c'", ch); return false; }
+            int c = (int)(q - kChanLetters);
+            if (fileOf[c] >= 0) { err.format("channel '%c' given twice", ch); return false; }
+            fileOf[c] = (int)nfiles;
+            first = std::min(first, c);
+          }
+          suffix[nfiles++].set(kChanSuffix[first]);  // each group a new channel: at most CH_COUNT
+        }
+        if (!*e) break;
+        g = e + 1;
       }
-      suffix[nfiles++].set(kChanSuffix[first]);
-    }
     for (int c = 0; c < CH_COUNT; c++)
-      if (fileOf[c] < 0) { err = std::string("channel '") + kChanLetters[c] + "' missing"; return false; }
-    if (fileOf[CH_S] != 0) { err = "internal: S not in file 0"; return false; }
+      if (fileOf[c] < 0) { err.format("channel '%c' missing", kChanLetters[c]); return false; }
+    if (fileOf[CH_S] != 0) { err.set("internal: S not in file 0"); return false; }
     return true;
   }
   void setDefault() {
-    std::string err;
+    Message err;
     parse(kDefaultChanMap, err);
   }
 };
@@ -597,8 +593,8 @@ static uint64_t hash64(const uint8_t* p, size_t n) {
   return h ^ (h >> 33);
 }
 
-static bool readFile(const std::string& name, Bytes& out) {
-  FILE* f = fopen(name.c_str(), "rb");
+static bool readFile(const char* name, Bytes& out) {
+  FILE* f = fopen(name, "rb");
   if (!f) return false;
   out.clear();
   uint8_t buf[1 << 16];
@@ -609,22 +605,26 @@ static bool readFile(const std::string& name, Bytes& out) {
   return ok;
 }
 
-static void writeFile(const std::string& name, const uint8_t* p, size_t n) {
-  FILE* f = fopen(name.c_str(), "wb");
-  if (!f) die("cannot create %s: %s", name.c_str(), strerror(errno));
-  if (n && fwrite(p, 1, n, f) != n) { fclose(f); die("write error on %s", name.c_str()); }
-  if (fclose(f) != 0) die("write error on %s", name.c_str());
+static void writeFile(const char* name, const uint8_t* p, size_t n) {
+  FILE* f = fopen(name, "wb");
+  if (!f) die("cannot create %s: %s", name, strerror(errno));
+  if (n && fwrite(p, 1, n, f) != n) { fclose(f); die("write error on %s", name); }
+  if (fclose(f) != 0) die("write error on %s", name);
+}
+
+// prefix + "." + suffix
+static Path dumpFileName(const char* prefix, const char* suffix) {
+  Path r;
+  if (!r.format("%s.%s", prefix, suffix)) die("file name too long: %s.%s", prefix, suffix);
+  return r;
 }
 
 static const uint32_t kBlobFileBit = 0x80000000u;  // OwnLoader: blob file k is ordinal kBlobFileBit | k
 
-static std::string ownFileName(const std::string& prefix, uint32_t ordinal, const char* ext) {
-  if (ordinal & kBlobFileBit) {
-    char buf[16];
-    snprintf(buf, sizeof(buf), "b%07X", ordinal & ~kBlobFileBit);
-    return prefix + buf + "." + ext;
-  }
-  char buf[16];
-  snprintf(buf, sizeof(buf), "%08X", ordinal);
-  return prefix + buf + "." + ext;
+static Path ownFileName(const char* prefix, uint32_t ordinal, const char* ext) {
+  Path r;
+  bool ok = ordinal & kBlobFileBit ? r.format("%sb%07X.%s", prefix, ordinal & ~kBlobFileBit, ext)
+                                   : r.format("%s%08X.%s", prefix, ordinal, ext);
+  if (!ok) die("file name too long: %s...", prefix);
+  return r;
 }
