@@ -1768,6 +1768,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     memset(lfn_y, 0, sizeof lfn_y), memset(lfn_R, 0, sizeof lfn_R), memset(lfn_c, 0, sizeof lfn_c);
     memset(lfn_v, 0, sizeof lfn_v), lfn_n = 0, lfn_scl = -1, lfn_e = LFN_E0;
     memset(pvt, 0, sizeof pvt);
+    memset(pkz_n, 0, sizeof pkz_n), memset(pkz_c0, 0, sizeof pkz_c0), memset(pkz_cz, 0, sizeof pkz_cz);
+    memset(pkz_on, 0, sizeof pkz_on);
     memset(nw_r1, 0, sizeof nw_r1), memset(nw_r2, 0, sizeof nw_r2), memset(nw_qr, 0, sizeof nw_qr);
     memset(nw_el, 0, sizeof nw_el), memset(nw_es, 0, sizeof nw_es);
     memset(nw_hs, 0, sizeof nw_hs), memset(nw_hq, 0, sizeof nw_hq);
@@ -3534,6 +3536,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // 267, `padded.dts` 196, `96-24.dts` 157, `mid.dtsc` 118; `chs/m.dtsc` 17 bytes bigger, `3-1.dts`
   // 6)
   U32 pvt[NCH][3];
+  // (since format 182) the peak rule's switch above ABITS 2, by ABITS (PKZ_A - 1 and up as one): the
+  // indexes measured, their costs as coded (mode 0) and by the z path's logistic, 2^-16 bits, whether on
+  static constexpr int PKZ_A = 27;
+  static constexpr U32 PKZ_N = 512;
+  U32 pkz_n[PKZ_A];
+  S64 pkz_c0[PKZ_A], pkz_cz[PKZ_A];
+  U8 pkz_on[PKZ_A];
   int code_pvq_nw(const S64* alpha, int fit, int c1, int c2, int v, int ch, int b, int gn, U8& lb, U8& le) {
     U32* const t = pvt[ch];
     const U32 a1 = c1 >= 0 ? t[0] : 0, af = fit >= 0 ? t[1] : 0, a2 = c2 >= 0 ? t[2] : 0;
@@ -6478,12 +6487,24 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const bool nwok = nwth || nw8 || nwlc;
     if (nwlc) ke0 = kem * nw_le.t[nw_l0], ke1 = kem * nw_le.t[nw_l1 + 1];
     // (since format 163, where neither cell has held, at ABITS 1 and 2 where 97% of the parts' peaks
-    // have reached the top index or more, from 32 parts (FFmpeg's encodes): the samples the fit
+    // have reached 3/4 of the top index or more, from 32 parts (FFmpeg's encodes): the samples the fit
     // doesn't serve the same, but with the logistic's scale the parts' root mean square at that
-    // ABITS, sqrt(3) / pi of the root of ks hi^2 + 1 / 12)
+    // ABITS, sqrt(3) / pi of the root of ks hi^2 + 1 / 12; since format 182 above ABITS 2 too,
+    // where the switch below has found it the cheaper)
     const int nca = a < NW_PA ? a : NW_PA - 1;
     const NwPc& nwc = nw_pc[nca];
-    const bool nwpk = !nwok && nwp && ss > 0 && kpe > kpb && hi > 0 && a <= 2 && nwc.n >= 32.0 && nwc.p0 >= 48;
+    const bool pk_ok = !nwok && nwp && ss > 0 && kpe > kpb && hi > 0 && nwc.n >= 32.0 && nwc.p0 >= 48;
+    const int pka = a < PKZ_A ? a : PKZ_A - 1;
+    const bool nwpk = pk_ok && (a <= 2 || pkz_on[pka]);
+    // (since format 182, above ABITS 2 where the fit isn't taken: the indexes' costs as coded and as
+    // the z path's logistic would have them, to PKZ_N of them at the ABITS; then that path where
+    // cheaper. Without their WAVs the 55 streams 30903 bytes smaller: `sur/s.dts` 28196, on at ABITS
+    // 3-8, 10-12 and 14-16; FFmpeg's encodes 39-1150 each; `f4.dts` the same, off at every ABITS,
+    // where its lattice codes as mode 0 at half the z path's cost or less. On 20 streams, from 256,
+    // 1024 or 2048 indexes 27210, 30614 and 30348 bytes smaller against 512's 30864 (at 256
+    // `e16.dts` 136 bigger); the z path at every ABITS, no switch, 103792 bigger (`f4.dts` 105735,
+    // `e16.dts` 24440; `sur/s.dts` 22913 smaller); the peak rule's cells by ABITS to 26, 29985 smaller)
+    const bool pkm = pk_ok && a > 2 && !nwr && !pkz_on[pka] && pkz_n[pka] < PKZ_N;
     const bool nwz = nwp && !nwr && ss > 0 && (nwok || nwpk);
     const double zc = nwz ? nwg * nwd0 : 0.0;
     const S64 zq = (S64)llround(zc), zs = zc < (double)zq ? -1 : 1;
@@ -6580,10 +6601,23 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       const S64 rlo = zs > 0 ? lo - zq : zq - hi, rhi = zs > 0 ? hi - zq : zq - lo;
       v = zq + zs * code_index_nw(D, ENC ? zs * (v - zq) : 0, rlo, rhi, &how, zs * (zc - (double)zq), zsc,
                                   bon ? &bud : nullptr);
-    } else
+    } else {
+      if (pkm) c->nacc_on = 1, c->nacc = 0;
       v = code_index(D, v, bnd, qp, alt, lo, hi, &how, &hcal[b], dist, hu,
                      (pc >= 8 ? 3 : pc >= 3 ? 2 : pc >= 1 ? 1 : 0) + 4 * jd, bnd ? (S128)ss << AQ_F : 0,
                      __builtin_popcount(miss[ch][b]), xm > 0);
+      if (pkm) {
+        c->nacc_on = 0;
+        const double zm = nwg * nwd0, zz = 0.55132889542179204 * sqrt(nwc.ks / nwc.kn * (double)hi * (double)hi + 1.0 / 12.0);
+        const double iz = 1.0 / zz;
+        auto F = [&](double x) { const double t = (x - zm) * iz; return t >= 0.0 ? 1.0 - nw_tail(t) : nw_tail(-t); };
+        const double tot = F((double)hi + 0.5) - F((double)lo - 0.5), pv = F((double)v + 0.5) - F((double)v - 0.5);
+        const double q = tot > 0.0 ? pv / tot * 281474976710656.0 : 0.0;  // (2^48)
+        const U64 qi = q >= 1.0 ? (q < 281474976710656.0 ? (U64)q : (U64)1 << 48) : 1;
+        pkz_cz[pka] += ((S64)48 << 16) - lg2tab.log2x(qi), pkz_c0[pka] += c->nacc;
+        if (++pkz_n[pka] == PKZ_N) pkz_on[pka] = pkz_cz[pka] < pkz_c0[pka];
+      }
+    }
     if (nwp) {  // (the fit's sums, in steps, and its refit; the distances, the residual's length)
       if (ss > 0) {
         const double sc = 4194304.0 / (double)ss, ys = (double)clip23((S64)dequantize((S32)v, ss) + pred) * sc;

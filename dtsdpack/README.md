@@ -793,10 +793,11 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   less), make a cell: where the RMS rule's budget isn't used, from 32 parts on, an index whose
   part's peak hasn't reached the cell's lower end weighs, under that end, 0.98 of how often such
   parts' peaks have then reached it in as many places after, plus 0.02, and past the cell's upper
-  end 0.02 (`nw_bud_pk()`); and at ABITS 1 and 2, where 97% of the parts' peaks have reached the
-  top index and neither RMS cell has held, the values the fit doesn't serve are smn's too, the
-  logistic's scale the parts' root mean square at that ABITS (from ABITS 3 on, smp's coding of
-  them is better: `f4.dts` 0.5% bigger so at 3-6, 4.3% at 7-11, 8.5% from 12). smn retuned on
+  end 0.02 (`nw_bud_pk()`); and at ABITS 1 and 2, where 97% of the parts' peaks have reached 3/4
+  of the top index or more and neither RMS cell has held, the values the fit doesn't serve are
+  smn's too, the logistic's scale the parts' root mean square at that ABITS (from ABITS 3 on, smp's
+  coding of them is better: `f4.dts` 0.5% bigger so at 3-6, 4.3% at 7-11, 8.5% from 12; since
+  format 182 the z path's where that costs less, below). smn retuned on
   format 162's no-WAV dumps. Without their WAVs, `s.2.dts`'s core 32111131 bytes to 32074689
   (64.21% of it to 64.14%), the 12 no-WAV streams 12991892 to 12986033 (0.05%), the 55 streams of
   the check lists 127160127 to 126739942 (0.33%: `dtswavsample16.wav` 1.02%, FFmpeg's encodes
@@ -1445,6 +1446,44 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   of 15 runs interleaved with format 180's build on this host, `mid.dtsc` without its WAV 334 KB/s
   to 337 compressing and 331 to 336 decompressing, the XCH sample 274 to 272 and 259 to 269, and
   with its WAV 262 to 260 and 299 to 298 (the host's noise more than the change).
+  Since format 182 the peak rule's path above ABITS 2 too, where it costs less: at each ABITS (26
+  and up as one) where neither RMS cell has held but the peak rule's has (from 32 parts on, 97% of
+  their peaks at 3/4 of the top index or more) and the fit isn't taken, the first 512 indexes are
+  coded as before (smp's) and each is priced as well as the z path's logistic would have it (about
+  the shrunk fit, of the peak rule's scale, over the indexes lo..hi, its probability's log in
+  integers by `anal.inc`'s lg2tab; what smp's decisions cost, by the coder's sum of them, nacc);
+  from then on that ABITS's values go the z path where it priced less (`model_smp.inc`'s code_q()).
+  On `sur/s.dts` the switch takes it at ABITS 3-8, 10-12 and 14-16 (at 9 and 13 the z path's
+  logistic would have priced the whole stream's values 0.7% and 0.2% dearer), on FFmpeg's `f1.dts`
+  at 3-8 and 10-13, `f2.dts` 3-10, `f3.dts` 3-5, its `e_32000.dts` at 6-8, 10-12 and 15-17 and
+  `e_44100.dts` at 3-4, 6-7, 10-11 and 13-16; not on `f4.dts` (its lattice: smp's coding there half
+  the z path's cost or less) nor on `ff16src/e16.dts` but at ABITS 24. Without their WAVs, the 55
+  streams of the check lists 122054023 bytes to 122023120 (0.025%, none bigger: `sur/s.dts` 0.33%,
+  8651043 bytes to 8622847, FFmpeg's encodes 0.004-0.11%, `f1.dts` 1150 bytes smaller, `f3.dts` 423,
+  `e_44100.dts` 412, `e_32000.dts` 386, `f2.dts` 257, `e16.dts` 40, the 14-bit packing of `f1c.dts`
+  39; the rest the same), `s.2.dts`'s whole core 31223715 bytes to 31223716 (62.44% as before). With
+  their WAVs the check lists' 67 runs, `s.2.dts`'s whole core and the Cymatics core the same but for
+  the format's byte. On 20 streams (the 12, `sur/s.dts` and FFmpeg's encodes, 70035026 bytes to
+  70004162), the switch after 256, 1024 or 2048 indexes 27210, 30614 and 30348 bytes smaller,
+  against 512's 30864 (at 256 `e16.dts` 136 bytes bigger, `f4.dts` 41); with the peak rule's cells
+  by each ABITS to 26 (for 11 and up as one), 29985 (`e16.dts` 33 bytes bigger). Tried and dropped:
+  the peak rule's path at every ABITS, with no switch, 103792 bytes bigger (`f4.dts` 105735,
+  `e16.dts` 24440; `sur/s.dts` 22913 smaller), from ABITS 14 up alone `f4.dts` 4368 bytes bigger and
+  `e16.dts` 21460, at 3-10 alone 22536 and 1584; a normal distribution's tail for code_index_nw()
+  (or its mix with the logistic's), 5437 bytes bigger (`dtswavsample16.wav` 3955, `chs/m.dtsc` 1460;
+  `mid.dtsc` 206 smaller); the z path's scale by the subband's own spread instead (no smaller); a
+  gate on the indexes' low bits (`e16.dts`'s are as random as they come, and its z path still
+  loses). Offline, on `sur/s.dts`: its subbands above 0 noise to the fit (the subband below's values
+  and fit errors as regressors, R^2 0.001), smp's coding of them about the discrete normal
+  distribution's cost at each ABITS; its parts' peaks within 0.875 of the top index or more in 99%
+  of them at every ABITS, worth about 0.7 bits a part (3.7 KB a MB), most of which the switch takes.
+  For 0.3-0.7% more instructions (callgrind: `mid.dtsc` without its WAV compressing 24122 million to
+  24199, decompressing 23873 million to 23983; FATE's 7-frame XCH sample 0.7% more, with its WAV
+  0.5%: the coder's test, at every decision, of whether to sum its cost) and the same memory
+  (`mid.dtsc` without its WAV 24.3 MB at the peak, `s2h.dtsc` with its WAV 19.9-20.3 MB): the
+  medians of 15 runs interleaved with format 181's build on this host, `mid.dtsc` without its WAV
+  335 KB/s to 341 compressing and 334 to 341 decompressing, the XCH sample 267 to 270 and 273 to
+  267, and with its WAV 256 to 261 and 292 to 296 (the host's noise more than the change).
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first
