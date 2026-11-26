@@ -9,7 +9,7 @@ to code is where the encoder chose otherwise. Decompression, with the same WAV, 
 stream byte for byte.
 
 The core of `s.2.dts` (4 minutes 25 seconds of 5.1 at 1509 kbps; 50008260 bytes) compresses to
-76356 bytes (0.15%); without its audio, dtsdpack's model gets 62.47% and `xz -9e` 88.21%.
+76356 bytes (0.15%); without its audio, dtsdpack's model gets 62.45% and `xz -9e` 88.21%.
 
 The core substream's extensions are coded too: XCH (6.1's back centre) and XXCH (7.1's other
 channels) as more channels, X96 (DTS 96/24's 24-48 kHz band and the core's residuals) as subbands
@@ -104,7 +104,7 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76356 (0.15%) | 62.47% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76356 (0.15%) | 62.45% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3470 (0.27%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 4615 (0.43%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2585 (0.11%) | | |
@@ -1335,6 +1335,50 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   the medians of 15 runs interleaved with format 177's build on this host, `mid.dtsc` without its
   WAV 321 KB/s to 320 compressing and 312 to 309 decompressing, the XCH sample 240 to 257 and 253 to
   237, and with its WAV 232 to 222 and 262 to 239 (the host's noise more than the change).
+  Since format 179 an unbound channel's HF VQ subbands' scale factors, which the scale factors' pass
+  codes after every channel's ABITS, have format 176's fit too: one of their own, of the same
+  things, with a tally of its own for the first guess; and each such scale factor is this subframe's
+  first for the fits after it (the subbands above, the channels after), as an ADPCM subband's is. A
+  transient's second scale factor has a fit of its own, of its move from the first
+  (`model_smp.inc`'s sf2_x()): of 1; the first's move from the last subframe's, and whether there is
+  one; the transient's place; the channel before's second's move from its first at the subband,
+  where it is a transient there too, and whether; the subband below's, the same; and the channel
+  before's first's move from its last, and whether. Its logistic's scale is 0.85 times its mean
+  distance from the fit's value, by channel, and its first guess by a tally of its own. And abn and
+  scn are retuned on format 178's no-WAV dumps of format 166's set (abn's 53529 bytes there to
+  53040, scn's 303468 to 302737). Without their WAVs, `s.2.dts`'s whole core 31241391 bytes to
+  31231375 (62.47% of it to 62.45%), the 55 streams of the check lists 122172276 to 122096503
+  (0.062%: FATE's short samples 1-13 bytes each smaller, 0.04-0.42% (`dx4/cs.dtsc` 0.06%), Fire and
+  its two packings 0.218%, `padded.dts` 0.115%, `chs/n.dtsc` 0.082%, `dts_es.dtsc` 0.077%,
+  `dtswavsample14.wav` 0.069%, `chs/m.dtsc` 0.065%, `dtswavsample16.wav` 0.063%, `ES_6.1_16bit.dtsc`
+  and its packing and FFmpeg's `f3.dts` 0.058%, `lfe/l0.dtsc` 0.037%, the two `sil` streams
+  0.030-0.033%, `open_bitrate.dtsc` and `96-24.dts` and its packings 0.029%, `mid.dtsc` 0.026%,
+  `pc/p1.dtsc` 0.024%, `s2h.dtsc` and its packings 0.021%, `Master_Audio_5.0_96khz.dtsc` 0.021%,
+  FFmpeg's other encodes 0.005-0.024%, `3-1.dtsc` 0.009%, `sur/s.dts` 0.002%; the DTS:X 7.1.4 core
+  the same, `z192/z.dtsc` and the 14-bit packing of `f1c.dts` 4 bytes bigger). With their WAVs the
+  sizes are format 178's (the check lists' 67 runs 1447527 bytes, `s.2.dts`'s whole core with its
+  WAV 76356, the Cymatics core 60631). On 12 of the streams (as for format 178) 56660250 bytes to
+  56618870 (0.073%): the two fits 0.0637%, with abn retuned 0.0639%, with scn too 0.0730%. On six
+  (`chs/m.dtsc`, Fire, `dts_es.dtsc`, `open_bitrate.dtsc`, `mid.dtsc` and `s2h.dtsc`, 14555396
+  bytes): the HF VQ subbands' fit, its scale factors not this subframe's first for the rest, 2135
+  bytes smaller, and they so, 4161 (in the ADPCM subbands' fits instead, 1805; the first four HF VQ
+  subbands' apart from the rest's, the same, none of these streams having more); the transients' fit
+  as the outside prediction alone, 9745, and the first guess too, 10517 (with the transient's place
+  in three and the ABITS, and the channel before's seconds' moves at the subbands either side,
+  10482; with its transient's place against this one's, 10495). Tried and dropped: an unbound
+  channel's first scale factor against the trend of its subband's last values, the last 8's energy
+  or peak against the 8 before or the last subframe's (on `mid.dtsc` and `dts_es.dtsc` their
+  correlation with the fit's error 0.02-0.06, the logistic alone no smaller). Offline, that
+  logistic's scale chosen by the last ABITS, the subband, the fit's move, the scale itself or the
+  channel would take 0.3-0.5% off its own cost, the logistic alone, with a bias by the fit's move
+  0.4%: the fit's error is the scale factors' own (its value right a fifth of the time). For 0.08%
+  more instructions without the WAV (`mid.dtsc`'s, compressing, 24106 million to 24126, and 0.08%
+  decompressing, 23863 million to 23882; FATE's 7-frame XCH sample 0.20% more, with its WAV 0.02%)
+  and less memory without it (`mid.dtsc` without its WAV 25.2 MB to 24.3 at the peak, 228 fewer page
+  faults; `s2h.dtsc` with its WAV the same, 20.2-20.3 MB; 0.1 MB more of the binary mapped): the
+  medians of 15 runs interleaved with format 178's build on this host, `mid.dtsc` without its WAV
+  334 KB/s to 334 compressing and 330 to 335 decompressing, the XCH sample 209 to 186 and 256 to
+  268, and with its WAV 232 to 236 and 262 to 261 (the host's noise more than the change).
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first
@@ -2475,7 +2519,8 @@ and only where both signs could be the value (a sign counter of its own before, 
 - **scl**: the scale factors, against the RMS's (the LFE's too).
 - **scd**: a decoded WAV's (as the scale factor search shows it; scl's until format 118, below).
 - **scn**: a channel's the WAV doesn't bind (scl's until format 166, above; since format 176 its
-  first scale factors' outside predictions by a least squares fit of their move, above).
+  first scale factors' outside predictions by a least squares fit of their move, since format 179
+  its HF VQ subbands' and its transients' second ones' by fits of their own, above).
 - **hit**: whether an index that isn't the audio's is the other side's, and an LFE sample's whether
   it is the audio's.
 - **hid**: a decoded WAV's (as for sdd; hit's until format 132, below).

@@ -10,79 +10,79 @@ Debug 1
 Const 0
 
 Index a
- a_bd: bd, 1!1100000000000000000111111111111
+ a_bd: bd, 1!1111100000000000000111111111011
  a_es: es, &01111111
 
 Index b
- b_la: la, 1!000011011111010000110000100
- b_lb: lb, 1!101100111111111101001110000
+ b_la: la, 1!000000011001100000000000000
+ b_lb: lb, 1!101000111101010110100000000
 
 Index c
- c_sn: sn, 1!101111111111111111111010100
- c_la: la, 1!011111111111111111101010100
+ c_sn: sn, 1!101111111110111111111010100
+ c_la: la, 1!011100100110100101101010100
 
 Index d
- d_sn: sn, 1!001000000100000000000000000
+ d_sn: sn, 1!000000000000000000000000000
  d_sd: sd, 1!11
- d_de: de, 1!110111111
+ d_de: de, 1!100110011
  d_sc: sc, 1!10000101000000
- d_sm: sm, 1!0010011110101000
+ d_sm: sm, 1!1010011110100000
  d_bg: bg, 1!1001000
  d_ag: ag, 1!1100
  d_sx: sx, 1!11101
 
 Index e
- e_bd: bd, 1!0000100000000000000100000000001
- e_sn: sn, 1!101000001000000000000111100
+ e_bd: bd, 1!0000010000000000000100000000001
+ e_sn: sn, 1!101000000110000000000000000
 
 Index h
- h_lb: lb, 1!001000000000000000000000100
+ h_lb: lb, 1!010000000000001000000000000
  h_es: es, &01111111
- h_bd: bd, 1!0111111111111111111111111111110
+ h_bd: bd, 1!0110111111111111111111111111001
 
 Index i
- i_es: es, &01111111
- i_nb: nb, 1!010000100
- i_la: la, 1!000101000011101011101100100
+ i_es: es, &00101111
+ i_nb: nb, 1!110000011
+ i_la: la, 1!000000000000100011101000100
 
 Index j
  j_es: es, &00000000
- j_de: de, 1!000001000
+ j_de: de, 1!000100010
  j_pm: pm, 1!0
 
 Index k
- k_sn: sn, 1!010000000000000000000000000
+ k_sn: sn, 1!000000000000000000000000000
  k_nn: nn, 1!100110011111011
  k_sc: sc, 1!11110000001010
  k_eq: eq, 1!0000
- k_sm: sm, 1!0000100011001100
+ k_sm: sm, 1!0000001011001100
  k_bg: bg, 1!0001000
  k_ag: ag, 1!1010
  k_sx: sx, 1!10000
 
 Index l
- l_bd: bd, 1!0001110101010100010111111111000
+ l_bd: bd, 1!0001010011010110000111111111001
  l_cc: cc, 1!11
- l_la: la, 1!101000010100000000000000000
+ l_la: la, 1!001000010110001100000100000
 
 Index s
- s_sn: sn, 1!101111111111000000000000000
+ s_sn: sn, 1!101111111111000000000100000
  s_sd: sd, 1!00
- s_nn: nn, 1!000001110101000
+ s_nn: nn, 1!000001111101000
  s_sc: sc, 1!01111110110000
- s_sm: sm, 1!1010100011100010
+ s_sm: sm, 1!1010101011111000
  s_bg: bg, 1!1010101
  s_ag: ag, 1!0010
- s_sx: sx, 1!00100
+ s_sx: sx, 1!10100
 
 Index f
  f_es: es, &01111000
 
 Index m
- m_nn: nn, 1!111011010001110
+ m_nn: nn, 1!111101010000110
 
 Index w
- w_st: st, 1!100001001
+ w_st: st, 1!000000011
 
 Index t
  t_bd: bd, 1!1010100000000000000110010110000
@@ -95,37 +95,37 @@ Index g
  g_bd: bd, 1!1111111111111111111111111111111
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
-Number rA, 1, 0!11111111
+Number rA, 1, 0!11111101
 Number mwA, 1, 0!00000100
-Number rB, 1, 0!10101110
-Number mwB, 1, 0!00111011
-Number rC, 1, 0!11111101
-Number mwC, 1, 0!00101011
+Number rB, 1, 0!11111100
+Number mwB, 1, 0!00011111
+Number rC, 1, 0!11101111
+Number mwC, 1, 0!10100000
 Number rD, 1, 0!11111111
-Number mwD, 1, 0!00011011
+Number mwD, 1, 0!01111110
 Number rE, 1, 0!00000000
-Number mwE, 1, 0!10000001
+Number mwE, 1, 0!10000010
 Number rH, 1, 0!00000000
-Number mwH, 1, 0!00000001
+Number mwH, 1, 0!00000100
 Number rI, 1, 0!00000000
-Number mwI, 1, 0!01110111
+Number mwI, 1, 0!01101000
 Number rJ, 1, 0!00000000
-Number mwJ, 1, 0!10001110
-Number rK, 1, 0!11111110
-Number mwK, 1, 0!00111110
-Number rL, 1, 0!10100001
-Number mwL, 1, 0!00000000
-Number lr, 1, 0!10100
-Number mb, 1, 0!01000001
+Number mwJ, 1, 0!11001000
+Number rK, 1, 0!11111111
+Number mwK, 1, 0!01011110
+Number rL, 1, 0!11111101
+Number mwL, 1, 0!00000001
+Number lr, 1, 0!10001
+Number mb, 1, 0!01000000
 #  the mixers' initial weights, in 256ths (format 112): each counter's two probabilities' in the
 #  first three (wp, wq), the outside prediction's there (wo), A's APM refinement's (wa, format
 #  113), each mixer's in the final one (wf); and the final mixer's rate and boost, in 16ths of the
 #  others' (lf, bf, format 113), mixer 2's and 3's rates, in 16ths of mixer 1's (l2, l3, format 114)
 #  and boosts (b2, b3, format 115)
-Number wp, 1, 0!00101001
-Number wq, 1, 0!00000100
-Number wo, 1, 0!01000001
-Number wa, 1, 0!00000001
+Number wp, 1, 0!00100100
+Number wq, 1, 0!00000000
+Number wo, 1, 0!01111111
+Number wa, 1, 0!00000000
 Number wf, 1, 0!01100000
 Number lf, 1, 0!00010000
 Number bf, 1, 0!00000000
@@ -133,7 +133,7 @@ Number l2, 1, 0!01000000
 Number l3, 1, 0!00010000
 Number b2, 1, 0!00000100
 Number b3, 1, 0!00010000
-Number rS1, 1, 0!00010
+Number rS1, 1, 0!00011
 Number rS2, 1, 0!01000
 Number qs, 1, 3!1111110
 Number qf, 1, 3!0011000

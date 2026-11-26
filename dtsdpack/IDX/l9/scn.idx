@@ -12,24 +12,24 @@ Const 0
 Index a
  a_kd: kd, 1!001
  a_pk: pk, 1!0
- a_dp: dp, 1!1111111
+ a_dp: dp, 1!1011111
 
 Index b
  b_kd: kd, 1!000
  b_pk: pk, 1!0
- b_pn: pn, 1!0010111
- b_dp: dp, 1!1010111
+ b_pn: pn, 1!0000001
+ b_dp: dp, 1!1101001
  b_pl: pl, 1!001100001100010
 
 Index c
  c_kd: kd, 1!000
- c_pk: pk, 1!1
- c_ab: ab, 1!001010000010001000010010100
+ c_pk: pk, 1!0
+ c_ab: ab, 1!001010001010001000100101000
 
 Index d
- d_kd: kd, 1!000
+ d_kd: kd, 1!110
  d_pk: pk, 1!1
- d_lp: lp, 1!111111111
+ d_lp: lp, 1!101111111
 
 Index e
  e_kd: kd, 1!110
@@ -39,8 +39,8 @@ Index e
 Index h
  h_kd: kd, 1!101
  h_pk: pk, 1!0
- h_pn: pn, 1!0000011
- h_ab: ab, 1!101100100100101000000010000
+ h_pn: pn, 1!1000101
+ h_ab: ab, 1!101100010000101001000101100
 
 Index i
  i_kd: kd, 1!001
@@ -50,39 +50,39 @@ Index i
 
 Index j
  j_kd: kd, 1!000
- j_pk: pk, 1!0
- j_bd: bd, 1!1000100001000100001000100001111
+ j_pk: pk, 1!1
+ j_bd: bd, 1!1000100001000100001000100011111
  j_cc: cc, 1!11
- j_nb: nb, 1!100110001
+ j_nb: nb, 1!100101000
 
 Index k
  k_kd: kd, 1!000
- k_pk: pk, 1!1
- k_lp: lp, 1!100010111
+ k_pk: pk, 1!0
+ k_lp: lp, 1!100110011
  k_pn: pn, 1!1000011
 
 Index l
  l_kd: kd, 1!100
  l_pk: pk, 1!0
  l_hm: hm, 1!11
- l_ab: ab, 1!100000001001010001000100000
+ l_ab: ab, 1!100000000001000000000000100
 
 Index s
- s_kd: kd, 1!000
+ s_kd: kd, 1!100
  s_pk: pk, 1!0
- s_pn: pn, 1!1000011
- s_dp: dp, 1!1110100
+ s_pn: pn, 1!0000011
+ s_dp: dp, 1!1100100
  s_cc: cc, 1!11
 
 Index f
- f_kd: kd, 1!011
- f_pk: pk, 1!0
+ f_kd: kd, 1!110
+ f_pk: pk, 1!1
  f_pl: pl, 1!001010110000010
 
 Index m
  m_kd: kd, 1!110
- m_pk: pk, 1!0
- m_dp: dp, 1!0111101
+ m_pk: pk, 1!1
+ m_dp: dp, 1!0111010
 
 Index w
  w_pn: pn, 1!0000000
@@ -101,26 +101,26 @@ Index g
 
 #  The counters' limits (r: up to 255 counts) and margins (mw: in 64ths of 1/1024)
 Number rA, 1, 0!00000000
-Number mwA, 1, 0!00111101
+Number mwA, 1, 0!00111111
 Number rB, 1, 0!00000000
-Number mwB, 1, 0!11111000
-Number rC, 1, 0!00001010
-Number mwC, 1, 0!11000111
-Number rD, 1, 0!10100101
-Number mwD, 1, 0!00101101
+Number mwB, 1, 0!11110010
+Number rC, 1, 0!00001011
+Number mwC, 1, 0!11010111
+Number rD, 1, 0!11110010
+Number mwD, 1, 0!11011111
 Number rE, 1, 0!00000000
-Number mwE, 1, 0!10010000
-Number rH, 1, 0!11000100
-Number mwH, 1, 0!00110001
-Number rI, 1, 0!00000000
-Number mwI, 1, 0!01011100
-Number rJ, 1, 0!01010101
-Number mwJ, 1, 0!00000010
+Number mwE, 1, 0!11110000
+Number rH, 1, 0!00010000
+Number mwH, 1, 0!11110011
+Number rI, 1, 0!11111010
+Number mwI, 1, 0!01110000
+Number rJ, 1, 0!01110000
+Number mwJ, 1, 0!00000011
 Number rK, 1, 0!00000000
-Number mwK, 1, 0!11101011
+Number mwK, 1, 0!11101000
 Number rL, 1, 0!00000000
 Number mwL, 1, 0!10100001
-Number lr, 1, 0!01100
+Number lr, 1, 0!01110
 Number mb, 1, 0!00100000
 #  the mixers' initial weights, in 256ths (format 112): each counter's two probabilities' in the
 #  first three (wp, wq), the outside prediction's there (wo), A's APM refinement's (wa, format
@@ -129,22 +129,22 @@ Number mb, 1, 0!00100000
 #  and boosts (b2, b3, format 115)
 Number wp, 1, 0!00111110
 Number wq, 1, 0!00000011
-Number wo, 1, 0!01000000
+Number wo, 1, 0!10001111
 Number wa, 1, 0!00000000
-Number wf, 1, 0!01001101
+Number wf, 1, 0!01001100
 Number lf, 1, 0!00010000
-Number bf, 1, 0!00000001
+Number bf, 1, 0!00000000
 Number l2, 1, 0!01100000
 Number l3, 1, 0!00011110
-Number b2, 1, 0!00000101
-Number b3, 1, 0!00010100
+Number b2, 1, 0!00000100
+Number b3, 1, 0!00010010
 Number rS1, 1, 0!10000
 Number rS2, 1, 0!01000
 Number qs, 1, 3!0000000
-Number qf, 1, 3!1111100
-Number bw, 1, 0!01011
+Number qf, 1, 3!1011010
+Number bw, 1, 0!01110
 Number rT, 1, 0!00010000
-Number mwT, 1, 0!01100110
+Number mwT, 1, 0!01101110
 Number mt, 1, 0!110
 #  the mantissa mixer's rates: frozen (Index n)
 ! Number lrm, 1, 0!11111

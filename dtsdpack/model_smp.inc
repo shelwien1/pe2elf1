@@ -890,20 +890,25 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // mean's, above), by SFL_TA and a fourth, where the two differ (sfl_t, by channel, halved at
   // SFL_TL); the channel before's moves' mean this
   // subframe, sfl_c1 (sfl_cv whether it is there yet), and the sum and count of the channel's own
-  // moves in its subbands below sfl_k0 (sfl_s0, sfl_n0)
+  // moves in its subbands below sfl_k0 (sfl_s0, sfl_n0). Since format 179 an HF VQ subband's scale
+  // factor (which the scale factors' pass codes, after every channel's ABITS) by a fit of its own,
+  // sfl_f's SFL_G + 1, the same things, its first guess by a tally of its own (sfl_tv), and it
+  // this subframe's first (nw_e0), as an ADPCM subband's is; and a transient's second scale
+  // factor's move from its first by another, SFL_G + 2, of sf2_x()'s things, its mean distance
+  // from the fit's value by channel (sfl_e2, sfl_m2), its tally sfl_t2
   static constexpr int SFL_X = 17, SFL_N = 20, SFL_K = 32, SFL_G = 6;
   static constexpr U32 SFL_GN = 256, SFL_TA = 64, SFL_TL = 1024;
   static constexpr double SFL_LAM = 0.999, SFL_S = 0.85, SFL_S0 = 0.3, SFL_S1 = 2.0, SFL_RIDGE = 1e-3;
   static constexpr double SFL_L2 = SFL_LAM * SFL_LAM, SFL_L4 = SFL_L2 * SFL_L2, SFL_L8 = SFL_L4 * SFL_L4;
   static constexpr double SFL_LK = SFL_L8 * SFL_L8 * SFL_L8 * SFL_L8;  // (SFL_LAM to the SFL_K)
   static_assert(SFL_K == 32 && SFL_N % 4 == 0 && SFL_N >= SFL_X, "SFL_LK is SFL_LAM to the 32nd; nw_add()'s whole 4s");
-  NwFitT<SFL_N> sfl_f[NCH][SFL_G + 1];
+  NwFitT<SFL_N> sfl_f[NCH][SFL_G + 3];
   U32 sfl_n[NCH][SFL_G];
-  double sfl_e[NCH][NSUB], sfl_c1[NCH], sfl_s0[NCH], sfl_n0[NCH];
+  double sfl_e[NCH][NSUB], sfl_c1[NCH], sfl_s0[NCH], sfl_n0[NCH], sfl_e2[NCH];
   int sfl_k0[NCH];
-  U8 sfl_m[NCH][NSUB], sfl_cv[NCH], sfl_all[NCH];  // (sfl_all: every group's fit has had SFL_GN, the whole's needed no more)
+  U8 sfl_m[NCH][NSUB], sfl_cv[NCH], sfl_all[NCH], sfl_m2[NCH];  // (sfl_all: every group's fit has had SFL_GN, the whole's needed no more)
   S16 sfl_p[NCH][NSUB];
-  U32 sfl_t[NCH][2];
+  U32 sfl_t[NCH][2], sfl_tv[NCH][2], sfl_t2[NCH][2];
   U8 sfl_z[NCH];  // (since format 177 whether the channel's fits are zeroed for the stream: as first used)
   // (the subbands' groups: 0-1, 2-3, 4-7, 8-11, 12-19, 20-31)
   static int sfl_g(int b) { return b < 4 ? b >> 1 : b < 12 ? 2 + (b >= 8) : 4 + (b >= 20); }
@@ -1722,7 +1727,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int k = 0; k < 3; k++) am_wk[k] = AM_W0;
     am_ve = AM_E0;
     memset(sfl_m, 0, sizeof sfl_m), memset(sfl_p, 0, sizeof sfl_p), memset(sfl_cv, 0, sizeof sfl_cv), memset(sfl_all, 0, sizeof sfl_all);
-    memset(sfl_t, 0, sizeof sfl_t);
+    memset(sfl_t, 0, sizeof sfl_t), memset(sfl_tv, 0, sizeof sfl_tv), memset(sfl_t2, 0, sizeof sfl_t2);
+    memset(sfl_e2, 0, sizeof sfl_e2), memset(sfl_m2, 0, sizeof sfl_m2);
     for (int c = 0; c < NCH; c++)
       for (int k = 0; k < NSUB; k++) nw_ba[c][k] = nw_bb[c][k] = nw_bs[c][k] = nw_bf[c][k] = 1.0;
     for (int c = 0; c < NCH; c++) nw_bw[c] = 0.0, nw_lsc[c] = NW_LS;
@@ -5037,10 +5043,25 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     x[15] = sfl_n0[ch] > 0.0 ? sfl_s0[ch] / sfl_n0[ch] : 0.0, x[16] = sfl_c1[ch];
     for (int k = SFL_X; k < SFL_N; k++) x[k] = 0.0;
   }
-  // (the fit's value, A - 1 and the move it makes, within the table; its logistic's scale's inverse, *is)
-  double sfl_q(int ch, int b, int A, int max, const double* x, double* is) const {
+  // (a transient's second scale factor's things, its move from its first s1: 1; the first's move
+  // from the last subframe's, and whether there is one; the transient's place; the channel before's
+  // second's move from its first, at the subband, where it is a transient there too, and whether;
+  // the subband below's, the same; the channel before's first's move from its last, and whether)
+  void sf2_x(const CoreRec& r, const CoreSub& s, int ch, int b, int A, int s1, int tm, double* x) const {
+    for (int k = 0; k < SFL_N; k++) x[k] = 0.0;
+    const int c1 = ch - 1 >= r.ch0() && r.shuff[ch - 1] == r.shuff[ch] ? ch - 1 : -1;
+    x[0] = 1.0;
+    if (A) x[1] = (double)(s1 - (A - 1)), x[2] = 1.0;
+    x[3] = (double)tm;
+    if (c1 >= 0 && b < r.nvqsub[c1] && s.tmode[c1][b] && nw_e0[c1][b]) x[4] = (double)(s.scale[c1][b][1] - (nw_e0[c1][b] - 1)), x[5] = 1.0;
+    if (b && s.tmode[ch][b - 1] && nw_e0[ch][b - 1]) x[6] = (double)(s.scale[ch][b - 1][1] - (nw_e0[ch][b - 1] - 1)), x[7] = 1.0;
+    if (c1 >= 0 && b < r.nvqsub[c1] && nw_e0[c1][b] && hist.scale[c1][b]) x[8] = (double)(nw_e0[c1][b] - hist.scale[c1][b]), x[9] = 1.0;
+  }
+  // (the fit's value, A - 1 and the move it makes, within the table; its logistic's scale's inverse,
+  // *is; hv, an HF VQ subband's)
+  double sfl_q(int ch, int b, int A, int max, const double* x, double* is, bool hv) const {
     const int g = sfl_g(b);
-    const double* w = sfl_f[ch][sfl_n[ch][g] >= SFL_GN ? g : SFL_G].w;
+    const double* w = hv ? sfl_f[ch][SFL_G + 1].w : sfl_f[ch][sfl_n[ch][g] >= SFL_GN ? g : SFL_G].w;
     double mu = (double)(A - 1);
     for (int k = 0; k < SFL_X; k++) mu += w[k] * x[k];
     mu = mu < 0.0 ? 0.0 : mu > (double)(max - 1) ? (double)(max - 1) : mu;
@@ -5048,8 +5069,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     *is = 1.0 / s;
     return mu;
   }
-  // (x and the move y into the fits of the subband's group and the channel's whole)
-  void sfl_learn(int ch, int b, const double* x, double y) {
+  // (x and the move y into the fits of the subband's group and the channel's whole; an HF VQ
+  // subband's, hv, into its own)
+  void sfl_learn(int ch, int b, const double* x, double y, bool hv) {
+    if (hv) {
+      sfl_fit(sfl_f[ch][SFL_G + 1], x, y);
+      return;
+    }
     const int g = sfl_g(b);
     if (!sfl_all[ch]) {
       sfl_fit(sfl_f[ch][SFL_G], x, y);
@@ -5366,27 +5392,56 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // (since format 176 an unbound channel's first, where it has a last one: by sfl's fit, its first
     // guess the fit's value rounded where that has been right more often, sfl_t)
     double sfx[SFL_N], smu = -1.0, sis = 0.0;
-    const bool sfu = early && A;
+    // (since format 179 an HF VQ subband's, hv, by its own; a transient's second, h2, by its move from
+    // the first: without their WAVs, the 12 streams 0.064% smaller, Fire 0.21%, `padded.dts` 0.10%)
+    const bool hv = hfb && !j && !bound[ch], sfu = (early || hv) && A;
+    const bool h2 = j == 1 && !hfb && !bound[ch] && nw_e0[ch][b];
     const int pold = p >= 0 ? p : A - 1;
     int pfit = -1;
     if (sfu) {
       if (!sfl_z[ch]) memset(sfl_f[ch], 0, sizeof sfl_f[ch]), sfl_z[ch] = 1;
-      sfl_x(r, ch, b, A, sfx), smu = sfl_q(ch, b, A, max, sfx, &sis), pfit = (int)floor(smu + 0.5);
-      const U32* const tl = sfl_t[ch];
+      sfl_x(r, ch, b, A, sfx), smu = sfl_q(ch, b, A, max, sfx, &sis, hv), pfit = (int)floor(smu + 0.5);
+      const U32* const tl = hv ? sfl_tv[ch] : sfl_t[ch];
       if (tl[1] > tl[0] + SFL_TA + (tl[0] >> 2)) p = pfit;
     }
+    const int s1 = h2 ? nw_e0[ch][b] - 1 : 0, p2old = p >= 0 ? p : s1;
+    int p2fit = -1;
+    double s2x[SFL_N];
+    if (h2) {
+      if (!sfl_z[ch]) memset(sfl_f[ch], 0, sizeof sfl_f[ch]), sfl_z[ch] = 1;
+      sf2_x(r, s, ch, b, A, s1, tm, s2x);
+      const double* w = sfl_f[ch][SFL_G + 2].w;
+      double mu = (double)s1;
+      for (int k = 0; k < SFL_X; k++) mu += w[k] * s2x[k];
+      smu = mu < 0.0 ? 0.0 : mu > (double)(max - 1) ? (double)(max - 1) : mu;
+      sis = 1.0 / (sfl_m2[ch] ? (SFL_S * sfl_e2[ch] > SFL_S0 ? SFL_S * sfl_e2[ch] : SFL_S0) : SFL_S1);
+      p2fit = (int)floor(smu + 0.5);
+      const U32* const tl = sfl_t2[ch];
+      if (tl[1] > tl[0] + SFL_TA + (tl[0] >> 2)) p = p2fit;
+    }
     v = scale(D, v, p, A, max, spu && p == p0, sg, spc, spp, spk, !bound[ch], smu, sis);
+    if (h2) {
+      if (p2fit != p2old) {
+        U32* const tl = sfl_t2[ch];
+        tl[0] += v == p2old, tl[1] += v == p2fit;
+        if (tl[0] + tl[1] >= SFL_TL) tl[0] >>= 1, tl[1] >>= 1;
+      }
+      const double e = (double)v - smu, ae = e < 0 ? -e : e;
+      sfl_e2[ch] = sfl_m2[ch] ? sfl_e2[ch] + (ae - sfl_e2[ch]) / 16.0 : ae, sfl_m2[ch] = 1;
+      sfl_fit(sfl_f[ch][SFL_G + 2], s2x, (double)(v - s1));
+    }
     if (sfu) {
       if (pfit != pold) {
-        U32* const tl = sfl_t[ch];
+        U32* const tl = hv ? sfl_tv[ch] : sfl_t[ch];
         tl[0] += v == pold, tl[1] += v == pfit;
         if (tl[0] + tl[1] >= SFL_TL) tl[0] >>= 1, tl[1] >>= 1;
       }
       const double e = (double)v - smu, ae = e < 0 ? -e : e;
       sfl_e[ch][b] = sfl_m[ch][b] ? sfl_e[ch][b] + (ae - sfl_e[ch][b]) / 16.0 : ae, sfl_m[ch][b] = 1;
-      sfl_learn(ch, b, sfx, (double)(v - (A - 1)));
+      sfl_learn(ch, b, sfx, (double)(v - (A - 1)), hv);
       sfl_p[ch][b] = (S16)A;
     }
+    if (hv) nw_e0[ch][b] = (S16)(1 + v);
     if (!bound[ch] && !j) nw_sm[ch][b] = nw_sn[ch][b] ? nw_sm[ch][b] + ((double)v - nw_sm[ch][b]) / 8 : (double)v, nw_sn[ch][b] = 1;
     if (pf >= 0) {
       U32* const n = sfx_n[ch];

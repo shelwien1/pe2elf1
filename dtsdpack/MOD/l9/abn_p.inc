@@ -16,21 +16,20 @@ void D9_abn_make( const M_abn_v & D, tcx & X ) {
   M_abn_VARS(M_LOCAL)
 
   a = 0;
-  a = a*15 + D9_abn_a_bd[__min(31,__max(0,(bd)-(1-1)))];
+  a = a*17 + D9_abn_a_bd[__min(31,__max(0,(bd)-(1-1)))];
   a = (a<<7) + (((es)&127)); // 01111111
 
   b = 0;
-  b = b*12 + D9_abn_b_la[__min(27,__max(0,(la)-(1-1)))];
-  b = b*18 + D9_abn_b_lb[__min(27,__max(0,(lb)-(1-1)))];
+  b = b*5 + D9_abn_b_la[__min(27,__max(0,(la)-(1-1)))];
+  b = b*12 + D9_abn_b_lb[__min(27,__max(0,(lb)-(1-1)))];
 
   c = 0;
-  c = c*23 + D9_abn_c_sn[__min(27,__max(0,(sn)-(1-1)))];
-  c = c*22 + D9_abn_c_la[__min(27,__max(0,(la)-(1-1)))];
+  c = c*22 + D9_abn_c_sn[__min(27,__max(0,(sn)-(1-1)))];
+  c = c*14 + D9_abn_c_la[__min(27,__max(0,(la)-(1-1)))];
 
   d = 0;
-  d = d*3 + (((sn)>2+(1-1))+((sn)>9+(1-1)));
   d = d*3 + (((sd)>0+(1-1))+((sd)>1+(1-1)));
-  d = d*9 + D9_abn_d_de[__min(9,__max(0,(de)-(1-1)))];
+  d = d*6 + D9_abn_d_de[__min(9,__max(0,(de)-(1-1)))];
   d = d*4 + D9_abn_d_sc[__min(14,__max(0,(sc)-(1-1)))];
   d = d*8 + D9_abn_d_sm[__min(16,__max(0,(sm)-(1-1)))];
   d = d*3 + (((bg)>0+(1-1))+((bg)>3+(1-1)));
@@ -39,23 +38,22 @@ void D9_abn_make( const M_abn_v & D, tcx & X ) {
 
   e = 0;
   e = e*4 + D9_abn_e_bd[__min(31,__max(0,(bd)-(1-1)))];
-  e = e*8 + D9_abn_e_sn[__min(27,__max(0,(sn)-(1-1)))];
+  e = e*5 + D9_abn_e_sn[__min(27,__max(0,(sn)-(1-1)))];
 
   h = 0;
-  h = h*3 + (((lb)>2+(1-1))+((lb)>24+(1-1)));
+  h = h*3 + (((lb)>1+(1-1))+((lb)>14+(1-1)));
   h = (h<<7) + (((es)&127)); // 01111111
-  h = h*30 + D9_abn_h_bd[__min(31,__max(0,(bd)-(1-1)))];
+  h = h*28 + D9_abn_h_bd[__min(31,__max(0,(bd)-(1-1)))];
 
   i = 0;
-  i = (i<<7) + (((es)&127)); // 01111111
-  i = i*3 + (((nb)>1+(1-1))+((nb)>6+(1-1)));
-  i = i*13 + D9_abn_i_la[__min(27,__max(0,(la)-(1-1)))];
+  i = (i<<5) + (((((es)>>5)&1)<<4) + ((es)&15)); // 00101111
+  i = i*5 + D9_abn_i_nb[__min(9,__max(0,(nb)-(1-1)))];
+  i = i*7 + D9_abn_i_la[__min(27,__max(0,(la)-(1-1)))];
 
   j = 0;
-  j = j*2 + (((de)>5+(1-1)));
+  j = j*3 + (((de)>3+(1-1))+((de)>7+(1-1)));
 
   k = 0;
-  k = k*2 + (((sn)>1+(1-1)));
   k = k*11 + D9_abn_k_nn[__min(15,__max(0,(nn)-(1-1)))];
   k = k*7 + D9_abn_k_sc[__min(14,__max(0,(sc)-(1-1)))];
   k = k*6 + D9_abn_k_sm[__min(16,__max(0,(sm)-(1-1)))];
@@ -66,25 +64,25 @@ void D9_abn_make( const M_abn_v & D, tcx & X ) {
   l = 0;
   l = l*18 + D9_abn_l_bd[__min(31,__max(0,(bd)-(1-1)))];
   l = l*3 + (((cc)>0+(1-1))+((cc)>1+(1-1)));
-  l = l*5 + D9_abn_l_la[__min(27,__max(0,(la)-(1-1)))];
+  l = l*8 + D9_abn_l_la[__min(27,__max(0,(la)-(1-1)))];
 
   s = 0;
-  s = s*12 + D9_abn_s_sn[__min(27,__max(0,(sn)-(1-1)))];
-  s = s*6 + D9_abn_s_nn[__min(15,__max(0,(nn)-(1-1)))];
+  s = s*13 + D9_abn_s_sn[__min(27,__max(0,(sn)-(1-1)))];
+  s = s*7 + D9_abn_s_nn[__min(15,__max(0,(nn)-(1-1)))];
   s = s*9 + D9_abn_s_sc[__min(14,__max(0,(sc)-(1-1)))];
-  s = s*8 + D9_abn_s_sm[__min(16,__max(0,(sm)-(1-1)))];
+  s = s*10 + D9_abn_s_sm[__min(16,__max(0,(sm)-(1-1)))];
   s = s*5 + D9_abn_s_bg[__min(7,__max(0,(bg)-(1-1)))];
   s = s*2 + (((ag)>2+(1-1)));
-  s = s*2 + (((sx)>2+(1-1)));
+  s = s*3 + (((sx)>0+(1-1))+((sx)>2+(1-1)));
 
   f = 0;
   f = (f<<4) + ((((es)>>3)&15)); // 01111000
 
   m = 0;
-  m = m*10 + D9_abn_m_nn[__min(15,__max(0,(nn)-(1-1)))];
+  m = m*9 + D9_abn_m_nn[__min(15,__max(0,(nn)-(1-1)))];
 
   w = 0;
-  w = w*4 + D9_abn_w_st[__min(9,__max(0,(st)-(1-1)))];
+  w = w*3 + (((st)>7+(1-1))+((st)>8+(1-1)));
 
   t = 0;
   t = t*9 + D9_abn_t_bd[__min(31,__max(0,(bd)-(1-1)))];
