@@ -754,7 +754,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // encoders allocate by such a table, the level the subframe's budget's (`dtswavsample16.wav`'s: in a
   // subframe's channel, at ABITS 10 and up, e - 5.55 ABITS less the subband's offset spreads by 1.61
   // scale factors, as it would were each ABITS exactly 5.55 of them, the rest uniform: 1.60). The
-  // ABITS counted at y (am_cnt, am_tot: two maps, of the subbands under AM_GB and of the rest; y
+  // ABITS counted at y (am_cnt, am_tot: two maps, of the subbands under AM_GB and of the rest, since
+  // format 178 each three, by how many subbands of its own the level has had, none, one or more; y
   // between its two nearest whole ones, linearly; each from AM_A, a y's halved where they pass AM_L),
   // mixed with format 174's counts by a weight for how much of the level the subframe has given
   // (am_wk: none of its own yet, one subband, more), each weight the two's posterior after the ABITS,
@@ -762,27 +763,71 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // (abits_val_n()). The level, the mean of e - am_off - the ABITS' centre (the mean y at it, each
   // ABITS an AM_C-th: am_cs / am_cn; 5 ABITS + 10 before any) over the channel's subbands at ABITS 2
   // and up so far this subframe (am_Ls, am_Ln), before any the last subframe's (am_Lp, am_set
-  // whether there is one); the subbands' offsets, each an AM_O-th of e - the level - the centre
+  // whether there is one); the subbands' offsets, each an AM_O-th of e - the level - the centre.
+  // Since format 178 the level is the mean of three by their precisions (am_level()): the last
+  // subframe's, the channel before's this subframe less the learned difference between the two
+  // channels' levels (am_D, each subframe an AM_DR-th of it; am_Dn whether there is one), and each
+  // subband's of its own; their variances learned, each subframe an AM_VR-th: of its own level from
+  // the last one's (am_vl), from the channel before's less am_D (am_vc, against am_pcv, the one it
+  // had, am_pco whether it had one), and of a subband's from the mean of the subframe's (am_ve, by
+  // am_Lq, their squares' sum); am_tp the subframe am_Lp is the level of
   static constexpr int AM_YO = 64, AM_YN = 256, AM_GB = 8;
-  static constexpr double AM_A = 0.05, AM_S = 0.05, AM_O = 16.0, AM_C = 256.0, AM_W0 = 0.2;
+  static constexpr double AM_A = 0.02, AM_S = 0.1, AM_O = 24.0, AM_C = 256.0, AM_W0 = 0.2;
+  static constexpr double AM_DR = 16.0, AM_VR = 64.0, AM_V0 = 9.0, AM_E0 = 3.0;
   static constexpr float AM_L = 128.0f;
-  float am_cnt[2][AM_YN][27], am_tot[2][AM_YN];
+  float am_cnt[6][AM_YN][27], am_tot[6][AM_YN];
   double am_off[NSUB], am_cs[27], am_cn[27], am_Ls[NCH], am_Lp[NCH], am_wk[3];
+  double am_D[NCH], am_vl[NCH], am_vc[NCH], am_pcv[NCH], am_Lq[NCH], am_ve;
   int am_Ln[NCH];
-  S64 am_t[NCH];
-  U8 am_set[NCH], am_z;  // (am_z: whether am_cnt and am_tot are zeroed for the stream: as first used)
+  S64 am_t[NCH], am_tp[NCH];
+  U8 am_set[NCH], am_Dn[NCH], am_pco[NCH], am_z;  // (am_z: whether am_cnt and am_tot are zeroed for the stream: as first used)
   struct AmUse {  // (what am_mix() found, for am_learn())
     int y, m, kc;
     double f, po[27], pn[27];
   };
-  // (the level of channel ch's subframe so far, *L; false where there is none)
+  // (the level of channel ch's subframe so far, *L; false where there is none. A subframe begins:
+  // what the channel's last level teaches, its variances, the difference from the channel before's)
   bool am_level(int ch, double* L) {
     if (am_t[ch] != t0) {
-      if (am_Ln[ch]) am_Lp[ch] = am_Ls[ch] / am_Ln[ch], am_set[ch] = 1;
-      am_Ls[ch] = 0.0, am_Ln[ch] = 0, am_t[ch] = t0;
+      if (am_Ln[ch]) {
+        const double Lf = am_Ls[ch] / am_Ln[ch];
+        if (am_set[ch]) {
+          const double d = Lf - am_Lp[ch];
+          am_vl[ch] += (d * d - am_vl[ch]) / AM_VR;
+        }
+        if (am_pco[ch]) {
+          const double d = Lf - am_pcv[ch];
+          am_vc[ch] += (d * d - am_vc[ch]) / AM_VR;
+        }
+        if (am_Ln[ch] >= 2) {
+          const double v = (am_Lq[ch] - am_Ln[ch] * Lf * Lf) / (am_Ln[ch] - 1);
+          am_ve += (v - am_ve) / AM_VR;
+        }
+        am_Lp[ch] = Lf, am_set[ch] = 1;
+        if (ch > 0 && am_set[ch - 1] && am_tp[ch - 1] == am_t[ch]) {
+          const double d = am_Lp[ch] - am_Lp[ch - 1];
+          am_D[ch] = am_Dn[ch] ? am_D[ch] + (d - am_D[ch]) / AM_DR : d, am_Dn[ch] = 1;
+        }
+        am_tp[ch] = am_t[ch];
+      }
+      am_Ls[ch] = 0.0, am_Lq[ch] = 0.0, am_Ln[ch] = 0, am_t[ch] = t0, am_pco[ch] = 0;
     }
-    if (am_Ln[ch]) return *L = am_Ls[ch] / am_Ln[ch], true;
-    return *L = am_Lp[ch], am_set[ch] != 0;
+    double num = 0.0, den = 0.0;
+    if (am_set[ch]) {
+      const double a = 1.0 / (am_vl[ch] + 1e-3);
+      num += a * am_Lp[ch], den += a;
+    }
+    if (ch > 0 && am_t[ch - 1] == t0 && am_Ln[ch - 1] && am_Dn[ch]) {
+      const double Pc = am_Ls[ch - 1] / am_Ln[ch - 1] + am_D[ch], c = 1.0 / (am_vc[ch] + 1e-3);
+      if (!am_pco[ch]) am_pcv[ch] = Pc, am_pco[ch] = 1;
+      num += c * Pc, den += c;
+    }
+    if (am_Ln[ch]) {
+      const double e = 1.0 / (am_ve + 1e-3);
+      num += e * am_Ls[ch], den += e * am_Ln[ch];
+    }
+    if (den <= 0.0) return *L = 0.0, false;
+    return *L = num / den, true;
   }
   // (channel ch's subband b at e: the map's probabilities mixed into q, format 174's counts of sum qs,
   // which then hold the mixture's; false where there is no level yet, q as it was)
@@ -792,7 +837,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     if (!am_z) memset(am_cnt, 0, sizeof am_cnt), memset(am_tot, 0, sizeof am_tot), am_z = 1;
     const double yy = (double)e - am_off[b] - L + (double)AM_YO;
     u.y = clip((int)floor(yy), 0, AM_YN - 2), u.f = clip(yy - (double)u.y, 0.0, 1.0);
-    u.m = b >= AM_GB, u.kc = imin(am_Ln[ch], 2);
+    u.kc = imin(am_Ln[ch], 2), u.m = (b >= AM_GB) + 2 * u.kc;
     const float* const c0 = am_cnt[u.m][u.y];
     const float* const c1 = u.f > 0.0 ? am_cnt[u.m][u.y + 1] : c0;
     const double tt = (1.0 - u.f) * am_tot[u.m][u.y] + u.f * (u.f > 0.0 ? am_tot[u.m][u.y + 1] : 0.0), w = am_wk[u.kc];
@@ -823,6 +868,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     }
     if (v >= 2) {
       const double cen = am_cn[v] > 0.0 ? am_cs[v] / am_cn[v] : 5.0 * v + 10.0;
+      am_Lq[ch] += ((double)e - am_off[b] - cen) * ((double)e - am_off[b] - cen);
       am_Ls[ch] += (double)e - am_off[b] - cen, am_Ln[ch]++;
       const double L = am_Ls[ch] / am_Ln[ch];
       am_off[b] += ((double)e - L - cen - am_off[b]) / AM_O;
@@ -1671,8 +1717,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     memset(sfl_z, 0, sizeof sfl_z), memset(sfl_n, 0, sizeof sfl_n), memset(sfl_e, 0, sizeof sfl_e);
     am_z = 0, memset(am_off, 0, sizeof am_off), memset(am_cs, 0, sizeof am_cs), memset(am_cn, 0, sizeof am_cn);
     memset(am_Ls, 0, sizeof am_Ls), memset(am_Lp, 0, sizeof am_Lp), memset(am_Ln, 0, sizeof am_Ln), memset(am_set, 0, sizeof am_set);
-    for (int k = 0; k < NCH; k++) am_t[k] = -1;
+    for (int k = 0; k < NCH; k++)
+      am_t[k] = -1, am_tp[k] = -2, am_D[k] = am_pcv[k] = am_Lq[k] = 0.0, am_vl[k] = am_vc[k] = AM_V0, am_Dn[k] = am_pco[k] = 0;
     for (int k = 0; k < 3; k++) am_wk[k] = AM_W0;
+    am_ve = AM_E0;
     memset(sfl_m, 0, sizeof sfl_m), memset(sfl_p, 0, sizeof sfl_p), memset(sfl_cv, 0, sizeof sfl_cv), memset(sfl_all, 0, sizeof sfl_all);
     memset(sfl_t, 0, sizeof sfl_t);
     for (int c = 0; c < NCH; c++)

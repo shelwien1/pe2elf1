@@ -566,7 +566,9 @@ struct Model : ModelX96<f_DEC, LV> {
         // same counts too, nq: model_side.inc's abits_val_n(); since format 177 those counts mixed
         // with the ABITS counted at the first scale factor less the subband's offset and the
         // subframe's level, model_smp.inc's am_mix(): without their WAVs, on 12 streams 0.48%
-        // smaller, `dtswavsample16.wav` 0.82%, its ABITS 484 KB to 242)
+        // smaller, `dtswavsample16.wav` 0.82%, its ABITS 484 KB to 242; since format 178 the level
+        // by its priors too, the last subframe's and the channel before's, and the maps by how sure
+        // it is: 0.018% smaller again)
         const int nwl = clip(hist.abits[ch][b], 0, 27);
         double nq[27];
         const double* nqp = nullptr;

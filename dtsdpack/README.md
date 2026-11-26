@@ -9,7 +9,7 @@ to code is where the encoder chose otherwise. Decompression, with the same WAV, 
 stream byte for byte.
 
 The core of `s.2.dts` (4 minutes 25 seconds of 5.1 at 1509 kbps; 50008260 bytes) compresses to
-76356 bytes (0.15%); without its audio, dtsdpack's model gets 62.48% and `xz -9e` 88.21%.
+76356 bytes (0.15%); without its audio, dtsdpack's model gets 62.47% and `xz -9e` 88.21%.
 
 The core substream's extensions are coded too: XCH (6.1's back centre) and XXCH (7.1's other
 channels) as more channels, X96 (DTS 96/24's 24-48 kHz band and the core's residuals) as subbands
@@ -104,7 +104,7 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76356 (0.15%) | 62.48% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76356 (0.15%) | 62.47% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3470 (0.27%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 4615 (0.43%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2585 (0.11%) | | |
@@ -1286,6 +1286,55 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   medians of 15 runs interleaved with format 176's build on this host, `mid.dtsc` without its WAV
   328 KB/s to 345 compressing and 326 to 326 decompressing, the XCH sample 269 to 275 and 273 to
   268, and with its WAV 194 to 255 and 304 to 289 (the host's noise more than the change).
+  Since format 178 that level is the mean of three by their precisions (`model_smp.inc`'s
+  am_level()): the last subframe's; the channel before's this subframe plus the difference of the
+  two channels' levels, which moves a 16th of the way to each subframe's; and each of the subframe's
+  own subbands'. Each is weighed by the inverse of its variance, learned a 64th of the way each
+  subframe: of the channel's level about its last one (from 9), about the channel before's plus the
+  difference (from 9), and of a subband's about the subframe's mean (from 3). In `chs/m.dtsc`'s
+  subframes (a channel's level by its subbands at ABITS 10 and up), a channel's level less the
+  channel before's spreads by 1.7-2.9 scale factors where its move from its last subframe's spreads
+  by 2.9-3.5 (Fire's 2.2-4.3 and 6.1-7.2); and on `mid.dtsc`, `chs/m.dtsc` and Fire the map alone
+  would code the ABITS 8-12% smaller with each subband's level its subframe's other subbands' (which
+  the decoder cannot have). Each of the two maps is now three, by how many subbands of its own the
+  level has had (none, one, more); the counts from 0.02, a 10th of each weight shared back, the
+  offsets a 24th of the way. Without their WAVs, `s.2.dts`'s whole core 31244852 bytes to 31241391
+  (62.48% of it to 62.47%), the 55 streams of the check lists 122194262 to 122172276 (0.018%:
+  `open_bitrate.dtsc` 0.044%, `dts_es.dtsc` 0.038%, `96-24.dts` and its packings 0.033%,
+  `chs/n.dtsc` 0.032%, `ES_6.1_16bit.dtsc` and its packing 0.028%, Fire and its two packings 0.026%,
+  `chs/m.dtsc` 0.022%, the two `sil` streams, `lfe/l0.dtsc`, `pc/p1.dtsc` and `padded.dts`
+  0.017-0.018%, `dtswavsample16.wav` 0.015% (its ABITS 242 KB to 238), `dtswavsample14.wav` 0.012%,
+  `Master_Audio_5.0_96khz.dtsc` 0.011%, FFmpeg's encodes 0.002-0.031%, `s2h.dtsc` and its packings
+  0.008%, `mid.dtsc` 0.007%, `sur/s.dts` 0.004%, `3-1.dtsc` 0.002%; FATE's short samples from 2
+  bytes smaller to a byte bigger, three of them a byte bigger, the DTS:X 7.1.4 core and the 14-bit
+  packing of `f1c.dts` the same). With their WAVs the sizes are format 177's (the check lists' 67
+  runs 1447527 bytes, `s.2.dts`'s whole core with its WAV 76356, the Cymatics core 60631). On 12 of
+  the streams (as for format 177) 56670254 bytes to 56660250 (0.018%): the three by their
+  precisions, learned a 64th of the way, 0.0077% (a 128th, 0.0075%); the maps each three, 0.0151%;
+  the constants, 0.0177% (the counts from 0.01, 0.0149%). On four (`chs/m.dtsc`, Fire, `dts_es.dtsc`
+  and `open_bitrate.dtsc`, 13023822 bytes): the channel before's level plus the difference in place
+  of the last subframe's, 282 bytes smaller (the two's mean, 169; with a weight of its own for the
+  map, 339); that as 0.5, 1, 2 or 3 subbands' worth in the subframe's mean, 1235, 1675, 1938 and
+  1884 bytes smaller (at 1, the difference learned an 8th or a 32nd of the way, 1711 and 1599; only
+  where there is a channel before's, the last subframe's then none, 1419; at 2, 1727); the three by
+  their precisions learned an 8th, a 16th, a 32nd or a 64th of the way, 1189, 1683, 2062 and 2193
+  (from other variances, the same; the priors' precisions 2, 3 or 5 times, 1733, 1251 and 403 at a
+  32nd); the maps two (none of its own, some) or three, 2614 and 2827 (with format 177's level, 377
+  and 625); then the counts from 0.01, 0.02 or 0.1, 3182, 3107 and 2322; a 50th or a 10th shared
+  back, 2374 and 3032 (with the counts from 0.02, a 10th 3286, a 5th 3175; from 0.01, a 10th 3362);
+  the offsets an 8th, a 24th or a 32nd of the way, 1865, 3421 (with the two before) and 2800; halved
+  at 64 or 256, 2834 and 2545; the weights from 0.3, 2827 as from 0.2. Tried and dropped: an unbound
+  channel's HF VQ vectors guessed from its own last subframe's too, beside format 173's guesses from
+  the two earlier channels' (on Fire, `s2h.dtsc`, `mid.dtsc`, `dts_es.dtsc` and `open_bitrate.dtsc`
+  34 bytes smaller in all). An unbound channel's flags for an ABITS of 0 are never set on
+  `mid.dtsc`, `dts_es.dtsc`, `chs/m.dtsc` or `dtswavsample16.wav`, and cost 3-103 bytes of each:
+  nothing there. For 0.015% more instructions without the WAV (`mid.dtsc`'s, compressing, 24102
+  million to 24106, and 0.12% decompressing, 23834 million to 23863; FATE's 7-frame XCH sample 0.08%
+  more, with its WAV the same) and 0.1 MB more memory without it (the six maps: `mid.dtsc` without
+  its WAV 25.0 MB to 25.2 at the peak, 46 more page faults; `s2h.dtsc` with its WAV 20.3 to 19.8):
+  the medians of 15 runs interleaved with format 177's build on this host, `mid.dtsc` without its
+  WAV 321 KB/s to 320 compressing and 312 to 309 decompressing, the XCH sample 240 to 257 and 253 to
+  237, and with its WAV 232 to 222 and 262 to 239 (the host's noise more than the change).
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first
@@ -2421,7 +2470,8 @@ and only where both signs could be the value (a sign counter of its own before, 
 - **abn**: a channel's the WAV doesn't bind (abt's until format 166, above; since format 174 its
   first two decisions' outside predictions by the counts of its ABITS, since format 175 every
   decision's, since format 177 those counts mixed with a map's of the ABITS by the first scale
-  factor less its subband's offset and the subframe's level, above).
+  factor less its subband's offset and the subframe's level, since format 178 that level by its
+  priors too and the maps by how sure it is, above).
 - **scl**: the scale factors, against the RMS's (the LFE's too).
 - **scd**: a decoded WAV's (as the scale factor search shows it; scl's until format 118, below).
 - **scn**: a channel's the WAV doesn't bind (scl's until format 166, above; since format 176 its
