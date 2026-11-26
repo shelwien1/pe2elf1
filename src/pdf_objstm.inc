@@ -9,7 +9,7 @@
 // (bytes after the last offset up to /First), N varints zigzag(n - prev - 1), u8 offsets-exact,
 // [N varints zigzag(off - predicted)].
 
-static void objstmPredict(const uint8_t* m, size_t n, size_t k, const std::vector<uint64_t>& offs, uint64_t& pred) {
+static void objstmPredict(const uint8_t* m, size_t n, size_t k, const lib::vector<uint64_t>& offs, uint64_t& pred) {
   if (k == 0) { pred = 0; return; }
   size_t st = (size_t)lib::min<uint64_t>(offs[k - 1], n);
   Lexer lx(m, n, st);
@@ -20,7 +20,7 @@ static void objstmPredict(const uint8_t* m, size_t n, size_t k, const std::vecto
   pred = e;
 }
 
-static void objstmHeader(const std::vector<uint64_t>& nums, const std::vector<uint64_t>& offs, uint8_t sepA, uint8_t sepB,
+static void objstmHeader(const lib::vector<uint64_t>& nums, const lib::vector<uint64_t>& offs, uint8_t sepA, uint8_t sepB,
                          const Bytes& tail, Bytes& out) {
   char buf[24];
   for (size_t k = 0; k < nums.size(); k++) {
@@ -38,7 +38,7 @@ static uint64_t gObjstmExact = 0, gObjstmInexact = 0, gObjstmNumsSeq = 0;
 static bool objstmDecodeLayer(const Bytes& in, int64_t N, int64_t First, Bytes& out, Bytes& recon) {
   if (N <= 0 || First <= 0 || (uint64_t)First > in.size() || N > First) return false;
   // parse the header strictly: digits, one separator byte, ...
-  std::vector<uint64_t> nums, offs;
+  lib::vector<uint64_t> nums, offs;
   size_t p = 0, f = (size_t)First;
   int sepA = -1, sepB = -1;
   for (int64_t k = 0; k < N; k++) {
@@ -63,7 +63,7 @@ static bool objstmDecodeLayer(const Bytes& in, int64_t N, int64_t First, Bytes& 
     if (!isWS(c)) return false;
   const uint8_t* m = in.data() + f;
   size_t mn = in.size() - f;
-  std::vector<int64_t> corr((size_t)N);
+  lib::vector<int64_t> corr((size_t)N);
   bool exact = true;
   for (size_t k = 0; k < (size_t)N; k++) {
     uint64_t pred;
@@ -101,7 +101,7 @@ static bool objstmEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out) {
   uint8_t sepA = r.u8(), sepB = r.u8();
   Bytes tail;
   r.bytes(r.len(), tail);
-  std::vector<uint64_t> nums(N), offs(N);
+  lib::vector<uint64_t> nums(N), offs(N);
   uint64_t prev = (uint64_t)-1;
   for (auto& v : nums) {
     v = prev + 1 + (uint64_t)unzigzag(r.var());
@@ -148,7 +148,7 @@ static void xrefRowsPredict(const ObjPositions* op, uint64_t num, uint64_t type,
 }
 
 static bool xrefRowsDecodeLayer(const CodecCtx& ctx, const Bytes& in, const FixedVec<uint64_t, 3>& W,
-                                const std::vector<lib::pair<uint64_t, uint64_t>>& index, Bytes& out, Bytes& recon) {
+                                const lib::vector<lib::pair<uint64_t, uint64_t>>& index, Bytes& out, Bytes& recon) {
   if (!xrefRowsGeometry(W)) return false;
   size_t rl = (size_t)(W[0] + W[1] + W[2]);
   uint64_t rows = 0;
@@ -192,7 +192,7 @@ static bool xrefRowsEncodeLayer(const CodecCtx& ctx, const Bytes& recon, const B
   for (auto& w : W) w = r.u8();
   if (!xrefRowsGeometry(W)) return false;
   size_t ni = r.len();
-  std::vector<lib::pair<uint64_t, uint64_t>> index(ni);
+  lib::vector<lib::pair<uint64_t, uint64_t>> index(ni);
   for (auto& x : index) { x.first = r.var(); x.second = r.var(); }
   RBuf q(in);
   out.clear();

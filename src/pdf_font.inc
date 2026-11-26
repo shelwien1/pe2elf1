@@ -578,7 +578,7 @@ static bool parseType1(const Bytes& stored, const Bytes& recon, FontMetrics& m) 
     m.upem = (uint32_t)up;
   }
   // charstrings: "/name len RD <body>"
-  std::vector<lib::pair<size_t, size_t>> blobs;
+  lib::vector<lib::pair<size_t, size_t>> blobs;
   t1FindBlobs(p + s, n, rd, blobs);
   T1NameTable byName;
   for (auto& b : blobs) {
@@ -766,13 +766,13 @@ static inline bool widthNumStart(uint8_t c) { return (c >= '0' && c <= '9') || c
 struct FontCache {
   static const int kSlots = 8;
   struct Slot {
-    std::string key;
+    lib::string key;
     lib::unique_ptr<FontMetrics> m;
   };
   Slot slot[kSlots];
   int next = 0;
   // the metrics for key; found = false: a reset slot for the caller to fill
-  FontMetrics* get(const std::string& key, bool& found) {
+  FontMetrics* get(const lib::string& key, bool& found) {
     for (auto& s : slot)
       if (s.m && s.key == key) {
         found = true;

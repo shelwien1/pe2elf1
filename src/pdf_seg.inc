@@ -24,12 +24,12 @@ struct ObjCand {
 struct Segmentation {
   bool isPdf = false;
   size_t hdrPos = 0;
-  std::vector<Item> items;
-  std::vector<Obj> objs;
-  std::vector<Obj> trailers;  // classic trailer dicts in file order
-  std::vector<XrefSection> xrefs;
-  std::vector<ObjCand> cands;
-  std::unordered_map<uint32_t, std::vector<size_t>> candByNum;  // objnum -> offsets
+  lib::vector<Item> items;
+  lib::vector<Obj> objs;
+  lib::vector<Obj> trailers;  // classic trailer dicts in file order
+  lib::vector<XrefSection> xrefs;
+  lib::vector<ObjCand> cands;
+  lib::unordered_map<uint32_t, lib::vector<size_t>> candByNum;  // objnum -> offsets
 };
 
 class Segmenter {
@@ -223,9 +223,9 @@ class Segmenter {
       } else if (L && L->t == Obj::REF) {
         auto f = s_.candByNum.find((uint32_t)L->i);
         if (f != s_.candByNum.end()) {
-          for (auto ri = f->second.rbegin(); ri != f->second.rend() && !found; ++ri) {
+          for (size_t ri = f->second.size(); ri-- > 0 && !found;) {  // latest first
             int64_t len;
-            if (intObjectAt(*ri, (uint32_t)L->i, len) && len >= 0 && validEnd(ds + (size_t)len)) {
+            if (intObjectAt(f->second[ri], (uint32_t)L->i, len) && len >= 0 && validEnd(ds + (size_t)len)) {
               it.dataEnd = ds + (size_t)len;
               it.extent = 1;
               found = true;

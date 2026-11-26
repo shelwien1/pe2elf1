@@ -47,10 +47,10 @@ struct StreamFacts {
 
 // xref section bookkeeping shared by encoder and decoder (updated in item order)
 struct DeriveState {
-  std::vector<uint64_t> xrefPos;    // starts of classic sections and XRef stream objects
+  lib::vector<uint64_t> xrefPos;    // starts of classic sections and XRef stream objects
   int64_t lastXrefEnd = -1;         // max(start + count) of the latest classic section
   int64_t lastXRefStm = -1;         // start of the latest XRef stream object
-  std::unordered_map<uint32_t, uint64_t> lenRef;  // object number -> payload size of the stream
+  lib::unordered_map<uint32_t, uint64_t> lenRef;  // object number -> payload size of the stream
                                                   // whose /Length refers to it
 };
 
@@ -127,15 +127,15 @@ static void streamFacts(const CodecCtx& ctx, const StreamDesc& sd, const Bytes& 
 // "@" (an integer that is the whole value of an indirect object). Values: INT token, REF (first
 // number of "N G R"), HEX (digits of a hex string, without the brackets).
 struct DerivTok {
-  std::string path;
+  lib::string path;
   enum Kind { INT, REF, HEX } kind;
   size_t a, b;  // token range (HEX: the digits)
   uint64_t v;   // INT value / REF object number
 };
 
-static void derivWalk(const uint8_t* p, size_t n, std::vector<DerivTok>& out) {
-  struct Frame { bool dict; std::string path, key; bool expectKey; };
-  std::vector<Frame> st;
+static void derivWalk(const uint8_t* p, size_t n, lib::vector<DerivTok>& out) {
+  struct Frame { bool dict; lib::string path, key; bool expectKey; };
+  lib::vector<Frame> st;
   size_t i = 0;
   bool afterObj = false, afterStartxref = false;
   auto skipWS = [&]() {
@@ -148,7 +148,7 @@ static void derivWalk(const uint8_t* p, size_t n, std::vector<DerivTok>& out) {
   auto valueDone = [&]() {
     if (!st.empty() && st.back().dict) st.back().expectKey = true;
   };
-  auto curPath = [&]() -> std::string {
+  auto curPath = [&]() -> lib::string {
     if (!st.empty() && !st.back().dict) return st.back().path;  // "/Key[]" for elements of a keyed array
     if (st.empty() || !st.back().dict || st.back().expectKey) return "";
     return st.back().path + st.back().key;
@@ -177,7 +177,7 @@ static void derivWalk(const uint8_t* p, size_t n, std::vector<DerivTok>& out) {
       continue;
     }
     if (c == '<' && i + 1 < n && p[i + 1] == '<') {
-      std::string path = (!st.empty() && !st.back().dict) ? std::string("[]") : curPath();
+      lib::string path = (!st.empty() && !st.back().dict) ? lib::string("[]") : curPath();
       st.push_back({true, path, "", true});
       i += 2;
       afterObj = afterStartxref = false;
@@ -186,7 +186,7 @@ static void derivWalk(const uint8_t* p, size_t n, std::vector<DerivTok>& out) {
     if (c == '<') {
       size_t a = i + 1, b = a;
       while (b < n && p[b] != '>') b++;
-      std::string path = curPath();
+      lib::string path = curPath();
       if (!path.empty() && b < n) out.push_back({path, DerivTok::HEX, a, b, 0});
       i = b < n ? b + 1 : n;
       valueDone();
@@ -200,8 +200,8 @@ static void derivWalk(const uint8_t* p, size_t n, std::vector<DerivTok>& out) {
       continue;
     }
     if (c == '[') {
-      std::string path = curPath();
-      st.push_back({false, path.empty() ? std::string() : path + "[]", "", false});
+      lib::string path = curPath();
+      st.push_back({false, path.empty() ? lib::string() : path + "[]", "", false});
       i++;
       continue;
     }
@@ -231,7 +231,7 @@ static void derivWalk(const uint8_t* p, size_t n, std::vector<DerivTok>& out) {
       uint64_t v;
       size_t e;
       bool isInt = intAt(i, e, v) && e == b;
-      std::string path = curPath();
+      lib::string path = curPath();
       if (isInt) {
         // reference?
         size_t save = i;
@@ -278,7 +278,7 @@ static void derivWalk(const uint8_t* p, size_t n, std::vector<DerivTok>& out) {
 
 // /Length N G R in a stream dictionary: the referenced object number
 static bool lengthRefOf(const uint8_t* p, size_t n, uint32_t& num) {
-  std::vector<DerivTok> toks;
+  lib::vector<DerivTok> toks;
   derivWalk(p, n, toks);
   for (auto& t : toks)
     if (t.path == "/Length" && t.kind == DerivTok::REF && t.v <= 0xFFFFFFFFull) {
@@ -361,8 +361,8 @@ struct DerivEdit {
 };
 
 // encoder: text with the chosen tokens replaced and literal 0x04 escaped
-static void derivEncode(const uint8_t* p, size_t n, std::vector<DerivEdit> edits, Bytes& out) {
-  std::sort(edits.begin(), edits.end());
+static void derivEncode(const uint8_t* p, size_t n, lib::vector<DerivEdit> edits, Bytes& out) {
+  lib::sort(edits.begin(), edits.end());
   out.clear();
   size_t k = 0;
   for (size_t i = 0; i < n;) {
@@ -417,7 +417,7 @@ static void strRender(const Bytes& c, int policy, Bytes& out) {
 }
 
 // string token ranges of an object's text
-static void stringTokens(const uint8_t* p, size_t n, std::vector<lib::pair<size_t, size_t>>& out) {
+static void stringTokens(const uint8_t* p, size_t n, lib::vector<lib::pair<size_t, size_t>>& out) {
   size_t i = 0;
   while (i < n) {
     uint8_t c = p[i];
@@ -446,8 +446,8 @@ static void stringTokens(const uint8_t* p, size_t n, std::vector<lib::pair<size_
 }
 
 // encoder: placeholders for the encrypted strings of one object
-static void cryptStrings(const uint8_t* p, size_t n, uint8_t cipher, const DerivCrypt& dc, std::vector<DerivEdit>& edits) {
-  std::vector<lib::pair<size_t, size_t>> toks;
+static void cryptStrings(const uint8_t* p, size_t n, uint8_t cipher, const DerivCrypt& dc, lib::vector<DerivEdit>& edits) {
+  lib::vector<lib::pair<size_t, size_t>> toks;
   stringTokens(p, n, toks);
   size_t taken = edits.size();
   for (auto& t : toks) {
@@ -506,8 +506,8 @@ struct SigBlobs {
 };
 
 // encoder: placeholders for the signature blobs of one object; DER elements appended to p7s
-static void sigStrings(const uint8_t* p, size_t n, std::vector<DerivEdit>& edits, Bytes& p7s) {
-  std::vector<lib::pair<size_t, size_t>> toks;
+static void sigStrings(const uint8_t* p, size_t n, lib::vector<DerivEdit>& edits, Bytes& p7s) {
+  lib::vector<lib::pair<size_t, size_t>> toks;
   stringTokens(p, n, toks);
   for (auto& t : toks) {
     if (p[t.first] != '<' || t.second - t.first < 2 + 64) continue;
@@ -534,7 +534,7 @@ static void sigStrings(const uint8_t* p, size_t n, std::vector<DerivEdit>& edits
     size_t z = der;
     while (z < v.size() && v[z] == 0) z++;
     if (z != v.size()) continue;
-    DerivEdit e{t.first, t.second, {kDerivEsc, 'G', (uint8_t)(lower ? 1 : 0)}};
+    DerivEdit e{t.first, t.second, bytesOf(kDerivEsc, 'G', (uint8_t)(lower ? 1 : 0))};
     putVarTo(e.rep, v.size() - der);
     edits.push_back(lib::move(e));
     p7s.insert(p7s.end(), v.begin(), v.begin() + der);
@@ -604,16 +604,16 @@ struct B64Blobs {
   const Bytes* data = nullptr;
   const Bytes* rec = nullptr;
   size_t dpos = 0, rpos = 0, index = 0;
-  const std::vector<Bytes>* fastZ = nullptr;  // encoder verify: the original zlib bytes per blob
+  const lib::vector<Bytes>* fastZ = nullptr;  // encoder verify: the original zlib bytes per blob
   const CodecCtx* ctx = nullptr;
   lib::function<Bytes(uint32_t, const char*)> file;  // blob file k with its extension
   uint32_t nextFile = 0;
 };
 
 // encoder: placeholders for the base64 runs of one object; data and recon appended
-static void b64Strings(const CodecCtx& ctx, const uint8_t* p, size_t n, std::vector<DerivEdit>& edits, Bytes& data,
-                       Bytes& rec, std::vector<Bytes>* orig, uint64_t& blobBytes, std::vector<Bytes>& files,
-                       std::vector<ShortName>& fileExt) {
+static void b64Strings(const CodecCtx& ctx, const uint8_t* p, size_t n, lib::vector<DerivEdit>& edits, Bytes& data,
+                       Bytes& rec, lib::vector<Bytes>* orig, uint64_t& blobBytes, lib::vector<Bytes>& files,
+                       lib::vector<ShortName>& fileExt) {
   auto put = [&](Bytes& v) {
     putVarTo(rec, v.size());
     blobBytes += v.size();
@@ -669,7 +669,7 @@ static void b64Strings(const CodecCtx& ctx, const uint8_t* p, size_t n, std::vec
       put(dec);
       if (orig) orig->push_back(Bytes());
     }
-    edits.push_back({a, i, {kDerivEsc, 'B', flags}});
+    edits.push_back({a, i, bytesOf(kDerivEsc, 'B', flags)});
   }
 }
 
@@ -686,7 +686,7 @@ struct FwdPatch {
   int64_t delta;
 };
 
-static bool fwdApply(Bytes& out, const std::vector<uint64_t>& itemStart, const std::vector<FwdPatch>& patches,
+static bool fwdApply(Bytes& out, const lib::vector<uint64_t>& itemStart, const lib::vector<FwdPatch>& patches,
                      uint64_t bias = 0) {
   for (auto& p : patches) {
     uint64_t v;
@@ -733,9 +733,9 @@ static bool parseFontOf(int kind, const Bytes& b, const Bytes& t1recon, FontMetr
 // Font programs (and CIDToGIDMap streams) by source text; the metrics are parsed once.
 struct DerivFonts {
   lib::function<Bytes(uint32_t, const char*)> load;  // own file by ordinal and extension
-  std::unordered_map<uint32_t, Bytes> inl;                   // inline streams seen so far
+  lib::unordered_map<uint32_t, Bytes> inl;                   // inline streams seen so far
   FontCache cache;
-  bool source(const std::string& src, Bytes& out) {
+  bool source(const lib::string& src, Bytes& out) {
     if (src.size() < 2) return false;
     if (src[0] == 's') {
       uint64_t num = 0;
@@ -750,7 +750,7 @@ struct DerivFonts {
     }
     if (src[0] != 'o' || !load) return false;
     size_t dot = src.find('.');
-    if (dot == std::string::npos || dot < 2 || dot + 1 >= src.size() || dot > 11) return false;
+    if (dot == lib::string::npos || dot < 2 || dot + 1 >= src.size() || dot > 11) return false;
     uint64_t ord = 0;
     for (size_t i = 1; i < dot; i++) {
       if (src[i] < '0' || src[i] > '9') return false;
@@ -764,8 +764,8 @@ struct DerivFonts {
     out = load((uint32_t)ord, ext.c_str());
     return true;
   }
-  const FontMetrics* get(int kind, const std::string& font, const std::string& t1hex, const std::string& map) {
-    std::string key = std::string(1, (char)('a' + kind)) + " " + font + " " + t1hex + " " + map;
+  const FontMetrics* get(int kind, const lib::string& font, const lib::string& t1hex, const lib::string& map) {
+    lib::string key = lib::string(1, (char)('a' + kind)) + " " + font + " " + t1hex + " " + map;
     bool found;
     FontMetrics* e = cache.get(key, found);
     if (!found) {
@@ -794,7 +794,7 @@ struct WidthTok {
 };
 
 // tokens of the array that opens at p[a]; false unless it holds only numbers, brackets and spaces
-static bool widthsTokens(const uint8_t* p, size_t n, size_t a, std::vector<WidthTok>& out) {
+static bool widthsTokens(const uint8_t* p, size_t n, size_t a, lib::vector<WidthTok>& out) {
   out.clear();
   int depth = 0;
   for (size_t i = a; i < n;) {
@@ -857,12 +857,12 @@ static size_t topKeyValue(const uint8_t* p, size_t n, const char* key) {
 // done, top-level objects in item order and ObjStm members in member order.
 struct StructMap {
   typedef lib::pair<uint32_t, uint32_t> Ref;
-  std::unordered_map<uint32_t, Ref> parent;
+  lib::unordered_map<uint32_t, Ref> parent;
   // for /ParentTree: /StructParents -> page, /StructParent -> object, (page, MCID) -> element,
   // object named by an OBJR -> element
-  std::unordered_map<uint32_t, uint32_t> spPage, spObj;
-  std::unordered_map<uint64_t, Ref> mcElem;
-  std::unordered_map<uint32_t, Ref> objrElem;
+  lib::unordered_map<uint32_t, uint32_t> spPage, spObj;
+  lib::unordered_map<uint64_t, Ref> mcElem;
+  lib::unordered_map<uint32_t, Ref> objrElem;
   bool parentTreeRef(bool arr, uint64_t key, uint64_t idx, Ref& r) const {
     if (key > 0xFFFFFFFFull) return false;
     if (arr) {
@@ -979,14 +979,14 @@ struct NumsWalk {
 // encoder: placeholders for the /Nums array opening at v[a] (value text v, edits at base + offset);
 // key >= 0: v[a] opens an array object that is the /Nums value of that key
 static size_t numsChoose(const uint8_t* v, size_t n, size_t a, size_t base, const StructMap& sm,
-                         std::vector<DerivEdit>& edits, int64_t key, long member, bool after = false) {
+                         lib::vector<DerivEdit>& edits, int64_t key, long member, bool after = false) {
   NumsWalk w;
   if (key >= 0) {
     w.depth = 1;
     w.st = 1;
     w.key = (uint64_t)key;
   }
-  std::vector<DerivEdit> ed;
+  lib::vector<DerivEdit> ed;
   size_t refStart = 0;
   StructMap::Ref pred;
   bool havePred = false;
@@ -1013,13 +1013,13 @@ static size_t numsChoose(const uint8_t* v, size_t n, size_t a, size_t base, cons
       bool endRef = j - i == 1 && v[i] == 'R' && w.refPart == 2;
       w.word(v + i, j - i);
       if (endRef && havePred && refStr(pred).eq((const char*)v + refStart, j - refStart))
-        ed.push_back({base + refStart, base + j, Bytes{kDerivEsc, 'r'}});
+        ed.push_back({base + refStart, base + j, bytesOf(kDerivEsc, 'r')});
       if (endRef) havePred = false;
     }
     i = j;
   }
   if (!w.done || w.bad || ed.size() < 2) return 0;
-  Bytes rep{kDerivEsc, (uint8_t)(key < 0 ? 'n' : after ? 'Q' : 'q')};
+  Bytes rep = bytesOf(kDerivEsc, (uint8_t)(key < 0 ? 'n' : after ? 'Q' : 'q'));
   FixedStr<63> f;  // " <key> <member> "
   if (key >= 0) f.format(" %llu ", (unsigned long long)key);
   else if (member >= 0) f.set(" ");
@@ -1062,14 +1062,14 @@ static ValStr refStr(lib::pair<uint32_t, uint32_t> r) {
 // encoder: placeholder for /P of object `num` when the map predicts it; v = value text (no
 // header), base = its offset in the text the edit applies to. member < 0: top-level object.
 static bool structChoose(const uint8_t* v, size_t n, size_t base, uint32_t num, long member, const StructMap& sm,
-                         std::vector<DerivEdit>& edits) {
+                         lib::vector<DerivEdit>& edits) {
   auto f = sm.parent.find(num);
   if (f == sm.parent.end()) return false;
   size_t a = topKeyValue(v, n, "/P"), e;
   uint64_t pn, pg;
   if (a == SIZE_MAX || !refAt(v, n, a, pn, pg, e) || !refStr(f->second).eq((const char*)v + a, e - a))
     return false;
-  Bytes rep{kDerivEsc, (uint8_t)(member < 0 ? 'k' : 'K')};
+  Bytes rep = bytesOf(kDerivEsc, (uint8_t)(member < 0 ? 'k' : 'K'));
   if (member >= 0) {
     ValStr m;
     m.format(" %llu ", (unsigned long long)member);
@@ -1082,7 +1082,7 @@ static bool structChoose(const uint8_t* v, size_t n, size_t base, uint32_t num, 
 // ObjStm members: numbers from the L_OBJSTM recon, offsets predicted from the member text as the
 // layer does. The decoder computes the offsets as the text is restored: member k's start is
 // known once members before it are complete.
-static bool objstmReconNums(const Bytes& recon, std::vector<uint64_t>& nums, bool& exact, std::vector<int64_t>& corr) {
+static bool objstmReconNums(const Bytes& recon, lib::vector<uint64_t>& nums, bool& exact, lib::vector<int64_t>& corr) {
   RBuf r(recon);
   size_t N = r.len();
   r.u8();
@@ -1104,8 +1104,8 @@ static bool objstmReconNums(const Bytes& recon, std::vector<uint64_t>& nums, boo
 }
 
 struct ObjstmMembers {
-  std::vector<uint64_t> nums, offs;
-  std::vector<int64_t> corr;
+  lib::vector<uint64_t> nums, offs;
+  lib::vector<int64_t> corr;
   bool exact = true;
   size_t added = 0;  // members whose /K is in the map
   bool init(const StreamDesc& sd) {
@@ -1158,11 +1158,11 @@ struct DerivExtra {
 
 // encoder: placeholders for the /Widths or /W array opening at p[a]; the map and rule with the
 // most exact predictions win. Returns the number of widths replaced.
-static size_t widthsChoose(const uint8_t* p, size_t n, size_t a, int kind, const std::string& fields, uint32_t first,
-                           const FontMetrics& m, std::vector<DerivEdit>& edits, bool after = false) {
-  std::vector<WidthTok> tk;
+static size_t widthsChoose(const uint8_t* p, size_t n, size_t a, int kind, const lib::string& fields, uint32_t first,
+                           const FontMetrics& m, lib::vector<DerivEdit>& edits, bool after = false) {
+  lib::vector<WidthTok> tk;
   if (!widthsTokens(p, n, a, tk)) return 0;
-  auto run = [&](int map, int rule, std::vector<size_t>* hitTok) -> size_t {
+  auto run = [&](int map, int rule, lib::vector<size_t>* hitTok) -> size_t {
     WidthsWalk ww;
     ww.cid = kind == WK_CID2 || kind == WK_CID2M || kind == WK_CID0;
     ww.first = first;
@@ -1199,21 +1199,21 @@ static size_t widthsChoose(const uint8_t* p, size_t n, size_t a, int kind, const
   size_t nnum = 0;
   for (auto& t : tk) nnum += t.t == 0;
   if (best < 3 || best * 10 < (size_t)(kind == WK_T1 ? 7 : 2) * nnum) return 0;
-  std::vector<size_t> hit;
+  lib::vector<size_t> hit;
   run(bestMap, bestRule, &hit);
-  Bytes rep{kDerivEsc, (uint8_t)(after ? 'v' : 'w'), (uint8_t)('a' + kind), (uint8_t)('a' + bestMap),
-            (uint8_t)('a' + bestRule)};
+  Bytes rep = bytesOf(kDerivEsc, (uint8_t)(after ? 'v' : 'w'), (uint8_t)('a' + kind), (uint8_t)('a' + bestMap),
+            (uint8_t)('a' + bestRule));
   // fields: " <font> <FirstChar> [h<recon>] [<map>] "
   rep.insert(rep.end(), fields.begin(), fields.end());
   if (after) edits.push_back({a + 1, a + 1, rep});
   else edits.push_back({a, a + 1, rep});
-  for (size_t t : hit) edits.push_back({tk[t].a, tk[t].b, Bytes{kDerivEsc, 'x'}});
+  for (size_t t : hit) edits.push_back({tk[t].a, tk[t].b, bytesOf(kDerivEsc, 'x')});
   return hit.size();
 }
 
 // decoder: placeholders resolved
 static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const DeriveState& ds, uint32_t objNum,
-                        Bytes& out, const DerivCrypt* dc = nullptr, std::vector<FwdPatch>* fwd = nullptr,
+                        Bytes& out, const DerivCrypt* dc = nullptr, lib::vector<FwdPatch>* fwd = nullptr,
                         SigBlobs* sig = nullptr, B64Blobs* b64 = nullptr, DerivExtra* ex = nullptr) {
   DerivFonts* fonts = ex ? ex->fonts : nullptr;
   out.clear();
@@ -1310,7 +1310,7 @@ static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const 
       i += 4;
       // " <font> <FirstChar> [h<recon>] [<map>] "
       int nf = 2 + (kind == WK_T1) + (kind == WK_CID2M);
-      std::string fld[4];
+      lib::string fld[4];
       for (int f = 0; f < nf; f++) {
         if (i >= n || p[i++] != ' ') return false;
         size_t f0 = i;
@@ -1325,8 +1325,8 @@ static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const 
         first = first * 10 + (c - '0');
       }
       if (first > 0xFFFFFF) return false;
-      const FontMetrics* m = fonts->get(kind, fld[0], kind == WK_T1 ? fld[2] : std::string(),
-                                        kind == WK_CID2M ? fld[2] : std::string());
+      const FontMetrics* m = fonts->get(kind, fld[0], kind == WK_T1 ? fld[2] : lib::string(),
+                                        kind == WK_CID2M ? fld[2] : lib::string());
       if (!m) return false;
       WidthsWalk ww;
       ww.cid = kind == WK_CID2 || kind == WK_CID2M || kind == WK_CID0;
@@ -1462,7 +1462,7 @@ static bool derivDecode(const uint8_t* p, size_t n, const StreamFacts& f, const 
 
 // encoder: anchors for forward slots (item starts in file order, file size)
 struct FwdAnchors {
-  std::vector<uint64_t> starts;  // item starts, ascending
+  lib::vector<uint64_t> starts;  // item starts, ascending
   uint64_t fileSize = 0;
   uint64_t bias = 0;             // values are file offsets minus this
   // placeholder for position value v of a token with `width` digits; false if no anchor
@@ -1472,27 +1472,27 @@ struct FwdAnchors {
     uint64_t pos = v + bias;  // position in the file
     if (pos == fileSize) { target = 0; delta = 0; }
     else {
-      auto it = std::upper_bound(starts.begin(), starts.end(), pos);
+      auto it = lib::upper_bound(starts.begin(), starts.end(), pos);
       if (it == starts.begin()) return false;
       size_t k = (size_t)(it - starts.begin()) - 1;
       target = k + 1;
       delta = (int64_t)(pos - starts[k]);
       if (delta > 64) return false;
     }
-    rep = {kDerivEsc, 'f', (uint8_t)width, (uint8_t)(zeroPad ? 2 : 0)};
+    rep = bytesOf(kDerivEsc, 'f', (uint8_t)width, (uint8_t)(zeroPad ? 2 : 0));
     putVarTo(rep, target);
     putVarTo(rep, zigzag(delta));
     return true;
   }
   bool length(uint64_t itemPos, uint64_t v, size_t width, Bytes& rep) const {
     itemPos += bias;
-    auto it = std::lower_bound(starts.begin(), starts.end(), itemPos);
+    auto it = lib::lower_bound(starts.begin(), starts.end(), itemPos);
     if (it == starts.end() || *it != itemPos) return false;
     size_t k = (size_t)(it - starts.begin());
     uint64_t e = k + 1 < starts.size() ? starts[k + 1] : fileSize;
     int64_t delta = (int64_t)(v - (e - itemPos));
     if (delta < -64 || delta > 64) return false;
-    rep = {kDerivEsc, 'f', (uint8_t)width, 1};
+    rep = bytesOf(kDerivEsc, 'f', (uint8_t)width, 1);
     putVarTo(rep, k + 1);
     putVarTo(rep, zigzag(delta));
     return true;
@@ -1500,8 +1500,8 @@ struct FwdAnchors {
 };
 
 // encoder: forward slots for the linearization dictionary and forward-pointing trailer values
-static void fwdChoose(const uint8_t* p, size_t n, int kind, const FwdAnchors& fa, std::vector<DerivEdit>& edits) {
-  std::vector<DerivTok> toks;
+static void fwdChoose(const uint8_t* p, size_t n, int kind, const FwdAnchors& fa, lib::vector<DerivEdit>& edits) {
+  lib::vector<DerivTok> toks;
   derivWalk(p, n, toks);
   bool lin = memfind(p, n, "/Linearized", 11) != nullptr;
   auto taken = [&](const DerivTok& t) {
@@ -1535,15 +1535,15 @@ static void fwdChoose(const uint8_t* p, size_t n, int kind, const FwdAnchors& fa
 
 // encoder: choose placeholders for one item text. kind: 0 text item, 1 object item, 2 stream prefix
 static void derivChoose(const uint8_t* p, size_t n, int kind, uint8_t cls, const StreamFacts& f, const DeriveState& ds,
-                        uint32_t objNum, std::vector<DerivEdit>& edits) {
-  std::vector<DerivTok> toks;
+                        uint32_t objNum, lib::vector<DerivEdit>& edits) {
+  lib::vector<DerivTok> toks;
   derivWalk(p, n, toks);
   auto tryCodes = [&](const DerivTok& t, const char* codes) {  // codes tried in order
     ValStr v;
     for (const char* q = codes; *q; q++) {
       uint8_t c = (uint8_t)*q;
       if (derivValue(c, f, ds, objNum, v) && v.eq((const char*)p + t.a, t.b - t.a)) {
-        edits.push_back({t.a, t.b, Bytes{kDerivEsc, c}});
+        edits.push_back({t.a, t.b, bytesOf(kDerivEsc, c)});
         return;
       }
     }

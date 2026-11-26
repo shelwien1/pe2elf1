@@ -15,11 +15,11 @@
 
 struct CmapEntry {
   uint64_t src = 0, hi = 0;
-  std::string dst;  // hex digits as written
+  lib::string dst;  // hex digits as written
 };
 
 // parses "<hex>" at p; returns end or 0
-static size_t cmapHex(const uint8_t* d, size_t n, size_t p, std::string& hex) {
+static size_t cmapHex(const uint8_t* d, size_t n, size_t p, lib::string& hex) {
   if (p >= n || d[p] != '<') return 0;
   size_t q = p + 1;
   while (q < n && hexVal(d[q]) >= 0) q++;
@@ -28,13 +28,13 @@ static size_t cmapHex(const uint8_t* d, size_t n, size_t p, std::string& hex) {
   return q + 1;
 }
 
-static uint64_t cmapVal(const std::string& h) {
+static uint64_t cmapVal(const lib::string& h) {
   uint64_t v = 0;
   for (char c : h) v = v << 4 | (uint64_t)hexVal((uint8_t)c);
   return v;
 }
 
-static bool cmapCaseOf(const std::string& h, int& lower) {
+static bool cmapCaseOf(const lib::string& h, int& lower) {
   for (char c : h) {
     if (c >= 'a' && c <= 'f') { if (lower == 0) return false; lower = 1; }
     if (c >= 'A' && c <= 'F') { if (lower == 1) return false; lower = 0; }
@@ -58,13 +58,13 @@ static bool cmapEncodeBlock(const uint8_t* d, size_t a, size_t b, int kind, Byte
   while (p < b && isWS(d[p])) p++;
   Bytes lead(d + a, d + p), sep, eol;
   bool haveSep = false, haveEol = false;
-  std::vector<CmapEntry> ents;
+  lib::vector<CmapEntry> ents;
   int lower = -1;
   size_t srcDigits = 0;
   size_t lastEnd = p;
   while (p < b && d[p] == '<') {
     CmapEntry e;
-    std::string h;
+    lib::string h;
     int fields = kind == 1 ? 3 : 2;
     for (int f = 0; f < fields; f++) {
       if (f) {

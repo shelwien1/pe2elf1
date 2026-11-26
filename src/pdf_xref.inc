@@ -20,10 +20,10 @@ struct XrefSection {
   size_t start = 0, end = 0;  // [start, end) in the file
   Bytes eol1;                 // after "xref"
   uint8_t sep = ' ';          // between subsection start and count
-  std::vector<Bytes> eol2;    // after each subsection count
+  lib::vector<Bytes> eol2;    // after each subsection count
   uint8_t eole[2] = {' ', '\n'};
-  std::vector<lib::pair<uint64_t, uint64_t>> subs;
-  std::vector<XrefEntry> entries;
+  lib::vector<lib::pair<uint64_t, uint64_t>> subs;
+  lib::vector<XrefEntry> entries;
 };
 
 static bool parseXrefAt(const uint8_t* d, size_t n, size_t pos, XrefSection& x) {
@@ -85,7 +85,7 @@ static bool parseXrefAt(const uint8_t* d, size_t n, size_t pos, XrefSection& x) 
 
 // Object positions known to both sides: latest definition of each object number so far.
 struct ObjPositions {
-  std::unordered_map<uint32_t, lib::pair<uint64_t, uint32_t>> pos;  // num -> (offset, gen)
+  lib::unordered_map<uint32_t, lib::pair<uint64_t, uint32_t>> pos;  // num -> (offset, gen)
   void add(uint32_t num, uint32_t gen, uint64_t off) { pos[num] = {off, gen}; }
   bool get(uint64_t num, uint64_t& off, uint32_t& gen) const {
     auto it = pos.find((uint32_t)num);
@@ -107,12 +107,12 @@ static bool objHeaderOf(const uint8_t* p, size_t n, uint32_t& num, uint32_t& gen
 }
 
 // next free object number after entry i (0 after the last), over the whole section
-static std::vector<uint64_t> xrefNextFree(const std::vector<lib::pair<uint64_t, uint64_t>>& subs,
-                                          const std::vector<char>& types) {
-  std::vector<uint64_t> nums;
+static lib::vector<uint64_t> xrefNextFree(const lib::vector<lib::pair<uint64_t, uint64_t>>& subs,
+                                          const lib::vector<char>& types) {
+  lib::vector<uint64_t> nums;
   for (auto& sb : subs)
     for (uint64_t k = 0; k < sb.second; k++) nums.push_back(sb.first + k);
-  std::vector<uint64_t> next(types.size(), 0);
+  lib::vector<uint64_t> next(types.size(), 0);
   uint64_t nf = 0;
   for (size_t i = types.size(); i-- > 0;) {
     next[i] = nf;
@@ -132,9 +132,9 @@ static void writeXref(ChanWriter& w, const XrefSection& x, const ObjPositions& o
   w.u8(CH_S, x.eole[0]);
   w.u8(CH_S, x.eole[1]);
   w.var(CH_N, x.subs.size());
-  std::vector<char> types;
+  lib::vector<char> types;
   for (auto& e : x.entries) types.push_back(e.type);
-  std::vector<uint64_t> nextFree = xrefNextFree(x.subs, types);
+  lib::vector<uint64_t> nextFree = xrefNextFree(x.subs, types);
   uint64_t prevEnd = 0;
   for (size_t s = 0; s < x.subs.size(); s++) {
     w.svar(CH_N, (int64_t)(x.subs[s].first - prevEnd));
@@ -173,7 +173,7 @@ static void writeXref(ChanWriter& w, const XrefSection& x, const ObjPositions& o
     }
 }
 
-static int64_t xrefEnd(const std::vector<lib::pair<uint64_t, uint64_t>>& subs) {
+static int64_t xrefEnd(const lib::vector<lib::pair<uint64_t, uint64_t>>& subs) {
   int64_t e = -1;
   for (auto& s : subs) e = lib::max<int64_t>(e, (int64_t)(s.first + s.second));
   return e;
@@ -181,17 +181,18 @@ static int64_t xrefEnd(const std::vector<lib::pair<uint64_t, uint64_t>>& subs) {
 
 // false on bad data (error recorded)
 static bool readXref(ChanReader& r, const ObjPositions& op, Bytes& out, int64_t* endOut = nullptr,
-                     std::vector<lib::pair<uint64_t, int64_t>>* fwd = nullptr) {
+                     lib::vector<lib::pair<uint64_t, int64_t>>* fwd = nullptr) {
   int64_t prevTarget = -1;
-  std::vector<int64_t> targets;
-  out.insert(out.end(), {'x', 'r', 'e', 'f'});
+  lib::vector<int64_t> targets;
+  static const uint8_t kXref[4] = {'x', 'r', 'e', 'f'};
+  out.insert(out.end(), kXref, kXref + 4);
   Bytes t;
   r.lenBytes(CH_N, CH_T, t);
   out.insert(out.end(), t.begin(), t.end());
   uint8_t sep = r.u8(CH_S), e0 = r.u8(CH_S), e1 = r.u8(CH_S);
   size_t ns = r.len(CH_N, lib::min<size_t>(1 << 30, r.remaining(CH_N)));  // each needs a byte
-  std::vector<lib::pair<uint64_t, uint64_t>> subs(ns);
-  std::vector<Bytes> eol2(ns);
+  lib::vector<lib::pair<uint64_t, uint64_t>> subs(ns);
+  lib::vector<Bytes> eol2(ns);
   uint64_t prevEnd = 0, total = 0;
   for (size_t s = 0; s < ns; s++) {
     subs[s].first = prevEnd + (uint64_t)r.svar(CH_N);
@@ -201,9 +202,9 @@ static bool readXref(ChanReader& r, const ObjPositions& op, Bytes& out, int64_t*
     total += subs[s].second;
     if (total > r.remaining(CH_N) + 1) return fail("bad xref section");  // a byte per entry
   }
-  std::vector<XrefEntry> ents;
-  std::vector<char> types;
-  std::vector<uint8_t> kinds;
+  lib::vector<XrefEntry> ents;
+  lib::vector<char> types;
+  lib::vector<uint8_t> kinds;
   for (size_t s = 0; s < ns; s++)
     for (uint64_t k = 0; k < subs[s].second; k++) {
       uint64_t num = subs[s].first + k, poff = 0;
@@ -229,7 +230,7 @@ static bool readXref(ChanReader& r, const ObjPositions& op, Bytes& out, int64_t*
       types.push_back(e.type);
       kinds.push_back((uint8_t)kind);
     }
-  std::vector<uint64_t> nextFree = xrefNextFree(subs, types);
+  lib::vector<uint64_t> nextFree = xrefNextFree(subs, types);
   if (endOut) *endOut = xrefEnd(subs);
   char buf[48];
   size_t ei = 0;

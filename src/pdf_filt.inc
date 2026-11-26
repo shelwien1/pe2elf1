@@ -34,7 +34,7 @@ struct FilterParams {
   int ccittK = 0, ccittCols = 1728, ccittRows = 0;  // L_CCITT
   bool ccittEol = false, ccittAlign = false, ccittEob = true, ccittBlack1 = false;
   FixedVec<uint64_t, 3> xrefW;                     // L_XREFROWS: /W
-  std::vector<lib::pair<uint64_t, uint64_t>> xrefIndex;  // L_XREFROWS: /Index ranges
+  lib::vector<lib::pair<uint64_t, uint64_t>> xrefIndex;  // L_XREFROWS: /Index ranges
 };
 
 // recon record reader. Sticky: after a read past the end it returns zeros and empty strings,
@@ -777,7 +777,7 @@ static bool lzwDecode(const FilterParams& fp, const Bytes& in, Bytes& out, Bytes
   int early = fp.earlyChange ? 1 : 0;
   out.clear();
   uint32_t estart[4096] = {}, elen[4096] = {};  // the LZW table at its 12-bit maximum
-  std::vector<uint64_t> clears;
+  lib::vector<uint64_t> clears;
   size_t bitpos = 0, nbits = in.size() * 8;
   int width = 9, next = 258, prev = -1;
   bool eod = false;
@@ -854,7 +854,7 @@ static bool lzwEncode(const Bytes& recon, const Bytes& in, Bytes& out) {
   RBuf r(recon);
   int early = r.u8() ? 1 : 0;
   size_t nc = r.len();
-  std::vector<uint64_t> clears(nc);
+  lib::vector<uint64_t> clears(nc);
   uint64_t acc = 0;
   for (size_t k = 0; k < nc; k++) { acc += r.var(); clears[k] = acc; }
   bool eod = r.u8() != 0;
@@ -951,7 +951,7 @@ static bool isPseudoLayerType(uint8_t t) {
 
 // full name of a filter (abbreviations of inline images expanded); a name past 127 bytes keeps
 // its first 127, still an unknown filter
-static PdfName normFilter(const std::string& f) {
+static PdfName normFilter(const lib::string& f) {
   static const char* const ab[][2] = {{"AHx", "ASCIIHexDecode"}, {"A85", "ASCII85Decode"}, {"LZW", "LZWDecode"},
                                       {"Fl", "FlateDecode"},     {"RL", "RunLengthDecode"}, {"CCF", "CCITTFaxDecode"},
                                       {"DCT", "DCTDecode"}};
@@ -999,7 +999,7 @@ static bool iccRefEncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out); 
 struct CcittParams;
 static bool ccittDecodeFP(const FilterParams& fp, const Bytes& in, Bytes& out, Bytes& recon);
 static bool xrefRowsDecodeLayer(const CodecCtx& ctx, const Bytes& in, const FixedVec<uint64_t, 3>& W,
-                                const std::vector<lib::pair<uint64_t, uint64_t>>& index, Bytes& out, Bytes& recon);
+                                const lib::vector<lib::pair<uint64_t, uint64_t>>& index, Bytes& out, Bytes& recon);
 
 static bool layerEncode(const CodecCtx& ctx, uint8_t type, const Bytes& recon, const Bytes& in, Bytes& out) {
   switch (type) {

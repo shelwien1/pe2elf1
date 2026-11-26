@@ -111,14 +111,14 @@ struct LiftEvent {
 };
 
 struct LiftGroups {
-  std::vector<uint32_t> ofMarker;  // group id per number marker
+  lib::vector<uint32_t> ofMarker;  // group id per number marker
   uint32_t count = 0;
-  std::vector<LiftEvent> events;   // content-stream mode
+  lib::vector<LiftEvent> events;   // content-stream mode
   uint32_t tdKeys = 0;
 };
 
 struct LiftStrings {  // strings by marker order: literal strings (marker 5), hex strings (2, 3)
-  std::vector<lib::pair<const uint8_t*, size_t>> lit, hex;
+  lib::vector<lib::pair<const uint8_t*, size_t>> lit, hex;
 };
 
 static int liftOpOf(const uint8_t* t, size_t l) {
@@ -139,19 +139,19 @@ static int liftOpOf(const uint8_t* t, size_t l) {
 }
 
 static void liftGroup(LiftMode mode, const uint8_t* s, size_t n, LiftGroups& g, const LiftStrings* strs = nullptr) {
-  std::unordered_map<std::string, uint32_t> ids;
+  lib::unordered_map<lib::string, uint32_t> ids;
   struct Pend { size_t idx; uint8_t slot; };
-  std::vector<Pend> pend;
-  std::string key;  // OBJ: last name at array depth 0
+  lib::vector<Pend> pend;
+  lib::string key;  // OBJ: last name at array depth 0
   int arr = 0, operands = 0;
   size_t markers = 0, litK = 0, hexK = 0;
   g.ofMarker.clear();
   g.events.clear();
   // content-stream text state for the Td table
-  std::string lastName, font, shown, opText;
+  lib::string lastName, font, shown, opText;
   bool opHasText = false;
-  std::unordered_map<std::string, int32_t> tdIds;
-  std::vector<char> tdSeen;
+  lib::unordered_map<lib::string, int32_t> tdIds;
+  lib::vector<char> tdSeen;
   auto addText = [&](const uint8_t* p, size_t l) {
     opText.append((const char*)p, l);
     opHasText = true;
@@ -164,7 +164,7 @@ static void liftGroup(LiftMode mode, const uint8_t* s, size_t n, LiftGroups& g, 
         LiftEvent e{(uint8_t)op, false, pend.empty() ? (uint32_t)markers : (uint32_t)pend[0].idx, -1, false};
         e.ok = !arr && operands == kLiftOpArgs[op] && pend.size() == kLiftOpArgs[op];
         if (op == LOP_Td && e.ok && !shown.empty()) {
-          std::string k = font;
+          lib::string k = font;
           k.push_back('\0');
           k += shown;
           auto f = tdIds.find(k);
@@ -194,7 +194,7 @@ static void liftGroup(LiftMode mode, const uint8_t* s, size_t n, LiftGroups& g, 
       opHasText = false;
     }
     for (auto& p : pend) {
-      std::string k;
+      lib::string k;
       if (mode == LIFT_OBJ) k = key;
       k.push_back((char)p.slot);
       if (t) k.append((const char*)t, tl);
@@ -229,7 +229,7 @@ static void liftGroup(LiftMode mode, const uint8_t* s, size_t n, LiftGroups& g, 
     if (c == 1) { marker(); i++; continue; }
     if (c == 2 || c == 3 || c == 5) {
       if (!arr) operands++;
-      const std::vector<lib::pair<const uint8_t*, size_t>>* v = strs ? (c == 5 ? &strs->lit : &strs->hex) : nullptr;
+      const lib::vector<lib::pair<const uint8_t*, size_t>>* v = strs ? (c == 5 ? &strs->lit : &strs->hex) : nullptr;
       size_t& k = c == 5 ? litK : hexK;
       if (v && k < v->size()) addText((*v)[k].first, (*v)[k].second);
       k++;
@@ -342,7 +342,7 @@ static void liftGroup(LiftMode mode, const uint8_t* s, size_t n, LiftGroups& g, 
 struct LiftWalk {
   int64_t cx = 0, cy = 0, sx = 0, sy = 0;
   bool valid = false;
-  std::vector<lib::array<int64_t, 2>> td;
+  lib::vector<lib::array<int64_t, 2>> td;
   explicit LiftWalk(uint32_t tdKeys) : td(tdKeys) {}
   // prediction for operand i of event e given the event's earlier operand values
   bool pred(const LiftEvent& e, int i, const int64_t* v, int64_t& p) const {
@@ -422,7 +422,7 @@ static uint64_t liftWord(const LiftNum& v, int64_t prev, bool delta) {
   return zigzag(delta ? v.m - prev : v.m) * 8 + v.code;
 }
 
-static void liftEncodeGroup(const std::vector<LiftNum>& v, uint8_t mode, Bytes& out) {
+static void liftEncodeGroup(const lib::vector<LiftNum>& v, uint8_t mode, Bytes& out) {
   bool delta = mode & 1, fixed = (mode & 2) != 0;
   int w = (mode >> 2) & 15;
   int64_t prev = 0;
@@ -437,7 +437,7 @@ static void liftEncodeGroup(const std::vector<LiftNum>& v, uint8_t mode, Bytes& 
   }
 }
 
-static void liftEncodeInts(const std::vector<int64_t>& v, uint8_t mode, Bytes& out) {
+static void liftEncodeInts(const lib::vector<int64_t>& v, uint8_t mode, Bytes& out) {
   bool delta = mode & 1, fixed = (mode & 2) != 0;
   int w = (mode >> 2) & 15;
   int64_t prev = 0;
@@ -481,7 +481,7 @@ struct LiftEntropy {
 
 // best of the four modes for a group (plain values or integers); returns the mode, fills out
 template <class T, class Enc>
-static uint8_t liftChooseModeT(const std::vector<T>& v, LiftEntropy& est, Enc enc, uint64_t (*word)(const T&, int64_t, bool),
+static uint8_t liftChooseModeT(const lib::vector<T>& v, LiftEntropy& est, Enc enc, uint64_t (*word)(const T&, int64_t, bool),
                                int64_t (*valOf)(const T&), Bytes& out, double& bitsOut) {
   int w[2] = {1, 1};
   for (int d = 0; d < 2; d++) {
@@ -567,7 +567,7 @@ static LiftNum liftUnitSpell(const LiftUnit& u, int64_t v) {
 }
 
 // unit form for a group's values: true and the integers if every value fits one rule
-static bool liftUnitOf(const std::vector<LiftNum>& v, LiftUnit& u, std::vector<int64_t>& ints) {
+static bool liftUnitOf(const lib::vector<LiftNum>& v, LiftUnit& u, lib::vector<int64_t>& ints) {
   if (v.empty()) return false;
   int S = 0, lead = -1;  // lead: 1 written, 0 omitted, -1 unknown
   for (auto& x : v) {
@@ -702,7 +702,7 @@ static void liftPackStrings(const Bytes& lens, const Bytes& data, Bytes& out) {
   out.insert(out.end(), lens.begin(), lens.end());
   out.insert(out.end(), data.begin(), data.end());
 }
-static bool liftUnpackStrings(const Bytes& in, std::vector<lib::pair<const uint8_t*, size_t>>& out) {
+static bool liftUnpackStrings(const Bytes& in, lib::vector<lib::pair<const uint8_t*, size_t>>& out) {
   out.clear();
   if (in.empty()) return true;
   RBuf hh(in);
@@ -735,9 +735,9 @@ static void liftForward(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums
   hex.clear();
   str.clear();
   Bytes hexLen, hexData, strLen;  // lengths kept apart from the bytes (xz: about -10% on .csh)
-  std::vector<lib::pair<size_t, size_t>> litAt, hexAt;  // (offset, length) in in / hexData
+  lib::vector<lib::pair<size_t, size_t>> litAt, hexAt;  // (offset, length) in in / hexData
   skel.reserve(n);
-  std::vector<LiftNum> vals;
+  lib::vector<LiftNum> vals;
   size_t biPos = SIZE_MAX;
   if (inl) inl->clear();
   auto copy = [&](size_t a, size_t b) {
@@ -853,8 +853,8 @@ static void liftForward(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums
     return;
   }
   // predictions from the walk, with the true values
-  std::vector<int64_t> v6(vals.size()), pred(vals.size(), 0);
-  std::vector<char> has6(vals.size()), hasPred(vals.size(), 0);
+  lib::vector<int64_t> v6(vals.size()), pred(vals.size(), 0);
+  lib::vector<char> has6(vals.size()), hasPred(vals.size(), 0);
   for (size_t k = 0; k < vals.size(); k++) has6[k] = liftV6(vals[k], v6[k]);
   liftRunWalk(g, [&](size_t k, bool hp, int64_t pv, int64_t& out) {
     hasPred[k] = hp;
@@ -862,32 +862,32 @@ static void liftForward(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums
     out = v6[k];
     return has6[k] != 0;
   });
-  std::vector<std::vector<uint32_t>> members(g.count);
+  lib::vector<lib::vector<uint32_t>> members(g.count);
   for (size_t k = 0; k < vals.size(); k++) members[g.ofMarker[k]].push_back((uint32_t)k);
   Bytes head, data;
   lib::unique_ptr<LiftEntropy> estp(new LiftEntropy());  // 513 KB: not on a thread's stack
   LiftEntropy& est = *estp;
   for (auto& mem : members) {
-    std::vector<LiftNum> gv;
+    lib::vector<LiftNum> gv;
     for (uint32_t k : mem) gv.push_back(vals[k]);
     Bytes bestB, b;
     double bestBits, bits;
     uint8_t mode0 = liftChooseModeT(gv, est, liftEncodeGroup, liftWordNum, liftValNum, bestB, bestBits);
-    Bytes hdr{mode0};
+    Bytes hdr = bytesOf(mode0);
     LiftUnit u;
-    std::vector<int64_t> ints;
+    lib::vector<int64_t> ints;
     if (liftUnitOf(gv, u, ints)) {
       uint8_t m1 = liftChooseModeT(ints, est, liftEncodeInts, liftWordInt, liftValInt, b, bits);
       if (bits + 8 < bestBits) {
         bestBits = bits + 8;
         bestB.swap(b);
-        hdr = {(uint8_t)(m1 | 0x40), u.byte()};
+        hdr = bytesOf((uint8_t)(m1 | 0x40), u.byte());
       }
       // residual form: only where the walk predicts something
       bool anyPred = false, all6 = true;
       for (uint32_t k : mem) { anyPred |= hasPred[k] != 0; all6 &= has6[k] != 0; }
       if (anyPred && all6) {
-        std::vector<int64_t> r(mem.size());
+        lib::vector<int64_t> r(mem.size());
         for (size_t t = 0; t < mem.size(); t++) r[t] = v6[mem[t]] - pred[mem[t]];
         int k10 = 0;
         while (k10 < 12) {
@@ -901,7 +901,7 @@ static void liftForward(LiftMode mode, const Bytes& in, Bytes& skel, Bytes& nums
         if (bits + 16 < bestBits) {
           bestBits = bits + 16;
           bestB.swap(b);
-          hdr = {(uint8_t)(m2 | 0xC0), u.byte(), (uint8_t)k10};
+          hdr = bytesOf((uint8_t)(m2 | 0xC0), u.byte(), (uint8_t)k10);
         }
       }
     }
@@ -921,10 +921,10 @@ static bool liftInverse(LiftMode mode, const Bytes& skel, const Bytes& nums, con
   LiftGroups g;
   liftGroup(mode, skel.data(), skel.size(), g, &ls);
   size_t nm = g.ofMarker.size();
-  std::vector<size_t> cnt(g.count, 0);
+  lib::vector<size_t> cnt(g.count, 0);
   for (uint32_t id : g.ofMarker) cnt[id]++;
   RBuf nr(nums);
-  std::vector<LiftGroupCode> gc(g.count);
+  lib::vector<LiftGroupCode> gc(g.count);
   for (auto& c : gc) {
     c.mode = nr.u8();
     if (c.mode & 0x40) {
@@ -944,8 +944,8 @@ static bool liftInverse(LiftMode mode, const Bytes& skel, const Bytes& nums, con
     if ((c.mode & 2) && (w < 1 || w > 8)) return false;
   }
   // coded values per group, in marker order within the group
-  std::vector<std::vector<LiftNum>> plain(g.count);
-  std::vector<std::vector<int64_t>> coded(g.count);
+  lib::vector<lib::vector<LiftNum>> plain(g.count);
+  lib::vector<lib::vector<int64_t>> coded(g.count);
   for (uint32_t id = 0; id < g.count; id++) {
     const LiftGroupCode& c = gc[id];
     bool delta = c.mode & 1, fixed = (c.mode & 2) != 0;
@@ -979,13 +979,13 @@ static bool liftInverse(LiftMode mode, const Bytes& skel, const Bytes& nums, con
   }
   if (nr.p != nums.size()) return false;
   // values per marker
-  std::vector<uint32_t> pos(nm);
+  lib::vector<uint32_t> pos(nm);
   {
-    std::vector<uint32_t> next(g.count, 0);
+    lib::vector<uint32_t> next(g.count, 0);
     for (size_t k = 0; k < nm; k++) pos[k] = next[g.ofMarker[k]]++;
   }
-  std::vector<int64_t> unitVal(nm, 0);
-  std::vector<char> done(nm, 0);
+  lib::vector<int64_t> unitVal(nm, 0);
+  lib::vector<char> done(nm, 0);
   bool bad = false;
   // residual form: v6 = coded * 10^k + prediction; unit value = v6 / 10^(6-S)
   auto resolve = [&](size_t k, bool hp, int64_t pv) {

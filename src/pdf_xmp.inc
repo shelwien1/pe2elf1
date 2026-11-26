@@ -24,13 +24,13 @@ static bool xmpThumbSplit(const Bytes& in, Bytes& jpeg, Bytes& recon) {
   static const char tag[] = "GImg:image>";
   const size_t tl = sizeof(tag) - 1;
   size_t bestA = 0, bestB = 0;
-  for (size_t p = 0; (p = std::search(in.begin() + p, in.end(), tag, tag + tl) - in.begin()) < in.size(); p += tl) {
+  for (size_t p = 0; (p = lib::search(in.begin() + p, in.end(), tag, tag + tl) - in.begin()) < in.size(); p += tl) {
     size_t s = p;  // start of the element name
     while (s > 0 && (isalnum(in[s - 1]) || in[s - 1] == '_')) s--;
     if (s == 0 || in[s - 1] != '<') continue;  // a closing tag or something else
-    std::string close = "</" + std::string(in.begin() + s, in.begin() + p + tl);
+    lib::string close = "</" + lib::string(in.begin() + s, in.begin() + p + tl);
     size_t a = p + tl;
-    auto e = std::search(in.begin() + a, in.end(), close.begin(), close.end());
+    auto e = lib::search(in.begin() + a, in.end(), close.begin(), close.end());
     if (e == in.end()) continue;
     size_t b = e - in.begin();
     if (b - a > bestB - bestA) { bestA = a; bestB = b; }

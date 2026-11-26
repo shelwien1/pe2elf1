@@ -27,13 +27,13 @@ struct StreamDesc {
 // Recon blobs go through a per-file dictionary of distinct blobs. Reference coding (channel N):
 // 0 = new blob (length N, bytes R), 1 = same blob as the previous layer of this type, k+2 = blob k.
 struct ReconDictW {
-  std::unordered_map<std::string, uint32_t> map;
+  lib::unordered_map<lib::string, uint32_t> map;
   uint32_t count = 0;
   int64_t last[L_COUNT];
   uint64_t newBytes = 0, refs = 0, hits = 0;
   ReconDictW() { for (auto& l : last) l = -1; }
   void put(ChanWriter& w, uint8_t type, const Bytes& blob) {
-    std::string key((const char*)blob.data(), blob.size());
+    lib::string key((const char*)blob.data(), blob.size());
     key.push_back((char)type);
     refs++;
     auto it = map.find(key);
@@ -52,7 +52,7 @@ struct ReconDictW {
   }
 };
 struct ReconDictR {
-  std::vector<Bytes> blobs;
+  lib::vector<Bytes> blobs;
   int64_t last[L_COUNT];
   ReconDictR() { for (auto& l : last) l = -1; }
   bool get(ChanReader& r, uint8_t type, Bytes& out) {
@@ -125,7 +125,7 @@ static void writeStreamDesc(ChanWriter& w, EmitState& st, StreamDesc& sd, Bytes&
 }
 
 static bool readStreamDesc(ChanReader& r, ReadState& st, StreamDesc& sd, Bytes& stored,
-                           std::vector<ShortName>& ordExt) {
+                           lib::vector<ShortName>& ordExt) {
   sd.cls = r.u8(CH_S);
   sd.storage = r.u8(CH_S);
   size_t len = 0;
@@ -226,9 +226,9 @@ typedef lib::function<bool(size_t, const StreamDesc&, const Bytes&, Bytes&)> Fas
 
 // The whole decoder: false, with the error recorded (failMessage()), on bad dump data.
 static bool decodeDumpImpl(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader loader, const FastRestore* fast,
-                           const std::vector<Bytes>* blobFast, Bytes& out);
+                           const lib::vector<Bytes>* blobFast, Bytes& out);
 static bool decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader loader, Bytes& out,
-                       const FastRestore* fast = nullptr, const std::vector<Bytes>* blobFast = nullptr) {
+                       const FastRestore* fast = nullptr, const lib::vector<Bytes>* blobFast = nullptr) {
   failClear();
   out.clear();
   bool ok = decodeDumpImpl(d, meta0, lib::move(loader), fast, blobFast, out) && !failed();
@@ -237,7 +237,7 @@ static bool decodeDump(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader l
 }
 
 static bool decodeDumpImpl(const DumpFiles& d, size_t meta0, ChanReader::OwnLoader loader, const FastRestore* fast,
-                           const std::vector<Bytes>* blobFast, Bytes& out) {
+                           const lib::vector<Bytes>* blobFast, Bytes& out) {
   CodecCtx ctx;
   ctx.zlibHdr[0] = d.hdr.zlibHdr[0];
   ctx.zlibHdr[1] = d.hdr.zlibHdr[1];
@@ -291,10 +291,10 @@ static bool decodeDumpImpl(const DumpFiles& d, size_t meta0, ChanReader::OwnLoad
     return true;
   };
   ReadState st;
-  std::vector<ShortName> ordExt;
+  lib::vector<ShortName> ordExt;
   ObjPositions objPos;
   ctx.objPos = &objPos;
-  std::unordered_map<uint64_t, Bytes> rgbaSrc;  // stored BGRA BMPs of L_RGBA streams, for L_ALPHA
+  lib::unordered_map<uint64_t, Bytes> rgbaSrc;  // stored BGRA BMPs of L_RGBA streams, for L_ALPHA
   ctx.alphaSource = [&](uint64_t k) -> const Bytes* {
     auto f = rgbaSrc.find(k);
     return f == rgbaSrc.end() ? nullptr : &f->second;
@@ -303,8 +303,8 @@ static bool decodeDumpImpl(const DumpFiles& d, size_t meta0, ChanReader::OwnLoad
   DeriveState ds;
   StreamFacts noFacts;
   Bytes txt;
-  std::vector<uint64_t> itemStart;
-  std::vector<FwdPatch> fwd, local;
+  lib::vector<uint64_t> itemStart;
+  lib::vector<FwdPatch> fwd, local;
   SigBlobs sig{&d.aux[AX_P7S], 0};
   B64Blobs b64;
   b64.data = &d.aux[AX_B64];
@@ -320,7 +320,7 @@ static bool decodeDumpImpl(const DumpFiles& d, size_t meta0, ChanReader::OwnLoad
     return blobLoader(kBlobFileBit | k, ext);
   };
   struct Deferred { uint64_t pos; StreamDesc sd; Bytes data; size_t streamNo; };
-  std::vector<Deferred> deferred;
+  lib::vector<Deferred> deferred;
   auto rebase = [&](uint64_t base) {
     for (auto& f : local) {
       f.pos += base;
@@ -359,7 +359,7 @@ static bool decodeDumpImpl(const DumpFiles& d, size_t meta0, ChanReader::OwnLoad
       }
       case I_XREF: {
         ds.xrefPos.push_back(out.size() - bias);
-        std::vector<lib::pair<uint64_t, int64_t>> xf;
+        lib::vector<lib::pair<uint64_t, int64_t>> xf;
         if (!readXref(r, objPos, out, &ds.lastXrefEnd, &xf)) return false;
         for (auto& x : xf) fwd.push_back({x.first, 10, 2, (uint64_t)x.second + 1, 0});
         break;

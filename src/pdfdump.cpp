@@ -19,11 +19,6 @@
 
 #include "base.inc"  // the C++ library subset in use (lib::), on the C library and the OS
 
-#include <string>
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
-
 #include "preflate.inc"
 
 namespace pdd {
@@ -118,7 +113,7 @@ class Encoder {
   Stats st;
   Segmentation seg;
   Security sec;
-  std::vector<StreamRec> streams;
+  lib::vector<StreamRec> streams;
   bool stored = false;
   Message storedReason;
   double tEncode = 0, tVerify = 0, tLift = 0;
@@ -235,21 +230,21 @@ class Encoder {
   Message err_;
   ObjIndex idx_;
   CodecCtx ctx_;
-  std::vector<std::vector<lib::pair<uint32_t, Obj>>> members_;  // (elements keep their address: growth moves the inner vectors)
-  std::unordered_map<int, int> streamOfItem_;
-  std::vector<uint32_t> ownOrd_;                     // stream -> own-file ordinal (ST_FILE)
-  std::unordered_map<uint32_t, size_t> streamByNum_;  // object number -> stream
+  lib::vector<lib::vector<lib::pair<uint32_t, Obj>>> members_;  // (elements keep their address: growth moves the inner vectors)
+  lib::unordered_map<int, int> streamOfItem_;
+  lib::vector<uint32_t> ownOrd_;                     // stream -> own-file ordinal (ST_FILE)
+  lib::unordered_map<uint32_t, size_t> streamByNum_;  // object number -> stream
   FontCache fontCache_;                               // metrics of recent font programs
-  std::vector<ShortName> ordExt_;                        // own-file ordinal -> extension
-  std::unordered_map<uint32_t, const Obj*> widthArrays_;  // array object -> font dictionary naming it
-  std::unordered_map<uint32_t, uint32_t> numsArrays_;     // array object -> its /Nums key
-  std::unordered_map<uint32_t, size_t> inlineSeen_;       // inline-stored streams written so far
+  lib::vector<ShortName> ordExt_;                        // own-file ordinal -> extension
+  lib::unordered_map<uint32_t, const Obj*> widthArrays_;  // array object -> font dictionary naming it
+  lib::unordered_map<uint32_t, uint32_t> numsArrays_;     // array object -> its /Nums key
+  lib::unordered_map<uint32_t, size_t> inlineSeen_;       // inline-stored streams written so far
   StructMap sm_;                                      // structure parents, in item order
   Bytes preT_, preCS_, preCmap_;                      // texts before unchecked lifts
   bool liftsUnchecked_ = false;
-  std::unordered_map<uint32_t, std::vector<int>> streamsByNum_;
-  std::vector<Bytes> b64Orig_;  // original zlib bytes per base64 blob (verify shortcut)
-  std::unordered_map<uint64_t, std::vector<int>> cache_;
+  lib::unordered_map<uint32_t, lib::vector<int>> streamsByNum_;
+  lib::vector<Bytes> b64Orig_;  // original zlib bytes per base64 blob (verify shortcut)
+  lib::unordered_map<uint64_t, lib::vector<int>> cache_;
   uint64_t bias_ = 0;  // offset bias (plan 4, step 1)
 
   // mostly printable ASCII / UTF-8 text (XMP, PostScript, JavaScript, ...)
@@ -273,7 +268,7 @@ class Encoder {
     size_t pos, len;
     int kind;
   };
-  std::vector<ItemText> itemTexts_;
+  lib::vector<ItemText> itemTexts_;
   void itemText(ChanWriter& w, int kind, const Bytes& t) {
     itemTexts_.push_back({dump.chan[dump.hdr.map.fileOf[CH_T]].size(), t.size(), kind});
     w.put(CH_T, t);
@@ -479,7 +474,7 @@ class Encoder {
     // trailers: classic ones and XRef stream dictionaries, in file order
     const Obj* encRef = nullptr;
     const Obj* id = nullptr;
-    std::vector<const Obj*> trailers;
+    lib::vector<const Obj*> trailers;
     for (size_t i = 0; i < seg.items.size(); i++) {
       const Item& it = seg.items[i];
       if (it.kind == Item::STREAM) {
@@ -622,15 +617,15 @@ class Encoder {
   // depend on the thread count), duplicates copied afterwards
   void processAll() {
     if (failed()) return;  // an earlier phase failed: the worker below must not clear that
-    std::vector<int> dupOf(streams.size(), -1);
-    std::vector<size_t> work;
+    lib::vector<int> dupOf(streams.size(), -1);
+    lib::vector<size_t> work;
     for (size_t i = 0; i < streams.size(); i++) {
       streamPrep(streams[i]);
       dupOf[i] = cacheLookup(streams[i]);
       if (dupOf[i] < 0) work.push_back(i);
     }
     // largest first, so one big stream does not finish last on its own
-    std::stable_sort(work.begin(), work.end(), [&](size_t a, size_t b) { return streams[a].payload > streams[b].payload; });
+    lib::stable_sort(work.begin(), work.end(), [&](size_t a, size_t b) { return streams[a].payload > streams[b].payload; });
     // an error a worker records stops nothing else: it is passed on afterwards, first by stream
     lib::mutex errMu;
     size_t errAt = SIZE_MAX;
@@ -772,7 +767,7 @@ class Encoder {
   void chooseBias() {
     bias_ = 0;
     if (seg.hdrPos == 0) return;
-    std::unordered_set<uint64_t> starts;
+    lib::unordered_set<uint64_t> starts;
     for (auto& it : seg.items)
       if (it.kind == Item::OBJ || it.kind == Item::STREAM) starts.insert(it.start);
     size_t hit0 = 0, hitB = 0;
@@ -806,7 +801,7 @@ class Encoder {
     processAll();
     // read-only ObjStm expansion; rebuild the index in file order with members
     Classifier cl(idx_);
-    std::vector<int> objstmOf(seg.items.size(), -1);
+    lib::vector<int> objstmOf(seg.items.size(), -1);
     for (auto& s : streams) {
       const Obj& d = seg.objs[seg.items[s.item].obj];
       if (cl.ownClass(d) != SC_OBJSTM || s.remain != R_DONE) continue;
@@ -865,7 +860,7 @@ class Encoder {
     }
     // -a: RGB image + 8-bit soft mask of the same size as one BGRA BMP; the mask is restored from it
     if (opt_.rgba) {
-      std::vector<char> merged(streams.size(), 0);
+      lib::vector<char> merged(streams.size(), 0);
       for (size_t i = 0; i < streams.size(); i++) {
         StreamRec& s = streams[i];
         if (!s.bmp || merged[i] || s.desc.layers.empty() || s.desc.layers.back().type != L_BMP) continue;
@@ -972,7 +967,7 @@ class Encoder {
       uint8_t c = s.desc.cls;
       if (c == SC_CONTENT || c == SC_CMAP || c == SC_OBJSTM || c == SC_XREF) continue;
       static const char kTag[] = "GImg:image>";
-      if (std::search(s.data.begin(), s.data.end(), kTag, kTag + sizeof(kTag) - 1) == s.data.end()) continue;
+      if (lib::search(s.data.begin(), s.data.end(), kTag, kTag + sizeof(kTag) - 1) == s.data.end()) continue;
       Bytes jpeg, recon, back;
       if (!xmpThumbSplit(s.data, jpeg, recon)) continue;
       if (!layerEncode(ctx_, L_XMPJPG, recon, jpeg, back) || back != s.data) continue;
@@ -985,7 +980,7 @@ class Encoder {
       if (s.remain != R_DONE || s.bmp || s.tif || s.data.size() < 128) continue;
       int k = iccLookup(s.data);
       if (k < 0) continue;
-      Bytes recon{(uint8_t)k}, back;
+      Bytes recon = bytesOf((uint8_t)k), back;
       if (!layerEncode(ctx_, L_ICCREF, recon, Bytes(), back) || back != s.data) continue;
       if (!s.desc.layers.push_back({L_ICCREF, lib::move(recon)})) continue;
       s.data.clear();
@@ -1056,7 +1051,7 @@ class Encoder {
       if (done2 && (!done || nonzero(out2) + 8 < nonzero(out))) {
         // the descriptor must carry the payload size; /DL-style facts would differ, so only
         // when nothing in the prefix needs the decoded data
-        std::vector<DerivTok> toks;
+        lib::vector<DerivTok> toks;
         const Item& it = seg.items[s.item];
         derivWalk(in_.data() + it.start, it.dataStart - it.start, toks);
         bool needDecoded = false;
@@ -1139,7 +1134,7 @@ class Encoder {
         if (w && w->t == Obj::REF && w->i >= 0 && w->i <= 0xFFFFFFFFll) widthArrays_[(uint32_t)w->i] = o;
       }
     }
-    std::unordered_map<uint64_t, std::vector<size_t>> seen;
+    lib::unordered_map<uint64_t, lib::vector<size_t>> seen;
     uint32_t next = 0;
     for (size_t i = 0; i < seg.items.size(); i++) {
       if (seg.items[i].kind != Item::STREAM) continue;
@@ -1191,7 +1186,7 @@ class Encoder {
   struct WidthFont {
     int kind;
     uint32_t first = 0;
-    std::string fields;
+    lib::string fields;
     const FontMetrics* m = nullptr;
   };
   bool widthFont(const Obj& o, WidthFont& wf) {
@@ -1210,7 +1205,7 @@ class Encoder {
     const Obj* ff = fd->get(ffKey);
     if (!ff || ff->t != Obj::REF) return false;
     ValStr src, mapSrc;
-    std::string t1hex;  // the Type 1 recon in hex: any length
+    lib::string t1hex;  // the Type 1 recon in hex: any length
     const Bytes* data;
     const Bytes* mapData = nullptr;
     const StreamRec* rec;
@@ -1238,16 +1233,16 @@ class Encoder {
       if (!fc || fc->t != Obj::INT || fc->i < 0 || fc->i > 0xFFFF) return false;
       wf.first = (uint32_t)fc->i;
     }
-    std::string key = std::string(1, (char)('a' + wf.kind)) + " " + src.c_str() + " " + t1hex + " " + mapSrc.c_str();
+    lib::string key = lib::string(1, (char)('a' + wf.kind)) + " " + src.c_str() + " " + t1hex + " " + mapSrc.c_str();
     bool found;
     FontMetrics* fm = fontCache_.get(key, found);  // valid until the next get
     if (!found && parseFontOf(wf.kind, *data, recon, *fm) && wf.kind == WK_CID2M)
       fm->setCidMap(mapData->data(), mapData->size());
     if (!fm->ok) return false;
     wf.m = fm;
-    wf.fields = std::string(" ") + src.c_str() + " " + decStr(wf.first).c_str() + " ";
+    wf.fields = lib::string(" ") + src.c_str() + " " + decStr(wf.first).c_str() + " ";
     if (wf.kind == WK_T1) wf.fields += t1hex + " ";
-    if (wf.kind == WK_CID2M) wf.fields += std::string(mapSrc.c_str()) + " ";
+    if (wf.kind == WK_CID2M) wf.fields += lib::string(mapSrc.c_str()) + " ";
     return true;
   }
 
@@ -1255,7 +1250,7 @@ class Encoder {
   // an array object a font dictionary names. p: the object's value (no header); edits at base +.
   // top: a top-level object's value, right after "obj": a placeholder there must not touch the
   // keyword (the decoder reads "N G obj" before it resolves any placeholder)
-  void widthsDerive(const uint8_t* p, size_t n, size_t base, uint32_t num, bool top, std::vector<DerivEdit>& edits) {
+  void widthsDerive(const uint8_t* p, size_t n, size_t base, uint32_t num, bool top, lib::vector<DerivEdit>& edits) {
     size_t at = SIZE_MAX;
     const Obj* fontDict = nullptr;
     Obj o;
@@ -1282,7 +1277,7 @@ class Encoder {
     }
     WidthFont wf;
     if (!widthFont(*fontDict, wf)) return;
-    std::vector<DerivEdit> we;
+    lib::vector<DerivEdit> we;
     size_t got = widthsChoose(p, n, at, wf.kind, wf.fields, wf.first, *wf.m, we, after);
     for (auto& e : we) edits.push_back({e.a + base, e.b + base, e.rep});
     if (got) {
@@ -1294,7 +1289,7 @@ class Encoder {
 
   // /ParentTree leaves: refs predicted from page /StructParents and the structure elements' MCIDs
   // member: ObjStm member index, -1 for a top-level object
-  void numsDerive(const uint8_t* p, size_t n, size_t base, uint32_t num, long member, std::vector<DerivEdit>& edits) {
+  void numsDerive(const uint8_t* p, size_t n, size_t base, uint32_t num, long member, lib::vector<DerivEdit>& edits) {
     size_t i0 = 0;
     while (i0 < n && isWS(p[i0])) i0++;
     if (i0 < n && p[i0] == '[') {  // an array object that is a /Nums value
@@ -1315,7 +1310,7 @@ class Encoder {
     ObjstmMembers mem;
     if (!mem.init(s.desc)) return false;
     const Bytes& M = s.data;
-    std::vector<DerivEdit> ed;
+    lib::vector<DerivEdit> ed;
     size_t N = mem.nums.size();
     for (size_t k = 0; k < N; k++) {
       uint64_t a, b = M.size();
@@ -1342,7 +1337,7 @@ class Encoder {
     DeriveState ds;
     StreamFacts noFacts;
     Bytes txt;
-    std::vector<DerivEdit> edits;
+    lib::vector<DerivEdit> edits;
     ctx_.objPos = &objPos;
     FwdAnchors fa;
     for (auto& it : seg.items) fa.starts.push_back(it.start);
@@ -1351,7 +1346,7 @@ class Encoder {
     dump.hdr.offsetBias = bias_;
     lib::function<int64_t(uint64_t)> itemAt = [&](uint64_t off) -> int64_t {
       off += bias_;
-      auto f = std::lower_bound(fa.starts.begin(), fa.starts.end(), off);
+      auto f = lib::lower_bound(fa.starts.begin(), fa.starts.end(), off);
       return f != fa.starts.end() && *f == off ? (int64_t)(f - fa.starts.begin()) : -1;
     };
     // item text with derived fields replaced (kind: 0 text, 1 object, 2 stream prefix, 3 plain)
@@ -1442,7 +1437,7 @@ class Encoder {
           f.payloadKnown = true;
           f.payloadLen = s.payload;
           {
-            std::vector<DerivTok> toks;
+            lib::vector<DerivTok> toks;
             derivWalk(in_.data() + it.start, it.dataStart - it.start, toks);
             bool wantDec = false, wantMd5 = false;
             for (auto& t : toks) {
@@ -1755,7 +1750,7 @@ static int selfTest() {
     bool ok = ahxDecode(in, out, recon) && ahxEncode(recon, out, re) && re == in;
     check("asciihex round trip", ok ? "ok" : "mismatch", "ok");
     Bytes a85in;
-    a85Write(sample, false, true, 75, Bytes{'\n'}, false, true, a85in);
+    a85Write(sample, false, true, 75, bytesOf('\n'), false, true, a85in);
     ok = a85Decode(a85in, out, recon) && out == sample && a85Encode(recon, out, re) && re == a85in;
     check("ascii85 round trip", ok ? "ok" : "mismatch", "ok");
     Bytes hdrs, rl;
@@ -1789,7 +1784,7 @@ static int selfTest() {
     t.predictor = 2;
     ok = ok && tiffWrap(t, strip, tif) && tifwEncodeLayer(Bytes(), tif, back) && back == strip;
     Bytes cut(tif.begin(), tif.end() - 1);
-    ok = ok && !tifwEncodeLayer(Bytes(), cut, back) && !tifwEncodeLayer(Bytes{1}, tif, back);
+    ok = ok && !tifwEncodeLayer(Bytes(), cut, back) && !tifwEncodeLayer(bytesOf(1), tif, back);
     check("tiff wrap round trip", ok ? "ok" : "mismatch", "ok");
   }
   printf("%s\n", bad ? "SELFTEST FAILED" : "all ok");

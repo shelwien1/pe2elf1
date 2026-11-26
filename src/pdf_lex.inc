@@ -23,8 +23,8 @@ struct Obj {
   int64_t i = 0;           // INT, BOOL, REF (object number)
   uint32_t gen = 0;        // REF
   double r = 0;            // REAL
-  std::string s;           // NAME (decoded, no slash), STR (decoded bytes), KW
-  std::vector<Obj> a;      // ARR elements; DICT: key, value, key, value...
+  lib::string s;           // NAME (decoded, no slash), STR (decoded bytes), KW
+  lib::vector<Obj> a;      // ARR elements; DICT: key, value, key, value...
 
   bool isName(const char* n) const { return t == NAME && s == n; }
   bool isNum() const { return t == INT || t == REAL; }
@@ -174,7 +174,7 @@ class Lexer {
     // regular token: number, keyword, or reference
     size_t st = pos;
     while (pos < n_ && isRegular(p_[pos])) pos++;
-    std::string tok((const char*)p_ + st, pos - st);
+    lib::string tok((const char*)p_ + st, pos - st);
     int kind = numberKind(tok);
     if (kind == 1) {
       o.t = Obj::INT;
@@ -223,7 +223,7 @@ class Lexer {
 
  private:
   // 1 = integer, 2 = real, 0 = neither
-  static int numberKind(const std::string& t) {
+  static int numberKind(const lib::string& t) {
     size_t i = 0;
     if (i < t.size() && (t[i] == '+' || t[i] == '-')) i++;
     size_t digits = 0, dots = 0;

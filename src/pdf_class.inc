@@ -43,7 +43,7 @@ static const char* sniffExt(const uint8_t* p, size_t n) {
 }
 
 // extension from an attachment file name: [a-z0-9]{1,8}, else empty
-static ShortName fileNameExt(const std::string& name) {
+static ShortName fileNameExt(const lib::string& name) {
   // UTF-16BE (BOM FE FF): character k at 2 + 2k; a character over 0xFF reads as '?'
   bool u16 = name.size() >= 2 && (uint8_t)name[0] == 0xFE && (uint8_t)name[1] == 0xFF;
   size_t nc = u16 ? (name.size() - 2) / 2 : name.size();
@@ -63,7 +63,7 @@ static ShortName fileNameExt(const std::string& name) {
 
 // ---- object resolution -------------------------------------------------------------------------
 struct ObjIndex {
-  std::unordered_map<uint32_t, const Obj*> byNum;  // latest definition in file order
+  lib::unordered_map<uint32_t, const Obj*> byNum;  // latest definition in file order
   const Obj* resolve(const Obj* o, int depth = 0) const {
     while (o && o->t == Obj::REF && depth++ < 32) {
       auto it = byNum.find((uint32_t)o->i);
@@ -78,13 +78,13 @@ struct ObjIndex {
 };
 
 // ObjStm members: (objnum, value)
-static bool expandObjStm(const Obj& dict, const Bytes& data, std::vector<lib::pair<uint32_t, Obj>>& out) {
+static bool expandObjStm(const Obj& dict, const Bytes& data, lib::vector<lib::pair<uint32_t, Obj>>& out) {
   const Obj* N = dict.get("N");
   const Obj* F = dict.get("First");
   if (!N || !F || N->t != Obj::INT || F->t != Obj::INT || N->i < 0 || F->i < 0 || (size_t)F->i > data.size())
     return false;
   Lexer lx(data.data(), data.size(), 0);
-  std::vector<lib::pair<uint64_t, uint64_t>> hdr;
+  lib::vector<lib::pair<uint64_t, uint64_t>> hdr;
   for (int64_t k = 0; k < N->i; k++) {
     uint64_t num, off;
     if (!lx.parseUInt(num) || !lx.parseUInt(off)) break;
@@ -105,8 +105,8 @@ static bool expandObjStm(const Obj& dict, const Bytes& data, std::vector<lib::pa
 
 struct Classifier {
   const ObjIndex& idx;
-  std::unordered_map<uint32_t, uint8_t> refClass;
-  std::unordered_map<uint32_t, std::string> attachName;
+  lib::unordered_map<uint32_t, uint8_t> refClass;
+  lib::unordered_map<uint32_t, lib::string> attachName;
   explicit Classifier(const ObjIndex& i) : idx(i) {}
 
   void assign(const Obj* v, uint8_t cls) {
@@ -141,7 +141,7 @@ struct Classifier {
     }
     if (o.t != Obj::DICT) return;
     for (size_t k = 0; k + 1 < o.a.size(); k += 2) {
-      const std::string& key = o.a[k].s;
+      const lib::string& key = o.a[k].s;
       const Obj* v = &o.a[k + 1];
       if (key == "Contents" && isPage(o)) assign(v, SC_CONTENT);
       else if (key == "FontFile") assign(v, SC_FONT_T1);
@@ -169,7 +169,7 @@ struct Classifier {
           }
       } else if (key == "EF") {
         const Obj* ef = idx.resolve(v);
-        std::string name;
+        lib::string name;
         const Obj* uf = idx.resolve(o.get("UF"));
         const Obj* f = idx.resolve(o.get("F"));
         if (uf && uf->t == Obj::STR) name = uf->s;
@@ -273,7 +273,7 @@ static bool imageColor(const ObjIndex& idx, const Obj& d, const lib::function<co
       return 0;
     }
     if (c->t != Obj::ARR || c->a.empty() || c->a[0].t != Obj::NAME) return 0;
-    const std::string& f = c->a[0].s;
+    const lib::string& f = c->a[0].s;
     if (f == "CalGray") return 1;
     if (f == "CalRGB" || f == "Lab") return 3;
     if (f == "Separation") return 1;

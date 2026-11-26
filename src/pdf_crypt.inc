@@ -449,7 +449,7 @@ struct Security {
               else if (cm->isName("AESV2")) m = CI_AES128;
               else if (cm->isName("AESV3")) m = CI_AES256;
             }
-            const std::string& nm = cf->a[k].s;
+            const lib::string& nm = cf->a[k].s;
             CryptFilter* e = nullptr;
             for (auto& c : cfm)
               if (c.name.eq(nm.data(), nm.size())) e = &c;

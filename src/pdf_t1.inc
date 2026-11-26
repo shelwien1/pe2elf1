@@ -34,7 +34,7 @@ typedef FixedVec<ShortName, 255> RdNames;
 // recognized blobs are examined, so the scan gives the same result on either side as long as
 // every blob header is recognized; layerDecode verifies that through t1EncodeLayer.
 static void t1FindBlobs(const uint8_t* p, size_t n, const RdNames& rd,
-                        std::vector<lib::pair<size_t, size_t>>& blobs, bool bodies = true) {
+                        lib::vector<lib::pair<size_t, size_t>>& blobs, bool bodies = true) {
   blobs.clear();
   size_t i = 0;
   while (i < n) {
@@ -127,7 +127,7 @@ static bool t1CsSplit(const uint8_t* c, size_t n, size_t lenIV, Bytes& iv, Bytes
 // ascending (op, op2, count) order: operators 0..11, 12 with its second byte, 13..31, then 255
 // (the end of a charstring) as 288 slots, times 256 counts.
 static const size_t kT1Groups = 288 * 256;
-static bool t1OperandKeys(const Bytes& ops, std::vector<uint32_t>& keys) {
+static bool t1OperandKeys(const Bytes& ops, lib::vector<uint32_t>& keys) {
   keys.clear();
   size_t i = 0;
   while (i < ops.size()) {
@@ -146,7 +146,7 @@ static bool t1OperandKeys(const Bytes& ops, std::vector<uint32_t>& keys) {
 }
 
 static bool t1GroupOperands(const Bytes& ops, const Bytes& seq, Bytes& out, bool group) {
-  std::vector<uint32_t> keys;  // one per operand: as many as the font has
+  lib::vector<uint32_t> keys;  // one per operand: as many as the font has
   if (!t1OperandKeys(ops, keys)) return false;
   // group sizes and starts: fixed arrays over all groups (576 KB, on the heap)
   lib::unique_ptr<uint32_t[]> cntP(new uint32_t[kT1Groups]()), atP(new uint32_t[kT1Groups]());
@@ -159,7 +159,7 @@ static bool t1GroupOperands(const Bytes& ops, const Bytes& seq, Bytes& out, bool
     sum += cnt[g];
   }
   RBuf r(seq);
-  std::vector<uint64_t> v(keys.size());
+  lib::vector<uint64_t> v(keys.size());
   out.clear();
   if (group) {  // operands in charstring order -> each to its group's next place
     for (uint32_t k : keys) v[at[k]++] = r.var();
@@ -228,7 +228,7 @@ static bool t1Plain(const Bytes& recon, const Bytes& in, Bytes& out, size_t& s, 
     }
     RBuf ivr(ivB), opr(opsB), nr(numB);
     const uint8_t* sk = in.data() + s;
-    std::vector<lib::pair<size_t, size_t>> heads;
+    lib::vector<lib::pair<size_t, size_t>> heads;
     t1FindBlobs(sk, skelLen, rd, heads, false);
     joined.assign(in.begin(), in.begin() + s);
     size_t pos = 0;
@@ -256,7 +256,7 @@ static bool t1EncodeLayer(const Bytes& recon, const Bytes& in, Bytes& out) {
   if (!t1Plain(recon, in, out, s, n, flags, rd, lenIV)) return false;
   uint8_t* p = out.data() + s;
   if (flags & 1) {
-    std::vector<lib::pair<size_t, size_t>> blobs;
+    lib::vector<lib::pair<size_t, size_t>> blobs;
     t1FindBlobs(p, n, rd, blobs);
     for (auto& b : blobs) t1Encrypt(p + b.first, b.second, 4330);
   }
@@ -311,7 +311,7 @@ static bool t1DecodeLayer(const Bytes& in, Bytes& out, Bytes& recon, bool charst
     if (lx.parse(v) && v.t == Obj::INT && v.i < 0) csDecrypt = false;
   }
   if (csDecrypt) {
-    std::vector<lib::pair<size_t, size_t>> blobs;
+    lib::vector<lib::pair<size_t, size_t>> blobs;
     t1FindBlobs(p, len, rd, blobs);
     if (blobs.empty()) csDecrypt = false;
     for (auto& b : blobs) t1Decrypt(p + b.first, b.second, 4330);
@@ -326,7 +326,7 @@ static bool t1DecodeLayer(const Bytes& in, Bytes& out, Bytes& recon, bool charst
       Obj v;
       if (lx.parse(v) && v.t == Obj::INT && v.i >= 0 && v.i < 64) lenIV = (size_t)v.i;
     }
-    std::vector<lib::pair<size_t, size_t>> blobs;
+    lib::vector<lib::pair<size_t, size_t>> blobs;
     t1FindBlobs(p, len, rd, blobs);
     split = !blobs.empty();
     size_t pos = 0;

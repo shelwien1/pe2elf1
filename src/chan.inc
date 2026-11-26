@@ -4,7 +4,13 @@
 // so any set of channels can share one physical file with no framing. The channel->file map is
 // stored in the header, which sits at the start of <P>.meta.
 
-typedef std::vector<uint8_t> Bytes;
+typedef lib::vector<uint8_t> Bytes;
+// Bytes of the given values (what a braced list makes)
+template <class... A>
+static Bytes bytesOf(A... a) {
+  const uint8_t v[] = {(uint8_t)a...};
+  return Bytes(v, v + sizeof...(A));
+}
 
 // A variable-size array with its storage at the maximum size, in place (no heap allocation).
 // push_back and resize return false when the array would outgrow N; callers that can meet more
@@ -320,11 +326,11 @@ struct DumpFiles {
   DumpHeader hdr;
   Bytes chan[CH_COUNT];              // physical channel files (hdr.map.nfiles; data only, no header)
   Bytes classFile[CF_COUNT];
-  std::vector<ShortName> ownExt;     // own files by ordinal
-  std::vector<Bytes> ownData;
+  lib::vector<ShortName> ownExt;     // own files by ordinal
+  lib::vector<Bytes> ownData;
   Bytes aux[AX_COUNT];
-  std::vector<ShortName> blobExt;    // large base64 blobs of object text, own files <P>b%07X.<ext>
-  std::vector<Bytes> blobData;
+  lib::vector<ShortName> blobExt;    // large base64 blobs of object text, own files <P>b%07X.<ext>
+  lib::vector<Bytes> blobData;
 };
 
 static void serializeHeader(const DumpHeader& h, Bytes& out) {
@@ -470,7 +476,7 @@ class ChanReader {
  public:
   // ownLoader: fetches own file by (ordinal, ext); used when the dump comes from disk.
   typedef lib::function<Bytes(uint32_t, const char*)> OwnLoader;  // ordinal, extension
-  ChanReader(const DumpFiles& d, size_t meta0, OwnLoader loader, const std::vector<Bytes>* ownData = nullptr)
+  ChanReader(const DumpFiles& d, size_t meta0, OwnLoader loader, const lib::vector<Bytes>* ownData = nullptr)
       : d_(d), loader_(lib::move(loader)), ownData_(ownData ? ownData : &d.ownData) {
     for (auto& p : pos_) p = 0;
     pos_[0] = meta0;
@@ -563,7 +569,7 @@ class ChanReader {
  private:
   const DumpFiles& d_;
   OwnLoader loader_;
-  const std::vector<Bytes>* ownData_;
+  const lib::vector<Bytes>* ownData_;
   size_t pos_[CH_COUNT];
   size_t cfPos_[CF_COUNT];
   bool bad_ = false;
