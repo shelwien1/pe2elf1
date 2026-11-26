@@ -19,20 +19,24 @@ enum { HX_KIND, HX_RAWLEN, HX_TAILZ, HX_TAILNZ, HX_GAPZ, HX_GAPNZ, HX_TAILTZ, HX
 enum { SF_PMODE, SF_PVQ, SF_TMODE, SF_JSHUFF, SF_JSCALE, SF_HFVQ, SF_LFE, SF_TMSR, SF_PMSR, SF_N };
 
 // decisions per context (ND, mantissa nodes MND), sign contexts (NG); the nodes of each:
-//   hdr  code() of a field's value less its last one (nodes 0-12, the sign by field), and 13 the
-//        value is the last one, 14 the one before it, 15 a flag (a field of one bit)
+//   hdr  code() of a field's value less its last one (nodes 0-12), and 13 the value is the last
+//        one, 14 the one before it, 15 a flag (a field of one bit), 16 the difference's sign (by
+//        field, the sign contexts, before format 175: the families' last node since, model_hdr.inc's
+//        code_diff())
 //   sid  the same (14: the value is that of the place before in the subframe), then an index
-//        (PVQ, HFVQ): 16-31 its top 4 bits as a tree, 32-47 the bits below them by place
+//        (PVQ, HFVQ): 16-31 its top 4 bits as a tree, 32-47 the bits below them by place; 48 the
+//        sign
 //   sdd  the same, where the WAV is decoded (sid's before format 132; the model's dw_rule(): the
 //        scale factor search or the bit allocation search shows it decoded, as for abd, or at -9
 //        under 90% of the stream's indexes have been the audio's)
 //   sdn  the same, a channel's the WAV doesn't bind (sid's or sdd's before format 167)
-//   jsc  sid's nodes 0-15 (a joint scale factor)
-//   abt  ABITS: code() of its difference from the last (0-12), 13 the last one, 14 the band below's
+//   jsc  hdr's nodes (a joint scale factor)
+//   abt  ABITS: code() of its difference from the last (0-12), 13 the last one, 14 the band below's,
+//        15 the sign
 //   abd  the same (a decoded WAV's ABITS, abt's before format 118)
 //   abn  the same (a channel's the WAV doesn't bind, abt's before format 166)
 //   scl  a scale factor: code() of its difference from the prediction (0-12), 13 the prediction,
-//        14 the last one (no prediction)
+//        14 the last one (no prediction), 15 the sign
 //   scd  the same (a decoded WAV's scale factors, scl's before format 118)
 //   scn  the same (a channel's the WAV doesn't bind, scl's before format 166)
 //   hit  13 an LFE sample's index is the audio's (a subband sample's goes to the coder as it is:
@@ -63,10 +67,10 @@ enum { SF_PMODE, SF_PVQ, SF_TMODE, SF_JSHUFF, SF_JSCALE, SF_HFVQ, SF_LFE, SF_TMS
 //        a channel's the WAV doesn't bind, by the LPC of its subband's decoded values
 //   vpn  the same, a channel's the WAV doesn't bind (vqp's or vpd's before format 167)
 //   raw  a byte's bits, by their place in its binary tree (1-255)
-enum { HN_SAME = TC_NODE, HN_SAME2, HN_BIT, HN_N };
-enum { SN_SAME = TC_NODE, SN_SAMEP, SN_BIT, SN_IX, SN_IXPOS = SN_IX + 16, SN_N = SN_IXPOS + 16 };
-enum { AN_SAME = TC_NODE, AN_BELOW, AN_N };
-enum { CN_HIT = TC_NODE, CN_SAME, CN_N };
+enum { HN_SAME = TC_NODE, HN_SAME2, HN_BIT, HN_SIGN, HN_N };
+enum { SN_SAME = TC_NODE, SN_SAMEP, SN_BIT, SN_IX, SN_IXPOS = SN_IX + 16, SN_SIGN = SN_IXPOS + 16, SN_N };
+enum { AN_SAME = TC_NODE, AN_BELOW, AN_SIGN, AN_N };
+enum { CN_HIT = TC_NODE, CN_SAME, CN_SIGN, CN_N };
 constexpr int LEN_NODES = 32;  // a length's tree: its nodes by the bits so far (1-31)
 constexpr int LEN_TOP = 2;     // and the bits below the top one that follow it, by the length and the bits before them
 constexpr int LEN_MAX = 24;    // (lengths 0-24)

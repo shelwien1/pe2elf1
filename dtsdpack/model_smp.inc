@@ -4730,7 +4730,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // (the scale factor v by sf_post()'s k entries ci, pv, of class g (the top subband, 28-30, the
   // rest); past the first SP_R, f_scl's difference from the likeliest)
   template <class F>
-  int sf_post_code(F& f, int g, const int* ci, const double* pv, int k, S64 v, tcx& X_, u32 kd, int max) {
+  int sf_post_code(F& f, int g, const int* ci, const double* pv, int k, S64 v, tcx& X_, int max) {
     double rem = 1.0;
     for (int r = 0; r < k && r < SP_R; r++) {
       double pc = rem > 1e-12 ? pv[r] / rem : 0.0;
@@ -4760,7 +4760,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (hit) return ci[r];
       rem -= pv[r];
     }
-    return (int)checked(ci[0] + f.codes(X_, ENC ? v - ci[0] : 0, kd), 0, max - 1);
+    auto ruled = [&](S64 x) {  // (the entries tried)
+      for (int r = 0; r < k && r < SP_R; r++)
+        if (x == ci[r]) return true;
+      return false;
+    };
+    return (int)checked(ci[0] + B::code_diff(f, X_, ENC ? v - ci[0] : 0, ci[0], 0, max - 1, ruled), 0, max - 1);
   }
   // A scale factor v in 0..max-1 by the family f (scl's; a decoded WAV's scd's, since format 118:
   // scale()), its variables D: by sf_post()'s k entries where spu (sf_post_code()), else against
@@ -4771,10 +4776,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     tcx X;
     f.make(D, X);
     f.select(X);
-    if (spu) return sf_post_code(f, sg, spc, spp, spk, v, X, (u32)D.kd, max);
-    if (p >= 0) return f.bit(CN_HIT, ENC && v == p) ? p : checked(p + f.codes(X, ENC ? v - p : 0, (u32)D.kd), 0, max - 1);
+    auto none = [](S64) { return false; };
+    if (spu) return sf_post_code(f, sg, spc, spp, spk, v, X, max);
+    if (p >= 0) return f.bit(CN_HIT, ENC && v == p) ? p : checked(p + B::code_diff(f, X, ENC ? v - p : 0, p, 0, max - 1, none), 0, max - 1);
     if (A && f.bit(CN_SAME, ENC && v == A - 1)) return A - 1;
-    return checked((A ? A - 1 : 0) + f.codes(X, ENC ? v - (A ? A - 1 : 0) : 0, (u32)D.kd), 0, max - 1);
+    const S64 base = A ? A - 1 : 0;
+    return checked(base + B::code_diff(f, X, ENC ? v - base : 0, base, 0, max - 1, none), 0, max - 1);
   }
   // (scl's, or scd's where the scale factor search shows the WAV decoded: ss_rule())
   S64 scale(M_scl_v& D, S64 v, int p, S32 A, int max, int spu = 0, int sg = 0, const int* spc = nullptr,

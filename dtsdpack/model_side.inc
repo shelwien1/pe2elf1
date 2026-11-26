@@ -45,7 +45,7 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
     D.tr = tr;
     f.make(D, X);
     f.select(X);
-    v = code_val(f, X, bit1, v, A, P, A ? A - 1 : P ? P - 1 : 0, (u32)fld, lo, hi);
+    v = code_val(f, X, bit1, v, A, P, A ? A - 1 : P ? P - 1 : 0, lo, hi);
     sst = !A ? 0 : v == A - 1 ? 1 : 2;
     return v;
   }
@@ -87,10 +87,12 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
   // (Sn: the first guess, 1 + it, 0 none; then Alt, the second (1 + it), else the last one; then the
   // difference from the first of them there is; pq, pq2: the outside predictions of the first two,
   // P(not it) in 4096ths, -1 none; dec: a decoded WAV's, the scale factor search's counts or the bit
-  // allocation search's rule say (the abd family's: its own parameters, since format 118)
+  // allocation search's rule say (the abd family's: its own parameters, since format 118); nq, an
+  // unbound channel's: the counts of its ABITS, 0-26, by its last one, de and lbd (model.inc: every
+  // decision's outside prediction past the first two, since format 175)
   S64 abits_code(int ch, int b, S64 v, S64 lo, S64 hi, S32 A, S32 Bw, int es, int de, int ls, int pm, int lbd,
                  int nb, int mx, S32 Sn, int nn, int sc, int eq, int sm, S32 Alt = 0, int bg = 0, int ag = 0, int sx = 0,
-                 int pq = -1, int pq2 = -1, int dec = 0, int nw = 0) {
+                 int pq = -1, int pq2 = -1, int dec = 0, int nw = 0, const double* nq = nullptr) {
     M_abt_v D;
     D.bd = b;
     D.cc = chan_class(ch);
@@ -118,20 +120,69 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
 #define M_COPY(f) E.f = D.f;
       M_abt_VARS(M_COPY)
 #undef M_COPY
-      v = abits_val(f_abn, E, v, lo, hi, c1, c2, b, pq, pq2);
+      v = nq ? abits_val_n(f_abn, E, v, lo, hi, c1, c2, pq, pq2, nq) : abits_val(f_abn, E, v, lo, hi, c1, c2, pq, pq2);
     } else if (dec) {
       M_abd_v E;
 #define M_COPY(f) E.f = D.f;
       M_abt_VARS(M_COPY)
 #undef M_COPY
-      v = abits_val(f_abd, E, v, lo, hi, c1, c2, b, pq, pq2);
+      v = abits_val(f_abd, E, v, lo, hi, c1, c2, pq, pq2);
     } else
-      v = abits_val(f_abt, D, v, lo, hi, c1, c2, b, pq, pq2);
+      v = abits_val(f_abt, D, v, lo, hi, c1, c2, pq, pq2);
     ast = !A ? 0 : v == A - 1 ? 1 : 2;
     return v;
   }
+  // (since format 175, an unbound channel's ABITS by the counts q of its values 0-26 (model.inc's
+  // B::nwa_n, each from NWA_A) past the first two decisions too: where it is neither c1 - 1 nor c2 -
+  // 1, the outside predictions of its difference's magnitude's decisions, code()'s first 8 nodes
+  // (0, 1, 2 and the length 1-5 of the magnitude less 2), and of its sign, by the counts' shares of
+  // the values lo..hi but those two: on 12 streams without their WAVs the magnitude's 0.13% smaller
+  // than by abn alone, with the sign's 0.04% more. P(not y of r) in 4096ths, -1 where r is none)
+  static int q_op(double y, double r) { return r > 1e-6 ? clip((int)(4096.0 * (1.0 - y / r) + 0.5), 64, 4096 - 64) : -1; }
   template <class F, class V>
-  S64 abits_val(F& f, V& D, S64 v, S64 lo, S64 hi, S32 c1, S32 c2, int b, int pq, int pq2) {
+  S64 abits_val_n(F& f, V& D, S64 v, S64 lo, S64 hi, S32 c1, S32 c2, int pq, int pq2, const double* q0) {
+    tcx X;
+    f.make(D, X);
+    f.select(X);
+    int pa[AN_N];
+    for (int k = 0; k < AN_N; k++) pa[k] = -1;
+    if (pq >= 0) pa[AN_SAME] = cm_pclip(pq);
+    if (pq2 >= 0) pa[AN_BELOW] = cm_pclip(pq2);
+    f.prpa = pa;
+    S64 out;
+    if (c1 && f.bit(AN_SAME, ENC && v == c1 - 1)) out = c1 - 1;
+    else if (c2 && c2 != c1 && f.bit(AN_BELOW, ENC && v == c2 - 1)) out = c2 - 1;
+    else {
+      const int base = c1 ? c1 - 1 : c2 ? c2 - 1 : 0;
+      double q[27], w[28] = {}, r = 0.0;
+      for (int k = 0; k < 27; k++) {
+        q[k] = k < lo || k > hi || (c1 && k == c1 - 1) || (c2 && k == c2 - 1) ? 0.0 : q0[k];
+        w[k > base ? k - base : base - k] += q[k], r += q[k];
+      }
+      for (int j = 0; j < TC_SMALL; j++) pa[j] = q_op(w[j], r), r -= w[j];
+      for (int j = 0; j < 5; j++) {  // (the length: magnitudes 2^j + 2 .. 2^(j+1) + 1)
+        double g = 0.0;
+        for (int m = (1 << j) + 2; m <= (2 << j) + 1 && m < 28; m++) g += w[m];
+        pa[tc_node_len(j)] = q_op(g, r), r -= g;
+      }
+      const S64 d = ENC ? v - base : 0, m = f.code(X, d < 0 ? -d : d);
+      out = base;
+      if (m) {
+        const S64 vn = base - m, vp = base + m;
+        const bool cn = vn >= lo && vn != c1 - 1 && vn != c2 - 1, cp = vp <= hi && vp != c1 - 1 && vp != c2 - 1;
+        if (cn != cp) out = cp ? vp : vn;
+        else {
+          const double qn = vn >= 0 && vn < 27 ? q[vn] : 0.0, qp = vp < 27 ? q[vp] : 0.0;
+          pa[AN_SIGN] = q_op(qn, qn + qp);
+          out = f.bit(AN_SIGN, ENC && d < 0) ? vn : vp;
+        }
+      }
+    }
+    f.prpa = nullptr;
+    return checked(out, lo, hi);
+  }
+  template <class F, class V>
+  S64 abits_val(F& f, V& D, S64 v, S64 lo, S64 hi, S32 c1, S32 c2, int pq, int pq2) {
     tcx X;
     f.make(D, X);
     f.select(X);
@@ -142,7 +193,7 @@ struct ModelSide : ModelHdr<f_DEC, LV> {
       if (pq2 >= 0) pa[HN_SAME2] = cm_pclip(pq2);
       f.prpa = pa;
     }
-    v = code_val(f, X, 0, v, c1, c2, c1 ? c1 - 1 : c2 ? c2 - 1 : 0, (u32)imin(b, M_abt_NG - 1), lo, hi);  // (X96's subbands past 31: 31's)
+    v = code_val(f, X, 0, v, c1, c2, c1 ? c1 - 1 : c2 ? c2 - 1 : 0, lo, hi);
     f.prpa = nullptr;
     return v;
   }

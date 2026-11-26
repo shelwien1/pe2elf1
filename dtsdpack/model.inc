@@ -562,13 +562,18 @@ struct Model : ModelX96<f_DEC, LV> {
         // index w), and its counters see neither it with the last ABITS nor de with it: in
         // `dtswavsample16.wav`'s 6.56 million ABITS the subband below's unchanged leaves this one
         // so 88.6% of the time, its moving down by one 47.6%, it moving too 29.0%; by such counts
-        // 0.68 bits an ABITS, abn's 0.81)
+        // 0.68 bits an ABITS, abn's 0.81; since format 175 every decision past those two by the
+        // same counts too, nq: model_side.inc's abits_val_n())
         const int nwl = clip(hist.abits[ch][b], 0, 27);
+        double nq[27];
+        const double* nqp = nullptr;
         if (!bound[ch] && !zk) {
           const S32 A0 = hist.abits[ch][b], Al = alt >= lo && alt <= hi ? alt + 1 : 0, Bw = b ? s.abits[ch][b - 1] + 1 : 0;
           const S32 c1 = Sn ? Sn : A0, c2 = Al ? Al : Sn ? A0 : Bw;
           const U16* const n = B::nwa_n[nwl][de][lbd];
           const double t = (double)B::nwa_t[nwl][de][lbd], al = B::NWA_A;
+          for (int k = 0; k < 27; k++) nq[k] = (double)n[k] + al;
+          nqp = nq;
           if (c1 >= 1 && c1 <= 27) {
             const double p1 = ((double)n[c1 - 1] + al) / (t + 27.0 * al);
             pq1 = clip((int)(4096.0 * (1.0 - p1) + 0.5), 64, 4096 - 64);
@@ -582,7 +587,7 @@ struct Model : ModelX96<f_DEC, LV> {
         else if (!twin_field(fid, ch, b, v, lo, hi) && !(B::ffe_ok && !pass && bound[ch] && B::ff_abits(ch, b, v, lo, hi)))
           v = abits_code(ch, b, v, lo, hi, hist.abits[ch][b], b ? s.abits[ch][b - 1] + 1 : 0, e, de, ls,
                          s.pmode[ch][b], lbd, nb, mx, Sn, near_e ? 14 : nn, sc, eq, ms,
-                         alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag, (fs && ut) || nws ? sx : 0, pq1, pq2, B::ss_rule() || B::ab_rule(), !bound[ch]);
+                         alt >= lo && alt <= hi ? alt + 1 : 0, bg, ag, (fs && ut) || nws ? sx : 0, pq1, pq2, B::ss_rule() || B::ab_rule(), !bound[ch], nqp);
         v = checked(v, lo, hi);
         if (nws) B::nwd_n[0] += v > nws - 1, B::nwd_n[1] += v < nws - 1;
         if (!bound[ch] && !zk && v >= 0 && v <= 26) {

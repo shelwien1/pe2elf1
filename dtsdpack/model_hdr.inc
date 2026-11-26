@@ -77,15 +77,30 @@ struct ModelHdr {
     return k;
   }
 
+  // A value base + d, d by family f, its contexts X selected: d's magnitude by the cascade (code()),
+  // then its sign by the family's last node, where both base - |d| and base + |d| lie in lo..hi and
+  // neither is ruled out (ruled(x), the values its decisions before have ruled out). Since format
+  // 175: before it by the family's sign counters, under a context such as the field or the subband
+  // alone, and where only one side could be the value too (in no-WAV streams the sign of an ABITS'
+  // change goes much by the channel's last ABITS and the energy's move, which those didn't see)
+  template <class F, class R>
+  static INLINE S64 code_diff(F& f, const tcx& X, S64 d, S64 base, S64 lo, S64 hi, const R& ruled) {
+    const S64 m = f.code(X, d < 0 ? -d : d);
+    if (!m) return 0;
+    const bool cn = base - m >= lo && !ruled(base - m), cp = base + m <= hi && !ruled(base + m);
+    if (cn != cp) return cp ? m : -m;
+    return f.bit(F::ND - 1, ENC && d < 0) ? -m : m;
+  }
   // A value v of family f's (hdr's or sid's: their first nodes are the same), its contexts X
   // selected: a flag where bit1, else whether it is c1 - 1, whether c2 - 1 (1 + those values, 0
-  // none), else its difference from base (codes(), by sign context sc), in lo..hi
+  // none), else its difference from base (code_diff()), in lo..hi
   template <class F>
-  INLINE S64 code_val(F& f, const tcx& X, int bit1, S64 v, S32 c1, S32 c2, S64 base, u32 sc, S64 lo, S64 hi) {
+  INLINE S64 code_val(F& f, const tcx& X, int bit1, S64 v, S32 c1, S32 c2, S64 base, S64 lo, S64 hi) {
     if (bit1) return f.bit(HN_BIT, ENC && v);
     if (c1 && f.bit(HN_SAME, ENC && v == c1 - 1)) return c1 - 1;
     if (c2 && c2 != c1 && f.bit(HN_SAME2, ENC && v == c2 - 1)) return c2 - 1;
-    return checked(base + f.codes(X, ENC ? v - base : 0, sc), lo, hi);
+    const S64 ex = c1 && c2 && c2 != c1 ? c2 - 1 : lo - 1;  // (base is c1 - 1 where there is one)
+    return checked(base + code_diff(f, X, ENC ? v - base : 0, base, lo, hi, [ex](S64 x) { return x == ex; }), lo, hi);
   }
 
   // The hdr family's value of field fld (a flag where bit1, else in 0..hi), its last values A and
@@ -101,7 +116,7 @@ struct ModelHdr {
     D.nch = imin(nch, 3);
     f_hdr.make(D, X);
     f_hdr.select(X);
-    v = code_val(f_hdr, X, bit1, v, A, A2, A ? A - 1 : 0, (u32)fld, 0, hi);
+    v = code_val(f_hdr, X, bit1, v, A, A2, A ? A - 1 : 0, 0, hi);
     kept(A, v);
     return v;
   }
