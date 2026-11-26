@@ -89,8 +89,7 @@ struct StreamRec {
   StreamDesc desc;
   Bytes data;                // stored form
   uint8_t remain = R_DONE;
-  std::string stop;          // filter at which undoing stopped
-  std::vector<std::string> chain;
+  PdfName stop;              // filter at which undoing stopped ("external", "Predictor": not a filter)
   size_t payload = 0;        // bytes in the PDF
   size_t decoded = 0;        // bytes after filters (before BMP wrap)
   uint8_t wantCipher = CI_NONE;
@@ -103,21 +102,17 @@ struct StreamRec {
   uint64_t storedHash = 0;   // of the stored form, for the verify shortcut
 };
 
-struct FilterRef {
-  std::string name;
-  const Obj* parms = nullptr;
-};
-
 struct Stats {
   uint64_t itemCount[Item::KIND_COUNT] = {}, itemBytes[Item::KIND_COUNT] = {};
   struct F { uint64_t present = 0, undone = 0, terminal = 0, bytes = 0; };
-  std::map<std::string, F> filters;
+  NameTable<PdfName, F, 64> filters;
   struct C { uint64_t count = 0, payload = 0, stored = 0; };
   C cls[SC_COUNT];
   uint64_t storage[ST_COUNT] = {}, storageBytes[ST_COUNT] = {};
   uint64_t cipherCount[4] = {}, cipherKept = 0;
   uint64_t extents[5] = {};
-  std::map<std::string, std::pair<uint64_t, uint64_t>> exts;  // own files by extension: count, bytes
+  struct X { uint64_t count = 0, bytes = 0; };
+  NameTable<ShortName, X, 64> exts;  // own files by extension
   uint64_t reconBlobs = 0, reconRefs = 0;
   uint64_t typedBytes = 0, payloadBytes = 0, layeredPayload = 0;
   uint64_t bmpCount = 0;
@@ -429,8 +424,8 @@ class Encoder {
     w.u8(CH_S, I_END);
   }
 
-  std::vector<FilterRef> getFilters(const Obj& d) const {
-    std::vector<FilterRef> r;
+  FilterList getFilters(const Obj& d) const {
+    FilterList r;
     const Obj* f = idx_.resolve(d.get("Filter"));
     const Obj* p = idx_.resolve(d.get("DecodeParms"));
     if (!f) return r;
@@ -438,8 +433,12 @@ class Encoder {
       r.push_back({normFilter(f->s), p && p->t == Obj::DICT ? p : (p && p->t == Obj::ARR && !p->a.empty() ? idx_.resolve(&p->a[0]) : nullptr)});
     } else if (f->t == Obj::ARR) {
       for (size_t i = 0; i < f->a.size(); i++) {
+        if (r.size() + 1 == kMaxFilters && i + 1 < f->a.size()) {
+          r.push_back({PdfName("?"), nullptr});
+          break;
+        }
         const Obj* fn = idx_.resolve(&f->a[i]);
-        if (!fn || fn->t != Obj::NAME) { r.push_back({"?", nullptr}); continue; }
+        if (!fn || fn->t != Obj::NAME) { r.push_back({PdfName("?"), nullptr}); continue; }
         const Obj* pp = nullptr;
         if (p && p->t == Obj::ARR && i < p->a.size()) pp = idx_.resolve(&p->a[i]);
         else if (p && p->t == Obj::DICT && f->a.size() == 1) pp = p;
@@ -448,6 +447,9 @@ class Encoder {
     }
     return r;
   }
+ public:
+  FilterList filtersOf(const StreamRec& s) const { return getFilters(seg.objs[seg.items[s.item].obj]); }
+ private:
 
   FilterParams params(const Obj* p) const {
     FilterParams fp;
@@ -464,7 +466,7 @@ class Encoder {
     return fp;
   }
 
-  uint8_t streamCipher(const Obj& d, uint32_t num, const std::vector<FilterRef>& fl) const {
+  uint8_t streamCipher(const Obj& d, uint32_t num, const FilterList& fl) const {
     if (!sec.present) return CI_NONE;
     if (sec.encNum && num == sec.encNum) return CI_NONE;
     const Obj* t = idx_.resolve(d.get("Type"));
@@ -561,20 +563,22 @@ class Encoder {
     ctx_.verify = !opt_.noVerify;
   }
 
-  // filter chain + parameters as a cache key
-  std::string chainKey(const std::vector<FilterRef>& fl) const {
-    std::string k;
+  // filter chain + parameters as a cache key: per filter its name (<= 127) and up to 2 x 96 bytes
+  typedef FixedStr<kMaxFilters * (128 + 2 * 96)> ChainKey;
+  ChainKey chainKey(const FilterList& fl) const {
+    ChainKey k;
     for (auto& f : fl) {
       FilterParams fp = params(f.parms);
       char b[96];
-      snprintf(b, sizeof(b), "%s/%d/%d/%d/%d/%d;", f.name.c_str(), fp.predictor, fp.colors, fp.bpc, fp.columns,
-               fp.earlyChange);
-      k += b;
+      int n = snprintf(b, sizeof(b), "%d/%d/%d/%d/%d;", fp.predictor, fp.colors, fp.bpc, fp.columns, fp.earlyChange);
+      k.append(f.name.data(), f.name.size());
+      k.append("/", 1);
+      k.append(b, std::min((size_t)n, sizeof(b) - 1));
       if (f.name == "CCITTFaxDecode") {
         FilterParams cp = ccittParams(f.parms);
-        snprintf(b, sizeof(b), "K%d/%d/%d/%d%d%d%d;", cp.ccittK, cp.ccittCols, cp.ccittRows, cp.ccittEol, cp.ccittAlign,
-                 cp.ccittEob, cp.ccittBlack1);
-        k += b;
+        n = snprintf(b, sizeof(b), "K%d/%d/%d/%d%d%d%d;", cp.ccittK, cp.ccittCols, cp.ccittRows, cp.ccittEol, cp.ccittAlign,
+                     cp.ccittEob, cp.ccittBlack1);
+        k.append(b, std::min((size_t)n, sizeof(b) - 1));
       }
     }
     return k;
@@ -585,8 +589,7 @@ class Encoder {
     const Item& it = seg.items[s.item];
     const Obj& d = seg.objs[it.obj];
     s.payload = it.dataEnd - it.dataStart;
-    std::vector<FilterRef> fl = getFilters(d);
-    for (auto& f : fl) s.chain.push_back(f.name);
+    FilterList fl = getFilters(d);
     s.wantCipher = streamCipher(d, it.num, fl);
   }
 
@@ -596,7 +599,7 @@ class Encoder {
     const Item& it = seg.items[s.item];
     const Obj& d = seg.objs[it.obj];
     if (s.wantCipher != CI_NONE || d.get("F") || it.dataEnd - it.dataStart < 64) return -1;
-    std::string key = chainKey(getFilters(d));
+    ChainKey key = chainKey(getFilters(d));
     uint64_t h = hash64(in_.data() + it.dataStart, it.dataEnd - it.dataStart) ^ hash64((const uint8_t*)key.data(), key.size());
     auto& v = cache_[h];
     for (int k : v) {
@@ -618,8 +621,8 @@ class Encoder {
     s.stop = o.stop;
     s.decoded = o.decoded;
     // the stop filter's parameters from this stream's own chain (same chain key, same position)
-    std::vector<FilterRef> fl = getFilters(seg.objs[seg.items[s.item].obj]);
-    std::vector<FilterRef> ofl = getFilters(seg.objs[seg.items[o.item].obj]);
+    FilterList fl = getFilters(seg.objs[seg.items[s.item].obj]);
+    FilterList ofl = getFilters(seg.objs[seg.items[o.item].obj]);
     for (size_t k = 0; k < ofl.size() && k < fl.size(); k++)
       if (o.stopParms == ofl[k].parms) s.stopParms = fl[k].parms;
     s.stopLast = o.stopLast;
@@ -681,7 +684,7 @@ class Encoder {
     const Item& it = seg.items[s.item];
     const Obj& d = seg.objs[it.obj];
     Bytes cur(in_.begin() + it.dataStart, in_.begin() + it.dataEnd);
-    std::vector<FilterRef> fl = getFilters(d);
+    FilterList fl = getFilters(d);
     uint8_t ci = s.wantCipher;
     if (ci != CI_NONE) {
       Bytes pt;
@@ -704,7 +707,7 @@ class Encoder {
       cur.swap(pt);
     }
     if (d.get("F")) {
-      s.stop = "external";  // data lives in an external file; in-file bytes are not filtered
+      s.stop.set("external");  // data lives in an external file; in-file bytes are not filtered
     } else if (opt_.filterLevel == 0) {
       if (!fl.empty()) {
         s.remain = R_ENCODED;
@@ -741,7 +744,7 @@ class Encoder {
           uint8_t pl = fp.predictor == 2 ? L_TIFF : fp.predictor >= 10 ? L_PNG : L_NONE;
           if (!pl || !layerDecode(ctx_, pl, fp, cur, out, recon) || !s.desc.layers.push_back({pl, std::move(recon)})) {
             s.remain = R_ENCODED;
-            s.stop = "Predictor";
+            s.stop.set("Predictor");
             break;
           }
           cur.swap(out);
@@ -1504,8 +1507,9 @@ class Encoder {
       else st.cipherKept++;
     }
     bool sawStop = false;
-    for (auto& f : s.chain) {
-      auto& fs = st.filters[f];
+    for (auto& fr : getFilters(seg.objs[it.obj])) {
+      const PdfName& f = fr.name;
+      auto& fs = st.filters.at(f.data(), f.size());
       fs.present++;
       fs.bytes += s.payload;
       if (f == "Crypt") continue;
@@ -1519,8 +1523,8 @@ class Encoder {
     }
     if (s.bmp) st.bmpCount++;
     if (s.desc.storage == ST_FILE || s.desc.storage == ST_DUP) {
-      auto& e = st.exts[s.desc.ext.c_str()];
-      if (s.desc.storage == ST_FILE) { e.first++; e.second += s.data.size(); }
+      auto& e = st.exts.at(s.desc.ext.c_str());
+      if (s.desc.storage == ST_FILE) { e.count++; e.bytes += s.data.size(); }
     }
     bool typed = s.desc.storage == ST_CLASS ||
                  ((s.desc.storage == ST_FILE || s.desc.storage == ST_DUP) && s.desc.ext != "bin" && s.desc.ext != "z" &&
@@ -1573,9 +1577,13 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
     if (st.extents[k]) printf("  %s %llu", kExtentName[k], (unsigned long long)st.extents[k]);
   printf("\n");
   printf("filters (streams present / undone / terminal, payload bytes):\n");
-  for (auto& f : st.filters)
-    printf("  %-16s %6llu %6llu %6llu  %s\n", f.first.c_str(), (unsigned long long)f.second.present,
-           (unsigned long long)f.second.undone, (unsigned long long)f.second.terminal, human(f.second.bytes).c_str());
+  const decltype(st.filters)::E* fsorted[64];
+  st.filters.sorted(fsorted);
+  for (size_t i = 0; i < st.filters.e.size(); i++) {
+    const auto& f = *fsorted[i];
+    printf("  %-16s %6llu %6llu %6llu  %s\n", f.k.c_str(), (unsigned long long)f.v.present,
+           (unsigned long long)f.v.undone, (unsigned long long)f.v.terminal, human(f.v.bytes).c_str());
+  }
   printf("classes (count, payload -> stored):\n");
   for (int c = 0; c < SC_COUNT; c++)
     if (st.cls[c].count)
@@ -1588,8 +1596,12 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
   printf("\n");
   if (!st.exts.empty()) {
     printf("files:");
-    for (auto& e : st.exts)
-      if (e.second.first) printf("  .%s %llu (%s)", e.first.c_str(), (unsigned long long)e.second.first, human(e.second.second).c_str());
+    const decltype(st.exts)::E* esorted[64];
+    st.exts.sorted(esorted);
+    for (size_t i = 0; i < st.exts.e.size(); i++) {
+      const auto& e = *esorted[i];
+      if (e.v.count) printf("  .%s %llu (%s)", e.k.c_str(), (unsigned long long)e.v.count, human(e.v.bytes).c_str());
+    }
     printf("\n");
   }
   if (st.bmpCount) printf("bmp3 images: %llu\n", (unsigned long long)st.bmpCount);
@@ -1662,7 +1674,7 @@ static void printInfo(const char* name, const Bytes& in, Encoder& E, const Optio
     for (auto& s : E.streams) {
       const Item& it = E.seg.items[s.item];
       std::string fl;
-      for (auto& f : s.chain) fl += (fl.empty() ? "" : ",") + f;
+      for (auto& f : E.filtersOf(s)) fl += std::string(fl.empty() ? "" : ",") + f.name.c_str();
       if (fl.empty()) fl = "-";
       std::string ly;
       for (auto& l : s.desc.layers) ly += std::string(ly.empty() ? "" : "+") + kLayerName[l.type];

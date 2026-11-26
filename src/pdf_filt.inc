@@ -949,18 +949,31 @@ static bool isPseudoLayerType(uint8_t t) {
          t == L_ICCREF;
 }
 
-static std::string normFilter(const std::string& f) {
+// full name of a filter (abbreviations of inline images expanded); a name past 127 bytes keeps
+// its first 127, still an unknown filter
+static PdfName normFilter(const std::string& f) {
   static const char* const ab[][2] = {{"AHx", "ASCIIHexDecode"}, {"A85", "ASCII85Decode"}, {"LZW", "LZWDecode"},
                                       {"Fl", "FlateDecode"},     {"RL", "RunLengthDecode"}, {"CCF", "CCITTFaxDecode"},
                                       {"DCT", "DCTDecode"}};
+  PdfName r;
   for (auto& a : ab)
-    if (f == a[0]) return a[1];
-  return f;
+    if (f == a[0]) { r.set(a[1]); return r; }
+  r.setCut(f.data(), f.size());
+  return r;
 }
-static bool isTerminalFilter(const std::string& f) {
+static bool isTerminalFilter(const PdfName& f) {
   return f == "DCTDecode" || f == "JPXDecode" || f == "JBIG2Decode" || f == "CCITTFaxDecode";
 }
-static uint8_t layerOfFilter(const std::string& f) {
+
+// A stream's /Filter entries with their /DecodeParms. An array of more than kMaxFilters entries
+// reads as its first kMaxFilters - 1 and an unknown filter "?": undoing stops there at the latest.
+struct FilterRef {
+  PdfName name;
+  const Obj* parms = nullptr;
+};
+static const size_t kMaxFilters = 32;
+typedef FixedVec<FilterRef, kMaxFilters> FilterList;
+static uint8_t layerOfFilter(const PdfName& f) {
   if (f == "FlateDecode") return L_FLATE;
   if (f == "LZWDecode") return L_LZW;
   if (f == "ASCIIHexDecode") return L_AHX;

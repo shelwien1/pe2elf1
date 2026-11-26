@@ -625,7 +625,7 @@ static bool liftInlineImage(const CodecCtx& ctx, const uint8_t* dict, size_t dn,
     if (k.s == "F" || k.s == "Filter") filt = v;
     else if (k.s == "DP" || k.s == "DecodeParms") parms = v;
   }
-  FixedVec<std::pair<std::string, const Obj*>, kMaxLayers> fl;  // more filters than layers: not lifted
+  FixedVec<FilterRef, kMaxLayers> fl;  // more filters than layers: not lifted
   if (filt.t == Obj::NAME) fl.push_back({normFilter(filt.s), parms.t == Obj::DICT ? &parms : nullptr});
   else if (filt.t == Obj::ARR)
     for (size_t k = 0; k < filt.a.size(); k++) {
@@ -637,12 +637,12 @@ static bool liftInlineImage(const CodecCtx& ctx, const uint8_t* dict, size_t dn,
   Bytes cur(data, data + len), out, recon;
   Layers layers;
   for (auto& f : fl) {
-    uint8_t lt = layerOfFilter(f.first);
+    uint8_t lt = layerOfFilter(f.name);
     if (!lt) return false;
     FilterParams fp;
-    if (f.second) {
+    if (f.parms) {
       auto geti = [&](const char* key, int& v) {
-        const Obj* o = f.second->get(key);
+        const Obj* o = f.parms->get(key);
         if (o && o->t == Obj::INT && o->i >= 0 && o->i < (1 << 30)) v = (int)o->i;
       };
       geti("Predictor", fp.predictor);

@@ -140,6 +140,8 @@ struct FixedStr {
     return true;
   }
   void clear() { n = 0; s[0] = 0; }
+  // the first N bytes of a longer input
+  void setCut(const char* p, size_t len) { set(p, std::min(len, N)); }
   // printf into the string, cut at N bytes; false if it was cut
   bool format(const char* fmt, ...) {
     va_list ap;
@@ -165,6 +167,35 @@ typedef FixedStr<15> ShortName;
 typedef FixedStr<127> PdfName;
 // messages: an error (fail(), at most 1023 bytes) with a short prefix
 typedef FixedStr<1279> Message;
+
+// Counters keyed by a short string (report tables): at most N keys. Once N - 1 keys are in, any
+// other key counts under "(other)".
+template <class Key, class V, size_t N>
+struct NameTable {
+  struct E { Key k; V v; };
+  FixedVec<E, N> e;
+  V& at(const char* p, size_t len) {
+    for (auto& x : e)
+      if (x.k.eq(p, len)) return x.v;
+    E x{};
+    if (e.size() + 1 < N) x.k.setCut(p, len);
+    else {
+      for (auto& y : e)
+        if (y.k == "(other)") return y.v;
+      x.k.set("(other)");
+    }
+    e.push_back(x);
+    return e.back().v;
+  }
+  V& at(const char* p) { return at(p, strlen(p)); }
+  bool empty() const { return e.empty(); }
+  // entries in byte order of their keys
+  void sorted(const E** out) const {
+    size_t m = e.size();
+    for (size_t i = 0; i < m; i++) out[i] = &e[i];
+    std::sort(out, out + m, [](const E* a, const E* b) { return strcmp(a->k.c_str(), b->k.c_str()) < 0; });
+  }
+};
 
 // Key material (hashes, file and object keys, /O /U /OE /UE): at most 64 bytes, kept in place.
 // assign() keeps the first 64 bytes of a longer input (the handlers read at most 48 of any).
