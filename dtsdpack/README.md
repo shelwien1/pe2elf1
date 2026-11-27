@@ -1524,6 +1524,48 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   with format 182's build on this host, `mid.dtsc` without its WAV 338 KB/s to 334 compressing and
   332 to 322 decompressing, the XCH sample 253 to 249 and 260 to 274, and with its WAV 252 to 248
   and 291 both.
+  Since format 184 two things more about the spread of an unbound channel's indexes. Where a cell's
+  rule holds (an RMS rule's, the louder 8-block's or the learned cell), the z path's logistic
+  (format 162's, about the shrunk fit) takes its scale times 2^(0.6 u) (`model_smp.inc`'s NW_ZU, in
+  code_q()), u where the subband's last part fell by its RMS (format 183's nw_u) against this part's
+  scale factor, in the log2 of the RMS, within half the scale factor table's step there (2^x by the
+  first five terms of its series): a part's RMS lies, within its cell, near where the last one's
+  did. And where the subband's step changes, the spreads (format 160's) follow the step over its
+  scale factor's 3/8 power (the root of its root times its root's root, nw_qr) rather than over its
+  root: as a scale factor grows, the fit's residuals grow by its 3/8 power, not by its half. Without
+  their WAVs, the 55 streams of the check lists 122006026 bytes to 121991458 (0.012%:
+  `dtswavsample16.wav` 4576 bytes smaller, `padded.dts` 1015, Fire 850 (two test packings of it 849
+  and 856), `sil/v.dtsc` 651, `sil/t.dtsc` 633, `mid.dtsc` 372, FFmpeg's `f2.dts` 388; 7 bigger:
+  FFmpeg's `f4.dts` and its packing 172 bytes each, `chs/n.dtsc` 31, `e16.dts` 16, FATE's XLL XCH
+  sample 5, `lfe/l0.dtsc` 3, the 14-bit packing of `f1c.dts` 1), `s.2.dts`'s whole core 31222941
+  bytes to 31212545 (62.44% to 62.41%). With their WAVs the check lists' 67 runs, `s.2.dts`'s whole
+  core and the Cymatics core the same but for the format's byte. On 20 streams (the 12, `sur/s.dts`
+  and FFmpeg's encodes, 69994174 bytes to 69985455): the scale's tilt alone at 0.4, 0.5, 0.6 or 0.75
+  2934, 3401, 3713 and 4000 bytes smaller (at 0.75 `padded.dts` 89 bytes bigger and `3-1.dts` 64);
+  the spreads' exponent alone at 0.3, 0.375, 0.4 or 0.625 3729, 5026 and 4902 bytes smaller and
+  15585 bigger (at 0.375 `chs/m.dtsc` 350 bytes bigger and `f4.dts` 171, `dtswavsample16.wav` 2087
+  smaller and `padded.dts` 996); both 8719 smaller, with 0.4's exponent 8572. Tried and dropped: the
+  RMS rule's budget (format 162's) with its mean square tilted alike, at half the place 566 bytes
+  smaller (`Fire__VooDoo_Studio_30_sec.wav` 476 bigger, `chs/m.dtsc` 264, `3-1.dts` 196), at all of
+  it 4701 bigger; the louder 8-block's budget (format 164's) by that block's place, 360 smaller and
+  551 bigger; the exponent by the change's direction, the root where the scale factor rose and its
+  root's root where it fell or the other way round, 5383 and 15359 bytes bigger (a scale factor up
+  and back down then leaves the spread changed); the exponent learned per channel, from the root, by
+  the gradient of the residuals' log-loss (as format 172's blend is), 11004-15172 bytes bigger
+  (`dtswavsample16.wav` 13-17 KB: the spreads weigh the fits' samples too, which the gradient leaves
+  out). Offline, on `mid.dtsc`'s and `dtswavsample16.wav`'s fit-path indexes without their WAVs: the
+  logistic's scale as it is the cheapest of 0.8-1.25 times it, a scale from the RMS of the subband's
+  residuals in a window about each (±4 to ±32 samples, the residual itself left out) 0.4-1.6%
+  dearer; the fit's gain on the indexes 11-12 dB in subband 0, 6-10 dB in subband 1, 4.3-6.1 dB
+  above; so what is left there is the fit's to take. And the coder counts the bytes it renormalizes
+  by (format 183's nsh) in its byte loops rather than at every decision. For 0.2% more instructions
+  compressing (callgrind: `mid.dtsc` without its WAV 24180 million to 24228; FATE's 7-frame XCH
+  sample 0.05% more, with its WAV 0.03%), 0.4% fewer decompressing (`mid.dtsc` without its WAV 24169
+  million to 24068: the byte count's) and the same memory (`mid.dtsc` without its WAV 24.4 MB at the
+  peak, `s2h.dtsc` with its WAV 19.9-20.3 MB): the medians of 15 runs interleaved with format 183's
+  build on this host, `mid.dtsc` without its WAV 340 KB/s to 332 compressing and 328 to 326
+  decompressing, the XCH sample 278 to 271 and 272 to 268, and with its WAV 269 to 262 and 296 to
+  293.
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first

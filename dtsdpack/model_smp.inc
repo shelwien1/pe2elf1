@@ -493,6 +493,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
                 "nw_y's ring a power of 2 (nw_yp's wrap a whole number of them), R's rows in 4s");
   static constexpr double NW_TH = 0.95, NW_LAM = 0.9985, NW_LAML = 0.9965, NW_RIDGE = 1e-5, NW_LT = 0.95;
   static constexpr double NW_LS = 0.75;  // (since format 160 the residual's logistic scale, of the spread: 0.6 before format 170)
+  static constexpr double NW_ZU = 0.6;   // (since format 184 the z path's scale by where the last part fell: code_q())
   // (since format 171 each sample weighed by 1 over its step squared times s^2 + NW_WG e^2, s the
   // spread before it and e the fit's error, both in steps: least squares fits of what the coder
   // pays for, the error over its spread, robust to the error a fit can't follow)
@@ -6216,8 +6217,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // prediction (code_index_nw(): alone it codes `mid.dtsc`'s residuals 0.9% smaller than smn,
     // `96-24.dts`'s as small; a 50/50 mix of the two 0.6-0.8% smaller still); the spreads following
     // the subband's step where it changes, by the ratio of the step over the root of its scale
-    // factor (the ABITS' share whole, the scale factor's half: nw_qr); smn's nl the fit's value
-    // against the spread, in half doublings, pk whether the nearest earlier channel has no values
+    // factor (the ABITS' share whole, the scale factor's half, since format 184 its 3/8: nw_qr); smn's
+    // nl the fit's value against the spread, in half doublings, pk whether the nearest earlier
+    // channel has no values
     // here; smn retuned: the 12 streams 13384188 bytes to 13338083 (0.34%: `mid.dtsc` 1.13%,
     // `96-24.dts` 0.66%, `master audio 7.1 24bit` 0.60%, `s.2.dts`'s first 3 MB 0.47%, the others
     // 0.08-0.31%; FATE's 7-frame samples 1.3-2.9% bigger), of which the outside prediction 0.18%,
@@ -6438,7 +6440,12 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       nwq = (S64)llround(nwd);
       const int tm = s.tmode[ch][b], si = s.scale[ch][b][tm && (j >> 3) >= tm ? 1 : 0];
       const double sv = (double)(r.shuff[ch] == 6 ? SF7[si & 127] : SF6[si & 63]);
-      const double qr = (double)ss / sqrt(sv > 1.0 ? sv : 1.0);
+      // (since format 184 over its scale factor's 3/8 power, the root of its root times its root's
+      // root, rather than over its root: nw_qr; on 20 streams at 0.3, 0.375, 0.4 or 0.625 3729, 5026
+      // and 4902 bytes smaller and 15585 bigger; the root where the scale factor rose and its root's
+      // root where it fell, or the other way, 5383 and 15359 bigger; learned by channel 11004-15172)
+      const double svc = sv > 1.0 ? sv : 1.0, sv4 = sqrt(sqrt(svc));
+      const double qr = (double)ss / sqrt(sqrt(svc) * sv4);
       if (qr > 0.0) {  // (the spreads where the step changes)
         if (nw_qr[ch][b] > 0.0 && qr != nw_qr[ch][b]) {
           const double m = nw_qr[ch][b] / qr;
@@ -6539,7 +6546,24 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     const S64 zq = (S64)llround(zc), zs = zc < (double)zq ? -1 : 1;
     double zsc = 0.0;
     if (nwz) {
-      const double ms = nwok ? nw_g() * ktq * ktq : nwc.ks / nwc.kn * (double)hi * (double)hi;
+      // (since format 184, by a cell's rule, the scale ktq times 2^(NW_ZU u): u where the subband's
+      // last part fell, by its RMS (nw_u's, format 183's), against this part's scale factor, in the
+      // log2 of the RMS, within half the table's step there; 2^x by the first terms of its series.
+      // With the spreads by the scale factor's 3/8 power (nw_qr), without their WAVs the 55 streams
+      // 14568 bytes smaller, `s.2.dts`'s whole core 10396; on 20 streams NW_ZU alone at 0.4, 0.5,
+      // 0.6, 0.75 2934, 3401, 3713 and 4000 smaller, at 0.75 `padded.dts` 89 bigger)
+      double ktz = ktq;
+      if (nwok && nw_us[ch][b] > 0) {
+        const int tz = s.tmode[ch][b], pz = tz && (j >> 3) >= tz ? 1 : 0, sz = s.scale[ch][b][pz];
+        const int nz = r.shuff[ch] == 6 ? 128 : 64, s0 = sz + 1 < nz ? sz : sz - 1;
+        const U32* tb = r.shuff[ch] == 6 ? SF7 : SF6;
+        const double lr = s0 >= 0 && tb[s0] > 0 ? nw_log2((double)tb[s0 + 1]) - nw_log2((double)tb[s0]) : 0.0;
+        double up = (double)(nw_us[ch][b] - 1) + nw_u[ch][b][0] - (double)sz;
+        up = up < -0.5 ? -0.5 : up > 0.5 ? 0.5 : up;
+        const double y = NW_ZU * up * lr * 0.69314718055994531;
+        ktz = ktq * (1.0 + y * (1.0 + y * (0.5 + y * (1.0 / 6.0 + y / 24.0))));
+      }
+      const double ms = nwok ? nw_g() * ktz * ktz : nwc.ks / nwc.kn * (double)hi * (double)hi;
       zsc = 0.55132889542179204 * sqrt(ms + 1.0 / 12.0);
       int e2;
       const double mt = frexp(zsc / NW_LS, &e2);
