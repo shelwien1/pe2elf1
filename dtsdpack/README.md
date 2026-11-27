@@ -104,7 +104,7 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76356 (0.15%) | 62.44% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76356 (0.15%) | 62.37% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3470 (0.27%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 4615 (0.43%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2585 (0.11%) | | |
@@ -1631,6 +1631,42 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   KB/s to 385 and 330 to 387 compressing, 322 to 373 and 317 to 379 decompressing, the XCH sample
   265 to 272 and 253 to 274, 260 to 271 and 253 to 267, and with its WAV 259 to 261 and 255 to 291,
   298 to 284 and 291 to 300.
+  Since format 186 the cascade's NLMS part (format 169's) is five fits of the same, stepping by 0.1
+  (as before), 0.25, 0.03, 0.01 and 0.003 of the power (`model_smp.inc`'s NWC_MU and nwc_mux()),
+  each by its own error, its value theirs weighed by (m / m_i)^32, m_i a fit's errors' mean (format
+  171's measure) and m the least of them; the weighed value's own errors' mean is the part's. And
+  the cascade's four choices (the fit alone, with the NLMS part, with both parts, the blend after
+  its warm-up), where the one whose mean had been the least was taken, are weighed so too, by (m /
+  m_k)^64 (each power by squaring, + - * / alone). A fast fit follows what moves, a slow one is the
+  surer where little does; the weights take each where its errors have been the fewer, both where
+  they are near. Without their WAVs, the 55 streams of the check lists 121814538 bytes to 121710351
+  (0.086%: `dtswavsample16.wav` 47030 bytes smaller, `chs/n.dtsc` 7835, `chs/m.dtsc` 7782,
+  `lfe/l0.dtsc` 6234, Fire's WAV and its two packings 5706-5751 each, `padded.dts` 4377,
+  `pc/p1.dtsc` 2228, `dtswavsample14.wav` 2077, the two `sil` streams 1840 and 1851; 17 bigger:
+  FFmpeg's `f4.dts` and its packing 1953 bytes each (0.27%), its 16-bit `e16.dts` 1071, FATE's 7-
+  and 14-frame samples 2-59 bytes, the DTS:X 7.1.4 core 4), `s.2.dts`'s whole core 31208782 bytes
+  to 31188610 (62.41% to 62.37%). With their WAVs the check lists' 67 runs, `s.2.dts`'s whole core
+  and the Cymatics core the same but for the format's byte. Against format 185, on the 55 and
+  `s.2.dts`'s core: one more fit, the one whose mean had been the less taken, at 0.25 or 0.03,
+  29006 and 9946 bytes smaller (the core 468 and 6304); two more, at 0.25 and 0.03, 0.2 and 0.03,
+  0.35 and 0.03 or 0.25 and 0.05, 37795, 34898, 36535 and 36962 (the core 5804-6868); three (0.25,
+  0.03, 0.01) 43921 (the core 7405); those three weighed by 1 / m_i^P, P 4, 8, 16 or 32, 45082,
+  53828, 61538 and 63973 (the core 4020-10975), with 0.003 too at 16, 67099; the choices weighed
+  too, by 1 / m_k^4 or 1 / m_k^16, 28057 and 90159, by (m / m_k)^32, ^64 or ^128, 102748, 98689
+  and 89736 (the core 19334, 19223 and 17919); with 0.003 too, at 32 and 64, 104187 (the core
+  20172). Tried and dropped: the cascade's two least squares fits weighed so too, and its two
+  blends, 107068 and 108748 bytes smaller but `s.2.dts`'s core 1763 and 3411 bigger; the choices
+  by the least in the warm-up, the same within 7 bytes; a fast least squares fit of the subband's
+  last 8 values (forgetting by 0.98) among the blend's inputs, 4341 bigger; the long fit in subband
+  4 too (format 185's NW_BL 5 again), 15250 smaller still, 10618 of it `dtswavsample16.wav`'s, for
+  2.8% more instructions. For 2.2% more instructions without the WAV (callgrind: `mid.dtsc` 21226
+  million to 21697 compressing, 20995 to 21466 decompressing; FATE's 7-frame XCH sample 159.8
+  million to 165.3, with its WAV the same, 175.4 and 175.3) and 0.2 MB more memory at the peak
+  (`mid.dtsc` without its WAV 24.4 MB to 24.5-24.6, `s2h.dtsc` with its WAV 20.0-20.3 MB to
+  20.1-20.4): the medians of 15 runs interleaved with format 185's sped-up build on this host,
+  twice, `mid.dtsc` without its WAV 381 KB/s to 367 and 383 to 371 compressing, 366 to 365 and 380
+  to 362 decompressing, the XCH sample 257 to 258 and 229 to 225, 278 to 255 and 257 to 229, and
+  with its WAV 254 to 257 and 206 to 228, 292 to 285 and 261 to 247.
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first
