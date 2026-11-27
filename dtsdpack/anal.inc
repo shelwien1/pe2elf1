@@ -1041,7 +1041,7 @@ struct Lg2Tab {
   }
 };
 static const Lg2Tab lg2tab;
-static S32 co_bits(U32 q) { return lg2tab.one - lg2tab.log2x(q); }
+static S32 co_log2(U64 x) { return lg2tab.log2x(x); }
 // X96's steps: each LOSSY_QUANT entry times each SF6 scale factor (x96_ss()'s, 2^-22), and their
 // lg16(); made where first needed (make())
 struct JxSteps {

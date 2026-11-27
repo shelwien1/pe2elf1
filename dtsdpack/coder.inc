@@ -27,9 +27,9 @@ static CoCosts co_make_costs(void) {
   return t;
 }
 static const CoCosts bitcost_ = co_make_costs();
-// (since format 182) a decision's cost, 2^-16 bits, q its probability (CO_PBITS bits): anal.inc's,
-// by lg2tab, made in integers alone, as every build makes it
-static S32 co_bits(U32 q);
+// (since format 183) 2^16 log2(x), x >= 1: anal.inc's lg2tab's, made in integers alone, as every
+// build makes it (coded_len()'s)
+static S32 co_log2(U64 x);
 static INLINE float co_cost(U32 q) {
   if (q >= CO_ONE - (CO_ONE >> 8)) {
     const float x = (float)(CO_ONE - q) / (float)CO_ONE;
@@ -53,10 +53,6 @@ struct Coder : h264p::Rangecoder<f_DEC> {
   int err;            // dec: the data is damaged (a value no encoder writes)
   int cat;            // statistics: category of the bits coded now
   int stats;          // enc: count them (-s)
-  // (since format 182) while nacc_on, the bits coded's costs, 2^-16 bits each (co_bits()), into nacc:
-  // what the model's peak rule switch (model_smp.inc's code_q()) weighs an index's cost by
-  int nacc_on;
-  S64 nacc;
   double cost[NCAT];  // bits spent per category (enc)
   double orig[NCAT];  // bits they took in the input
 #ifdef DTSD_FSTAT
@@ -84,9 +80,14 @@ struct Coder : h264p::Rangecoder<f_DEC> {
     if (!f_DEC && stats) fcost[fid] += co_cost(bit ? CO_ONE - p : p);
 #endif
     RC::rc_Process(p, b);
-    if (nacc_on) nacc += co_bits(b ? CO_ONE - p : p);
     return (int)b;
   }
+
+  // (since format 183) the code's length so far, 2^-16 bits: 8 bits for each byte the range has been
+  // renormalized by, less the log2 of the range left, the coder's and the decoder's alike (what the
+  // model's peak rule switch, model_smp.inc's code_q(), prices an index by: format 182 summed each
+  // decision's cost, testing at every decision whether to, 0.3-0.7% of the instructions)
+  S64 coded_len() const { return ((S64)RC::nsh << 19) - co_log2(RC::range); }
 
   // 32 bits as they are (the CRC), a byte at a time, each value of each as likely
   U32 code_u32(U32 v) {

@@ -26,6 +26,13 @@ static INLINE double nw_tail(double a) {
   const int i = (int)x;
   return nw_lg.t[i] + (nw_lg.t[i + 1] - nw_lg.t[i]) * (x - (double)i);
 }
+// (since format 183) log2 x, x > 0, by frexp() and lg2tab's table (to about 2^-8), as every build
+// makes it
+static INLINE double nw_log2(double x) {
+  int e;
+  const double m = frexp(x, &e);
+  return (double)e - 32.0 + (double)lg2tab.log2x((U64)(m * 4294967296.0)) / 65536.0;
+}
 // (since format 173) e^-x, x >= 0: a table of 64ths to 64 made with + - * / alone, as every machine
 // makes it, linear between; past 64, 0 (code_hfvq_nw()'s guesses)
 struct HvEx {
@@ -739,6 +746,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // and of the one seen at the energy, each by its distance and the last 256 or so weighing most,
   // nwg_p (nw_gpen()))
   S16 nw_e0[NCH][NSUB];
+  // (since format 183) where the subband's last part, the last subframe's last, fell in its cell, in
+  // scale factors from that subframe's first, by the part's RMS, its louder 8-block's and its peak
+  // index against the top (code_q()); nw_us 1 + that first (0 none); nw_sp the running mean of that
+  // first plus the place by the RMS, each part an 8th of the way, nw_spn whether there is one
+  double nw_u[NCH][NSUB][3], nw_sp[NCH][NSUB];
+  S16 nw_us[NCH][NSUB];
+  U8 nw_spn[NCH][NSUB];
   U16 nwz_n[3][2];
   int nwd_n[2];
   int nwg_p[2];
@@ -895,8 +909,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // sfl_f's SFL_G + 1, the same things, its first guess by a tally of its own (sfl_tv), and it
   // this subframe's first (nw_e0), as an ADPCM subband's is; and a transient's second scale
   // factor's move from its first by another, SFL_G + 2, of sf2_x()'s things, its mean distance
-  // from the fit's value by channel (sfl_e2, sfl_m2), its tally sfl_t2
-  static constexpr int SFL_X = 17, SFL_N = 20, SFL_K = 32, SFL_G = 6;
+  // from the fit's value by channel (sfl_e2, sfl_m2), its tally sfl_t2. Since format 183 five more
+  // things: where the subband's last part fell in its cell (nw_u, nw_sp; sfl_x()). With the peak
+  // rule's switch priced by the coder's length (code_q()), without their WAVs the 55 streams 17094
+  // bytes smaller (`dtswavsample16.wav` 4232, `chs/m.dtsc` 3406; 22 of them 1-14 bytes bigger)
+  static constexpr int SFL_X = 22, SFL_N = 24, SFL_K = 32, SFL_G = 6;
   static constexpr U32 SFL_GN = 256, SFL_TA = 64, SFL_TL = 1024;
   static constexpr double SFL_LAM = 0.999, SFL_S = 0.85, SFL_S0 = 0.3, SFL_S1 = 2.0, SFL_RIDGE = 1e-3;
   static constexpr double SFL_L2 = SFL_LAM * SFL_LAM, SFL_L4 = SFL_L2 * SFL_L2, SFL_L8 = SFL_L4 * SFL_L4;
@@ -1781,6 +1798,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     memset(nw_be, 0, sizeof nw_be), memset(nw_bm, 0, sizeof nw_bm), memset(nw_bh, -1, sizeof nw_bh);
     nw_ci = nw_cn = nw_cgs = nw_cgn = 0.0, memset(nw_cr, 0, sizeof nw_cr), memset(nw_ct, 0, sizeof nw_ct);
     memset(nw_e0, 0, sizeof nw_e0);
+    memset(nw_u, 0, sizeof nw_u), memset(nw_us, 0, sizeof nw_us), memset(nw_sp, 0, sizeof nw_sp), memset(nw_spn, 0, sizeof nw_spn);
     for (int k = 0; k < 3; k++) nwz_n[k][0] = 32, nwz_n[k][1] = 1;
     nwd_n[0] = nwd_n[1] = 0, nwg_p[0] = nwg_p[1] = 0;
     memset(nwa_n, 0, sizeof nwa_n), memset(nwa_t, 0, sizeof nwa_t);
@@ -5109,7 +5127,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // above's last, against A - 1; whether the subband below has moved and the channel before; 1; the
   // channel before's value at the subband this subframe and the one before that's, against A - 1;
   // how the last one moved; how the subbands below moved this subframe, on average, and the channel
-  // before's; 0s to SFL_N
+  // before's; since format 183 where the subband's last part fell in its cell by its RMS, its louder
+  // 8-block and its peak (nw_u, 0s where it was another than A - 1's), where the channel before's
+  // did by its RMS, and the running mean of the subband's level so found against A - 1 (nw_sp); 0s
+  // to SFL_N
   void sfl_x(const CoreRec& r, int ch, int b, int A, double* x) {
     const int c1 = ch - 1 >= r.ch0() && r.shuff[ch - 1] == r.shuff[ch] ? ch - 1 : -1;
     const int c2 = ch - 2 >= r.ch0() && r.shuff[ch - 2] == r.shuff[ch] ? ch - 2 : -1;
@@ -5135,6 +5156,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       if (ok(ch, k)) sfl_s0[ch] += mv(ch, k), sfl_n0[ch] += 1.0;
     if (sfl_k0[ch] < b) sfl_k0[ch] = b;
     x[15] = sfl_n0[ch] > 0.0 ? sfl_s0[ch] / sfl_n0[ch] : 0.0, x[16] = sfl_c1[ch];
+    const bool uo = nw_us[ch][b] == A;
+    for (int k = 0; k < 3; k++) x[17 + k] = uo ? nw_u[ch][b][k] : 0.0;
+    x[20] = c1 >= 0 && hist.scale[c1][b] && nw_us[c1][b] == hist.scale[c1][b] ? nw_u[c1][b][0] : 0.0;
+    x[21] = nw_spn[ch][b] ? nw_sp[ch][b] - (double)(A - 1) : 0.0;
     for (int k = SFL_X; k < SFL_N; k++) x[k] = 0.0;
   }
   // (a transient's second scale factor's things, its move from its first s1: 1; the first's move
@@ -6503,7 +6528,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // where its lattice codes as mode 0 at half the z path's cost or less. On 20 streams, from 256,
     // 1024 or 2048 indexes 27210, 30614 and 30348 bytes smaller against 512's 30864 (at 256
     // `e16.dts` 136 bigger); the z path at every ABITS, no switch, 103792 bigger (`f4.dts` 105735,
-    // `e16.dts` 24440; `sur/s.dts` 22913 smaller); the peak rule's cells by ABITS to 26, 29985 smaller)
+    // `e16.dts` 24440; `sur/s.dts` 22913 smaller); the peak rule's cells by ABITS to 26, 29985 smaller.
+    // Since format 183 mode 0's cost by the coder's length (coded_len()), and the z path where its
+    // price less a 256th of it is the less: the logistic's price runs 0-1.1% over what the z path
+    // codes (`sur/s.dts`'s at ABITS 3-15), format 182's sum of rounded logs (lg2tab's, down) as far
+    // over smp's; at par, `sur/s.dts` 6530 bytes bigger, less a 128th or 64th, 2932 and 5427)
     const bool pkm = pk_ok && a > 2 && !nwr && !pkz_on[pka] && pkz_n[pka] < PKZ_N;
     const bool nwz = nwp && !nwr && ss > 0 && (nwok || nwpk);
     const double zc = nwz ? nwg * nwd0 : 0.0;
@@ -6602,20 +6631,19 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
       v = zq + zs * code_index_nw(D, ENC ? zs * (v - zq) : 0, rlo, rhi, &how, zs * (zc - (double)zq), zsc,
                                   bon ? &bud : nullptr);
     } else {
-      if (pkm) c->nacc_on = 1, c->nacc = 0;
+      const S64 len0 = pkm ? c->coded_len() : 0;
       v = code_index(D, v, bnd, qp, alt, lo, hi, &how, &hcal[b], dist, hu,
                      (pc >= 8 ? 3 : pc >= 3 ? 2 : pc >= 1 ? 1 : 0) + 4 * jd, bnd ? (S128)ss << AQ_F : 0,
                      __builtin_popcount(miss[ch][b]), xm > 0);
       if (pkm) {
-        c->nacc_on = 0;
         const double zm = nwg * nwd0, zz = 0.55132889542179204 * sqrt(nwc.ks / nwc.kn * (double)hi * (double)hi + 1.0 / 12.0);
         const double iz = 1.0 / zz;
         auto F = [&](double x) { const double t = (x - zm) * iz; return t >= 0.0 ? 1.0 - nw_tail(t) : nw_tail(-t); };
         const double tot = F((double)hi + 0.5) - F((double)lo - 0.5), pv = F((double)v + 0.5) - F((double)v - 0.5);
         const double q = tot > 0.0 ? pv / tot * 281474976710656.0 : 0.0;  // (2^48)
         const U64 qi = q >= 1.0 ? (q < 281474976710656.0 ? (U64)q : (U64)1 << 48) : 1;
-        pkz_cz[pka] += ((S64)48 << 16) - lg2tab.log2x(qi), pkz_c0[pka] += c->nacc;
-        if (++pkz_n[pka] == PKZ_N) pkz_on[pka] = pkz_cz[pka] < pkz_c0[pka];
+        pkz_cz[pka] += ((S64)48 << 16) - lg2tab.log2x(qi), pkz_c0[pka] += c->coded_len() - len0;
+        if (++pkz_n[pka] == PKZ_N) pkz_on[pka] = pkz_cz[pka] - (pkz_cz[pka] >> 8) < pkz_c0[pka];
       }
     }
     if (nwp) {  // (the fit's sums, in steps, and its refit; the distances, the residual's length)
@@ -6719,6 +6747,30 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           }
           q.p0 = l0 < 0 ? 0 : l0, q.p1 = l1;
           q.ks += nw_pe[ch][b] / ((double)n * (double)hi * (double)hi) - q.ks / 64.0, q.kn += 1.0 - q.kn / 64.0;
+        }
+      }
+      // (since format 183, at the part's end: where it fell in its cell, by its RMS (its energy over
+      // its RMS rule's, its scale factor's square times its samples), its louder 8-block's and its
+      // peak index against the top, half the log2 of each over the log2 of the table's step there,
+      // within -2..2 (-2 where 0), plus how far its scale factor lies from the subframe's first)
+      if (ss > 0 && kpe > kpb && j == kpe * 8 - 1 && ktq > 0.0) {
+        const int tm = s.tmode[ch][b], part = tm && (j >> 3) >= tm ? 1 : 0, si = s.scale[ch][b][part];
+        const int nt = r.shuff[ch] == 6 ? 128 : 64, s0 = si + 1 < nt ? si : si - 1;
+        const U32* tb = r.shuff[ch] == 6 ? SF7 : SF6;
+        const double lr = s0 >= 0 && tb[s0] > 0 ? nw_log2((double)tb[s0 + 1]) - nw_log2((double)tb[s0]) : 0.0;
+        const double t2 = ktq * ktq, d = (double)(si - s.scale[ch][b][0]);
+        auto U = [&](double e, double m) {
+          if (!(e > 0.0) || !(lr > 0.0)) return d - 2.0;
+          const double x = 0.5 * nw_log2(e / (m * t2)) / lr;
+          return d + (x < -2.0 ? -2.0 : x > 2.0 ? 2.0 : x);
+        };
+        nw_u[ch][b][0] = U(nw_pe[ch][b], (double)((kpe - kpb) * 8));
+        nw_u[ch][b][1] = U(nw_bm[ch][b], 8.0);
+        nw_u[ch][b][2] = hi > 0 ? U((double)nw_pk[ch][b] * (double)nw_pk[ch][b], (double)hi * (double)hi / t2) : 0.0;
+        nw_us[ch][b] = (S16)(1 + s.scale[ch][b][0]);
+        if (nw_pe[ch][b] > 0.0) {
+          const double y = (double)s.scale[ch][b][0] + nw_u[ch][b][0];
+          nw_sp[ch][b] = nw_spn[ch][b] ? nw_sp[ch][b] + (y - nw_sp[ch][b]) / 8.0 : y, nw_spn[ch][b] = 1;
         }
       }
       if (a >= 3 && ss > 0 && j == kpe * 8 - 1) {  // (the part's end: whether in its cell, the ratio)

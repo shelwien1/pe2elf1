@@ -53,6 +53,7 @@ template <int f_DEC> struct Rangecoder : Coroutine {
   uint64_t FFNum;  // (a run of 0xFF bytes can pass 2^32: 11 TB of bytes all 0xFF coded as they are)
   uint Cache;
   uint skip;
+  uint64_t nsh;  // (since dtsdpack's format 183: the bytes the range has been renormalized by, the coder's and the decoder's alike)
   uint low_Add() {
     const uint cf = (lowl + rpre < lowl);
     lowl += rpre;
@@ -104,6 +105,7 @@ template <int f_DEC> struct Rangecoder : Coroutine {
     else
       ShiftCode(n);
     range <<= n * 8;
+    nsh += n;
   }
   INLINE void rc_Process(uint freq, uint &bit) {
     uint b = bit;
@@ -141,6 +143,7 @@ template <int f_DEC> struct Rangecoder : Coroutine {
     Cache = uint(-1);
     range = 0xFFFFFFFFu;
     skip = LOWBYTES - CODBYTES;
+    nsh = 0;
     if(f_DEC) {
       code = 0;
       for(uint i = 0; i < CODBYTES; i++)
