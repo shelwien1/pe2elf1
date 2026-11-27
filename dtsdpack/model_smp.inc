@@ -491,13 +491,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   static constexpr int NW_BL = 4, NW_WARM = 32, NW_NY = 64;
   static_assert((NW_NY & (NW_NY - 1)) == 0 && NW_NY >= NW_NO + NW_NLP && 256 % NW_NY == 0 && NW_NS % 4 == 0 && NW_NL % 4 == 0,
                 "nw_y's ring a power of 2 (nw_yp's wrap a whole number of them), R's rows in 4s");
-  static constexpr double NW_TH = 0.95, NW_LAM = 0.9985, NW_LAML = 0.9965, NW_RIDGE = 1e-5, NW_LT = 0.95;
+  static constexpr double NW_TH = 0.95, NW_LAM = 0.9985, NW_LAML = 0.996, NW_RIDGE = 1e-5, NW_LT = 0.95;  // (NW_LAML 0.9965 before format 185)
   static constexpr double NW_LS = 0.75;  // (since format 160 the residual's logistic scale, of the spread: 0.6 before format 170)
   static constexpr double NW_ZU = 0.6;   // (since format 184 the z path's scale by where the last part fell: code_q())
   // (since format 171 each sample weighed by 1 over its step squared times s^2 + NW_WG e^2, s the
   // spread before it and e the fit's error, both in steps: least squares fits of what the coder
   // pays for, the error over its spread, robust to the error a fit can't follow)
-  static constexpr double NW_WG = 0.25;
+  static constexpr double NW_WG = 0.15;  // (0.25 before format 185)
   static_assert(NW_K == 16, "NW_LK and NW_LKL are NW_LAM and NW_LAML to the 16th");
   static constexpr double NW_L2 = NW_LAM * NW_LAM, NW_L4 = NW_L2 * NW_L2, NW_L8 = NW_L4 * NW_L4;
   static constexpr double NW_LK = NW_L8 * NW_L8;  // (NW_LAM to the NW_K)
@@ -557,10 +557,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // the fit alone, with the NLMS fit's value and with both parts', each sample a 64th of them
   // (nwc_m1, nwc_mo, nwc_m2; a 128th since format 170, since format 171 the means of NWC_GS's
   // measure), the least of them taken; the fit's errors of the subband's 8, in values, for the
-  // channels after it (nwc_r, 0 where there is no step))
+  // channels after it (nwc_r, 0 where there is no step). Since format 185 a second least squares
+  // fit beside that one, of the same, forgetting by NWC_LAM2 (nwc_Rs, nwc_cs), its errors' mean
+  // as the first's (nwc_m2s): the one whose mean has been the less is the least squares part)
   static constexpr int NWC_K = 32;
   static_assert((NWC_K & (NWC_K - 1)) == 0 && NWC_K % 4 == 0, "nwc_e's ring a power of 2, nw_dot()'s 4s");
-  static constexpr double NWC_MU = 0.08, NWC_LAM = 0.85, NWC_RIDGE = 0.02;  // (0.02, 0.88 and 0.04 before format 171)
+  // (NWC_MU 0.02 and NWC_LAM 0.88 before format 171, 0.08 and 0.85 before format 185; NWC_RIDGE 0.04 before format 171)
+  static constexpr double NWC_MU = 0.1, NWC_LAM = 0.9, NWC_LAM2 = 0.97, NWC_RIDGE = 0.02;
   // (since format 171 each choice's errors measured by g = e^2 / (e^2 + NWC_GS s^2), s the spread,
   // in steps, and not by their squares, their means a 256th a sample (a 128th before): a choice is
   // as good as how often it's near, not how far its misses go)
@@ -570,28 +573,33 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // NWB_LAM a sample, its ridge NWB_RIDGE of its mean diagonal (nwb_R, the sums of their products,
   // its lower 3 by 3 by rows, nwb_c, of them by the error; nwb_solve()): a fourth choice, by the
   // mean square of its errors (nwb_m) as the other three's)
-  static constexpr double NWB_LAM = 0.998, NWB_RIDGE = 0.01;
-  double nwb_R[NCH][NSUB][6], nwb_c[NCH][NSUB][3], nwb_m[NCH][NSUB];
+  static constexpr double NWB_LAM = 0.997, NWB_RIDGE = 0.01;  // (NWB_LAM 0.998 before format 185)
+  // (since format 185 a second blend beside it, of the same, forgetting by NWB_LAM2 (nwb_Rf, nwb_cf), its
+  // errors' mean as the first's (nwb_mf): the fourth choice the one whose mean has been the less, the faster's
+  // where under NWB_K of the other's)
+  static constexpr double NWB_LAM2 = 0.98, NWB_K = 0.99;
+  double nwb_R[NCH][NSUB][6], nwb_c[NCH][NSUB][3], nwb_m[NCH][NSUB], nwb_Rf[NCH][NSUB][6], nwb_cf[NCH][NSUB][3], nwb_mf[NCH][NSUB];
   // (in steps: the long fit's value less the short one's, or the other way, as the one taken is; 0
   // outside them)
   static double nwb_x(bool nwl, double nwy, double nwys, double nwyl, double sc) {
     return nwl ? ((nwy == nwyl ? nwys : nwyl) - nwy) * sc : 0.0;
   }
   // (R + d I) a = c by L D L' (R's lower 3 by 3 by rows, d its mean diagonal by NWB_RIDGE): a h, 0
-  // where a pivot isn't positive
+  // where a pivot isn't positive (since format 185 L's products by the pivots, dv, not over their
+  // inverses: 4 fewer divisions)
   static double nwb_solve(const double* R, const double* c, const double* h) {
     const double d = (R[0] + R[2] + R[5]) / 3.0 * NWB_RIDGE + 1e-9;
-    double L[6], iD[3], z[3], a[3];
+    double L[6], iD[3], dv[3], z[3], a[3];
     for (int i = 0, ri = 0; i < 3; ri += ++i) {
       for (int k = 0, rk = 0; k < i; rk += ++k) {
         double t = R[ri + k];
-        for (int m = 0; m < k; m++) t -= L[ri + m] * L[rk + m] / iD[m];
+        for (int m = 0; m < k; m++) t -= L[ri + m] * L[rk + m] * dv[m];
         L[ri + k] = t * iD[k];
       }
       double t = R[ri + i] + d;
-      for (int m = 0; m < i; m++) t -= L[ri + m] * L[ri + m] / iD[m];
+      for (int m = 0; m < i; m++) t -= L[ri + m] * L[ri + m] * dv[m];
       if (!(t > 0.0)) return 0.0;
-      iD[i] = 1.0 / t;
+      dv[i] = t, iD[i] = 1.0 / t;
     }
     for (int i = 0, ri = 0; i < 3; ri += ++i) {
       double t = c[i];
@@ -606,23 +614,24 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     return a[0] * h[0] + a[1] * h[1] + a[2] * h[2];
   }
   double nwc_w[NCH][NSUB][NWC_K], nwc_e[NCH][NSUB][NWC_K], nwc_m1[NCH][NSUB], nwc_mo[NCH][NSUB], nwc_m2[NCH][NSUB];
-  double nwc_r[NCH][NSUB][8], nwc_R[NCH][NSUB][10], nwc_c[NCH][NSUB][4];
+  double nwc_r[NCH][NSUB][8], nwc_R[NCH][NSUB][10], nwc_c[NCH][NSUB][4], nwc_Rs[NCH][NSUB][10], nwc_cs[NCH][NSUB][4], nwc_m2s[NCH][NSUB];
   U8 nwc_p[NCH][NSUB];
   // (R + d I) a = c by L D L' (R's lower 4 by 4 by rows, d its mean diagonal by NWC_RIDGE): a h, 0
-  // where a pivot isn't positive (a damaged stream's)
+  // where a pivot isn't positive (a damaged stream's; since format 185 L's products by the pivots,
+  // dv, not over their inverses: 10 fewer divisions, the solve about 15% quicker)
   static double nwc_solve(const double* R, const double* c, const double* h) {
     const double d = (R[0] + R[2] + R[5] + R[9]) / 4.0 * NWC_RIDGE + 1e-9;
-    double L[10], iD[4], z[4], a[4];
+    double L[10], iD[4], dv[4], z[4], a[4];
     for (int i = 0, ri = 0; i < 4; ri += ++i) {
       for (int k = 0, rk = 0; k < i; rk += ++k) {
         double t = R[ri + k];
-        for (int m = 0; m < k; m++) t -= L[ri + m] * L[rk + m] / iD[m];
+        for (int m = 0; m < k; m++) t -= L[ri + m] * L[rk + m] * dv[m];
         L[ri + k] = t * iD[k];
       }
       double t = R[ri + i] + d;
-      for (int m = 0; m < i; m++) t -= L[ri + m] * L[ri + m] / iD[m];
+      for (int m = 0; m < i; m++) t -= L[ri + m] * L[ri + m] * dv[m];
       if (!(t > 0.0)) return 0.0;
-      iD[i] = 1.0 / t;
+      dv[i] = t, iD[i] = 1.0 / t;
     }
     for (int i = 0, ri = 0; i < 4; ri += ++i) {
       double t = c[i];
@@ -652,13 +661,13 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // spread is NW_BM or more; the blend the logistic's scale and the fits' weights', the slow one
   // what the fit's use and smn's contexts go by)
   double nw_bs[NCH][NSUB], nw_bf[NCH][NSUB], nw_bw[NCH];
-  static constexpr double NW_BF = 8.0, NW_BE = 0.005, NW_BM = 0.5;
+  static constexpr double NW_BF = 6.0, NW_BE = 0.008, NW_BM = 0.5;  // (8 and 0.005 before format 185)
   // (since format 173 the logistic's scale of the spread the channel's, nw_lsc, from NW_LS, by the
   // same log-loss: each sample its log a step NW_LCE of the gradient, (1 - x tanh(x / 2)), kept
   // within NW_LCL..NW_LCH: FFmpeg's encodes the channels' scales move away from 0.75 to their
   // cost, `e16.dts` 356 bytes bigger within 0.5..1.2)
   double nw_lsc[NCH];
-  static constexpr double NW_LCE = 0.002, NW_LCL = 0.7, NW_LCH = 0.9;
+  static constexpr double NW_LCE = 0.004, NW_LCL = 0.65, NW_LCH = 1.0;  // (0.002, 0.7 and 0.9 before format 185)
   // (since format 173 a channel the WAV doesn't bind, its HF VQ indexes, after sdn's flag of
   // whether the subband's last one, by a mixture over the code book's HV_N entries, that one left
   // out, code_hfvq_nw(): how often each has been the index in the stream and in the subband (hv_t0,
@@ -6364,9 +6373,20 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // (Offline, on format 170's `mid.dtsc`: the surround channels' errors 2.6-5.2% less in RMS by a
     // fit on the four earlier channels' errors, 1.5-2.9% by the 2 nearest's; the subband below's
     // values and errors, at the sample and either side, nothing.)
+    // Since format 185 the cascade's least squares part two fits of the same, forgetting by 0.9 and
+    // by 0.97 a sample (NWC_LAM, NWC_LAM2), the one whose errors' mean (format 171's measure, a
+    // 256th a sample) has been the less taken (ncs); the blend two as well, forgetting by 0.997 and
+    // by 0.98 (NWB_LAM, NWB_LAM2), the faster's taken where its mean is under 0.99 of the other's
+    // (NWB_K: by the raw least, `padded.dts` and `open_bitrate.dtsc` 850 and 540 bytes bigger on the
+    // switch's noise); with the no-WAV model's older constants retuned (NWC_MU 0.1, NW_LAML 0.996,
+    // NW_WG 0.15, NW_BF 6, NW_BE 0.008, NW_LCE 0.004, NW_LCL 0.65, NW_LCH 1.0, NWB_LAM 0.997). What
+    // an earlier channel's error says of this one's holds a few samples in some streams (Fire's, by
+    // one fit at 0.94 12.6 KB bigger) and some tens in others (`dtswavsample16.wav`'s, 43 KB smaller).
     const bool nwp = !bound[ch], nwl = nwp && b < NW_BL;  // (nwl: the long fit's subband)
     double nwh[NW_NG] = {}, nwy = 0.0, nwd = 0.0, nwd0 = 0.0, nwg = 1.0, nwys = 0.0, nwyl = 0.0;
     double nwx[NWC_K], nwxc[4] = {}, nwco = 0.0, nwcx = 0.0, nwbv = 0.0;  // (the cascade's: its inputs in steps (nwx set where it's read), its two parts, their blend)
+    double nwcxf = 0.0, nwcxs = 0.0;  // (since format 185 the two least squares fits' values, the faster's and the slower's)
+    double nwbf = 0.0;  // (since format 185 the faster blend's)
     S64 nwq = 0;
     bool nwr = false;
     if (nwp) {
@@ -6375,8 +6395,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         else memset(&nw_f[ch][b], 0, sizeof(NwFit));
         memset(nwc_w[ch][b], 0, sizeof(nwc_w[ch][b])), memset(nwc_e[ch][b], 0, sizeof(nwc_e[ch][b]));
         memset(nwc_R[ch][b], 0, sizeof(nwc_R[ch][b])), memset(nwc_c[ch][b], 0, sizeof(nwc_c[ch][b]));
+        memset(nwc_Rs[ch][b], 0, sizeof(nwc_Rs[ch][b])), memset(nwc_cs[ch][b], 0, sizeof(nwc_cs[ch][b]));
         memset(nwb_R[ch][b], 0, sizeof(nwb_R[ch][b])), memset(nwb_c[ch][b], 0, sizeof(nwb_c[ch][b])), nwb_m[ch][b] = 0.0;
-        nwc_m1[ch][b] = nwc_mo[ch][b] = nwc_m2[ch][b] = 0.0, nwc_p[ch][b] = 0;
+        memset(nwb_Rf[ch][b], 0, sizeof(nwb_Rf[ch][b])), memset(nwb_cf[ch][b], 0, sizeof(nwb_cf[ch][b])), nwb_mf[ch][b] = 0.0;
+        nwc_m1[ch][b] = nwc_mo[ch][b] = nwc_m2[ch][b] = nwc_m2s[ch][b] = 0.0, nwc_p[ch][b] = 0;
       }
       for (int k = 0; k < NW_NO; k++) nwh[k] = nw_y[ch][b][(nw_yp[ch][b] + NW_NY - 1 - k) & (NW_NY - 1)];
       if (nwl) {
@@ -6414,13 +6436,17 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           if (c >= r.ch0() && b < r.nvqsub[c] && s.abits[c][b] && !bound[c])
             nwxc[k] = nwc_r[c][b][j & 7] * sc, nwxc[2 + k] = tw_y[c][b][j & 7] * sc, any = true;
         }
-        if (any) nwcx = nwc_solve(nwc_R[ch][b], nwc_c[ch][b], nwxc);
-        const double m1 = nwc_m1[ch][b], mo = nwc_mo[ch][b], m2 = nwc_m2[ch][b], mb = nwb_m[ch][b];
+        if (any) nwcxf = nwc_solve(nwc_R[ch][b], nwc_c[ch][b], nwxc), nwcxs = nwc_solve(nwc_Rs[ch][b], nwc_cs[ch][b], nwxc);
+        const bool ncs = nwc_m2s[ch][b] < nwc_m2[ch][b];  // (the slower fit's where its errors' mean has been the less)
+        nwcx = ncs ? nwcxs : nwcxf;
+        const double m1 = nwc_m1[ch][b], mo = nwc_mo[ch][b], m2 = ncs ? nwc_m2s[ch][b] : nwc_m2[ch][b], mb = nwb_m[ch][b];
         {  // (the blend)
           const double h[3] = {nwco, nwcx, nwb_x(nwl, nwy, nwys, nwyl, sc)};
-          nwbv = nwb_solve(nwb_R[ch][b], nwb_c[ch][b], h);
+          nwbv = nwb_solve(nwb_R[ch][b], nwb_c[ch][b], h), nwbf = nwb_solve(nwb_Rf[ch][b], nwb_cf[ch][b], h);
         }
-        if (nw_n[ch][b] >= NW_WARM && mb < m1 && mb < mo && mb < m2) nwd += nwbv;
+        const bool nbf = nwb_mf[ch][b] < NWB_K * mb;  // (the faster blend's where its errors' mean has been the less)
+        const double mbx = nbf ? nwb_mf[ch][b] : mb;
+        if (nw_n[ch][b] >= NW_WARM && mbx < m1 && mbx < mo && mbx < m2) nwd += nbf ? nwbf : nwbv;
         else if (m2 < m1 && m2 < mo) nwd += nwco + nwcx;
         else if (mo < m1) nwd += nwco;
       }
@@ -6695,7 +6721,8 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           const double e1 = ys - nwy * sc, eo = e1 - nwco, e2 = eo - nwcx;
           double en = 1.0;
           for (int k = 0; k < NWC_K; k++) en += nwx[k] * nwx[k];
-          const double mu = NWC_MU * (nwc_m2[ch][b] < nwc_mo[ch][b] ? e2 : eo) / en;
+          const double m2u = nwc_m2s[ch][b] < nwc_m2[ch][b] ? nwc_m2s[ch][b] : nwc_m2[ch][b];
+          const double mu = NWC_MU * (m2u < nwc_mo[ch][b] ? e2 : eo) / en;
           for (int k = 0; k < NWC_K; k++) nwc_w[ch][b][k] += mu * nwx[k];
           const double gq = 1.0 / (NWC_GS * bw * bw);
           auto gf = [gq](double e) {
@@ -6703,24 +6730,36 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
             return x / (1.0 + x);
           };
           nwc_m1[ch][b] += (gf(e1) - nwc_m1[ch][b]) / NWC_GR, nwc_mo[ch][b] += (gf(eo) - nwc_mo[ch][b]) / NWC_GR;
-          nwc_m2[ch][b] += (gf(e2) - nwc_m2[ch][b]) / NWC_GR;
+          nwc_m2[ch][b] += (gf(eo - nwcxf) - nwc_m2[ch][b]) / NWC_GR, nwc_m2s[ch][b] += (gf(eo - nwcxs) - nwc_m2s[ch][b]) / NWC_GR;
           if (ch - 1 >= r.ch0()) {
             const double t = eo;
             double* const R = nwc_R[ch][b];
             double* const c = nwc_c[ch][b];
+            double* const Rs = nwc_Rs[ch][b];
+            double* const cs = nwc_cs[ch][b];
             for (int i = 0, ri = 0; i < 4; ri += ++i) {
-              for (int k = 0; k <= i; k++) R[ri + k] = NWC_LAM * R[ri + k] + nwxc[i] * nwxc[k];
-              c[i] = NWC_LAM * c[i] + nwxc[i] * t;
+              for (int k = 0; k <= i; k++) {
+                const double hh = nwxc[i] * nwxc[k];
+                R[ri + k] = NWC_LAM * R[ri + k] + hh, Rs[ri + k] = NWC_LAM2 * Rs[ri + k] + hh;
+              }
+              const double ht = nwxc[i] * t;
+              c[i] = NWC_LAM * c[i] + ht, cs[i] = NWC_LAM2 * cs[i] + ht;
             }
           }
           {  // (the blend's sums and the mean square of its errors)
             double* const R = nwb_R[ch][b];
             double* const c = nwb_c[ch][b];
             const double eb = e1 - nwbv, h[3] = {nwco, nwcx, nwb_x(nwl, nwy, nwys, nwyl, sc)};
-            nwb_m[ch][b] += (gf(eb) - nwb_m[ch][b]) / NWC_GR;
+            double* const Rf = nwb_Rf[ch][b];
+            double* const cf = nwb_cf[ch][b];
+            nwb_m[ch][b] += (gf(eb) - nwb_m[ch][b]) / NWC_GR, nwb_mf[ch][b] += (gf(e1 - nwbf) - nwb_mf[ch][b]) / NWC_GR;
             for (int i = 0, ri = 0; i < 3; ri += ++i) {
-              for (int k = 0; k <= i; k++) R[ri + k] = NWB_LAM * R[ri + k] + h[i] * h[k];
-              c[i] = NWB_LAM * c[i] + h[i] * e1;
+              for (int k = 0; k <= i; k++) {
+                const double hh = h[i] * h[k];
+                R[ri + k] = NWB_LAM * R[ri + k] + hh, Rf[ri + k] = NWB_LAM2 * Rf[ri + k] + hh;
+              }
+              const double he = h[i] * e1;
+              c[i] = NWB_LAM * c[i] + he, cf[i] = NWB_LAM2 * cf[i] + he;
             }
           }
           nwc_e[ch][b][nwc_p[ch][b]++ & (NWC_K - 1)] = nwc_r[ch][b][j & 7] = e1 / sc;

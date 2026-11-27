@@ -1566,6 +1566,55 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   build on this host, `mid.dtsc` without its WAV 340 KB/s to 332 compressing and 328 to 326
   decompressing, the XCH sample 278 to 271 and 272 to 268, and with its WAV 269 to 262 and 296 to
   293.
+  Since format 185 the cascade's least squares part (format 169's, of the 2 nearest earlier
+  channels' errors and values of the sample) is two fits of the same, forgetting by 0.9 and by 0.97
+  a sample (`model_smp.inc`'s NWC_LAM and NWC_LAM2: nwc_R, nwc_Rs), the one whose errors' mean
+  (format 171's measure, nwc_m2 and nwc_m2s) has been the less taken; and the blend of the cascade's
+  parts (format 171's) two as well, forgetting by 0.997 and by 0.98 (NWB_LAM, NWB_LAM2), the faster
+  one's taken where its mean is under 0.99 of the other's (NWB_K). What an earlier channel's error
+  says of this one's holds for a few samples in some streams and for some tens in others: one fit
+  forgetting by 0.94 rather than 0.85, `dtswavsample16.wav` 43480 bytes smaller and Fire 12598
+  bigger; the two, both smaller. With them the no-WAV model's older constants retuned: the NLMS
+  fit's step 0.1 of the power (NWC_MU, 0.08 before), the long fit's forgetting 0.996 (NW_LAML,
+  0.9965), the fits' weights' NW_WG 0.15 (0.25), the fast spread a 6th a sample (NW_BF, an 8th) and
+  its blend's step 0.008 (NW_BE, 0.005), the channel's logistic scale within 0.65..1 (NW_LCL and
+  NW_LCH, 0.7..0.9) by steps of 0.004 (NW_LCE, 0.002). And the two least squares solves, the blend's
+  and the cascade's (nwb_solve(), nwc_solve()), by the pivots themselves rather than over their
+  inverses: 4 and 10 fewer divisions at every sample, the 4 by 4 solve about 15% quicker (`e16.dts`
+  83 bytes smaller, the rest the same). Without their WAVs, the 55 streams of the check lists
+  121991458 bytes to 121814538 (0.145%: `dtswavsample16.wav` 82700 bytes smaller, `lfe/l0.dtsc`
+  20682, `chs/m.dtsc` 14587, `sil/t.dtsc` 10984, `sil/v.dtsc` 10964, `padded.dts` 9025, `pc/p1.dtsc`
+  5934, `chs/n.dtsc` 5374, `96-24.dts` and its packings 2772 each, FFmpeg's `f2.dts` 2654; 19
+  bigger: `sur/s.dts` 221 bytes, `s2h2.dtsc` 103, `Master_Audio_5.0_96khz.dts` 93, `s2h.dtsc` and
+  its packings 72 each, `f3.dts` 32, `e16.dts` 28, FATE's 7- and 14-frame samples 2-16), `s.2.dts`'s
+  whole core 31212545 bytes to 31208782 (62.41% as before). With their WAVs the check lists' 67
+  runs, `s.2.dts`'s whole core and the Cymatics core the same but for the format's byte. On 20
+  streams (the 12, `sur/s.dts` and FFmpeg's encodes, 69985442 bytes to 69870666): the one fit
+  forgetting by 0.9, 0.92, 0.94 or 0.96 31846, 42112, 46734 and 36918 bytes smaller (by 0.8 31987
+  bigger); the two, at 0.85 and 0.94, 0.85 and 0.97, 0.8 and 0.96, 0.9 and 0.96 or 0.9 and 0.97,
+  59905, 56998, 60883, 62593 and 61303 smaller (Fire between 2024 smaller and 2142 bigger); with the
+  constants 99942 smaller; the second blend at 0.98 by the less of the two means, or under 0.95,
+  0.97 or 0.99 of the other's, 13112, 8047, 11511 and 14951 smaller still (by the less, `padded.dts`
+  852 bytes bigger and `open_bitrate.dtsc` 537: the switch's noise), at 0.95, 0.97 or 0.985 by the
+  less 10116, 12930 and 12256. On the 55 and `s.2.dts`'s core: the slow fit at 0.96 rather than
+  0.97, 1097 and 1748 bytes bigger; NW_WG 0.25 as before, 3746 bigger and 1064 smaller; NW_LCL 0.7
+  as before, 6061 bigger and 2164 smaller; the faster blend under 0.97 of the other's, 3687 bigger
+  and 438 smaller. Tried and dropped: the two fits both among the blend's inputs, 3158 bytes bigger
+  than the one taken; the 3 or 4 earlier channels' errors in the fit (5 or 6 regressors, one fit at
+  0.94), 3217 and 7315 bigger; the long fit (format 168's) in subbands 4 or 4 and 5 too, 13592 and
+  20222 smaller, all but 1688 and 2426 of it `dtswavsample16.wav`'s, for 2.8% and 5.6% more
+  instructions; the constants a step further, NWC_MU 0.12 5090 smaller (13 of the 20 bigger),
+  NW_LAML 0.995 9108 smaller (the other 19 1165 bigger), NW_WG 0.1, NW_LCL 0.6, NW_BF 5, NW_BE
+  0.012, NW_LCE 0.006, NWB_LAM 0.996 within 2228 (the other 19 none smaller by 300), NWC_LAM2 0.95
+  1193 bigger, NW_LAM 0.998 99 smaller, the cascade's means a 128th a sample 644 bigger. For 1.7%
+  more instructions compressing (callgrind: `mid.dtsc` without its WAV 24228 million to 24634;
+  FATE's 7-frame XCH sample 2.4% more, with its WAV the same), 1.7% more decompressing (24068
+  million to 24474) and the same memory (`mid.dtsc` without its WAV 24.4 MB at the peak, `s2h.dtsc`
+  with its WAV 19.9-20.2 MB): the medians of 15 runs interleaved with format 184's build on this
+  host, twice, `mid.dtsc` without its WAV 332 KB/s to 320 and 316 to 300 compressing, 314 to 319 and
+  304 to 301 decompressing, the XCH sample 228 to 239 and 255 to 252, 246 to 254 and 263 to 252, and
+  with its WAV 245 to 248 and 234 to 250, 285 to 279 and 277 to 283 (the host slower than at format
+  184's: its build compressed `mid.dtsc` at 332 KB/s then, at 332 and 316 now).
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first
