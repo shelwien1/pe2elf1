@@ -1615,6 +1615,22 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   304 to 301 decompressing, the XCH sample 228 to 239 and 255 to 252, 246 to 254 and 263 to 252, and
   with its WAV 245 to 248 and 234 to 250, 285 to 279 and 277 to 283 (the host slower than at format
   184's: its build compressed `mid.dtsc` at 332 KB/s then, at 332 and 316 now).
+  The same output since in 13.8% fewer instructions without the WAV (callgrind: `mid.dtsc` 24634
+  million to 21226 compressing, 24474 to 20995 decompressing; FATE's 7-frame XCH sample 183.4
+  million to 159.8) and 1.1% fewer with it (that sample 177.4 million to 175.4, `s2h.dtsc` 16099 to
+  15922): the fits' Cholesky (nw_refit()) by blocks of 4 columns, each entry's products the same,
+  in the same order, as column by column, and L z = c one more row of it; code_index_nw()'s tails
+  at the ends of the magnitude's interval kept, each of the mantissa's decisions finding only its
+  midpoint's, the lengths' edges found by stepping on from the last one; nw_bud()'s pieces put in
+  order as they are made; the rings read newest first as two runs (nw_rev()); code_rank()'s 33
+  least keys alone kept in order, each put in place by halving; and code_q() by code of its own for
+  a channel the WAV binds and for one it doesn't (code_q_t(): with the rest alone the bound
+  channels' 0.4% more, their registers allocated otherwise). The same memory (`mid.dtsc` without
+  its WAV 24.4 MB at the peak, `s2h.dtsc` with its WAV 19.9-20.3 MB); the medians of 15 runs
+  interleaved with format 185's first build on this host, twice, `mid.dtsc` without its WAV 325
+  KB/s to 385 and 330 to 387 compressing, 322 to 373 and 317 to 379 decompressing, the XCH sample
+  265 to 272 and 253 to 274, 260 to 271 and 253 to 267, and with its WAV 259 to 261 and 255 to 291,
+  298 to 284 and 291 to 300.
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first
