@@ -104,7 +104,7 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76356 (0.15%) | 62.31% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76356 (0.15%) | 62.27% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3470 (0.27%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 4615 (0.43%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2585 (0.11%) | | |
@@ -1754,6 +1754,44 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   host, twice, `mid.dtsc` without its WAV 355 KB/s to 341 and 357 to 345 compressing, 367 to 342 and
   348 to 337 decompressing, the XCH sample 244 to 208 and 243 to 209, 232 to 205 and 212 to 212, and
   with its WAV 218 to 251 and 252 to 270, 276 to 289 and 294 to 278.
+  Since format 189 the long fit is in the subbands under 14 (NW_BL, 8 before), those from 8 up
+  (NW_B4) refitted every 4th 16 samples, not every other (the short one from the long one's sums'
+  first rows every 16 still); the subband below's surprise's weight in the logistic's scale learns
+  at 0.001 (NW_HZ), not at NW_HE's 0.008; and, where the stream's scale factors keep to their rule,
+  the scale's square gains nw_hc times the spread's square times z^2 - 1 too, z the channel before's
+  surprise in the subband at the sample (its 8 values coded before this channel's), nw_hc learned as
+  nw_hz: what moves one channel's values far from their fit moves the next one's at the same moment.
+  Without their WAVs, the 55 streams of the check lists 121556489 bytes to 121497513 (0.049%:
+  `dtswavsample16.wav` 21508 bytes smaller, `lfe/l0.dtsc` 7424, `pc/p1.dtsc` 6249, `chs/n.dtsc`
+  5968, `chs/m.dtsc` 2501, the silences `sil/t.dtsc` and `sil/v.dtsc` 1896 and 1878, `padded.dts`
+  1709, Fire's WAV and its two packings 1512-1519 each; 13 bigger, 397 bytes in all: FFmpeg's 32 kHz
+  encode `e_32000.dts` 293, the others 1-20 each), `s.2.dts`'s whole core 31159061 bytes to 31139378
+  (62.31% to 62.27%). With their WAVs the check lists' 67 runs, `s.2.dts`'s whole core and the
+  Cymatics core the same but for the format's byte. Against format 188, on the 55 and `s.2.dts`'s
+  core, each alone: the long fit to subband 9, 11, 13 or 15, refitted every 4th 16 samples from
+  subband 4 up (to 9 every other), 12681, 21175, 29607 and 33060 bytes smaller (the core 5506, 9887,
+  14513 and 18360) for 2.6%, 2.5%, 4.5% and 6.4% more instructions; to 11 refitted every other 16
+  from 4 up 24984 (10191) for 5.1%, every 4th from 8 up 24108 (10049) for 3.9%; nw_hz's rate 0.004,
+  0.002, 0.001, 0.0005 or 0.00025, 7857, 11286, 12323, 12057 and 11292 smaller (the core 2976, 4584,
+  5392, 5745 and 5863), 0.016 15306 bigger, the surprise off (rate 0) 17055 bigger; with nw_hz at
+  0.001, the channel before's surprise 14482 smaller still (the core 332 bigger), the same subband's
+  at the sample before 1238 (213 bigger), NW_HE 0.016 or 0.004 550 smaller and 418 bigger. All of it
+  58976 (19683); refitted every 4th 16 from subband 4 up instead, 56197 (19519; FFmpeg's 32 kHz
+  encode 433 bigger) for 1.1% fewer instructions. Tried and dropped: nw_hz by 2 or 3 groups of
+  subbands, 3118 and 4895 bigger; forgetting from subband 8 up by 0.999 (the long fit to 11) 3919
+  bigger (the core 211 smaller); the cascade's least squares part by the subband below's fit error
+  of the sample, 119837 bigger (the core 7377); the scale's floor an eighth or a half of the
+  spread's square, 526 smaller and 949 bigger. The fits' Cholesky (nw_chol()) each row below a block
+  of 4 columns its 4 entries in turn, and their sums (nw_add()) a block's 4 rows at once: the same
+  values, 4.8% fewer instructions. For about the same instructions without the WAV (callgrind:
+  `mid.dtsc` 23059 million to 23013 compressing, 22820 to 22777 decompressing; FATE's 7-frame XCH
+  sample 184.7 million to 184.8; with its WAV 175.3 and 175.4) and 0.5 MB more memory at the peak
+  (`mid.dtsc` without its WAV 24.9 MB to 25.3, `s2h.dtsc` with its WAV 19.9-20.0 MB to 20.3): the
+  medians of 15 runs interleaved with format 188's build on this host, twice, `mid.dtsc` without its
+  WAV 327 KB/s to 331 and 341 to 332 compressing, 339 to 324 and 349 to 336 decompressing, the XCH
+  sample (7 KB) 218 to 199 and 235 to 219, 240 to 223 and 235 to 218 (a millisecond more to start,
+  the long fit's sums in 6 more subbands: of 60 runs interleaved the least 24.1 ms to 24.8, the
+  median 29.3 to 31.0), and with its WAV 249 to 214 and 247 to 256, 282 to 253 and 282 to 287.
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first

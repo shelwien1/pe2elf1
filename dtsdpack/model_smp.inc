@@ -487,10 +487,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // square of its errors, in steps, has been under NW_LT of the short one's, each sample a 64th of
   // them (nw_el, nw_es). Since format 188 under NW_BL 8 (4 before), those from NW_BS (4) up
   // forgetting by NW_LAM as the short fits do and refitted every other NW_K samples, the short one
-  // from its sums every NW_K still (nw_refit())
+  // from its sums every NW_K still (nw_refit()); since format 189 under NW_BL 14, those from NW_B4
+  // (8) up refitted every 4th NW_K samples
   static constexpr int NW_NO = 16, NW_NX = 8, NW_NS = NW_NO + NW_NX, NW_NLP = 36, NW_NE = 4, NW_NL = NW_NLP + NW_NE,
                        NW_NG = NW_NS + NW_NL, NW_K = 16;
-  static constexpr int NW_BL = 8, NW_BS = 4, NW_WARM = 32, NW_NY = 64;
+  static constexpr int NW_BL = 14, NW_BS = 4, NW_B4 = 8, NW_WARM = 32, NW_NY = 64;
   static_assert((NW_NY & (NW_NY - 1)) == 0 && NW_NY >= NW_NO + NW_NLP && 256 % NW_NY == 0 && NW_NS % 4 == 0 && NW_NL % 4 == 0,
                 "nw_y's ring a power of 2 (nw_yp's wrap a whole number of them), R's rows in 4s");
   static constexpr double NW_TH = 0.95, NW_LAM = 0.9985, NW_LAML = 0.996, NW_RIDGE = 1e-5, NW_LT = 0.95;  // (NW_LAML 0.9965 before format 185)
@@ -515,7 +516,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     double w[N];       // the fit
     double ws[NW_NS];  // (the long one's: the short fit, its first NW_NS's)
     U32 n;             // the samples since it was refitted
-    U32 k;             // (since format 188 its refits: the long one's from NW_BS up every other one)
+    U32 k;             // (since format 188 its refits: the long one's from NW_BS up every other one, since format 189 from NW_B4 up every 4th)
   };
   typedef NwFitT<NW_NS> NwFit;
   typedef NwFitT<NW_NG> NwFitL;
@@ -548,22 +549,39 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     for (int k = 0; k < n1; k++) dst[k] = ring[p - 1 - k];
     for (int k = n1; k < n; k++) dst[k] = ring[M - 1 + n1 - k];
   }
-  // h (in steps) into the sums, y its value (R's rows by 4s: rows 4q to 4q + 3 4 (q + 1) wide)
+  // h (in steps) into the sums, y its value (R's rows by 4s: rows 4q to 4q + 3 4 (q + 1) wide; since
+  // format 189 the AVX2 build's the block's 4 rows by each 4 of h in turn and c by 4s, each entry's
+  // sum the same as before)
   template <int N> static INLINE void nw_add(NwFitT<N>& f, const double* h, double y) {
     double* Ri = f.R;
+#ifdef DTSD_AVX2
+    for (int q = 0; q < N / 4; q++) {
+      const int W = 4 * (q + 1);
+      const __m256d h0 = _mm256_set1_pd(h[4 * q]), h1 = _mm256_set1_pd(h[4 * q + 1]);
+      const __m256d h2 = _mm256_set1_pd(h[4 * q + 2]), h3 = _mm256_set1_pd(h[4 * q + 3]);
+      double* const R1 = Ri + W;
+      double* const R2 = R1 + W;
+      double* const R3 = R2 + W;
+      for (int k = 0; k < W; k += 4) {
+        const __m256d hk = _mm256_loadu_pd(h + k);
+        _mm256_storeu_pd(Ri + k, _mm256_add_pd(_mm256_loadu_pd(Ri + k), _mm256_mul_pd(h0, hk)));
+        _mm256_storeu_pd(R1 + k, _mm256_add_pd(_mm256_loadu_pd(R1 + k), _mm256_mul_pd(h1, hk)));
+        _mm256_storeu_pd(R2 + k, _mm256_add_pd(_mm256_loadu_pd(R2 + k), _mm256_mul_pd(h2, hk)));
+        _mm256_storeu_pd(R3 + k, _mm256_add_pd(_mm256_loadu_pd(R3 + k), _mm256_mul_pd(h3, hk)));
+      }
+      Ri += 4 * W;
+    }
+    const __m256d yv = _mm256_set1_pd(y);
+    for (int i = 0; i < N; i += 4) _mm256_storeu_pd(f.c + i, _mm256_add_pd(_mm256_loadu_pd(f.c + i), _mm256_mul_pd(_mm256_loadu_pd(h + i), yv)));
+#else
     for (int q = 0; q < N / 4; q++)
       for (int m = 0; m < 4; m++) {
         const int i = 4 * q + m, W = 4 * (q + 1);
-#ifdef DTSD_AVX2
-        const __m256d hi = _mm256_set1_pd(h[i]);
-        for (int k = 0; k < W; k += 4)
-          _mm256_storeu_pd(Ri + k, _mm256_add_pd(_mm256_loadu_pd(Ri + k), _mm256_mul_pd(hi, _mm256_loadu_pd(h + k))));
-#else
         for (int k = 0; k <= i; k++) Ri[k] += h[i] * h[k];
-#endif
         f.c[i] += h[i] * y;
         Ri += W;
       }
+#endif
   }
   NwFit nw_f[NCH][NSUB];
   NwFitL nw_fl[NCH][NW_BL];  // (the subbands under NW_BL's, their nw_f's unused)
@@ -711,6 +729,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
   // sample, its 8 coded before: its residual's distance over its spread (nw_z, 1 where not coded
   // by the fit); the sum a quarter of the spread's square at least; nw_hz learned as nw_hl is)
   double nw_hz[NCH], nw_z[NCH][NSUB][8];
+  static constexpr double NW_HZ = 0.001;  // (since format 189 nw_hz's rate, NW_HE's before)
+  // (since format 189 the square plus nw_hc times the spread's square times z^2 - 1 too, z the
+  // channel before's surprise in the subband at the sample, its 8 coded before, where the fit coded
+  // them: nw_z's; nw_hc learned as nw_hz is)
+  double nw_hc[NCH];
   // (since format 173 a channel the WAV doesn't bind, its HF VQ indexes, after sdn's flag of
   // whether the subband's last one, by a mixture over the code book's HV_N entries, that one left
   // out, code_hfvq_nw(): how often each has been the index in the stream and in the subband (hv_t0,
@@ -1036,7 +1059,10 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // builds' alike, read by nothing. Below R's rows one more, c's, which the same steps make z of
     // L z = c: its entry j scaled at column j, less its products with each column's entries below,
     // as L's columns would take them from z. Where a pivot isn't positive, the entries past its
-    // block, which nothing more reads, as they are)
+    // block, which nothing more reads, as they are. Since format 189 the block's own 4 rows column
+    // by column, then each row below it its 4 entries in turn, scaled and less their products with
+    // the entries before them: the same products in the same order as column by column, which took
+    // from each entry before a column's own 0 times it, leaving it as it was, its values finite)
     alignas(32) double A[RT + N + 4], U[4][N + 4];
     double iL[N], z[N], w[N];
     for (int t = 0; t < RT; t++) A[t] = f.R[t];
@@ -1055,9 +1081,9 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         A[rj + j] = sqrt(A[rj + j]), iL[j] = 1.0 / A[rj + j];
         double* const u = U[j - j0];
         for (int k = j0; k <= j; k++) u[k] = 0.0;
-        for (int i = j + 1, ri = rj + jw; i <= N; ri += 4 * (i / 4 + 1), i++) u[i] = A[ri + j] *= iL[j];
+        for (int i = j + 1, ri = rj + jw; i < jw; ri += jw, i++) u[i] = A[ri + j] *= iL[j];
         if (j + 1 < jw)
-          for (int i = j + 1, ri = rj + jw; i <= N; ri += 4 * (i / 4 + 1), i++) {
+          for (int i = j + 1, ri = rj + jw; i < jw; ri += jw, i++) {
             double* const Ai = A + ri + j0;
 #ifdef DTSD_AVX2
             _mm256_storeu_pd(Ai, _mm256_sub_pd(_mm256_loadu_pd(Ai), _mm256_mul_pd(_mm256_set1_pd(u[i]), _mm256_loadu_pd(u + j0))));
@@ -1067,6 +1093,24 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           }
       }
       if (nf < N) break;
+      {  // (the rows below the block, c's too, each its 4 entries in turn)
+        const double l10 = U[0][j0 + 1], l20 = U[0][j0 + 2], l30 = U[0][j0 + 3];
+        const double l21 = U[1][j0 + 2], l31 = U[1][j0 + 3], l32 = U[2][j0 + 3];
+        const double i0 = iL[j0], i1 = iL[j0 + 1], i2 = iL[j0 + 2], i3 = iL[j0 + 3];
+        for (int i = jw, ri = nw_ro(jw); i <= N; ri += 4 * (i / 4 + 1), i++) {
+          double* const Ai = A + ri + j0;
+          double a0 = Ai[0], a1 = Ai[1], a2 = Ai[2], a3 = Ai[3];
+          a0 *= i0;
+          a1 -= a0 * l10, a2 -= a0 * l20, a3 -= a0 * l30;
+          a1 *= i1;
+          a2 -= a1 * l21, a3 -= a1 * l31;
+          a2 *= i2;
+          a3 -= a2 * l32;
+          a3 *= i3;
+          Ai[0] = a0, Ai[1] = a1, Ai[2] = a2, Ai[3] = a3;
+          U[0][i] = a0, U[1][i] = a1, U[2][i] = a2, U[3][i] = a3;
+        }
+      }
       for (int i = jw, ri = nw_ro(jw); i <= N; ri += 4 * (i / 4 + 1), i++) {
         double* const Ai = A + ri;
         const int W = 4 * (i / 4 + 1);
@@ -1916,7 +1960,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     memset(sfl_e2, 0, sizeof sfl_e2), memset(sfl_m2, 0, sizeof sfl_m2);
     for (int c = 0; c < NCH; c++)
       for (int k = 0; k < NSUB; k++) nw_ba[c][k] = nw_bb[c][k] = nw_bs[c][k] = nw_bf[c][k] = 1.0;
-    for (int c = 0; c < NCH; c++) nw_bw[c] = 0.0, nw_lsc[c] = NW_LS, nw_hl[c] = nw_hd[c] = nw_hz[c] = 0.0;
+    for (int c = 0; c < NCH; c++) nw_bw[c] = 0.0, nw_lsc[c] = NW_LS, nw_hl[c] = nw_hd[c] = nw_hz[c] = nw_hc[c] = 0.0;
     for (int c = 0; c < NCH; c++)
       for (int k = 0; k < NSUB; k++)
         for (int i = 0; i < 8; i++) nw_z[c][k][i] = 1.0;
@@ -6570,6 +6614,30 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // channel's surprise alone 7364-14200 smaller but the core 1962-2255 bigger; the NLMS fits'
     // power doubled outside the gate 6736 smaller but `sur/s.dts` 3345 bigger; NWC_P 16 or 64,
     // NW_SWP 2 or 8, NW_SSP 4, NW_HL 2 or 8, NWC_RK 0.03 or 0.08, 16-8399 bigger.
+    // Since format 189 the long fit in the subbands under NW_BL 14 (8 before), from NW_B4 (8) up
+    // refitted every 4th NW_K samples (from NW_BS to it every other, as before); nw_hz learned at
+    // NW_HZ 0.001, not NW_HE's 0.008; and, where nrl, the logistic's scale's square plus nw_hc times
+    // the spread's square times z^2 - 1 too, z the channel before's surprise in the subband at the
+    // sample (its 8 coded before, where the fit coded them: nw_z), nw_hc learned as nw_hz: what
+    // moves one channel's values far from their fit moves the next one's at the same moment.
+    // Without their WAVs the 55 streams 58976 bytes smaller (0.049%: `dtswavsample16.wav` 21508,
+    // `lfe/l0.dtsc` 7424, `pc/p1.dtsc` 6249, `chs/n.dtsc` 5968, `chs/m.dtsc` 2501; 13 bigger, 397 in
+    // all: FFmpeg's 32 kHz encode `e_32000.dts` 293, the others 1-20 each), `s.2.dts`'s core 19683.
+    // Against format 188, each alone: the long fit to subband 9, 11, 13 or 15 refitted every 4th
+    // NW_K from subband 4 up (to 9 every other) 12681, 21175, 29607 and 33060 smaller (the core
+    // 5506, 9887, 14513 and 18360) for 2.6%, 2.5%, 4.5% and 6.4% more instructions; to 11 every
+    // other NW_K 24984 (10191) for 5.1%, every 4th from 8 up 24108 (10049) for 3.9%; nw_hz at 0.004,
+    // 0.002, 0.001, 0.0005 or 0.00025 7857, 11286, 12323, 12057 and 11292 smaller (the core 2976,
+    // 4584, 5392, 5745 and 5863), at 0.016 15306 bigger, at 0 (the term off) 17055 bigger. With
+    // nw_hz at 0.001: the channel before's surprise 14482 smaller still (the core 332 bigger), the
+    // same subband's at the sample before 1238 (213 bigger); NW_HE 0.016 or 0.004 550 smaller and
+    // 418 bigger. All of it 58976 (19683); every 4th NW_K from subband 4 up 56197 (19519, FFmpeg's
+    // 32 kHz encode 433 bigger) for 1.3% fewer instructions. Tried and dropped: nw_hz by 2 or 3
+    // groups of subbands 3118 and 4895 bigger; forgetting from subband 8 up by 0.999 (to 11) 3919
+    // bigger (the core 211 smaller); the cascade's least squares part by the subband below's fit
+    // error 119837 bigger (the core 7377); the scale's floor an eighth or a half of the spread's
+    // square 526 smaller and 949 bigger. nw_chol()'s blocks row by row and nw_add()'s sums 4 rows
+    // at once (the same values): 4.8% fewer instructions without the WAV.
     const bool nwp = NWP, nwl = nwp && b < NW_BL;  // (nwl: the long fit's subband)
     double nwh[NW_NG] = {}, nwy = 0.0, nwd = 0.0, nwd0 = 0.0, nwg = 1.0, nwys = 0.0, nwyl = 0.0;
     double nwx[NWC_K], nwxc[4] = {}, nwco = 0.0, nwcx = 0.0, nwbv = 0.0;  // (the cascade's: its inputs in steps (nwx set where it's read), its two parts, their blend)
@@ -6579,6 +6647,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
     // (since format 187 the other fit's value; the choices' variance, the two fits', the scale's spread)
     double nwo = 0.0, nhv = 0.0, nhd = 0.0, nsh = 0.0;
     double nhz = 0.0;  // (since format 188 the subband below's surprise's term)
+    double nhc = 0.0;  // (since format 189 the channel before's)
     S64 nwq = 0;
     bool nwr = false;
     const bool nrl = nwp && nw_rule();  // (since format 187 the stream's rule held)
@@ -6911,7 +6980,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         const double z = nw_z[ch][b - 1][j & 7];
         nhz = bb2 * (z * z - 1.0);
       }
-      const double t = bb2 + nw_hl[ch] * nhv + nw_hd[ch] * nhd + nw_hz[ch] * nhz;
+      if (nrl && ch - 1 >= r.ch0() && b < r.nvqsub[ch - 1] && s.abits[ch - 1][b] && !bound[ch - 1]) {  // (since format 189)
+        const double z = nw_z[ch - 1][b][j & 7];
+        nhc = bb2 * (z * z - 1.0);
+      }
+      const double t = bb2 + nw_hl[ch] * nhv + nw_hd[ch] * nhd + nw_hz[ch] * nhz + nw_hc[ch] * nhc;
       nsh = sqrt(t < 0.25 * bb2 ? 0.25 * bb2 : t);
     }
     if (nwr) {  // (the residual toward the fit's own value positive)
@@ -6949,7 +7022,7 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
           NwFitL& g = nw_fl[ch][b];
           for (int k = 0; k < NW_NG; k++) hs[k] = nwh[k] * scw;
           nw_add(g, hs, ysw);
-          if (++g.n == NW_K) g.n = 0, nw_refit(g, b >= NW_BS, b < NW_BS || (++g.k & 1));
+          if (++g.n == NW_K) g.n = 0, nw_refit(g, b >= NW_BS, b < NW_BS || (b < NW_B4 ? (++g.k & 1) : (++g.k & 3) == 1));
           const double el = ys - nwyl * sc, es = ys - nwys * sc;
           nw_el[ch][b] += (el * el - nw_el[ch][b]) / 64.0, nw_es[ch][b] += (es * es - nw_es[ch][b]) / 64.0;
         } else {
@@ -7130,8 +7203,11 @@ struct ModelSmp : ModelSide<f_DEC, LV> {
         ld -= NW_HE * (1.0 - x * th) / sb * nhd / (2.0 * sb);
         ld = ld < 0.0 ? 0.0 : ld > NW_HL ? NW_HL : ld;
         double& lz = nw_hz[ch];  // (since format 188)
-        lz -= NW_HE * (1.0 - x * th) / sb * nhz / (2.0 * sb);
+        lz -= NW_HZ * (1.0 - x * th) / sb * nhz / (2.0 * sb);
         lz = lz < 0.0 ? 0.0 : lz > NW_HL ? NW_HL : lz;
+        double& lh = nw_hc[ch];  // (since format 189)
+        lh -= NW_HZ * (1.0 - x * th) / sb * nhc / (2.0 * sb);
+        lh = lh < 0.0 ? 0.0 : lh > NW_HL ? NW_HL : lh;
         w = w < 0.0 ? 0.0 : w > 1.0 ? 1.0 : w;
         double& lc = nw_lsc[ch];
         lc *= 1.0 - NW_LCE * (1.0 - x * th);
