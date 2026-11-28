@@ -104,7 +104,7 @@ Exit codes:
 
 | Stream | Core | dtsdpack | Without the WAV | `xz -9e` |
 |---|---:|---:|---:|---:|
-| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76356 (0.15%) | 62.37% | 88.21% |
+| `s.2.dts` (5.1, 1509 kbps, 4:25) | 50008260 | 76356 (0.15%) | 62.34% | 88.21% |
 | its first 3 MB (6.8 s) | 1275608 | 3470 (0.27%) | | |
 | 3 MB from its middle (5.7 s) | 1068372 | 4615 (0.43%) | | |
 | FFmpeg's `master_audio_7.1_24bit.dts` (12.5 s) | 2358064 | 2585 (0.11%) | | |
@@ -1667,6 +1667,50 @@ The encoder's input is the WAV. `anal.inc` computes what the encoder computed fr
   twice, `mid.dtsc` without its WAV 381 KB/s to 367 and 383 to 371 compressing, 366 to 365 and 380
   to 362 decompressing, the XCH sample 257 to 258 and 229 to 225, 278 to 255 and 257 to 229, and
   with its WAV 254 to 257 and 206 to 228, 292 to 285 and 261 to 247.
+  Since format 187, where the stream's scale factors keep to their rule (format 162's gate, the
+  RMS rule's, or format 164's, the louder 8-block's: `model_smp.inc`'s nw_rule()), the long and
+  short fits' values in the subbands under NW_BL (format 168's), where the one whose errors' mean
+  square had been the less was taken, are weighed by (m / m_i)^4 (NW_SWP), and the fit's value
+  shrunk and as it is (format 162's), where the one whose mean distance had been the less was
+  taken, by (m / m_i)^8 (NW_SSP); the logistic's scale is the root of the spread's square plus the
+  cascade's four choices' variance about their weighed value and the two fits' (by their weights),
+  each times a weight of the channel's from 0, learned by the log-loss's gradient as the spread's
+  blend is (nw_hl, nw_hd); and the NLMS fits step by s / sqrt(s^2 + 0.05 e^2) of their errors
+  (NWC_RK), robust to the errors they can't follow as the fits' samples are weighed. A switch's
+  choice is as good as its last errors, and near a tie the two are worth both; where the choices or
+  the fits disagree, the residual is surer to be far. FFmpeg's encodes (their parts' peaks keep to
+  the peak rule, nw_rule() false) keep the choices. Without their WAVs, the 55 streams of the check
+  lists 121710351 bytes to 121626069 (0.069%: `dtswavsample16.wav` 47913 bytes smaller,
+  `chs/m.dtsc` 6566, `lfe/l0.dtsc` 5176, `chs/n.dtsc` 4776, `padded.dts` 2332, `pc/p1.dtsc` 1910,
+  `dtswavsample14.wav` 1831, Fire's WAV and its two packings 1247-1284 each, the two `sil` streams
+  1126 and 1136; 11 bigger: FFmpeg's 16-bit `e16.dts` 851 bytes (0.08%), `e_32000.dts` 185,
+  `f3.dts` 142, `e_44100.dts` 126, FATE's 7- and 14-frame samples 5-28 each, 48 smaller in all),
+  `s.2.dts`'s whole core 31188610 bytes to 31176771 (62.37% to 62.34%). With their WAVs the check
+  lists' 67 runs, `s.2.dts`'s whole core and the Cymatics core the same but for the format's byte.
+  Against format 186, on the 55 and `s.2.dts`'s core, each alone: the fits weighed everywhere, by
+  (m / m_i)^P, P 1, 2, 4, 8 or 16, 10206, 17807, 21209, 18954 and 14073 bytes smaller (the core
+  1095 bigger to 4924 smaller); the choices' variance in the scale's square 14167 (the core 948),
+  the NLMS fits' spread too 15372; the robust steps at 0.02, 0.05, 0.15 or 0.5, 13097, 21505,
+  17592 and 2213 (the core 4 smaller to 2664 bigger); the shrink weighed everywhere, P 4, 16, 32 or
+  64, 6190, 15750, 15598 and 12965, but FFmpeg's encodes 18009, 8441, 4642 and 2355 bigger.
+  Together, ungated (the shrink at 16), 73197 smaller, FFmpeg's encodes 10686 bigger; behind the
+  gate (the shrink at 32) 76898, the fits behind it too 78728 (FFmpeg's encodes 657 bigger), with
+  the two fits' variance 79640, the shrink at 16 or 8 83322 and 84282. Tried and dropped: the
+  shrink, or the fits too, soft or hard per channel by their running mean distances, 2340 and 7282
+  less smaller than the soft shrink alone (the core 2271 and 5601 bigger); the robust steps only
+  after the subband's warm-up, the short samples 273 smaller but the rest 3337 bigger (the slowest
+  fits keep what they learn early), or behind the gate too, 930 bigger (FFmpeg's encodes 638
+  smaller); the blend's third input by the hard choice, 567 bigger; the earlier channel's surprise
+  in the scale, 19561 smaller but the core 1087 bigger; a second short fit forgetting faster, 18387
+  smaller but the core 17492 bigger; the cascade's two least squares fits and its two blends
+  weighed so too, 19998 bigger and 6048 smaller (the core 4687 and 3624 bigger). For 0.6% more
+  instructions without the WAV (callgrind: `mid.dtsc` 21697 million to 21834 compressing, 21466 to
+  21601 decompressing; FATE's 7-frame XCH sample 165.3 million to 166.5, with its WAV the same,
+  175.3 and 175.4) and the same memory (`mid.dtsc` without its WAV 24.6 MB at the peak, `s2h.dtsc`
+  with its WAV 19.9-20.3 MB): the medians of 15 runs interleaved with format 186's build on this
+  host, twice, `mid.dtsc` without its WAV 354 KB/s to 350 and 374 to 366 compressing, 349 to 355
+  and 362 to 355 decompressing, the XCH sample 270 to 266 and 272 to 266, 267 to 272 and 276 to
+  274, and with its WAV 278 to 279 and 264 to 267, 309 to 311 and 274 to 280.
 - **The WAV's end**: block t's window ends at sample 32 t + 512, so the core's last frame looks 512
   samples past the WAV's end (a decoded WAV as long as the core's frames are), at what its encoder
   had there: 0s there missed three quarters of that frame's indexes, about 2 KB of `s.2.dts`'s first
